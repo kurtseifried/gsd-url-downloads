@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head><meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+        
+        <meta name="description" content="Varnish Software Documentation">
+        <meta name="google-site-verification" content="1iPhBlQhOxuRpTrb7Q8w06BuLCpiEs_GUWNDt9yKwNg" />
+
+        
+        
+        <link rel="preload" href="/bootstrap/css/bootstrap.min.css" as="style">
+        <link rel="preload" href="/font-awesome/css/font-awesome.min.css" as="style">
+        <link rel="preload" href="/custom.css" as="style">
+        <link rel="preload" href="/prism/prism.css" as="style">
+        <link rel="preload" href="/jquery.min.js" as="script">
+        <link rel="preload" href="/bootstrap/js/popper.min.js" as="script">
+        <link rel="preload" href="/bootstrap/js/bootstrap.min.js" as="script">
+
+        <title>Varnish HTTP/2 Request Smuggling -
+    Varnish Software Documentation</title>
+
+        <link href="/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+        <link href="/custom.css" rel="stylesheet">
+        <link rel="icon" type="image/png" href="/images/favicon.png">
+    </head>
+    <body>
+
+    <div class="banner-top text-center">
+        <a href="https://info.varnish-software.com/docs_banner">
+            <img class="p-2 img-fluid" src="https://info.varnish-software.com/hubfs/docs_banner.png" alt="banner"/>
+        </a>
+    </div>
+
+
+<div class="container">
+    <a title="Varnish Software documentation" href="/"><img class="logo" alt="Varnish Software logo" src="/images/varnish_software_logo.png"/></a><a class="float-right btn btn-primary mt-3 px-4" href="/search">Search</a><hr/>
+</div>
+
+
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="display-4">Varnish HTTP/2 Request Smuggling
+
+    <a class="font-weight-light font-italic text-danger small" href="/security">Security</a>
+
+
+</h1><nav id="TableOfContents">
+<ul>
+<li><a href="#overview">Overview</a></li>
+<li><a href="#impact">Impact</a></li>
+<li><a href="#status">Status</a>
+<ul>
+<li><a href="#affected-software-versions">Affected software versions</a></li>
+<li><a href="#versions-not-affected">Versions not affected</a></li>
+<li><a href="#resolved-in">Resolved in</a></li>
+<li><a href="#upgrading-on-redhat-and-derivatives">Upgrading on RedHat and derivatives</a></li>
+<li><a href="#upgrading-on-ubuntu-and-debian">Upgrading on Ubuntu and Debian</a></li>
+</ul></li>
+<li><a href="#workaround">Workaround</a>
+<ul>
+<li><a href="#turning-off-support-for-http-2">Turning off support for HTTP/2</a></li>
+<li><a href="#preventing-connection-reuse">Preventing connection reuse</a></li>
+</ul></li>
+<li><a href="#identifying-smuggled-requests">Identifying smuggled requests</a></li>
+<li><a href="#timeline">Timeline</a></li>
+<li><a href="#references">References</a></li>
+</ul>
+</nav><small class="text-muted">
+                Published July 13, 2021.
+            </small>
+
+<h1 id="overview">Overview</h1>
+
+<p>A request smuggling attack can be performed on Varnish Cache and Varnish
+Cache Plus servers that have the HTTP/2 protocol enabled. The smuggled
+requests do not go through normal VCL processing, and any authorization
+steps implemented in VCL would be bypassed.</p>
+
+<p>The responses to the smuggled requests can under some circumstances also
+be obtained by the attacker. Also, it may be possible for an attacker to
+use this for cache poisoning, where the response to a smuggled request is
+inserted as the cached content.</p>
+
+<p>This problem was discovered by Martin Blix Grydeland of Varnish Software.</p>
+
+<h1 id="impact">Impact</h1>
+
+<p>The potential impact is information disclosure and cache poisoning.</p>
+
+<h1 id="status">Status</h1>
+
+<h2 id="affected-software-versions">Affected software versions</h2>
+
+<ul>
+<li>Varnish Cache Plus 6.0 series up to and including 6.0.8r2</li>
+<li>Varnish Cache 6.0 LTS series up to and including 6.0.7</li>
+<li>Varnish Cache releases 6.0.0, 6.0.1, 6.0.2, 6.0.3, 6.0.4, 6.0.5, 6.1.0,
+6.1.1, 6.2.0, 6.2.1, 6.2.2, 6.2.3, 6.3.0, 6.3.1, 6.3.2, 6.4.0, 6.5.0,
+6.5.1, 6.6.0.</li>
+<li>Varnish Cache releases 5.x.x. Notice that the experimental HTTP/2
+support in these releases are known to have several issues, and enabling
+HTTP/2 is not recommended.</li>
+</ul>
+
+<h2 id="versions-not-affected">Versions not affected</h2>
+
+<ul>
+<li>All versions of Varnish Cache Plus 4.1</li>
+<li>All versions of Varnish Cache LTS 4.1 series.</li>
+<li>All versions of Varnish Cache prior to 5.0.0</li>
+</ul>
+
+<h2 id="resolved-in">Resolved in</h2>
+
+<ul>
+<li>Varnish Cache Plus 6.0.8r3 (released <TBD>)</li>
+<li>Varnish Cache LTS 6.0.8 (released <TBD>)</li>
+<li>Varnish Cache 6.6.1 and 6.5.2 (released <TBD>)</li>
+</ul>
+
+<p>The recommended solution is to upgrade Varnish to one of the versions
+where this issue has been resolved, and then ensure that Varnish is
+restarted.</p>
+
+<h2 id="upgrading-on-redhat-and-derivatives">Upgrading on RedHat and derivatives</h2>
+
+<p>You should already have configured the Varnish Cache Plus repository, so a
+normal upgrade will be enough:</p>
+
+<pre><code class="language-bash">sudo yum update varnish-plus
+sudo systemctl restart varnish
+</code></pre>
+
+<p>Verify that the version that is installed is recent:</p>
+
+<pre><code class="language-bash">rpm -q varnish-plus
+varnish-plus-6.0.8r3-1.el7.x86_64
+</code></pre>
+
+<h2 id="upgrading-on-ubuntu-and-debian">Upgrading on Ubuntu and Debian</h2>
+
+<p>You should already have configured the Varnish Cache Plus repository, so a
+normal upgrade should be enough:</p>
+
+<pre><code class="language-bash">sudo apt-get update
+sudo apt-get install --only-upgrade varnish-plus
+sudo systemctl restart varnish
+</code></pre>
+
+<p>Verify that the version that is installed is recent:</p>
+
+<pre><code class="language-bash">dpkg -l varnish-plus
+[...]
+ii  varnish-plus                6.0.8r3-1~xenial   amd64              A supercharged version of the popular web cache, Varnish Cache
+</code></pre>
+
+<h1 id="workaround">Workaround</h1>
+
+<h2 id="turning-off-support-for-http-2">Turning off support for HTTP/2</h2>
+
+<p>The problem only affects servers that have HTTP/2 support enabled. This
+support can be turned off at runtime. To disable HTTP/2 on a server do:</p>
+
+<pre><code class="language-bash">sudo varnishadm param.set feature -http2
+</code></pre>
+
+<p>To verify that HTTP/2 is disabled on a server, execute this command and
+make sure the current value does not list <code>http2</code>:</p>
+
+<pre><code class="language-bash">sudo varnishadm param.show feature
+</code></pre>
+
+<p>When using in-core TLS termination, this will also remove <code>h2</code> as a
+supported protocol advertised through ALPN.</p>
+
+<p>When using Hitch (or any other TLS termination proxy) in front of Varnish
+to handle TLS termination, it is also necessary unlist the <code>h2</code> token as a
+possible protocol in the ALPN advertisement sent to connecting clients.</p>
+
+<p>To unlist <code>h2</code> as a support protocol in Hitch, remove or comment out the
+line stating <code>alpn-protos = &quot;h2, http/1.1&quot;</code> in your Hitch configuration
+file. Then restart the Hitch service (reload is not sufficient).</p>
+
+<h2 id="preventing-connection-reuse">Preventing connection reuse</h2>
+
+<p>On compliant backends it is possible to prevent the execution of smuggled
+requests by disabling connection reuse of backend requests. Note that for
+this workaround to be effective, it relies on the backend to refuse any
+additional requests after seeing a <code>Connection: close</code> header.</p>
+
+<p>To disable backend connection reuse, add a <code>Connection: close</code> header on
+the outgoing backend requests:</p>
+
+<pre><code>sub vcl_backend_fetch {
+	set bereq.http.Connection = &quot;close&quot;;
+}
+</code></pre>
+
+<h1 id="identifying-smuggled-requests">Identifying smuggled requests</h1>
+
+<p>Smuggled requests will not show in any logs generated by Varnish, but
+would show in the backend logs. It may be possible to identify the
+smuggled requests in the backend logs by missing Varnish inserted
+artifacts, like the <code>X-Varnish</code> header. Though a determined attacker may
+spoof these artifacts in the smuggled requests.</p>
+
+<h1 id="timeline">Timeline</h1>
+
+<p><strong>2021-05-31</strong></p>
+
+<ul>
+<li>The problem is identified during internal testing at Varnish Software.</li>
+</ul>
+
+<p><strong>2021-06-11</strong></p>
+
+<ul>
+<li>Problem is analyzed and severity acknowledged.</li>
+</ul>
+
+<p><strong>2021-06-15</strong></p>
+
+<ul>
+<li>Varnish Cache Plus 6.0.8r3 released with patch for the issue.</li>
+</ul>
+
+<p><strong>2021-07-13</strong></p>
+
+<ul>
+<li>Public disclosure and updated open source packages.</li>
+</ul>
+
+<h1 id="references">References</h1>
+
+<ul>
+<li><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-36740">CVE-2021-36740</a></li>
+<li><a href="https://www.varnish-cache.org/security/VSV00007.html">Varnish Cache VSV00007 announcement</a></li>
+</ul>
+</div>
+    </div>
+</div>
+
+
+        <div class="container">
+            <hr/>
+            <div class="d-flex justify-content-end flex-column flex-md-row">
+                <div class="mr-auto p-2">
+                    <small>
+                        <strong>Manuals</strong><br/>
+                        
+                            
+                                <a class="" href="/varnish-live/">Varnish Live</a>
+                                <br/>
+                            
+                                <a class="" href="/varnish-plus-cloud/">Varnish Cloud</a>
+                                <br/>
+                            
+                                <a class="" href="/varnish-cache-plus/">Varnish Cache Plus</a>
+                                <br/>
+                            
+                                <a class="" href="/varnish-high-availability/">Varnish High Availability</a>
+                                <br/>
+                            
+                                <a class="" href="/varnish-administration-console/">Varnish Administration Console</a>
+                                <br/>
+                            
+                                <a class="" href="/varnish-custom-statistics/">Varnish Custom Statistics</a>
+                                <br/>
+                            
+                                <a class="" href="/varnish-broadcaster/">Varnish Broadcaster</a>
+                                <br/>
+                            
+                                <a class="" href="/varnish-waf/">Varnish WAF</a>
+                                <br/>
+                            
+                                <a class="" href="/varnish-controller/">Varnish Controller</a>
+                                <br/>
+                            
+                        
+                    </small>
+                </div>
+                <div class="p-2 news">
+                    <small>
+                        <strong>News</strong><br/>
+                        
+                        
+                            <a class="" href="/releases/varnish-cache-plus-6.0.8r7/">Varnish Cache Plus 6.0.8r7</a><br/>
+                        
+                            <a class="" href="/releases/varnish-cache-plus-6.0.8r6/">Varnish Cache Plus 6.0.8r6 - retracted!</a><br/>
+                        
+                            <a class="" href="/releases/varnish-controller-3.0.2/">Varnish Controller 3.0.2</a><br/>
+                        
+                            <a class="" href="/releases/varnish-cache-plus-6.0.8r5/">Varnish Cache Plus 6.0.8r5</a><br/>
+                        
+                            <a class="" href="/releases/varnish-controller-3.0.1/">Varnish Controller 3.0.1</a><br/>
+                        
+                        <i><a href="/news">News archive</a></i>
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <link href="/font-awesome/css/font-awesome.min.css" rel="stylesheet">
+        <link href="/prism/prism.css" rel="stylesheet">
+
+        <script src="/jquery.min.js"></script>
+        <script src="/bootstrap/js/popper.min.js"></script>
+        <script src="/bootstrap/js/bootstrap.min.js"></script>
+        <script>
+             
+            $(function() { $('table').addClass('table table-responsive'); })
+            $(function() { $('img').addClass('img-fluid'); })
+        </script>
+
+        <script>
+            
+            $('h1').each(function() {
+                $(this).append(' <a href=#' + $(this).prop('id') + '><i class="fa fa-paragraph anchor" aria-hidden="true"></i></a>');
+            })
+            $('h2').each(function() {
+                $(this).append(' <a href=#' + $(this).prop('id') + '><i class="fa fa-paragraph anchor" aria-hidden="true"></i></a>');
+            })
+            $('h3').each(function() {
+                $(this).append(' <a href=#' + $(this).prop('id') + '><i class="fa fa-paragraph anchor" aria-hidden="true"></i></a>');
+            })
+        </script>
+        <script src="/prism/prism.js"></script>
+    </body>
+</html>

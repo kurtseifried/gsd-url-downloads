@@ -1,0 +1,123 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<HTML>
+ <HEAD>
+   <TITLE> [patch] TLS Handshake failures can crash imap-login
+   </TITLE>
+   <LINK REL="Index" HREF="index.html" >
+   <LINK REL="made" HREF="mailto:dovecot%40dovecot.org?Subject=Re%3A%20%5Bpatch%5D%20TLS%20Handshake%20failures%20can%20crash%20imap-login&In-Reply-To=%3C20150424231720.09350797%40pc1.fritz.box%3E">
+   <META NAME="robots" CONTENT="index,nofollow">
+   <style type="text/css">
+       pre {
+           white-space: pre-wrap;       /* css-2.1, curent FF, Opera, Safari */
+           }
+   </style>
+   <META http-equiv="Content-Type" content="text/html; charset=us-ascii">
+   <LINK REL="Previous"  HREF="100616.html">
+   <LINK REL="Next"  HREF="100620.html">
+ </HEAD>
+ <BODY BGCOLOR="#ffffff">
+   <H1>[patch] TLS Handshake failures can crash imap-login</H1>
+    <B>Hanno B&#246;ck</B> 
+    <A HREF="mailto:dovecot%40dovecot.org?Subject=Re%3A%20%5Bpatch%5D%20TLS%20Handshake%20failures%20can%20crash%20imap-login&In-Reply-To=%3C20150424231720.09350797%40pc1.fritz.box%3E"
+       TITLE="[patch] TLS Handshake failures can crash imap-login">hanno at hboeck.de
+       </A><BR>
+    <I>Fri Apr 24 21:17:20 UTC 2015</I>
+    <P><UL>
+        <LI>Previous message: <A HREF="100616.html">FYI: dovecot (008632bdfd2c) compilation woes,	and minor glitch regarding update-version.sh
+</A></li>
+        <LI>Next message: <A HREF="100620.html">[patch] TLS Handshake failures can crash imap-login
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#100618">[ date ]</a>
+              <a href="thread.html#100618">[ thread ]</a>
+              <a href="subject.html#100618">[ subject ]</a>
+              <a href="author.html#100618">[ author ]</a>
+         </LI>
+       </UL>
+    <HR>  
+<!--beginarticle-->
+<PRE>Hi,
+
+I tracked down a tricky bug in dovecot that can cause the imap-login
+and pop3-login processes to crash on handshake failures.
+This can be tested by disabling SSLv3 in the dovecot config
+(ssl_protocols = !SSLv2 !SSLv3) and trying to connect with openssl and
+forced sslv3 (openssl s_client -ssl3 -connect localhost:995). This
+would cause a crash.
+
+
+What was going on is this:
+In ssl-proxy-openssl.c in line 545 in the function ssl_step() the
+function ssl_handshake() is called. There SSL_accept() is called. If
+SSL_accept failes - because a client sent an invalid packet or
+something the server doesn't support or any other reason -
+ssl_handle_error() will be called.
+
+ssl_handle_error() will call ssl_proxy_destroy().
+ssl_proxy_destroy() will then call ssl_proxy_flush(). And
+ssl_proxy_flush will call ssl_step() again. Here we have a loop. Now
+when SSL_accept() gets called again on the same context this is an
+invalid state for OpenSSL and it crashes.
+
+What to do? In essence, if ssl_proxy_destroy is called it shouldn't try
+to finish the handshake if the handshake hasn't even started due to an
+error. This can be done by a simple if check, see attached patch. I
+think this should do it.
+
+I have seen that a bug that is probably rootet in this has been posted
+here before regarding ssl3-disabled configs:
+<A HREF="http://dovecot.org/pipermail/dovecot/2015-March/100188.html">http://dovecot.org/pipermail/dovecot/2015-March/100188.html</A>
+
+cu,
+-- 
+Hanno B&#246;ck
+<A HREF="http://hboeck.de/">http://hboeck.de/</A>
+
+mail/jabber: <A HREF="http://dovecot.org/cgi-bin/mailman/listinfo/dovecot">hanno at hboeck.de</A>
+GPG: BBB51E42
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: dovecot-dont-crash-on-ssl-handshake-failure.diff
+Type: text/x-patch
+Size: 421 bytes
+Desc: not available
+URL: &lt;<A HREF="http://dovecot.org/pipermail/dovecot/attachments/20150424/bade681d/attachment.bin">http://dovecot.org/pipermail/dovecot/attachments/20150424/bade681d/attachment.bin</A>&gt;
+-------------- next part --------------
+A non-text attachment was scrubbed...
+Name: not available
+Type: application/pgp-signature
+Size: 819 bytes
+Desc: OpenPGP digital signature
+URL: &lt;<A HREF="http://dovecot.org/pipermail/dovecot/attachments/20150424/bade681d/attachment.sig">http://dovecot.org/pipermail/dovecot/attachments/20150424/bade681d/attachment.sig</A>&gt;
+</PRE>
+
+
+
+
+
+
+
+
+
+
+
+<!--endarticle-->
+    <HR>
+    <P><UL>
+        <!--threads-->
+	<LI>Previous message: <A HREF="100616.html">FYI: dovecot (008632bdfd2c) compilation woes,	and minor glitch regarding update-version.sh
+</A></li>
+	<LI>Next message: <A HREF="100620.html">[patch] TLS Handshake failures can crash imap-login
+</A></li>
+         <LI> <B>Messages sorted by:</B> 
+              <a href="date.html#100618">[ date ]</a>
+              <a href="thread.html#100618">[ thread ]</a>
+              <a href="subject.html#100618">[ subject ]</a>
+              <a href="author.html#100618">[ author ]</a>
+         </LI>
+       </UL>
+
+<hr>
+<a href="http://dovecot.org/cgi-bin/mailman/listinfo/dovecot">More information about the dovecot
+mailing list</a><br>
+</body></html>

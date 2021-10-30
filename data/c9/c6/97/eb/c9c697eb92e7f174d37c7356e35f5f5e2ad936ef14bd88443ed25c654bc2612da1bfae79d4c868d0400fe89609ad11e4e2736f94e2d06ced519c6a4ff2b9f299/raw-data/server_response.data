@@ -1,0 +1,327 @@
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>EFAIL</title>
+    <link rel='stylesheet' href='media/css/style.css' type='text/css' />
+</head>
+
+<body>
+
+    <header id="masthead" class="site-header" role="banner">
+        <div class="headerbackground"></div>
+        <div class="container">
+            <div class="logo">
+		            <img src='media/img/logo.svg'  height='180' width='180' />
+            </div>
+            <div id="brand">
+                <h1 >EFAIL</h1>
+            </div>
+
+        		<nav>
+        			<div>
+                <ul>
+                    <li><a href="#mitigations">Mitigations</a></li>
+                    <li><a href="#faq">FAQ</a></li>
+                    <li><a href="#paper">Paper/Talks</a></li>
+                    <li><a href="#press">Coverage</a></li>
+                </ul>
+              </div>
+          </nav>
+
+      		<div class="clear"></div>
+      	</div>
+
+</header>
+
+<div class="container">
+	<div id="primary">
+		<div id="content" role="main">
+            <article class="post">
+                <div class="the-content" style="text-align:justify;">
+                    <p>
+                    <strong>EFAIL describes vulnerabilities in the end-to-end encryption technologies OpenPGP and S/MIME that leak the plaintext of encrypted emails. </strong><br />
+                    Email is a plaintext communication medium whose communication paths are partly protected by TLS (<a href="https://en.wikipedia.org/wiki/Transport_Layer_Security">TLS</a>). For people in hostile environments (journalists, political activists, whistleblowers, ...) who depend on the confidentiality of digital communication, this may not be enough. Powerful attackers such as nation state agencies are known to eavesdrop on email communications of a large number of people. To address this, <a href="https://en.wikipedia.org/wiki/Pretty_Good_Privacy">OpenPGP</a> offers <a href="https://en.wikipedia.org/wiki/End-to-end_encryption">end-to-end encryption</a> specifically for sensitive communication in view of these powerful attackers. <a href="https://en.wikipedia.org/wiki/S/MIME">S/MIME</a> is an alternative standard for email end-to-end encryption that is typically used to secure corporate email communication.</p>
+
+                    <img style="width:60%;height:auto;float:left;margin-right:20px;" src="media/img/overview1.jpg">
+                    <p>The EFAIL attacks exploit vulnerabilities in the OpenPGP and S/MIME standards to reveal the plaintext of encrypted emails. In a nutshell, EFAIL abuses active content of HTML emails, for example externally loaded images or styles, to exfiltrate plaintext through requested URLs. To create these exfiltration channels, the attacker first needs access to the encrypted emails, for example, by eavesdropping on network traffic, compromising email accounts, email servers, backup systems or client computers. The emails could even have been collected years ago.</p>
+
+                    <img style="width:50%;height:auto; margin-left:20px;float:right;" src="media/img/overview2.jpg">
+                    <p>The attacker changes an encrypted email in a particular way and sends this changed encrypted email to the victim. The victim's email client decrypts the email and loads any external content, thus exfiltrating the plaintext to the attacker.</p>
+                    <p>&nbsp;</p>
+
+                    <h4>The CBC/CFB Gadget Attack</h4>
+
+                    <p>There are two different flavors of EFAIL attacks. First, we describe the novel <i>CBC/CFB gadget</i> attacks which abuse vulnerabilities in the specification of OpenPGP and S/MIME to exfiltrate the plaintext. The diagram below describes the idea of CBC gadgets in S/MIME. Because of the specifics of the <a href="https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation">CBC mode of operation</a>, an attacker can precisely modify plaintext blocks if she knows the plaintext. S/MIME encrypted emails usually start with &quot;Content-type: multipart/signed&quot; so the attacker knows at least one full block of plaintext as shown in <i>(a)</i>. She can then form a <i>canonical plaintext block</i> whose content is all zeros as shown in (b). We call the block pair <i>X</i> and <i>C<sub>0</sub></i> a CBC gadget. In step (c), she then repeatedly appends CBC gadgets to inject an image tag into the encrypted plaintext. This creates a single encrypted body part that exfiltrates its own plaintext when the user opens the attacker email. OpenPGP uses the <a href="https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Cipher_Feedback_.28CFB.29">CFB mode of operation</a>, which has very similar cryptographic properties as CBC and allows the same attack using CFB gadgets.</p>
+                    <img src="media/img/smime-attack.png">
+
+                    <p>The difference here is that any standard-conforming client will be vulnerable and that each vendor may cook their own mitigations that may or may not prevent the attacks. Thus, in the long term, it is necessary to update the specification to find and document changes that fix the underlying root causes of the vulnerabilities.</p>
+
+                    <p>While the CBC/CFB gadget attacks on PGP and S/MIME are technically very similar, the requirements for a successful attack differ substantially. Attacking S/MIME is straightforward and an attacker can break multiple (in our tests up to 500) S/MIME encrypted emails by sending a single crafted S/MIME email to the victim. As opposed to S/MIME, modern OpenPGP implementations offer a Modification Detection Code (MDC) that can detect modified plaintexts, effectively preventing the CFB gadget attack. However, we found that several clients only gave a warning to the user for invalid MDCs, but still displayed the modified plaintext. This allowed the CFB gadget attack despite the MDC. Furthermore, PGP compresses the plaintext before encrypting it, which complicates guessing known plaintext bytes. Given the current state of our research, the CFB gadget attack against PGP only has a success rate of approximately one in three attempts. We feel that plaintext compression is not a fundamental limitation of the EFAIL attacks but more a technical hitch and that attacks become more efficient in future research.</p>
+
+                    <h4>Direct Exfiltration</h4>
+                    <img width="331" src="media/img/exfil1.png" style="float:right;width: 60%;height:auto;margin-left:20px;margin-top:5px;">
+                    <p>Second, the <i>direct exfiltration</i> attack abuses vulnerabilities in Apple Mail, iOS Mail and Mozilla Thunderbird to directly exfiltrate the plaintext of encrypted emails. These vulnerabilities can be fixed in the respective email clients. The attack works like this. The attacker creates a new multipart email with three body parts as shown below. The first is an HTML body part essentially containing an HTML image tag. Note that the src attribute of that image tag is opened with quotes but not closed. The second body part contains the PGP or S/MIME ciphertext. The third is an HTML body part again that closes the src attribute of the first body part.</p>
+
+                    <img src="media/img/exfil2.png" style="width: 60%;height:auto;float:right;margin-left:20px;margin-top:5px;">
+                    <p>The attacker now sends this email to the victim. The victim's client decrypts the encrypted second body part and stitches the three body parts together in one HTML email as shown below. Note that the src attribute of the image tag in line 1 is closed in line 4, so the URL spans over all four lines.</p>
+
+                    <img src="media/img/exfil3.png" style="width: 60%;height:auto;float:right;margin-left:20px;margin-top:5px;">
+                    <p>The email client then URL encodes all non-printable characters (e.g., %20 is a whitespace) and requests an image from that URL. As the path of the URL contains the plaintext of the encrypted email, the victim's email client sends the plaintext to the attacker. </p>
+                    <p>The direct exfiltration EFAIL attacks work for encrypted PGP as well as S/MIME emails.</p>
+
+
+
+                    <section id="mitigations">
+                    <h2>Mitigations</h2>
+                    <p>Here are some strategies to prevent EFAIL attacks:<p>
+
+                    <p><strong>Short term: No decryption in email client.</strong> The best way to prevent EFAIL attacks is to only decrypt S/MIME or PGP emails in a separate application outside of your email client. Start by removing your S/MIME and PGP private keys from your email client, then decrypt incoming encrypted emails by copy&amp;pasting the ciphertext into a separate application that does the decryption for you. That way, the email clients cannot open exfiltration channels. This is currently the safest option with the downside that the process gets more involved.</p>
+                    <p><strong>Short term: Disable HTML rendering.</strong> The EFAIL attacks abuse active content, mostly in the form of HTML images, styles, etc. Disabling the presentation of <i>incoming</i> HTML emails in your email client will close the most prominent way of attacking EFAIL. Note that there are other possible backchannels in email clients which are not related to HTML but these are more difficult to exploit.</p>
+                    <p><strong>Medium term: Patching.</strong> Some vendors will publish patches that either fix the EFAIL vulnerabilities or make them much harder to exploit.</p>
+                    <p><strong>Long term: Update OpenPGP and S/MIME standards.</strong> The EFAIL attacks exploit flaws and undefined behavior in the <a href="https://en.wikipedia.org/wiki/MIME">MIME</a>, S/MIME, and OpenPGP standards. Therefore, the standards need to be updated, which will take some time.
+		<b>Update:</b> The changes in the current draft of <a href="https://tools.ietf.org/html/draft-ietf-openpgp-rfc4880bis-05">OpenPGP RFC4880 (bis05)</a> reflect our recommendation to <a href="https://tools.ietf.org/html/draft-ietf-openpgp-rfc4880bis-05#section-5.8">deprecate the SE packet type</a> and that <a href="https://tools.ietf.org/html/draft-ietf-openpgp-rfc4880bis-05#page-104">modified ciphertexts should not be displayed</a>.</p>
+
+                    <section id="paper">
+                        <h2>Paper</h2>
+                        The full technical paper is available at 27th USENIX Security Symposium.<br/><br/>
+                        <a href="https://www.usenix.org/conference/usenixsecurity18/presentation/poddebniak"><b>Efail: Breaking S/MIME and OpenPGP Email Encryption using Exfiltration Channels</b></a>
+                        <br/>
+                        <i>Damian Poddebniak, Christian Dresen, Jens Müller, Fabian Ising, Sebastian Schinzel, Simon Friedberger, Juraj Somorovsky, and Jörg Schwenk.</i><br/>
+                        27th USENIX Security Symposium, Baltimore, August 2018.</p>
+                    </section>
+		    <section>
+                        <h2>Talks</h2>
+			<p>There are several talks describing EFAIL.<br/><br/>
+                        <a href="https://www.youtube.com/watch?v=KrdljMp2li8"><b>Efail: Breaking S/MIME and OpenPGP Email Encryption using Exfiltration Channels</b></a>
+                        <br/>
+			<i>Damian Poddebniak, Christian Dresen.</i><br/>
+			RuhrSec 2018.</p>
+			<p><a href="https://www.youtube.com/watch?v=jRb54Xb7TCI&list=PLH15HpR5qRsVAXGmSVfjWrGtGLJjIJuGe&index=51&t=0s"><b>Efail: Breaking S/MIME and OpenPGP Email Encryption using Exfiltration Channels</b></a>
+                        <br/>
+			<i>Christian Dresen, Jens M&uuml;ller.</i><br/>
+			BlackHat USA 2018.</p>
+			<p><a href="https://www.youtube.com/watch?v=bsYck9SRsHA&list=PLCUxWIPmliVmG6fr0EiqnKqd27nYKNTuV"><b>Efail: Angriffe gegen Ende-zu-Ende-Verschlüsselung von E-Mail-Kommunikation mit S/MIME und OpenPGP</b></a>
+                        <br/>
+			<i>Christian Dresen</i><br/>
+			German OWASP Day 2018 M&uuml;nster.</p>
+       		 	<p><a href="https://www.youtube.com/watch?v=kKjtZy87iI0"><b>Attacking end-to-end email encryption</b></a>
+                        <br/>
+			<i>Sebastian Schinzel</i><br/>
+			35th Chaos Communication Congress (35C3).</p>
+        
+                    </section>
+
+
+		    
+<section id="faq">
+<h2>Questions and Answers</h2>
+  <ul class="question-list">
+          <li><a href="#what-is">What is PGP and S/MIME encryption?</a></li>
+          <li><a href="#what-are">What are the EFAIL attacks?</a></li>
+          <li><a href="#cve">Are there CVEs for EFAIL?</a></li>
+          <li><a href="#who-is">Who is affected?</a></li>
+          <li><a href="#can-you">Can you read my emails?</a></li>
+          <li><a href="#but-my">But my emails are TLS encrypted!</a></li>
+          <li><a href="#is-my">Is my email client affected?</a></li>
+          <li><a href="#been-p0wned">Can I find out whether I have already been attacked?</a></li>
+          <li><a href="#i-dont">I don't send HTML emails. Am I safe?</a></li>
+          <li><a href="#i-have">I have disabled HTML in my email client. Am I safe?</a></li>
+          <li><a href="#will-signatures">Will signatures prevent these attacks?</a></li>
+          <li><a href="#can-i-decrypt">Can you decrypt my own encrypted emails when I lost my private key?</a></li>
+          <li><a href="#do-i-need">Do I need to revoke my certificate or public key?</a></li>
+          <li><a href="#i-have-encrypted">I have encrypted data using OpenPGP or S/MIME and I won't decrypt it in the email context. Am I safe?</a></li>
+          <li><a href="#no-quotes">What happens if there are quotes in the encrypted email?</a></li>
+          <li><a href="#dkim">Will SPF/DKIM/DMARC mitigate the EFAIL attacks?</a></li>
+          <li><a href="#impact">How did EFAIL influence the developments in the current standards?</a></li>
+
+    </ul>
+
+    <h4><a name="what-is"></a>What is PGP and S/MIME encryption?</h4>
+    <p>Both technologies add an additional layer of security to your email communication. If used properly, both technologies should guarantee confidentiality and authenticity of your email messages even if an attacker has full access to your email account. The EFAIL attacks break this additional encryption layer.</p>
+
+    <h4><a name="what-are"></a>What are the EFAIL attacks?</h4>
+    <p>The EFAIL attacks break PGP and S/MIME email encryption by coercing clients into sending the full plaintext of the emails to the attacker.</p>
+
+    <h4><a name="cve"></a>Are there CVEs for EFAIL?</h4>
+    <p>Yes, there are two official CVE nummers for the CBC/CFB gadget attacks:
+    <br/><br/>CVE-2017-17688: OpenPGP CFB gadget attacks
+    <br/>CVE-2017-17689: S/MIME CBC gadget attacks
+<br/><br/>
+
+    Different vendors assigned further CVEs for specific security issues relevant to EFAIL, for example, direct exfiltration attacks.
+    </p>
+
+    <h4><a name="who-is"></a>Who is affected?</h4>
+    <p>Journalists, political activists or whistleblowers use an additional encryption layer, often PGP, because they fear that someone gets access to their email communication. The EFAIL attacks can be used to break this additional encryption layer. This leads to the situation where anyone getting access to their email communication can also read the victims emails even if they use additional PGP encryption. The same attacks apply to S/MIME which is typically used in enterprise infrastructures.</p>
+
+    <h4><a name="can-you"></a>Can you read my emails?</h4>
+    <p>No. The EFAIL attacks require the attacker to have access to your S/MIME or PGP encrypted emails. You are thus only affected if an attacker already has access to your emails. However, the very goal of PGP or S/MIME encryption is the protection against this kind of attacker. For those users who rely on PGP and S/MIME encryption, the EFAIL attacks may be a big deal!</p>
+
+    <h4><a name="but-my"></a>But my emails are TLS encrypted!</h4>
+    <p>TLS is a transport layer encryption technology that encrypts network traffic among email clients and email servers, or between two email servers. However, the emails are processed and stored in plaintext on the servers and in the email accounts. Any attacker getting access to these emails, either via compromising an email account or an email server, can read and change these emails. PGP and S/MIME are used to protect the confidentiality and integrity of emails in case an attacker can already access the emails.</p>
+
+    <h4><a name="is-my"></a>Is my email client affected?</h4>
+    <p>Our analysis shows that EFAIL plaintext exfiltration channels exist for 25 of the 35 tested S/MIME email clients and 10 of the 28 tested OpenPGP email clients. While it is necessary to change the OpenPGP and S/MIME standards to reliably fix these vulnerabilities, Apple Mail, iOS Mail and Mozilla Thunderbird had even more severe implementation flaws allowing direct exfiltration of the plaintext that is technically very easy to execute.</p>
+
+    <h4><a name="been-p0wned"></a>Can I find out whether I have already been attacked?</h4>
+    <p>Not for sure. You can of course search in your inbox for malicious emails indicating EFAIL attacks. A strong indication for these attacks could be, for example, malformed emails with unclosed img tags followed by encrypted content, or encrypted content that exfiltrates the plaintext to foreign URLs. However, note that emails are encrypted with the keys of sender as well as all receivers. The attacker can target any of these parties to exfiltrate content that is important to you. In advanced attack scenarios where the attacker is in control of the email server, she could have deleted the malicious emails after the victim has processed them. </p>
+
+    <h4><a name="i-dont"></a>I don't send HTML emails. Am I safe?</h4>
+    <p>No. The attacker can change encrypted text/only emails to HTML emails. You need to disable <i>viewing</i> HTML email to increase protection from EFAIL attacks.</p>
+
+    <h4><a name="i-have"></a>I have disabled HTML in my email client. Am I safe now?</h4>
+    <p>Depends. S/MIME or PGP encrypted emails are encrypted with the public keys of <i>all</i> recipients <i>and</i> the sender. The attacker can thus perform the EFAIL attacks if only one of the participants is vulnerable. In order to prevent the EFAIL attacks, <i>all</i> participants must use secure email clients.</p>
+
+    <h4><a name="will-signatures"></a>Will signatures prevent these attacks?</h4>
+    <p>No. PGP and S/MIME emails are displayed in the email program independently of whether or not they are signed or whether an existing signature is valid or not. Even if signatures did matter: an attacker can copy the altered ciphertext into a separate email and create a valid signature under his own name.</p>
+
+    <h4><a name="can-i-decrypt"></a>Can you decrypt my own encrypted emails when I lost my private key?</h4>
+    <p>No. The EFAIL attacks target a victim, who is in possession of the private key and who decrypts our prepared emails in an email client. If the private key is lost, the EFAIL attacks won't help recovering encrypted messages.</p>
+
+    <h4><a name="do-i-need"></a>Do I need to revoke my certificate or public key?</h4>
+    <p>No. Using the EFAIL attacks, the attacker can retrieve the plaintext of encrypted OpenPGP and S/MIME messages. She does not get direct access to the private key.</p>
+
+    <h4><a name="i-have-encrypted"></a>I have encrypted data using OpenPGP or S/MIME and I won't decrypt it in the email context. Am I safe?</h4>
+    <p>For now yes. There may be edge cases though that we hadn't looked into. For example, if you encrypted a directory with sensitive files, an attacker could change these encrypted files to contain false information or even malware. If a victim decrypts the directory and opens any of the files, malware or even just an HTML file could be used to exfiltrate plaintext or even compromise the system.</p>
+
+    <h4><a name="no-quotes"></a>What happens if there are quotes in the encrypted email?</h4>
+    <p>Quotes in the plaintext might end the URL that is used to exfiltrate the plaintext so that either the bytes after the quote are not exfiltrated or that the exploit may not work at all. Because of the properties of the CBC and CFB modes of operation, an attacker can split a single S/MIME or PGP ciphertext into multiple parts and exfiltrate each independently with separate HTML tags (but still in one email). If one part contains quotes then only the residual plaintext bytes in that part are missing. There is a whole zoo of techniques that the attacker can use to exfiltrate the full plaintext despite these technical obstacles.</p>
+
+
+    <h4><a name="dkim"></a>Will SPF/DKIM/DMARC mitigate the EFAIL attacks? (Update 2018-05-16)</h4>
+    <p>No. These technologies offer message authenticity and protection against email sender spoofing. Our EFAIL attacker would copy the S/MIME or PGP ciphertext from the original email and past the changed ciphertext into a new message. The attacker now sends the message under his own name with valid values for SPF/DKIM/DMARC.</p>
+
+    <h4><a name="impact"></a>How did EFAIL influence the developments in the current standards?</h4>
+    <p>There is an ongoing work on two new email security standards. Both considered countermeasures presented in our paper.
+    <br/>The <a href="https://tools.ietf.org/html/draft-ietf-lamps-rfc5751-bis-11">S/MIME standard draft</a> references our EFAIL paper and recommends the usage of authenticated encryption with AES-GCM. Furthermore, it warns that different parts in multipart/mixed emails should be treated as <i>being of different origins</i>.
+    <br/>The <a href="https://tools.ietf.org/html/draft-ietf-openpgp-rfc4880bis-05">OpenPGP standard draft</a> deprecates Symmetrically Encrypted (SE) data packets which are not protected by MDCs. It proposes AEAD protected data packets and mentions that <i>the implementation should not allow users to access erroneous data</i>.
+    </p>
+
+
+  </section>
+
+  <section id="disclousure">
+	  <h2>Responsible Disclosure</h2>
+	  <p>We have responsibly disclosed our findings to the affected vendors who have applied (or are in the process of applying) countermeasures. Please note that in general these countermeasures are specific hotfixes and we cannot rule out that extended attacks with further backchannels or exfiltrations will be found. (<b>Update:</b> After the disclosure, bypasses were indeed published for <a href="https://www.golem.de/news/pgp-smime-thunderbird-update-notwendig-um-efail-zu-verhindern-1805-134472.html">Thunderbird</a> and <a href="https://theintercept.com/2018/05/25/in-apple-mail-theres-no-protecting-pgp-encrypted-messages/">Apple Mail</a>.) Moreover, even if all backchannels are closed, both standards are still vulnerable to attacks where the attacker can modify email content or inject malicious code into attachments which get executed in a context beyond email client.
+	  </p>
+	  <p>We informed German CERT and BSI about our attacks in December 2017. They forwarded all the relevant information to other CERTs and companies.</p>
+	  <p>We disclosed our attacks to the GnuPG developers on the 24th of November 2017. Further clients are listed below. For reference we also include case numbers and CVEs if they have been assigned. Note that as of May 2018 fixes have been deployed for various mail clients, for details check the vendors' websites.</p>
+	  <p>Attacks on S/MIME clients:</p>
+	  <img src="media/img/efail-disclosure-smime.png" style="width: 70%;height:auto;float:center;margin-left:20px;margin-top:5px;">
+	  <p><small>* Due to the amount of disclosed products we have missed communication with this vendor.</small></p>
+	  <p>Attacks on PGP clients:</p>
+	  <img src="media/img/efail-disclosure-pgp.png" style="width: 70%;height:auto;float:center;margin-left:20px;margin-top:5px;">
+	  <p>Direct exfiltration attacks:</p>
+	  <img src="media/img/efail-disclosure-direct.png" style="width: 70%;height:auto;float:center;margin-left:20px;margin-top:5px;">
+  </section>
+
+  <section id="press">
+    <h2>Coverage</h2>
+    <p>
+      Electronic Frontier Foundation<br />
+      MAY 14, 2018<br/>
+      <b>Attention PGP Users: New Vulnerabilities Require You To Take Action Now</b><br/>
+      <a href="https://www.eff.org/deeplinks/2018/05/attention-pgp-users-new-vulnerabilities-require-you-take-action-now" target="_blank">https://www.eff.org/deeplinks/2018/05/attention-pgp-users-new-vulnerabilities-require-you-take-action-now</a>
+    </p>
+    <p>
+      Ars Technica<br />
+      MAY 14, 2018<br/>
+      <b>Critical PGP and S/MIME bugs can reveal encrypted e-mails. Uninstall now</b><br/>
+      <a href="https://arstechnica.com/information-technology/2018/05/critical-pgp-and-smime-bugs-can-reveal-encrypted-e-mails-uninstall-now/" target="_blank">https://arstechnica.com/information-technology/2018/05/critical-pgp-and-smime-bugs-can-reveal-encrypted-e-mails-uninstall-now/</a>
+    </p>
+    <p>
+      Golem<br />
+      MAY 14, 2018<br/>
+      <b>PGP und S/MIME abschalten</b><br/>
+      <a href="https://www.golem.de/news/e-mail-verschluesselung-pgp-und-s-mime-abschalten-1805-134359.html" target="_blank">https://www.golem.de/news/e-mail-verschluesselung-pgp-und-s-mime-abschalten-1805-134359.html</a>
+    </p>
+
+    <p>
+      Süddeutsche Zeitung<br />
+      MAY 14, 2018<br/>
+      <b>Verschlüsselte E-Mails sind nicht sicher</b><br/>
+      <a href="https://www.sueddeutsche.de/digital/exklusiv-verschluesselte-e-mails-sind-nicht-sicher-1.3978608" target="_blank">https://www.sueddeutsche.de/digital/exklusiv-verschluesselte-e-mails-sind-nicht-sicher-1.3978608</a>
+    </p>
+
+    <p>
+      Forbes<br />
+      MAY 14, 2018<br/>
+      <b>Major #eFail Vulnerability Exposes PGP Encrypted Email</b><br/>
+      <a href="https://www.forbes.com/sites/thomasbrewster/2018/05/14/pgp-encrypted-email-vulnerability-exposes-private-messages/#4c3963723e2a" target="_blank">https://www.forbes.com/sites/thomasbrewster/2018/05/14/pgp-encrypted-email-vulnerability-exposes-private-messages/#4c3963723e2a</a>
+    </p>
+
+
+    <p>
+      Wired<br />
+      MAY 14, 2018<br/>
+      <b>Encrypted email has a major, divisive flaw</b><br/>
+      <a href="https://www.wired.com/story/efail-encrypted-email-flaw-pgp-smime/" target="_blank">https://www.wired.com/story/efail-encrypted-email-flaw-pgp-smime/</a>
+    </p>
+
+
+    <p>
+      Heise Online<br />
+      MAY 14, 2018<br/>
+      <b>PGP und S/MIME: E-Mail-Verschlüsselung akut angreifbar</b><br/>
+      <a href="https://www.heise.de/security/meldung/PGP-E-Mail-Verschluesselung-akut-angreifbar-4048489.html" target="_blank">https://www.heise.de/security/meldung/PGP-E-Mail-Verschluesselung-akut-angreifbar-4048489.html</a>
+    </p>
+
+
+    <p>
+      The Register<br />
+      MAY 14, 2018<br/>
+      <b>S/MIME artists: EFAIL email app flaws menace PGP-encrypted chats</b><br/>
+      <a href="https://www.theregister.co.uk/2018/05/14/smime_pgp_encryption_flaw_emails_vulnerable_to_snooping/" target="_blank">https://www.theregister.co.uk/2018/05/14/smime_pgp_encryption_flaw_emails_vulnerable_to_snooping/</a>
+    </p>
+
+
+    <p>
+      Vice Motherboard<br />
+      MAY 14, 2018<br/>
+      <b>People Are Freaking Out That PGP Is ‘Broken’—But You Shouldn’t Be Using It Anyway</b><br/>
+      <a href="https://motherboard.vice.com/en_us/article/3k4nd9/pgp-gpg-efail-vulnerability" target="_blank">https://motherboard.vice.com/en_us/article/3k4nd9/pgp-gpg-efail-vulnerability</a>
+    </p>
+
+
+    <p>
+      The Atlantic<br />
+      MAY 21, 2018<br/>
+      <b>Email Is Dangerous</b><br/>
+      <a href="https://www.theatlantic.com/technology/archive/2018/05/email-is-dangerous/560780/" target="_blank">https://www.theatlantic.com/technology/archive/2018/05/email-is-dangerous/560780/</a>
+    </p>
+
+
+    <p>
+      Golem<br />
+      MAY 22, 2018<br/>
+      <b>Die wichtigsten Fakten zu Efail</b><br/>
+      <a href="https://www.golem.de/news/pgp-smime-die-wichtigsten-fakten-zu-efail-1805-134493.html" target="_blank">https://www.golem.de/news/pgp-smime-die-wichtigsten-fakten-zu-efail-1805-134493.html</a>
+    </p>
+
+
+    <p>
+      Bruce Schneier<br />
+      MAY 24, 2018<br/>
+      <b>What "Efail" Tells Us About Email Vulnerabilities and Disclosure</b><br/>
+      <a href="https://www.schneier.com/essays/archives/2018/05/what_efail_tells_us_.html" target="_blank">https://www.schneier.com/essays/archives/2018/05/what_efail_tells_us_.html</a>
+    </p>
+
+
+
+  </section>
+                </div>
+            </article>
+		</div>
+	</div>
+
+</div>
+<footer class="site-footer">
+    <div class="site-info container">
+      <p class="text-muted">Last updated May 14, 2018 | The Efail website free to use under GPL | Logo designed by Jana Runde and Zuzana Somorovska  (free to use under a CC0 license) | <a href="imprint.html">Imprint</a></p>
+    </div>
+	</div>
+</footer>
+
+</body>
+</html>

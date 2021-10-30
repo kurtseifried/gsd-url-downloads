@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Begin Jekyll SEO tag v2.5.0 -->
+<title>ereisr00</title>
+<meta name="generator" content="Jekyll v3.8.5" />
+<meta property="og:title" content="ereisr00" />
+<meta property="og:locale" content="en_US" />
+<link rel="canonical" href="https://ereisr00.github.io/" />
+<meta property="og:url" content="https://ereisr00.github.io/" />
+<meta property="og:site_name" content="ereisr00" />
+<script type="application/ld+json">
+{"@type":"WebSite","url":"https://ereisr00.github.io/","headline":"ereisr00","name":"ereisr00","@context":"http://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=cdaaac77f90f5c55a853697c4c2142e7b16340d6">
+    <!--[if lt IE 9]>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1><a href="https://ereisr00.github.io/">ereisr00</a></h1>
+        
+        
+
+        <p></p>
+
+        <p class="view"><a href="february_2019/index.html"> February 2019</a></p>
+
+        
+      </header>
+      <section>
+
+      <h1 id="010editor">010Editor</h1>
+
+<p>010Editor is a hex-editor that includes a sophisticated template and scripting engine.
+One of the major advantages of 010Editor is that it contains a large repository of templates that can be downloaded and used to parse new file formats. These templates are used to present an elaborate definition of a file and its structure in an easily digestable form (colors and windows).</p>
+
+<p>Just as have many other people, I’ve been using 010Editor for a while. This software is a leader in its specific market, and it’s hard to find a good alternative. I was curious on how the 010Editor scripting engine was implemented, and whether the implementation was secure, so I (naturally) decided to audit the security of the scripting engine.</p>
+
+<h2 id="templates">Templates</h2>
+
+<p>The scripting engine can be used for running scripts or templates. Both of which run the same C-like code, but templates have additional restrictions (some functions require explicit user permission to execute). The code is compiled and executed by the scripting engine, and is manifested as a template file (.bt) or as a script file (.1sc). New templates can be uploaded to a central repository, from which other users can download and make use of new templates. At the time of writing, this repository contains a large number of templates that can be used to parse many different types of file formats. When a new file is opened, 010 checks if a template that can parse the file is found in the repository, if a template is found, 010Editor prompts the user with an option to download the template. Templates execute when a file associated with the template is loaded by the editor or when explicitly ran by the user.</p>
+
+<h2 id="attack-surface">Attack surface</h2>
+
+<p>I started out by reviewing the documentation in order to gain an understanding of what kind of functionality the scripting engine provides the developer, and what kind of security guarantees the engine was supposed to provide. After looking at the list of functions provided by the engine, it was clear that the developers have implemented a large number of C-like functions. These functions are separated into 5 classes: Interface Functions, I/O functions, String functions, Math functions and Tool functions.</p>
+
+<p>010Editor also allows the use of external(DLL) functions, but the documentation clearly states that using these functions in templates requires explicit permission by the user. The usage of these functions in scripts is permitted. This situation made it clear that exploitation of a script file (.1sc) is not interesting, as scripts allow for the execution of arbitrary DLLs - and are expected to run at the discretion of the user (should be considered insecure).</p>
+
+<p>Out of the five different classes of functions, one stood out - String functions. These functions deal with string and memory operations (strcpy, memcpy, memmove, printf etc…) - this kind of logic is known to be very bug-prone and difficult to implement securely. At that point, I figured that there’s a fairly good chance that bugs would exist in the implementation of some of these functions, as they deal with the copying and moving of binary data (of which a string is made). As I am more interested in exploitable bugs (bugs that could result in code execution), the kind of memory corruptions that could occur from faulty implementation of these functions seemed like a good target (likely to overwrite memory).</p>
+
+<h2 id="reviewing-the-string-functions">Reviewing the string functions</h2>
+
+<p>After reviewing a bunch of different functions, and finding some bugs that I deemed unexploitable, I came across the following (truncated and commented) code.</p>
+
+<pre><code class="language-Assembly">
+/*
+ *  Internal implementation of function Memcpy in the template engine
+ */
+Memcpy(arg1, arg2, n, dest_offset, src_offset)
+  ...
+  mov     edi, [rdx+8]    // dest_offset
+  mov     rdx, [rax+20h]
+  mov     rax, [rax+10h]
+  mov     ecx, [r9+4]
+  mov     esi, [rdx+8]    // src_offset
+  mov     edx, [r8+4]
+  mov     eax, [rax+8]
+  sub     ecx, edi        // dest_len -= dest_offset 1) no check on dest_offset for negative value
+  sub     edx, esi        // src_len -= src_offset   2) no check on src_offset for negative value
+  cmp     ecx, edx        // if (dest_len &lt; src_len)
+  cmovle  edx, ecx        //   copy_length = dest_len
+  cmp     edx, eax        
+  cmovg   edx, eax        
+  test    edx, edx        
+  jle     short loc_XXX 
+  movsxd  rdi, edi        
+  movsxd  rsi, esi        
+  add     rdi, [r9+8]     // dest += dest_offset     3) passing dest += dest_offset could lead to underflow
+  add     rsi, [r8+8]     // src += src_offset       4) passing src += src_offset could lead to underflow
+  movsxd  rdx, edx        // n
+  call    _memcpy         ; Call Procedure
+...
+
+
+</code></pre>
+
+<p>As the comments specify, this is the internal implementation of the Memcpy function. 
+This function has the following signature:
+void Memcpy( uchar dest[], const uchar src[], int n, int destOffset=0, int srcOffset=0 )</p>
+
+<p>The bug here is that the code does not validate destOffset and srcOffset properly.
+These variables can be assigned a negative value, which can result in an underflow and corruption of the heap.</p>
+
+<h2 id="exploitation">Exploitation</h2>
+
+<p>At this point I had a memory corruption vulnerability, but I still needed something to overwrite. Surprisingly, the binary was not compiled with aslr (linux version) - which meant that if I could get a primitive to write an absolute address, I could easily overwrite the GOT and redirect execution.</p>
+
+<p>As I already reversed the code, I knew that the string variable was pointed to by a structure that represented the scripting engine’s “string object”.
+I realized that I could set the heap in such a way that this structure will be placed at a known location behind the array that I can underflow - this way I could overwrite this pointer to an absolute address of my choosing.
+After that pointer is overwritten, the “string object” would point to wherever I want, and I could use it to read/write arbitrary memory.</p>
+
+<p>To summarize, the exploitation follows these steps:</p>
+
+<ol>
+  <li>Initialize a string</li>
+  <li>Overwrite the pointer to the string with an address of a known function in the got</li>
+  <li>repeat 2 as much as needed to figure out which libc is running (by comparing the non-randomized bits to known libc addresses)</li>
+  <li>Calculate the address of system in libc</li>
+  <li>Initialize another string</li>
+  <li>Overwrite the pointer to a function in the got that we can trigger</li>
+  <li>Overwrite the got from bullet 6 with system</li>
+  <li>Trigger the function from bullet 6 with whatever command I want to run</li>
+</ol>
+
+<h2 id="closing">Closing</h2>
+
+<p>As 010Editor is a fairly popular product, these kinds of bugs can be used to attack a large number of people.
+If a malicious template is uploaded to the central repository it could be used as an attack vector against anyone who downloads the template.
+It’s also possible to exploit a non-malicious template that uses a vulnerable function by sending a malicious file to a victim machine and inducing the victim to open that file with 010Editor (a less promising attack vector).</p>
+
+<p>During the audit of 010 Editor version 9.0.1, numerous exploitable (and non exploitable) bugs were found.
+After gathering up the findings and completing the POC, I contacted Sweetscape and presented them with the findings.
+They quickly responded and cooperatively worked on fixing all the issues found. The bugs were fixed in version 9.0.2.</p>
+
+<h3 id="update">Update</h3>
+
+<p>the following CVE IDs were assigned for the vulnerabilities:</p>
+
+<p>https://github.com/ereisr00/bagofbugz/tree/master/010Editor/memcpy_rce.bt: CVE-2019-12551<br />
+https://github.com/ereisr00/bagofbugz/tree/master/010Editor/null_deref.bt: CVE-2019-12552<br />
+https://github.com/ereisr00/bagofbugz/tree/master/010Editor/strcat_heap_overflow.bt: CVE-2019-12553<br />
+https://github.com/ereisr00/bagofbugz/tree/master/010Editor/SubStr.bt: CVE-2019-12555<br />
+https://github.com/ereisr00/bagofbugz/tree/master/010Editor/WSubStr.bt: CVE-2019-12554</p>
+
+
+
+      </section>
+      <footer>
+        
+
+        
+        <p class="view"><a href="https://github.com/ereisr00">ereisr00 @ github</a></p>
+        
+      </footer>
+    </div>
+    <script src="/assets/js/scale.fix.js"></script>
+    
+  </body>
+</html>
+

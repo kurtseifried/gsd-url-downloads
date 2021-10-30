@@ -1,0 +1,146 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+<head> <title>curl - TLS session caching disaster - CVE-2021-22901</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
+<link rel="stylesheet" type="text/css" href="/curl.css">
+<link rel="shortcut icon" href="/favicon.ico">
+<link rel="icon" href="/logo/curl-symbol.svg" type="image/svg+xml">
+<link rel="STYLESHEET" type="text/css" href="https://curl.se/manpage.css">
+</head>
+<body>
+<div class="main">
+<div class="menu">
+<a href="/docs/" class="menuitem" title="Documentation Overview">Docs Overview</a>
+<div class="dropdown">
+  <a class="dropbtn" href="/docs/projdocs.html">Project</a>
+  <div class="dropdown-content">
+    <a href="/docs/bugbounty.html">Bug Bounty</a>
+    <a href="/docs/bugs.html">Bug Report</a>
+    <a href="/docs/code-of-conduct.html">Code of conduct</a>
+    <a href="/docs/libs.html">Dependencies</a>
+    <a href="/donation.html">Donate</a>
+    <a href="/docs/faq.html">FAQ</a>
+    <a href="/docs/features.html">Features</a>
+    <a href="/docs/governance.html">Governance</a>
+    <a href="/docs/history.html">History</a>
+    <a href="/docs/install.html">Install</a>
+    <a href="/docs/knownbugs.html">Known Bugs</a>
+    <a href="/docs/todo.html">TODO</a>
+    <a href="/about.html">Web Site Info</a>
+  </div>
+</div>
+<div class="dropdown">
+  <a class="dropbtn" href="/docs/protdocs.html">Protocols</a>
+  <div class="dropdown-content">
+    <a href="/docs/hsts.html">HSTS</a>
+    <a href="/docs/http-cookies.html">HTTP cookies</a>
+    <a href="/docs/http2.html">HTTP/2</a>
+    <a href="/docs/http3.html">HTTP/3</a>
+    <a href="/docs/mqtt.html">MQTT</a>
+    <a href="/docs/sslcerts.html">SSL certs</a>
+    <a href="/docs/caextract.html">CA Extract</a>
+    <a href="/docs/ssl-compared.html">SSL libs compared</a>
+    <a href="/docs/url-syntax.html">URL syntax</a>
+  </div>
+</div>
+<div class="dropdown">
+  <a class="dropbtn" href="/docs/reldocs.html">Releases</a>
+  <div class="dropdown-content">
+    <a href="/changes.html">Changelog</a>
+    <a href="/docs/releases.html">Release Table</a>
+    <a href="/docs/security.html">Security Problems</a>
+    <a href="/docs/versions.html">Version Nums</a>
+    <a href="/docs/vulnerabilities.html">Vulnerabilities</a>
+  </div>
+</div>
+<div class="dropdown">
+  <a class="dropbtn" href="/docs/tooldocs.html">Tool</a>
+  <div class="dropdown-content">
+    <a href="/docs/comparison-table.html">Comparison Table</a>
+    <a href="/docs/manpage.html">curl man page</a>
+    <a href="/docs/httpscripting.html">HTTP Scripting</a>
+    <a href="/docs/mk-ca-bundle.html">mk-ca-bundle</a>
+    <a href="/docs/manual.html">Tutorial</a>
+  </div>
+</div>
+<div class="dropdown">
+  <a class="dropbtn" href="/docs/whodocs.html">Who and Why</a>
+  <div class="dropdown-content">
+    <a href="/docs/companies.html">Companies</a>
+    <a href="/docs/copyright.html">Copyright</a>
+    <a href="/sponsors.html">Sponsors</a>
+    <a href="/docs/thanks.html">Thanks</a>
+    <a href="/docs/thename.html">The name</a>
+  </div>
+</div>
+</div>
+<div class="contents">
+<div class="where"><a href="/">curl</a> / <a href="/docs/">Docs</a> / <a href="/docs/security.html">Security Problems</a> / <b>TLS session caching disaster</b></div>
+<div class="relatedbox">
+<b>Related:</b>
+<br><a href="/docs/bugbounty.html">Bug Bounty</a>
+<br><a href="/changes.html">Changelog</a>
+<br><a href="/donation.html">Donate</a>
+<br><a href="faq.html">FAQ</a>
+<br><a href="security.html">Security Problems</a>
+<br><a href="/dev/secprocess.html">Security Process</a>
+<br><a href="vulnerabilities.html">Vulnerabilities Table</a>
+</div>
+<h1 id="tls-session-caching-disaster">TLS session caching disaster</h1>
+<p>Project curl Security Advisory, May 26th 2021 - <a href="https://curl.se/docs/CVE-2021-22901.html">Permalink</a></p>
+<h2 id="vulnerability">VULNERABILITY</h2>
+<p>libcurl can be tricked into using already freed memory when a new TLS session is negotiated or a client certificate is requested on an existing connection. For example, this can happen when a TLS server requests a client certificate on a connection that was established without one. A malicious server can use this in rare unfortunate circumstances to potentially reach remote code execution in the client.</p>
+<p>OpenSSL can declare a &quot;new session&quot; for different reasons, including the initial TLS handshake completion, TLS 1.2 (or earlier) renegotiation, or TLS 1.3 client certificate requests. When libcurl at run-time sets up support for session ID caching on a connection using OpenSSL, it stores pointers to the transfer in-memory object for later retrieval when OpenSSL considers a new session to be established.</p>
+<p>However, if the connection is used by multiple transfers (like with a reused HTTP/1.1 connection or multiplexed HTTP/2 connection) that first transfer object might be freed before the new session is established on that connection and then the function will access a memory buffer that might be freed. When using that memory, libcurl might even call a function pointer in the object, making it possible for a remote code execution if the server could somehow manage to get crafted memory content into the correct place in memory.</p>
+<p>We are not aware of any exploit of this flaw.</p>
+<h2 id="info">INFO</h2>
+<p>The flaw can only happen in libcurl built to use OpenSSL (or one of its forks).</p>
+<p>This flaw has existed in curl since commit <a href="https://github.com/curl/curl/commit/a304051620b92">a304051620b92</a> in libcurl <a href="vuln-7.75.0.html">7.75.0</a>, released on February 3, 2021.</p>
+<p>The Common Vulnerabilities and Exposures (CVE) project has assigned the name CVE-2021-22901 to this issue.</p>
+<p>CWE-416: Use After Free</p>
+<p>Severity: High</p>
+<h2 id="steps-to-remote-code-execution">Steps to remote code execution</h2>
+<ol>
+<li><p>libcurl built to use OpenSSL (BoringSSL and libressl work the same)</p></li>
+<li><p>A multi interface using application</p></li>
+<li><p>One of the following:</p></li>
+</ol>
+<ul>
+<li><p>create and use a first easy handle to do HTTP/1.1 over TLS to a malicious server</p></li>
+<li><p>free that easy handle with <code>curl_easy_cleanup()</code></p></li>
+<li><p>create and use a second easy handle to do HTTP/1.1 over TLS with to the same server such that the TLS connection is reused</p>
+<p>or</p></li>
+<li><p>more than one concurrent easy handle created that do HTTP/2 over a TLS connection to a malicious server,</p></li>
+<li><p>the <em>first</em> easy handle to use the connection must be freed with <code>curl_easy_cleanup()</code></p></li>
+<li><p>at least one easy handle remaining in use of the same connection</p></li>
+</ul>
+<ol start="4">
+<li><p>The attacking server needs to figure out heap address details in order to know what payload contents to provide</p></li>
+<li><p>The necessary exact memory address in the heap gets populated by memory contents controlled by the server</p></li>
+<li><p>The attacker starts a new handshake (on TLS 1.2 or earlier), or sends a TLS 1.3 client certificate request, or otherwise triggers OpenSSL to consider a new session to be established</p></li>
+</ol>
+<p>For a remote code execution, the client needs to perform (potentially many) more transfers (and thus have more easy handles) to allow the server to place crafted contents into heap memory. Instead of remote code execution, the client could instead crash or otherwise experience undefined behaviour.</p>
+<h2 id="affected-versions">AFFECTED VERSIONS</h2>
+<ul>
+<li>Affected versions: curl <a href="vuln-7.75.0.html">7.75.0</a> to and including <a href="vuln-7.76.1.html">7.76.1</a></li>
+<li>Not affected versions: curl &lt; <a href="vuln-7.75.0.html">7.75.0</a> and curl &gt;= <a href="vuln-7.77.0.html">7.77.0</a></li>
+</ul>
+<p>Also note that libcurl is used by many applications, and not always advertised as such.</p>
+<h2 id="the-solution">THE SOLUTION</h2>
+<p>When the transfer is detached from the connection, it clears the association to it from the session ID cache logic.</p>
+<p>A <a href="https://github.com/curl/curl/commit/7f4a9a9b2a49547eae24d2e19bc5c346e9026479">fix for CVE-2021-22901</a></p>
+<h2 id="recommendations">RECOMMENDATIONS</h2>
+<p>A - Upgrade curl to version <a href="vuln-7.77.0.html">7.77.0</a></p>
+<p>B - Apply the patch to your local version</p>
+<p>C - Build libcurl to use another TLS backend</p>
+<h2 id="timeline">TIMELINE</h2>
+<p>This issue was reported to the curl project on April 29, 2021.</p>
+<p>This advisory was posted on May 26, 2021.</p>
+<h2 id="credits">CREDITS</h2>
+<p>This issue was reported by Harry Sintonen. Patched by Harry Sintonen and Daniel Stenberg. Help and research by Brad Spencer.</p>
+<p>Thanks a lot!</p>
+</div>
+</div>
+<script defer src="https://www.fastly-insights.com/insights.js?k=8cb1247c-87c2-4af9-9229-768b1990f90b" type="text/javascript"></script>
+</body> </html>

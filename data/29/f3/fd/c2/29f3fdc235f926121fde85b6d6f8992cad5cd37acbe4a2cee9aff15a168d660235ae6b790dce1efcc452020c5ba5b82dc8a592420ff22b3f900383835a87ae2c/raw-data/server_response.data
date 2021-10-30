@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="/assets/css/style.css?v=ef657dd46baba51c35bd49db0ffbe43ae63e87c9">
+
+<!-- Begin Jekyll SEO tag v2.5.0 -->
+<title>Command Execution Vulnerability in rssh with allowscp (CVE-2019-1000018) | esnet-security.github.io</title>
+<meta name="generator" content="Jekyll v3.7.4" />
+<meta property="og:title" content="Command Execution Vulnerability in rssh with allowscp (CVE-2019-1000018)" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="ESnet Security’s github.io Site" />
+<meta property="og:description" content="ESnet Security’s github.io Site" />
+<link rel="canonical" href="https://esnet-security.github.io/vulnerabilities/20190115_rssh.html" />
+<meta property="og:url" content="https://esnet-security.github.io/vulnerabilities/20190115_rssh.html" />
+<meta property="og:site_name" content="esnet-security.github.io" />
+<script type="application/ld+json">
+{"@type":"WebPage","url":"https://esnet-security.github.io/vulnerabilities/20190115_rssh.html","headline":"Command Execution Vulnerability in rssh with allowscp (CVE-2019-1000018)","description":"ESnet Security’s github.io Site","@context":"http://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+
+  </head>
+
+  <body>
+
+    <header>
+      <div class="container">
+        <h1>esnet-security.github.io</h1>
+        <h2>ESnet Security's github.io Site</h2>
+
+        <section id="downloads">
+          
+          <a href="https://github.com/esnet-security/esnet-security.github.io" class="btn btn-github"><span class="icon"></span>View on GitHub</a>
+        </section>
+      </div>
+    </header>
+
+    <div class="container">
+      <section id="main_content">
+        <h1 id="command-execution-vulnerability-in-rssh-with-allowscp-cve-2019-1000018">Command Execution Vulnerability in rssh with allowscp (CVE-2019-1000018)</h1>
+
+<h2 id="issue">Issue</h2>
+
+<p>We discovered a vulnerability in rssh where users could bypass the “allowscp” option into arbitrary command execution.</p>
+
+<p>This issue is pending CVE assignment.</p>
+
+<h2 id="background">Background</h2>
+
+<p>From the <a href="http://www.pizzashack.org/rssh/">rssh home page</a>:</p>
+
+<blockquote>
+  <p>rssh is a restricted shell for use with OpenSSH, allowing only scp and/or sftp. It now also includes support for rdist, rsync, and cvs. For example, if you have a server which you only want to allow users to copy files off of via scp, without providing shell access, you can use rssh to do that.</p>
+</blockquote>
+
+<p>The <code class="highlighter-rouge">allowscp</code> option is intended to restrict users to only being able to scp files to or from the server, and not be able to run commands on the server.</p>
+
+<p>When a user runs scp on their client, an scp command is also run on the server. This runs through rssh (the restricted user’s shell), which attempts to verify the arguments are “secure.” We can control exactly which scp command is run on the server by supplying it as an argument to ssh. If rssh considers our invocation secure, it will execute that command.</p>
+
+<h2 id="exploit">Exploit</h2>
+
+<p>The verification that rssh attempts on the scp command is incomplete. The <code class="highlighter-rouge">PKCS11Provider</code> option will cause scp to load an arbitrary shared object file. By uploading a malicious .so file which will execute code when loaded, and then setting the <code class="highlighter-rouge">PKCS11Provider</code> option to that file, our scp command will execute the code.</p>
+
+<p>This option can be invoked one of three ways. In each of these methods, we’re using scp to copy a file to localhost over ssh, which causes ssh to be invoked, loading and executing our malicious .so file.</p>
+
+<p>Our setup for these commands is:</p>
+
+<p><code class="highlighter-rouge">scp bad.so rssh_user@host</code>:</p>
+
+<ol>
+  <li>
+    <p>From the command line:
+<code class="highlighter-rouge">ssh rssh_user@host 'scp -o PKCS11Provider=./bad.so 1 localhost:</code></p>
+  </li>
+  <li>
+    <p>Using the default .ssh/config file (uploaded to the server first):
+<code class="highlighter-rouge">ssh rssh_user@host 'scp 1 localhost:</code></p>
+  </li>
+  <li>
+    <p>By specifying our own ssh_config file (uploaded to the server first):
+<code class="highlighter-rouge">ssh rssh_user@host 'scp -F rssh.config 1 localhost:</code></p>
+  </li>
+</ol>
+
+<p>With a config file, its contents should be:</p>
+
+<p><code class="highlighter-rouge">PKCS11Provider ./bad.so</code></p>
+
+<h2 id="discovery">Discovery</h2>
+
+<p>For a detailed write-up of how we discovered this issue, see our <a href="https://software.es.net/sans-holiday-hack-2018/#org55a074b">SANS 2018 Holiday Hack report</a>.</p>
+
+<h2 id="remediation">Remediation</h2>
+
+<p>The author of rssh replied to our report saying that the software is no longer maintained.</p>
+
+<p>Russ Allbery sent a patch that is “COMPLETELY UNTESTED,” but might fix the problem. See:</p>
+
+<p><a href="https://sourceforge.net/p/rssh/mailman/message/36520087/">Initial E-mail</a>
+<a href="https://sourceforge.net/p/rssh/mailman/message/36520091/">Follow-up E-mail with a Bugfix to the Patch</a></p>
+
+<h2 id="disclosure--timeline">Disclosure &amp; Timeline:</h2>
+
+<p>Jan 7, 2019: rssh author notified</p>
+
+<p>Jan 9, 2019: rssh author replied, saying “RSSH is no longer maintained.”</p>
+
+<p>Jan 14, 2019: SANS notified</p>
+
+<p>Jan 16, 2019: Publication, CVE requested through <a href="https://iwantacve.org">Distributed Weakness Filing</a>, e-mailed rssh-discuss list</p>
+
+<p>Jan 22, 2019: CVE-2019-1000018 assigned</p>
+
+<h2 id="credit">Credit:</h2>
+
+<p>This issue was discovered by the ESnet Security Team. It was discovered as part of our participation in the SANS <a href="https://www.holidayhackchallenge.com/2018/">2018 Holiday Hack Challenge</a>. For more details about the Holiday Hack, you can also see <a href="https://esnet.github.io/sans-holiday-hack-2018/">our report</a>.</p>
+
+<h2 id="changes">Changes:</h2>
+
+<p>(Tracked in git)</p>
+
+<p>Jan 16, 2019: Fixed the publication date, and corrected two typos.</p>
+
+      </section>
+    </div>
+
+    
+  </body>
+</html>

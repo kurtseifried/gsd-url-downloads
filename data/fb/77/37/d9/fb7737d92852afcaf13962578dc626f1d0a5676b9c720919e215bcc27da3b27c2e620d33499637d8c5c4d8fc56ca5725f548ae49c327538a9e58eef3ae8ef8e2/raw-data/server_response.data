@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
+    <title>EdOverflow — Web Developer & Security Researcher</title>
+    <!-- Search Engine -->
+    <meta name="description" content="I discovered a bug in Resolv::getaddresses that has direct security implications on any Ruby-based application or gem that relies on it for anything security related.">
+    <meta name="image" content="https://edoverflow.com/frog.png">
+    <!-- Schema.org for Google -->
+    <meta itemprop="name" content="Bypassing Server-Side Request Forgery filters by abusing a bug in Ruby's native resolver.">
+    <meta itemprop="description" content="I discovered a bug in Resolv::getaddresses that has direct security implications on any Ruby-based application or gem that relies on it for anything security related.">
+    <meta itemprop="image" content="https://edoverflow.com/frog.png">
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Bypassing Server-Side Request Forgery filters by abusing a bug in Ruby's native resolver.">
+    <meta name="twitter:description" content="I discovered a bug in Resolv::getaddresses that has direct security implications on any Ruby-based application or gem that relies on it for anything security related.">
+    <meta name="twitter:site" content="@EdOverflow">
+    <meta name="twitter:creator" content="@EdOverflow">
+    <meta name="twitter:image:src" content="https://edoverflow.com/frog.png">
+    <!-- Open Graph general (Facebook, Pinterest &  Google+) -->
+    <meta name="og:title" content="Bypassing Server-Side Request Forgery filters by abusing a bug in Ruby's native resolver.">
+    <meta name="og:description" content="I discovered a bug in Resolv::getaddresses that has direct security implications on any Ruby-based application or gem that relies on it for anything security related.">
+    <meta name="og:image" content="https://edoverflow.com/assets/img/frog.png">
+    <meta name="og:url" content="https://edoverflow.com">
+    <meta name="og:site_name" content="EdOverflow">
+    <meta name="og:locale" content="en_Us">
+    <meta name="og:type" content="website">
+    <meta name="theme-color" content="#626cfc">
+    <link href="/stylesheet.min.css" rel="stylesheet">
+    <style>
+        @import url('./inter/inter.css');
+        html { font-family: 'Inter', sans-serif; }
+        @supports (font-variation-settings: normal) {
+          html { font-family: 'Inter var', sans-serif; }
+        }
+
+        body {
+            font-family: sans-serif;
+        }        
+
+        h1, h2, h3, h4 {
+            font-family: 'Inter', sans-serif;
+        }
+
+        nav {
+            padding: 20px 0px 0px 0px;
+            margin-bottom: -70px;
+        }
+
+        blockquote {
+            font-family: serif;
+        }
+
+        a {
+            color: #0020ff;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        .banner {
+            background: #eee;
+            text-align: center;
+        }
+
+        code {
+            display: inline;
+            padding: 3px 4px;
+            border-radius: 5px;
+        }
+
+        .highlight {
+            padding: 15px;
+        }
+
+        .highlighter-rouge {
+            background: #f6f8fa;
+            color: #000;
+        }
+
+        .message {
+            border: 1px solid #000;
+            
+        }
+    </style>
+</head>
+
+<body>
+
+    <nav>
+        <a href="/">
+            &larr; Home</a>
+    </nav>
+
+    <article>
+
+        <h1>Bypassing Server-Side Request Forgery filters by abusing a bug in Ruby's native resolver.</h1>
+        
+        <p>Nov 9, 2017</p>
+
+        <!-- ==============================================
+  https://user-images.githubusercontent.com/18099289/32407739-8a5e27ee-c18d-11e7-9bfb-4a5d09f821a0.png 
+  ================================================= -->
+
+<h2 id="summary">Summary</h2>
+
+<p>This is a security advisory for a bug that I discovered in <code class="language-plaintext highlighter-rouge">Resolv::getaddresses</code> that enabled me to bypass multiple Server-Side Request Forgery filters. Applications such as GitLab and HackerOne were affected by this bug. The disclosure of all reports referenced in this advisory follow <a href="https://www.hackerone.com/disclosure-guidelines">HackerOne’s Vulnerability Disclosure Guidelines</a>.</p>
+
+<p>This bug was assigned <a href="https://www.cve.mitre.org/cgi-bin/cvename.cgi?name=2017-0904">CVE-2017-0904</a>.</p>
+
+<h2 id="vulnerability-details">Vulnerability Details</h2>
+
+<p><code class="language-plaintext highlighter-rouge">Resolv::getaddresses</code> is OS-dependent, therefore by playing around with different IP formats one can return blank values. This bug can be abused to bypass exclusion lists often used to protect against SSRF.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>💻 Machine 1</th>
+      <th>💻 Machine 2</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>ruby 2.3.3p222 (2016-11-21) [x86_64-linux-gnu]</td>
+      <td>ruby 2.3.1p112 (2016-04-26) [x86_64-linux-gnu]</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>💻 Machine 1</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>irb(main):002:0&gt; Resolv.getaddresses("127.0.0.1")
+=&gt; ["127.0.0.1"]
+irb(main):003:0&gt; Resolv.getaddresses("localhost")
+=&gt; ["127.0.0.1"]
+irb(main):004:0&gt; Resolv.getaddresses("127.000.000.1")
+=&gt; ["127.0.0.1"]
+</code></pre></div></div>
+<p>💻 Machine 2</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>irb(main):008:0&gt; Resolv.getaddresses("127.0.0.1")
+=&gt; ["127.0.0.1"]
+irb(main):009:0&gt; Resolv.getaddresses("localhost")
+=&gt; ["127.0.0.1"]
+irb(main):010:0&gt; Resolv.getaddresses("127.000.000.1")
+=&gt; [] # 😱
+</code></pre></div></div>
+
+<p>This issue is reproducible in the latest stable build of Ruby:</p>
+
+<pre><code class="language-no-highlight">$ ruby -v
+ruby 2.4.3p201 (2017-10-11 revision 60168) [x86_64-linux]
+$ irb
+irb(main):001:0&gt; require 'resolv'
+=&gt; true
+irb(main):002:0&gt; Resolv.getaddresses("127.000.001")
+=&gt; []
+</code></pre>
+
+<h2 id="proof-of-concept">Proof of concept</h2>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>irb(main):001:0&gt; require 'resolv'
+=&gt; true
+irb(main):002:0&gt; uri = "0x7f.1"
+=&gt; "0x7f.1"
+irb(main):003:0&gt; server_ips = Resolv.getaddresses(uri)
+=&gt; [] # The bug!
+irb(main):004:0&gt; blocked_ips = ["127.0.0.1", "::1", "0.0.0.0"]
+=&gt; ["127.0.0.1", "::1", "0.0.0.0"]
+irb(main):005:0&gt; (blocked_ips &amp; server_ips).any?
+=&gt; false # Bypass
+</code></pre></div></div>
+
+<h2 id="root-cause">Root cause</h2>
+
+<p>The following section describes the root cause of this bug. I have added some comments in the code snippets to help the reader follow along.</p>
+
+<p>When we run irb in debug mode (<code class="language-plaintext highlighter-rouge">irb -d</code>) the following error is returned:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>irb(main):002:0&gt; Resolv.getaddresses "127.1"
+Exception `Resolv::DNS::Config::NXDomain' at /usr/lib/ruby/2.3.0/resolv.rb:549 - 127.1
+Exception `Resolv::DNS::Config::NXDomain' at /usr/lib/ruby/2.3.0/resolv.rb:549 - 127.1
+=&gt; []
+</code></pre></div></div>
+
+<p>So the exception stems from <code class="language-plaintext highlighter-rouge">fetch_resource()</code> <sup><a href="https://github.com/ruby/ruby/blob/e16bd0f4d81ef74035712853a5eb527f28abb342/lib/resolv.rb#L514-L554">[1]</a></sup>. The “NXDOMAIN” response indicates that the resolver cannot find a corresponding PTR record. No surprise there, since, as we will see later on, <code class="language-plaintext highlighter-rouge">resolv.rb</code> uses the operating system’s resolver.</p>
+
+<pre><code class="language-no-highlight"># Reverse DNS lookup on 💻 Machine 1.
+$ nslookup 127.0.0.1
+Server:   127.0.0.53
+Address:  127.0.0.53#53
+
+Non-authoritative answer:
+1.0.0.127.in-addr.arpa  name = localhost.
+
+Authoritative answers can be found from:
+
+$ nslookup 127.000.000.1
+Server:   127.0.0.53
+Address:  127.0.0.53#53
+
+Non-authoritative answer:
+Name: 127.000.000.1
+Address: 127.0.0.1
+
+# NXDOMAIN for 127.1.
+$ nslookup 127.1
+Server:   127.0.0.53
+Address:  127.0.0.53#53
+
+** server can't find 127.1: NXDOMAIN
+</code></pre>
+
+<p>Now the following code snippets demonstrate why <code class="language-plaintext highlighter-rouge">Resolv::getaddresses</code> is OS-dependent.</p>
+
+<p><code class="language-plaintext highlighter-rouge">getaddresses</code> takes the address (<code class="language-plaintext highlighter-rouge">name</code>) and passes it on to <code class="language-plaintext highlighter-rouge">each_address</code> where once it has been resolved it is appended to the <code class="language-plaintext highlighter-rouge">ret</code> array.</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># File lib/resolv.rb, line 100</span>
+<span class="k">def</span> <span class="nf">getaddresses</span><span class="p">(</span><span class="nb">name</span><span class="p">)</span>
+  <span class="c1"># This is the "ret" array.</span>
+  <span class="n">ret</span> <span class="o">=</span> <span class="p">[]</span>
+  <span class="c1"># This is where "address" is appended to the "ret" array.</span>
+  <span class="n">each_address</span><span class="p">(</span><span class="nb">name</span><span class="p">)</span> <span class="p">{</span><span class="o">|</span><span class="n">address</span><span class="o">|</span> <span class="n">ret</span> <span class="o">&lt;&lt;</span> <span class="n">address</span><span class="p">}</span>
+  <span class="k">return</span> <span class="n">ret</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">each_address</code> runs the <code class="language-plaintext highlighter-rouge">name</code> through <code class="language-plaintext highlighter-rouge">@resolvers</code>.</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># File lib/resolv.rb, line 109</span>
+<span class="k">def</span> <span class="nf">each_address</span><span class="p">(</span><span class="nb">name</span><span class="p">)</span>
+    <span class="k">if</span> <span class="no">AddressRegex</span> <span class="o">=~</span> <span class="nb">name</span>
+      <span class="k">yield</span> <span class="nb">name</span>
+      <span class="k">return</span>
+    <span class="k">end</span>
+    <span class="n">yielded</span> <span class="o">=</span> <span class="kp">false</span>
+    <span class="c1"># "name" is passed on to the resolver here.</span>
+    <span class="vi">@resolvers</span><span class="p">.</span><span class="nf">each</span> <span class="p">{</span><span class="o">|</span><span class="n">r</span><span class="o">|</span>
+      <span class="n">r</span><span class="p">.</span><span class="nf">each_address</span><span class="p">(</span><span class="nb">name</span><span class="p">)</span> <span class="p">{</span><span class="o">|</span><span class="n">address</span><span class="o">|</span>
+        <span class="k">yield</span> <span class="n">address</span><span class="p">.</span><span class="nf">to_s</span>
+        <span class="n">yielded</span> <span class="o">=</span> <span class="kp">true</span>
+      <span class="p">}</span>
+      <span class="k">return</span> <span class="k">if</span> <span class="n">yielded</span>
+    <span class="p">}</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">@resolvers</code> is initialised in <code class="language-plaintext highlighter-rouge">initialize()</code>.</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># File lib/resolv.rb, line 109</span>
+<span class="k">def</span> <span class="nf">initialize</span><span class="p">(</span><span class="n">resolvers</span><span class="o">=</span><span class="p">[</span><span class="no">Hosts</span><span class="p">.</span><span class="nf">new</span><span class="p">,</span> <span class="no">DNS</span><span class="p">.</span><span class="nf">new</span><span class="p">])</span>
+    <span class="vi">@resolvers</span> <span class="o">=</span> <span class="n">resolvers</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>Further on, <code class="language-plaintext highlighter-rouge">initialize</code> is actually initialised by setting <code class="language-plaintext highlighter-rouge">config_info</code> to <code class="language-plaintext highlighter-rouge">nil</code> which uses the default configuration in this case <code class="language-plaintext highlighter-rouge">/etc/resolv.conf</code>.</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># File lib/resolv.rb, line 308</span>
+<span class="c1"># Set to /etc/resolv.conf ¯\_(ツ)_/¯</span>
+<span class="k">def</span> <span class="nf">initialize</span><span class="p">(</span><span class="n">config_info</span><span class="o">=</span><span class="kp">nil</span><span class="p">)</span>
+  <span class="vi">@mutex</span> <span class="o">=</span> <span class="no">Thread</span><span class="o">::</span><span class="no">Mutex</span><span class="p">.</span><span class="nf">new</span>
+  <span class="vi">@config</span> <span class="o">=</span> <span class="no">Config</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="n">config_info</span><span class="p">)</span>
+  <span class="vi">@initialized</span> <span class="o">=</span> <span class="kp">nil</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>Here is the default configuration:</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># File lib/resolv.rb, line 959</span>
+<span class="k">def</span> <span class="nc">Config</span><span class="o">.</span><span class="nf">default_config_hash</span><span class="p">(</span><span class="n">filename</span><span class="o">=</span><span class="s2">"/etc/resolv.conf"</span><span class="p">)</span>
+  <span class="k">if</span> <span class="no">File</span><span class="p">.</span><span class="nf">exist?</span> <span class="n">filename</span>
+    <span class="n">config_hash</span> <span class="o">=</span> <span class="no">Config</span><span class="p">.</span><span class="nf">parse_resolv_conf</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+  <span class="k">else</span>
+    <span class="k">if</span> <span class="sr">/mswin|cygwin|mingw|bccwin/</span> <span class="o">=~</span> <span class="no">RUBY_PLATFORM</span>
+      <span class="nb">require</span> <span class="s1">'win32/resolv'</span>
+      <span class="n">search</span><span class="p">,</span> <span class="n">nameserver</span> <span class="o">=</span> <span class="no">Win32</span><span class="o">::</span><span class="no">Resolv</span><span class="p">.</span><span class="nf">get_resolv_info</span>
+      <span class="n">config_hash</span> <span class="o">=</span> <span class="p">{}</span>
+      <span class="n">config_hash</span><span class="p">[</span><span class="ss">:nameserver</span><span class="p">]</span> <span class="o">=</span> <span class="n">nameserver</span> <span class="k">if</span> <span class="n">nameserver</span>
+      <span class="n">config_hash</span><span class="p">[</span><span class="ss">:search</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">search</span><span class="p">].</span><span class="nf">flatten</span> <span class="k">if</span> <span class="n">search</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+  <span class="n">config_hash</span> <span class="o">||</span> <span class="p">{}</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>This demonstrates that <code class="language-plaintext highlighter-rouge">Resolv::getaddresses</code> is OS-dependent and that <code class="language-plaintext highlighter-rouge">getaddresses</code> returns an empty <code class="language-plaintext highlighter-rouge">ret</code> array when supplied with an IP address that fails during a reverse DNS lookup.</p>
+
+<h2 id="mitigation">Mitigation</h2>
+
+<p>I suggest staying away from <code class="language-plaintext highlighter-rouge">Resolv::getaddresses</code> altogether and using the <code class="language-plaintext highlighter-rouge">Socket</code> library.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>irb(main):002:0&gt; Resolv.getaddresses("127.1")
+=&gt; []
+irb(main):003:0&gt; Socket.getaddrinfo("127.1", nil).sample[3]
+=&gt; "127.0.0.1"
+</code></pre></div></div>
+
+<p>The Ruby Core dev team suggested using the same library.</p>
+
+<blockquote>
+The right way to check an address is using OS's resolver instead of resolv.rb if the address is resolved by OS's resolver. For example, Addrinfo.getaddrinfo of socket library can be used.
+<br />
+<span>- Tanaka Akira</span>
+</blockquote>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>% ruby -rsocket -e '
+as = Addrinfo.getaddrinfo("192.168.0.1", nil)
+p as
+p as.map {|a| a.ipv4_private? }
+'
+[#&lt;Addrinfo: 192.168.0.1 TCP&gt;, #&lt;Addrinfo: 192.168.0.1 UDP&gt;, #&lt;Addrinfo: 192.168.0.1 SOCK_RAW&gt;]
+[true, true, true]
+</code></pre></div></div>
+
+<h2 id="affected-applications-and-gems">Affected Applications and gems</h2>
+
+<h3 id="gitlab-community-edition-and-enterprise-edition">GitLab Community Edition and Enterprise Edition</h3>
+
+<p><em>Link to report: <a href="https://hackerone.com/reports/215105">https://hackerone.com/reports/215105</a></em></p>
+
+<p>The fix for <a href="https://hackerone.com/strukt">Mustafa Hasan</a>’s <a href="https://hackerone.com/reports/135937">report</a> (<a href="https://gitlab.com/gitlab-org/gitlab-ce/issues/17286">!17286</a>) could be easily bypassed by abusing this bug. GitLab introduced an exclusion list, but would resolve the user-supplied address using <code class="language-plaintext highlighter-rouge">Resolv::getaddresses</code> and then compare the output to the values in the exclusion list. This meant that one could no longer use certain addresses such as <code class="language-plaintext highlighter-rouge">http://127.0.0.1</code> and <code class="language-plaintext highlighter-rouge">http://localhost/</code>, which Mustafa Hasan used in the original report. The bypasses allowed me to scan a GitLab intance’s internal network.</p>
+
+<p><img src="https://user-images.githubusercontent.com/18099289/32322200-fed2e176-bfc3-11e7-8bc1-e2dc241abf6b.png" alt="Error message - Open port" /></p>
+
+<p><img src="https://user-images.githubusercontent.com/18099289/32322478-ec02630e-bfc4-11e7-9d76-d481d27db8f3.png" alt="Error message - Closed port" /></p>
+
+<p>GitLab have provided a patch: <a href="https://about.gitlab.com/2017/11/08/gitlab-10-dot-1-dot-2-security-release/">https://about.gitlab.com/2017/11/08/gitlab-10-dot-1-dot-2-security-release/</a>.</p>
+
+<h3 id="private_address_check-by-john-downey"><a href="https://github.com/jtdowney/private_address_check">private_address_check</a> by <a href="https://twitter.com/jtdowney">John Downey</a></h3>
+
+<p><em>Link to report: <a href="https://github.com/jtdowney/private_address_check/issues/1">https://github.com/jtdowney/private_address_check/issues/1</a></em></p>
+
+<p><a href="https://github.com/jtdowney/private_address_check">private_address_check</a> is a Ruby gem that helps prevent SSRF. The actual filtering takes place in <code class="language-plaintext highlighter-rouge">lib/private_address_check.rb</code>. The process starts by attempting to resolve the user-supplied URL with <code class="language-plaintext highlighter-rouge">Resolv::getaddresses</code> and then compares the returned value with a the values in the blacklist. Once again I was able to use the same technique as before with GitLab to bypass this filter.</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># File lib/private_address_check.rb, line 32</span>
+<span class="k">def</span> <span class="nf">resolves_to_private_address?</span><span class="p">(</span><span class="n">hostname</span><span class="p">)</span>
+  <span class="n">ips</span> <span class="o">=</span> <span class="no">Resolv</span><span class="p">.</span><span class="nf">getaddresses</span><span class="p">(</span><span class="n">hostname</span><span class="p">)</span>
+  <span class="n">ips</span><span class="p">.</span><span class="nf">any?</span> <span class="k">do</span> <span class="o">|</span><span class="n">ip</span><span class="o">|</span> 
+    <span class="n">private_address?</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<p>Consequently, <a href="https://hackerone.com/reports/287245">HackerOne was affected by this bypass</a>, because they use the <em>private_address_check</em> gem to prevent SSRF on the “Integrations” panel: <code class="language-plaintext highlighter-rouge">https://hackerone.com/{BBP}/integrations</code>.</p>
+
+<p><img src="https://user-images.githubusercontent.com/18099289/32408319-5f50eb78-c196-11e7-8aee-c6ffd572597f.png" alt="HackerOne - Blocked Address" /></p>
+
+<p><img src="https://user-images.githubusercontent.com/18099289/32408337-7bcdd874-c196-11e7-9fcc-1de5283bd7b0.png" alt="HackerOne - Bypass" /></p>
+
+<p>Unfortunately, I was unable to exploit this SSRF and therefore the issue only consisted of a filter bypass. HackerOne still encouraged me to report it, because they take any potential security issue into consideration and this bypass demonstrated a potential risk.</p>
+
+<p>This issue was patched in <a href="https://github.com/jtdowney/private_address_check/commit/58a0d7fe31de339c0117160567a5b33ad82b46af">version 0.4.0</a>.</p>
+
+<h2 id="unaffected-applications-and-gems">Unaffected applications and gems</h2>
+
+<h3 id="ssrf_filter-by-arkadiy-tetelman"><a href="https://github.com/arkadiyt/ssrf_filter">ssrf_filter</a> by <a href="https://twitter.com/arkadiyt">Arkadiy Tetelman</a></h3>
+
+<p>This gem is not vulnerable, because it checks if the value returned is empty.</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># File lib/ssrf_filter/ssrf_filter.rb, line 116</span>
+<span class="k">raise</span> <span class="no">UnresolvedHostname</span><span class="p">,</span> <span class="s2">"Could not resolve hostname '</span><span class="si">#{</span><span class="n">hostname</span><span class="si">}</span><span class="s2">'"</span> <span class="k">if</span> <span class="n">ip_addresses</span><span class="p">.</span><span class="nf">empty?</span>
+</code></pre></div></div>
+
+<pre><code class="language-no-highlight">irb(main):001:0&gt; require 'ssrf_filter'
+=&gt; true
+irb(main):002:0&gt; SsrfFilter.get("http://127.1/")
+SsrfFilter::UnresolvedHostname: Could not resolve hostname '127.1'
+  from /var/lib/gems/2.3.0/gems/ssrf_filter-1.0.2/lib/ssrf_filter/ssrf_filter.rb:116:in `block (3 levels) in &lt;class:SsrfFilter&gt;'
+  from /var/lib/gems/2.3.0/gems/ssrf_filter-1.0.2/lib/ssrf_filter/ssrf_filter.rb:107:in `times'
+  from /var/lib/gems/2.3.0/gems/ssrf_filter-1.0.2/lib/ssrf_filter/ssrf_filter.rb:107:in `block (2 levels) in &lt;class:SsrfFilter&gt;'
+  from (irb):2
+  from /usr/bin/irb:11:in `&lt;main&gt;'
+</code></pre>
+
+<h3 id="faraday-restrict-ip-addresses-by-ben-lavender"><a href="https://rubygems.org/gems/faraday-restrict-ip-addresses/versions/0.1.1">faraday-restrict-ip-addresses</a> by <a href="https://github.com/bhuga">Ben Lavender</a></h3>
+
+<p>This gem uses <code class="language-plaintext highlighter-rouge">Addrinfo.getaddrinfo</code> as recommended by the Ruby Code dev team.</p>
+
+<div class="language-ruby highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1"># File lib/faraday/restrict_ip_addresses.rb, line 61</span>
+<span class="k">def</span> <span class="nf">addresses</span><span class="p">(</span><span class="n">hostname</span><span class="p">)</span>
+      <span class="no">Addrinfo</span><span class="p">.</span><span class="nf">getaddrinfo</span><span class="p">(</span><span class="n">hostname</span><span class="p">,</span> <span class="kp">nil</span><span class="p">,</span> <span class="ss">:UNSPEC</span><span class="p">,</span> <span class="ss">:STREAM</span><span class="p">).</span><span class="nf">map</span> <span class="p">{</span> <span class="o">|</span><span class="n">a</span><span class="o">|</span> <span class="no">IPAddr</span><span class="p">.</span><span class="nf">new</span><span class="p">(</span><span class="n">a</span><span class="p">.</span><span class="nf">ip_address</span><span class="p">)</span> <span class="p">}</span>
+    <span class="k">rescue</span> <span class="no">SocketError</span> <span class="o">=&gt;</span> <span class="n">e</span>
+      <span class="c1"># In case of invalid hostname, return an empty list of addresses</span>
+      <span class="p">[]</span>
+<span class="k">end</span>
+</code></pre></div></div>
+
+<h2 id="conclusion">Conclusion</h2>
+
+<p>The author would like to acknowledge the help provided by <a href="https://twitter.com/TomNomNom">Tom Hudson</a> and <a href="https://twitter.com/SecurityYasin">Yasin Soliman</a> during the discovery of the bug.</p>
+
+<p>Both <a href="https://twitter.com/jtdowney">John Downey</a> and <a href="https://twitter.com/arkadiyt">Arkadiy Tetelman</a> were extremely responsive. John Downey was able to immediately provide a patch, and Arkadiy Tetelman helped me figure out why their gem was not affected by the issue.</p>
+
+<p>Finally, whatever you do, please do not view the source code of this write-up.</p>
+
+<hr />
+
+<p>Update (Friday, 10 November 2017): I expanded the “Root cause” section in order to better explain the actual issue.</p>
+
+
+        <article class="message">
+            <h3>Support my work! ☕</h3>
+            <p>
+                If you enjoyed this write-up and would like to support my work, I have a "Buy Me A Coffee" page. I am grateful for every contribution, however big or small. <mark>Thank you. :)</mark>
+            </p>
+            <p><a href="https://www.buymeacoffee.com/edoverflow"><button>Support me</button></a></p>
+        </article>
+
+        <hr>
+
+        <center>
+            <a href="/">&larr; Home</a>
+            <p><a href="/cdn-cgi/l/email-protection#492a26273d282a3d092c2d263f2c3b2f25263e672a2624">Email</a> • <a href="https://twitter.com/EdOverflow">Twitter </a> • <a href="https://www.buymeacoffee.com/edoverflow">Buy Me A Coffee ☕</a>
+            </p>
+        </center>
+    </article>
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script></body>
+
+</html>

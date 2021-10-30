@@ -1,0 +1,199 @@
+<!-- MHonArc v2.6.19 -->
+<!--X-Subject: Bug? wcsxfrm causing memory corruption -->
+<!--X-From-R13: Sevx Penl &#60;revx.z.oenlNtznvy.pbz> -->
+<!--X-Date: 10 May 2017 09:30:58 &#45;0000 -->
+<!--X-Message-Id: CAOTD34aCROSAQojYvV4rjwiWOfiALFP+P2wODoMV1dcaOhKPFQ@mail.gmail.com -->
+<!--X-Content-Type: multipart/mixed -->
+<!--X-Head-End-->
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML//EN">
+<HTML>
+<HEAD>
+<TITLE>Erik Bray - Bug? wcsxfrm causing memory corruption</TITLE>
+</HEAD>
+<BODY>
+<!--X-Body-Begin-->
+<!--X-User-Header-->
+<!--htdig_noindex-->
+<p>This is the mail archive of the 
+<tt>cygwin</tt>
+mailing list for the <a href="http://cygwin.com/">Cygwin project</a>.
+
+
+<!--/htdig_noindex-->
+<!--X-User-Header-End-->
+<!--X-TopPNI-->
+<!--htdig_noindex-->
+<HR>
+<table border="0">
+  <tr><th align="left">Index Nav:</th>
+      <td colspan="2">
+        [<A HREF="index.html#00149">Date&nbsp;Index</A>] [<a href="subjects.html#00149">Subject&nbsp;Index</a>] [<a href="authors.html#00149">Author&nbsp;Index</a>] [<A HREF="threads.html#00149">Thread&nbsp;Index</A>]
+      </td>
+  </tr>
+  <tr><th align="left">Message Nav:</th>
+      <td>[<A HREF="msg00148.html">Date&nbsp;Prev</A>]&nbsp;[<A HREF="msg00150.html">Date&nbsp;Next</A>]</td>
+      <td>[<A HREF="msg00148.html">Thread&nbsp;Prev</A>]&nbsp;[<A HREF="msg00334.html">Thread&nbsp;Next</A>]</td>
+  </tr>
+  <tr><th align="left">Other format:</th>
+  <td>[<a href="/cgi-bin/get-raw-msg?listname=cygwin&date=2017-05&msgid=CAOTD34aCROSAQojYvV4rjwiWOfiALFP%2BP2wODoMV1dcaOhKPFQ%40mail.gmail.com">Raw text</a>]</td>
+  </tr>
+</table>
+<!--/htdig_noindex-->
+
+<!--X-TopPNI-End-->
+<!--X-MsgBody-->
+<!--X-Subject-Header-Begin-->
+<h1>Bug? wcsxfrm causing memory corruption</h1>
+<!--X-Subject-Header-End-->
+<!--X-Head-of-Message-->
+<ul>
+<li><em>From</em>: Erik Bray &lt;erik dot m dot bray at gmail dot com&gt;</li>
+<li><em>To</em>: cygwin at cygwin dot com</li>
+<li><em>Date</em>: Wed, 10 May 2017 11:30:46 +0200</li>
+<li><em>Subject</em>: Bug? wcsxfrm causing memory corruption</li>
+<li><em>Authentication-results</em>: sourceware.org; auth=none</li>
+</ul>
+<!--X-Head-of-Message-End-->
+<!--X-Head-Body-Sep-Begin-->
+<hr>
+<!--X-Head-Body-Sep-End-->
+<!--X-Body-of-Message-->
+<pre>Greetings--
+
+In the process of fixing the Python test suite on Cygwin I ran across
+one test that was consistently causing segfaults later on, not
+directly local to that test.  The test involves wcsxfrm so that's
+where I focused my attention.
+
+The attached test demonstrates the bug.  Given an output buffer of N
+wide characters, wcsxfrm will cause bytes beyond the destination size
+to be reversed. I believe it might actually be a bug in the underlying
+LCMapStringW workhorse (this is on Windows 10; have not tested other
+versions).
+
+According to its docs [1], the cchDest argument (size of the
+destination buffer) is treated as a *byte* count when using
+LCMAP_SORTKEY.  However, for the purposes of applying the
+LCMAP_BYTEREV transformation it seems to be treating the output size
+(in bytes) as character count.  So in the example I give, where the
+output sort key is 7 bytes (including the null terminator), it swaps
+*14* bytes--the bytes including the sort key as well as the next 7
+adjacent bytes.  This is obviously a problem if the destination buffer
+is allocated out of some larger memory pool.
+
+This definitely has to be a bug, right?  Or at least very poorly
+documented on MS's part.  A workaround would either be to not use
+LCMAP_BYTEREV and just swap the bytes manually, or in a second call to
+LCMapStringW with LCMAP_BYTEREV and the correct character count...
+
+Thanks,
+Erik
+
+
+[1] <a  rel="nofollow" href="https://msdn.microsoft.com/en-us/library/windows/desktop/dd318700">https://msdn.microsoft.com/en-us/library/windows/desktop/dd318700</a>(v=vs.85).aspx
+</pre><pre>#include &lt;stdlib.h&gt;
+#include &lt;stdio.h&gt;
+#include &lt;locale.h&gt;
+#include &lt;wchar.h&gt;
+#include &lt;string.h&gt;
+#include &lt;windows.h&gt;
+
+#define SIZE 32
+
+
+void fill_bytes(uint8_t *a, int n) {
+    int idx;
+    for (idx=0; idx&lt;n; idx++) {
+        a[idx] = idx;
+    }
+}
+
+
+void print_bytes(uint8_t *a, int n) {
+    int idx;
+    for (idx=0; idx&lt;n; idx++) {
+        printf(&quot;0x%02x &quot;, ((uint8_t*)a)[idx]);
+        if ((idx + 1) % 8 == 0) printf(&quot;\n&quot;);
+    }
+}
+
+int main(void) {
+    wchar_t *a, *b;
+    uint8_t *aa;
+    size_t ret;
+    LCID collate_lcid;
+    int idx;
+    collate_lcid = 1033;
+    b = L&quot;b&quot;;
+    a = (wchar_t*) malloc(SIZE);
+    aa = (uint8_t*) a;
+
+    setlocale(LC_ALL, &quot;en_US.UTF-8&quot;);
+
+    printf(&quot;using wcsxfrm:\n&quot;);
+    fill_bytes(aa, SIZE);
+    printf(&quot;before:\n&quot;);
+    print_bytes(aa, SIZE);
+    ret = wcsxfrm(a, b, 4);
+    printf(&quot;after (%d):\n&quot;, ret);
+    print_bytes(aa, SIZE);
+
+    printf(&quot;\nusing LCMapStringW directly:\n&quot;);
+    fill_bytes(aa, SIZE);
+    printf(&quot;before:\n&quot;);
+    print_bytes(aa, SIZE);
+    
+    ret = LCMapStringW(collate_lcid, LCMAP_SORTKEY | LCMAP_BYTEREV, b, -1, a, 8);
+    printf(&quot;after (%d):\n&quot;, ret);
+    print_bytes(aa, SIZE);
+
+    printf(&quot;\nwithout LCMAP_BYTEREV:\n&quot;);
+    fill_bytes(aa, SIZE);
+    printf(&quot;before:\n&quot;);
+    print_bytes(aa, SIZE);
+    
+    ret = LCMapStringW(collate_lcid, LCMAP_SORTKEY, b, -1, a, 8);
+    printf(&quot;after (%d):\n&quot;, ret);
+    print_bytes(aa, SIZE);
+    free(a);
+    
+    return 0;
+}
+</pre><pre>
+--
+Problem reports:       <a  rel="nofollow" href="http://cygwin.com/problems.html">http://cygwin.com/problems.html</a>
+FAQ:                   <a  rel="nofollow" href="http://cygwin.com/faq/">http://cygwin.com/faq/</a>
+Documentation:         <a  rel="nofollow" href="http://cygwin.com/docs.html">http://cygwin.com/docs.html</a>
+Unsubscribe info:      <a  rel="nofollow" href="http://cygwin.com/ml/#unsubscribe-simple">http://cygwin.com/ml/#unsubscribe-simple</a></pre>
+<!--X-Body-of-Message-End-->
+<!--X-MsgBody-End-->
+<!--X-Follow-Ups-->
+<hr>
+<ul><li><strong>Follow-Ups</strong>:
+<ul>
+<li><strong><a name="00334" href="msg00334.html">Re: Bug? wcsxfrm causing memory corruption</a></strong>
+<ul><li><em>From:</em> Duncan Roe</li></ul></li>
+</ul></li></ul>
+<!--X-Follow-Ups-End-->
+<!--X-References-->
+<!--X-References-End-->
+<!--X-BotPNI-->
+<!--htdig_noindex-->
+<table border="0">
+  <tr><th align="left">Index Nav:</th>
+      <td colspan="2">
+        [<A HREF="index.html#00149">Date&nbsp;Index</A>] [<a href="subjects.html#00149">Subject&nbsp;Index</a>] [<a href="authors.html#00149">Author&nbsp;Index</a>] [<A HREF="threads.html#00149">Thread&nbsp;Index</A>]
+      </td>
+  </tr>
+  <tr><th align="left">Message Nav:</th>
+      <td>[<A HREF="msg00148.html">Date&nbsp;Prev</A>]&nbsp;[<A HREF="msg00150.html">Date&nbsp;Next</A>]</td>
+      <td>[<A HREF="msg00148.html">Thread&nbsp;Prev</A>]&nbsp;[<A HREF="msg00334.html">Thread&nbsp;Next</A>]</td>
+  </tr>
+</table>
+<!--/htdig_noindex-->
+
+<!--X-BotPNI-End-->
+<!--X-User-Footer-->
+<!--X-User-Footer-End-->
+</body>
+</html>

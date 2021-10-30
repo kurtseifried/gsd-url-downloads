@@ -1,0 +1,268 @@
+################################################################################
+#
+# COMPASS SECURITY ADVISORY
+# https://compass-security.com/en/research/advisories
+#
+################################################################################
+#
+# Product:  NetCrunch
+# Vendor:   AdRem
+# CSNC ID:  CSNC-2019-015
+# CVE ID:   CVE-2019-14480
+# Subject:  Improper Session Handling
+# Risk:     Medium
+# Effect:   Remotely exploitable
+# Authors:  Fabio Poloni <fabio.poloni@compass-security.com>
+#           Thierry Viaccoz <thierry.viaccoz@compass-security.com>
+#           Sylvain Heiniger <sylvain.heiniger@compass-security.com>
+# Date:     26.07.2019
+#
+################################################################################
+
+Introduction:
+-------------
+NetCrunch [1] is a so-called "agentless" monitoring solution developed by 
+AdRem. It allows system administrators to monitor, visualize and get alerts 
+from many kinds of systems in their network. The solution consists of a server 
+and a fat client (also called console), as well as a web client.
+
+Due to its architecture, the monitoring server is a critical system as it 
+holds credentials, most of the time privileged, for all monitored system.
+
+Compass Security identified an Improper Session Handling vulnerability in the 
+AdRem NetCrunch web client, which can lead to an authentication bypass or 
+escalation of privileges.
+
+Affected:
+---------
+Initially vulnerable:
+ * AdRem NetCrunch 10.6.0.4587
+
+Not vulnerable:
+ * AdRem NetCrunch 11.0.0.5282 ("HttpOnly" and "Secure" flags used and no 
+   tokens in local storage)
+
+Still vulnerable:
+ * AdRem NetCrunch 11.0.0.5282 (session IDs still weakly generated and session 
+   IDs still in GET requests)
+
+No other version was tested, but it is believed that older versions are also 
+vulnerable.
+
+Technical Description:
+----------------------
+Request happening during a login via XMLHttpRequest:
+    POST /Login.json HTTP/1.1
+    Host: some-server
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0
+    Accept: */*
+    Accept-Language: en-US,en;q=0.5
+    Accept-Encoding: gzip, deflate
+    X-Requested-With: XMLHttpRequest
+    Content-Type: application/x-www-form-urlencoded; charset=UTF-8
+    Content-Length: 50
+    Connection: close
+    
+    userName=compassReadOnly&password=[CUT]
+
+The HTTP Response is setting the cookie without both the "HttpOnly" and the 
+"Secure" flags, which makes it possible to be read via JavaScript and to be 
+submitted by the browser through an unencrypted HTTP request. Also, the 
+session ID is a 9-digit number, which increases over time and can therefore be 
+brute-forced to gain access to the application:
+    HTTP/1.1 200 OK
+    Connection: close
+    Content-Type: text/json; charset=UTF-8
+    Content-Length: 17
+    Cache-control: no-cache
+    Date: Thu, 09 May 2019 09:11:52 GMT
+    Pragma: no-cache
+    Server: AdRem WebApp Server
+    Set-Cookie: WASessionId=627435780; Path=/
+    
+    { success: true }
+
+The token for the API will be provided after requesting the index page using 
+an authenticated cookie and associated session:
+    GET /Index.html HTTP/1.1
+    Host: some-server
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0
+    Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+    Accept-Language: en-US,en;q=0.5
+    Accept-Encoding: gzip, deflate
+    Cookie: WASessionId=627435780
+    Connection: close
+    Upgrade-Insecure-Requests: 1
+
+The API token is in an inline script tag and will be saved into the 
+LocalStorage during execution:
+    HTTP/1.1 200 OK
+    Connection: close
+    Content-Type: text/html; charset=UTF-8
+    Content-Length: 3000
+    Cache-control: no-cache
+    Date: Thu, 09 May 2019 09:11:53 GMT
+    Expires: Thu, 16 May 2019 07:11:53 GMT
+    Pragma: no-cache
+    Server: AdRem WebApp Server
+    
+    <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+    <html>
+        <head>
+            [CUT]
+        </head>
+        <body>
+            [CUT]
+            <script type="text/javascript">
+                Options.load('<data gridpagesize=\"100\" refreshinterval=\"1\" shownetworkatlasonstart=\"True\" eventLogInPopupWindow=\"False\" mapZoom=\"100\" mapFolderZoom=\"100\" chartZoom=\"100\" gridZoom=\"100\" firstDayOfWeek=\"1\" hotsViews=\"0=1,\">\x0D\x0A</data>\x0D\x0A');
+                Ext.onReady(function () {
+                    initializeExt();
+                    if (localStorage) {
+                        localStorage["tid:" + window.location.host + ":ncsrv"] = '2019A95D78_1105_83986651'; // used by Client.js in external pages
+                    }
+                    Main.init('compassReadOnly');
+                    Menus.init();
+                    AtlasMaps.init({
+                        atlasMapId: Number('0'),
+                        favoriteMapsExpanded: strToBool('True')
+                    });
+                    AtlasMapTabs.init({
+                        activeTabId: Number('18')
+                    });
+                });
+                document.oncontextmenu = function () {return false;};
+            </script>
+        </body>
+    </html>
+
+An API to retrieve the API description is available as well:
+    GET /ncsrv/dashboards/summary/api.json?&_=1557393125037 HTTP/1.1
+    Host: some-server
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0
+    Accept: */*
+    Accept-Language: en-US,en;q=0.5
+    Accept-Encoding: gzip, deflate
+    Content-Type: application/json
+    X-Requested-With: XMLHttpRequest
+    Cookie: WASessionId=627435780
+    Connection: close
+
+This comprehensive description also provides a session ID (sid) for further 
+usage of the API:
+    HTTP/1.1 200 OK
+    Connection: close
+    Content-Type: text/json; charset=UTF-8
+    Content-Length: 9548
+    Cache-control: no-cache
+    Date: Thu, 09 May 2019 09:12:06 GMT
+    Pragma: no-cache
+    Server: AdRem WebApp Server
+    
+    {"api":[CUT],"sid":627445095,"authentication":"plain"}
+
+It is then necessary to authenticate the retrieved session ID (sid) using the 
+already-authenticated API token. The sid is transmitted in the URL:
+    POST /ncsrv/dashboards/summary/rpc?api=client.session&sid=627445095 HTTP/1.1
+    Host: some-server
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0
+    Accept: */*
+    Accept-Language: en-US,en;q=0.5
+    Accept-Encoding: gzip, deflate
+    Content-Type: application/json
+    X-Requested-With: XMLHttpRequest
+    Content-Length: 104
+    Cookie: WASessionId=627435780
+    Connection: close
+    
+    [{"action":"Security","method":"Authenticate","data":["2019A95D78_1105_83986651"],"type":"rpc","tid":1}]
+
+Afterwards, the sid is successfully authenticated and can be used:
+    HTTP/1.1 200 OK
+    Connection: close
+    Content-Type: text/json; charset=UTF-8
+    Content-Length: 129
+    Cache-control: no-cache
+    Date: Thu, 09 May 2019 09:12:07 GMT
+    Pragma: no-cache
+    Server: AdRem WebApp Server
+    
+    [{"type":"rpc","tid":1,"action":"Security","method":"Authenticate","result":{"Success":true,"Token":"2019A95D78_1105_83986651"}}]
+
+For example, to retrieve the current locale the sid is again transmitted in 
+the URL:
+    POST /ncsrv/dashboards/summary/rpc?api=ncsrv&sid=627445095 HTTP/1.1
+    Host: some-server
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0
+    Accept: */*
+    Accept-Language: en-US,en;q=0.5
+    Accept-Encoding: gzip, deflate
+    Content-Type: application/json
+    X-Requested-With: XMLHttpRequest
+    Content-Length: 72
+    Cookie: WASessionId=627435780
+    Connection: close
+    
+    [{"action":"IClientServices","method":"GetLocale","type":"rpc","tid":2}]
+
+Response:
+    HTTP/1.1 200 OK
+    Connection: close
+    Content-Type: text/json; charset=UTF-8
+    Content-Length: 86
+    Cache-control: no-cache
+    Date: Thu, 09 May 2019 09:12:07 GMT
+    Pragma: no-cache
+    Server: AdRem WebApp Server
+    
+    [{"type":"rpc","tid":2,"action":"IClientServices","method":"GetLocale","result":"en"}]
+
+Requesting the same data without the WASessionId cookie shows that the session 
+ID (sid) is sufficient to use the API:
+    POST /ncsrv/dashboards/summary/rpc?api=ncsrv&sid=627445095 HTTP/1.1
+    Host: some-server
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0
+    Accept: */*
+    Accept-Language: en-US,en;q=0.5
+    Accept-Encoding: gzip, deflate
+    Content-Type: application/json
+    X-Requested-With: XMLHttpRequest
+    Content-Length: 72
+    Connection: close
+    
+    [{"action":"IClientServices","method":"GetLocale","type":"rpc","tid":2}]
+
+Response:
+    HTTP/1.1 200 OK
+    Connection: close
+    Content-Type: text/json; charset=UTF-8
+    Content-Length: 86
+    Cache-control: no-cache
+    Date: Thu, 09 May 2019 09:32:05 GMT
+    Pragma: no-cache
+    Server: AdRem WebApp Server
+    
+    [{"type":"rpc","tid":2,"action":"IClientServices","method":"GetLocale","result":"en"}]
+
+Workaround / Fix:
+-----------------
+- The WASessionId cookie should have both the "HttpOnly" and "Secure" flags 
+  set to make sure it can't be read by JavaScript code or be sent in 
+  unencrypted HTTP traffic.
+- Both the WASessionId cookie and the session ID used for the API should be 
+  generated by a cryptographically secure random number generator.
+- The session ID should be transmitted as an HTTP header or as a POST parameter.
+- The session ID should be stored in the SessionStorage.
+
+As a NetCrunch customer, update your installation to the latest version to 
+receive the fix.
+
+Timeline:
+---------
+2019-05-23: Discovery by Fabio Poloni, Thierry Viaccoz and Sylvain Heiniger
+2019-08-01: Assigned CVE-2019-14480
+2019-08-29: Initial vendor notification
+2020-12-08: Coordinated public disclosure date
+
+References:
+-----------
+[1] https://www.adremsoft.com/

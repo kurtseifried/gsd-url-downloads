@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width,maximum-scale=2">
+    <link rel="stylesheet" type="text/css" media="screen" href="/assets/css/style.css?v=eda422175b0c5123efaea4ccfdf73f68bd5c9cf7">
+
+<!-- Begin Jekyll SEO tag v2.7.1 -->
+<title>DreyAnd’s haccery blog | Somewhat of a security blog made to share some of my own research and finds to the outer world.</title>
+<meta name="generator" content="Jekyll v3.9.0" />
+<meta property="og:title" content="DreyAnd’s haccery blog" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Somewhat of a security blog made to share some of my own research and finds to the outer world." />
+<meta property="og:description" content="Somewhat of a security blog made to share some of my own research and finds to the outer world." />
+<link rel="canonical" href="/maian-cart-rce/" />
+<meta property="og:url" content="/maian-cart-rce/" />
+<meta property="og:site_name" content="DreyAnd’s haccery blog" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="DreyAnd’s haccery blog" />
+<script type="application/ld+json">
+{"headline":"DreyAnd’s haccery blog","description":"Somewhat of a security blog made to share some of my own research and finds to the outer world.","url":"/maian-cart-rce/","@type":"WebPage","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <!-- start custom head snippets, customize with your own _includes/head-custom.html file -->
+
+<!-- Setup Google Analytics -->
+
+
+
+<!-- You can set your favicon here -->
+<!-- link rel="shortcut icon" type="image/x-icon" href="/favicon.ico" -->
+
+<!-- end custom head snippets -->
+
+  </head>
+
+  <body>
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          
+
+          <h1 id="project_title">DreyAnd's haccery blog</h1>
+          <h2 id="project_tagline">Somewhat of a security blog made to share some of my own research and finds to the outer world. </h2>
+
+          
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="main_content" class="inner">
+        <style>
+.inner {
+  max-width: 500%;
+}
+@media only screen and (max-width: 600px) {
+  .poc_vid {
+     width: 320px;
+     height: 680px;
+     position: absolute;
+     top: 0;
+     left: 0;
+     bottom: 0;
+     right: 0;
+     width: 100%;
+     height: 100%;
+  }
+  .conteiner {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+    padding-top: 75%; /* 4:3 Aspect Ratio */
+  }
+} 
+</style>
+
+<center><img src="https://i.imgur.com/GtC1TO3.png" alt="Avatar" style="width:120px; border-radius: 50%;" /> <br /> <br />
+<a href="https://twitter.com/dreyand_?ref_src=twsrc%5Etfw" class="twitter-follow-button" data-show-count="false">Follow @dreyand_</a><script async="" src="https://platform.twitter.com/widgets.js" charset="utf-8"></script></center>
+
+<p><br /></p>
+<center><h1>Maian Cart preauth RCE [CVE-2021-32172]</h1></center>
+<p><br /></p>
+
+<h2 id="contents">Contents:</h2>
+<ul>
+  <li>
+    <h3 id="intro"><a href="#intro">Intro</a></h3>
+  </li>
+  <li>
+    <h3 id="finding-the-issue"><a href="#finding-the-issue">Finding the issue</a></h3>
+  </li>
+  <li>
+    <h3 id="exploitation"><a href="#exploitation-1">Exploitation</a></h3>
+  </li>
+  <li>
+    <h3 id="outro"><a href="#outro-1">Outro</a></h3>
+  </li>
+</ul>
+
+<h1 id="intro-1">Intro</h1>
+
+<p>This issue was found back in around november 2020 by me and my friend who would rather not come out publicly with his name, so let’s call him purpl3 (his wish :D).</p>
+
+<p>This was one of my first 0day’s so we choose to audit some of the ecommerce platforms since they’re usually fun to play around.</p>
+
+<p>In the end we found a preauth RCE in Maian Cart 3.8 (latest) but we procrastinated to report it ever since because we already started working on new projects, so 2021 here we come :)</p>
+
+<p>I hope this post can also help out some people out there that are trying to get into source code review (although this one was pretty easy).</p>
+
+<h2 id="finding-the-issue-1">Finding the issue</h2>
+<p>To start with, if you are interested, you can setup the source code locally by following this <a href="https://websiteforstudents.com/install-maian-cart-on-ubuntu-18-04-16-04-with-apache2/">guide</a> and make it more of a challenge to play around &amp; learn.</p>
+
+<p>You can also setup a vhost for localhost and make it look like a real deployed website in the wild by editing <code class="language-plaintext highlighter-rouge">/etc/hosts</code>:</p>
+
+<p><img src="https://i.imgur.com/EMNpdem.png" alt="Image" /></p>
+
+<p>Usually when starting out a fresh target i starting grepping out interesting pieces of code or approaching it the blackbox way until i come by some interesting endpoints from where the whitebox testing starts.</p>
+
+<p>Also, it’s worth looking into post-admin-auth side vulnerabilities as they could be a part of a exploit chain later on.</p>
+
+<p>We found many XSS’s on the post-admin-auth side but it wasn’t really worth anything.. until purpl3 noticed a file manager plugin at <code class="language-plaintext highlighter-rouge">/admin/index.php?p=dl-manager#elf_l1_Lw</code>:
+<br />
+<br />
+<img src="https://i.imgur.com/xWzrlsI.png" alt="Image" />
+<br />
+<br />
+It allowed an administrator to upload files, including a shell. So that was a simple post-admin-auth RCE, but still that means pretty much nothing as it’s intended to allow all admin’s to upload/manage file’s unless it’s chained with something ;)</p>
+
+<p>Let’s take a look at the plugin’s source .</p>
+
+<p>We started grepping the files to find where it’s being used or to just gather some additional info on how the plugin works. 
+For this you can use <code class="language-plaintext highlighter-rouge">grep -r -E "elfinder" *</code>:
+<br />
+<br />
+<img src="https://i.imgur.com/awIKfhk.png" alt="Image" />
+<br />
+<br />
+Quickly enough i was able to find a few interesting files, <code class="language-plaintext highlighter-rouge">admin/control/classes/_elfinder/elFinder.class.php</code> being one of them as it contained <strong>a lot</strong> of useful information.
+<br /></p>
+
+<p>It looked like the Elfinder plugin also provides a API-like thing which allows the following calls to it:</p>
+
+<div class="language-php highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    <span class="k">protected</span> <span class="nv">$commands</span> <span class="o">=</span> <span class="k">array</span><span class="p">(</span>
+        <span class="s1">'open'</span>      <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'target'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'tree'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'init'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'mimes'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'compare'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'ls'</span>        <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'target'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'mimes'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'intersect'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'tree'</span>      <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'target'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">),</span>
+        <span class="s1">'parents'</span>   <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'target'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">),</span>
+        <span class="s1">'tmb'</span>       <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'targets'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">),</span>
+        <span class="s1">'file'</span>      <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'target'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'download'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'zipdl'</span>     <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'targets'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'download'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'size'</span>      <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'targets'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">),</span>
+        <span class="s1">'mkdir'</span>     <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'target'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'name'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">),</span>
+        <span class="s1">'mkfile'</span>    <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'target'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'name'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'mimes'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'rm'</span>        <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'targets'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">),</span>
+        <span class="s1">'rename'</span>    <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'target'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'name'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'mimes'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'duplicate'</span> <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'targets'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'suffix'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'paste'</span>     <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'dst'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'targets'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'cut'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'mimes'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'renames'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'hashes'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'suffix'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'upload'</span>    <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'target'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'FILES'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'mimes'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'html'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'upload'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'name'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'upload_path'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'chunk'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span><span class="s1">'cid'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'node'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'renames'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'hashes'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'suffix'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'get'</span>       <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'target'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'conv'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'put'</span>       <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'target'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'content'</span> <span class="o">=&gt;</span> <span class="s1">''</span><span class="p">,</span> <span class="s1">'mimes'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'archive'</span>   <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'targets'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'type'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'mimes'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'name'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'extract'</span>   <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'target'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'mimes'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'makedir'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'search'</span>    <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'q'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'mimes'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'target'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'info'</span>      <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'targets'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'compare'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'dim'</span>       <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'target'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">),</span>
+        <span class="s1">'resize'</span>    <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'target'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'width'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'height'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'mode'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'x'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'y'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'degree'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'quality'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'netmount'</span>  <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'protocol'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'host'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'path'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'port'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'user'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'pass'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'alias'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'options'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'url'</span>       <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'target'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'options'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'callback'</span>  <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'node'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'json'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'bind'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">,</span> <span class="s1">'done'</span> <span class="o">=&gt;</span> <span class="kc">false</span><span class="p">),</span>
+        <span class="s1">'chmod'</span>     <span class="o">=&gt;</span> <span class="k">array</span><span class="p">(</span><span class="s1">'targets'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span> <span class="s1">'mode'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">)</span>
+    <span class="p">);</span>
+</code></pre></div></div>
+<p><br /></p>
+
+<p>While trying to upload an actual file through the web UI and intercepting the request i found the exact parameter where i can pass all these:
+<br />
+<br />
+<img src="https://i.imgur.com/UOpJr4K.png" alt="Image" />
+<br /></p>
+
+<p>So i decided to do a quick request with curl and use the <code class="language-plaintext highlighter-rouge">ls</code> value on the <code class="language-plaintext highlighter-rouge">cmd</code> parameter to get a list of files (note - this all is still on the post-admin-auth side):
+<br />
+<br />
+<img src="https://i.imgur.com/m7zd1LO.png" alt="Image" /></p>
+
+<p><em>Notice something wrong here 8-)</em>
+<br /></p>
+
+<p>Okay, cool, we can do <strong>CRUD operations</strong> using the Elfinder API , but what’s the point of it when it’s all from the admin side?</p>
+
+<p>Let’s jump on the <a href="#exploitation-1">Exploitation</a> section of this blog.</p>
+
+<h1 id="exploitation-1">Exploitation</h1>
+
+<p>So as you have read the title of this blog post, it clearly says <strong>preauth</strong>. 
+How? If you haven’t noticed from the last image how the bug was chained to a <strong>preauth RCE</strong>, i’ll explain.</p>
+
+<p>This part required being a little lucky (i suppose xD) ! I tried curling the admin side endpoint <strong>without any session initiated</strong> and it still returned the output - fun right?</p>
+
+<p>So, this started sounding like a <code class="language-plaintext highlighter-rouge">Broken Access Control</code> issue.</p>
+
+<p>The API was clearly misconfigured and didn’t have any permission check, so any unauthorized attacker could make a request to it
+<br />
+Since i can’t trigger the shell in one API call, i gathered all the needed param values to upload &amp; execute a shell:</p>
+
+<ul>
+  <li><strong>Make a file</strong>: 
+/admin/index.php?p=ajax-ops&amp;op=elfinder&amp;cmd=mkfile&amp;name=shell.php&amp;target=l1_Lw</li>
+  <li><strong>Write to the file</strong>: POST request with the <code class="language-plaintext highlighter-rouge">cmd=put</code> param to /admin/index.php?p=ajax-ops&amp;op=elfinder</li>
+  <li><strong>Execute the file/shell</strong>: /product-downloads/shell.php</li>
+</ul>
+
+<p>So here we chained a <code class="language-plaintext highlighter-rouge">BAC</code> issue on a misconfigured API with a post-admin-auth RCE.</p>
+
+<p>I automated the whole exploit chain with a quick python script that you can find on my <a href="https://github.com/DreyAnd/maian-cart-rce">github</a>.</p>
+
+<h2 id="lets-explain-the-exploit">Let’s explain the exploit</h2>
+
+<p>So first it makes a file: 
+<br /><br />
+<img src="https://i.imgur.com/f78NAIv.png" alt="Image" />
+<br /></p>
+
+<p>Then it gets the file id which is contained in the json response body:
+<br /><br />
+<img src="https://i.imgur.com/Y3j9Ft6.png" alt="Image" />
+<br /></p>
+
+<p>Writes a url-encoded php web shell to the file with a POST request with <code class="language-plaintext highlighter-rouge">cmd=put</code> and the file id &amp; content as params:
+<br /><br />
+<img src="https://i.imgur.com/HiPSsUc.png" alt="Image" />
+<br /></p>
+
+<p>Then, finally execute the shell:
+<br /><br />
+<img src="https://i.imgur.com/kHI5cO8.png" alt="Image" />
+<br /></p>
+
+<p>I also added a little fun addition to it which removes the shell as soon as we close the exploit:
+<br /><br />
+<img src="https://i.imgur.com/ryb3BEn.png" alt="Image" />
+<br />
+<br /></p>
+
+<h3 id="video-poc">Video PoC:</h3>
+<div class="conteiner">
+<iframe class="poc_vid" width="800" height="680" src="https://www.youtube.com/embed/T3RV5cvfkxg" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen=""></iframe>
+</div>
+
+<h1 id="outro-1">Outro</h1>
+<p>This isssue was reported to the holders of Maian Cart, you can check out the referrence of this issue on their <a href="https://www.maianscriptworld.co.uk/critical-updates">website</a>.
+It should be patched in the upcoming Maian Cart v3.9 and all of their customers were contacted to patch their systems.
+<br />
+The CVE assigned number is <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-32172">CVE-2021-32172</a>
+<br />
+I hope you enjoyed one of my first blog post and aswell got to learn a little bit of source code analysis &amp; exploit development from it!
+Till the next time :)</p>
+
+
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        
+        <p>Published with <a href="https://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+  </body>
+</html>

