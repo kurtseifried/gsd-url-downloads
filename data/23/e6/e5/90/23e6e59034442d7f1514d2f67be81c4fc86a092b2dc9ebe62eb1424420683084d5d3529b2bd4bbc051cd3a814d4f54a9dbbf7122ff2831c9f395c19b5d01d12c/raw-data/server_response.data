@@ -1,0 +1,54 @@
+From 1f04a54ed22a33c696744ff3f4d800114023f9e4 Mon Sep 17 00:00:00 2001
+From: Randy Barlow <rbarlow@redhat.com>
+Date: Fri, 8 Apr 2016 17:00:21 -0400
+Subject: [PATCH] Install Node certificate with 640, apache owned
+ (CVE-2016-3107).
+
+Prior to this commit, the Node certificate had been installed
+world-readable:
+
+$ ls -lah /etc/pki/pulp/nodes/
+total 4.0K
+drwxr-xr-x. 2 root root   21 Apr  8 16:37 .
+drwxr-xr-x. 4 root root   90 Apr  8 16:37 ..
+-rw-r--r--. 1 root root 3.2K Apr  8 16:37 node.crt
+
+This commit adjusts the generation script to limit the permissions
+to 0640, and to adjust the group ownership to the apache group. It
+also uses the -Z flag on the mv command to ensure the correct
+SELinux context is used on the installed file.
+
+Credit also goes to Jeremy Cline (Red Hat) for independently
+discovering and reporting this issue.
+
+https://pulp.plan.io/issues/1833
+
+fixes #1833
+---
+ nodes/common/bin/pulp-gen-nodes-certificate | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/nodes/common/bin/pulp-gen-nodes-certificate b/nodes/common/bin/pulp-gen-nodes-certificate
+index 009e67d..36c8ee7 100755
+--- a/nodes/common/bin/pulp-gen-nodes-certificate
++++ b/nodes/common/bin/pulp-gen-nodes-certificate
+@@ -68,7 +68,13 @@ openssl x509 \
+   -days 3650 &> /dev/null
+ 
+ # bundle
+-cat $TMP/$BASE.key $TMP/$BASE.xx > $NODE_CRT
++cat $TMP/$BASE.key $TMP/$BASE.xx > $TMP/$BASE.crt
++chmod 640 $TMP/$BASE.crt
++chgrp apache $TMP/$BASE.crt
++mv -Z $TMP/$BASE.crt $NODE_CRT
+ 
+ # clean
+-rm -rf $TMP
+\ No newline at end of file
++rm $TMP/$BASE.key
++rm $TMP/$BASE.req
++rm $TMP/$BASE.xx
++rmdir $TMP
+-- 
+2.5.5
+

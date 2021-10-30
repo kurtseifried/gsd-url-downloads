@@ -1,0 +1,119 @@
+From 9947b26993d8ca4996dec4d574b0f5a82c5f24f5 Mon Sep 17 00:00:00 2001
+From: Dan Callaghan <dcallagh@redhat.com>
+Date: Wed, 29 Apr 2015 16:11:10 +1000
+Subject: [PATCH 1/3] disallow external entities in job XML
+
+Bug: 1215020
+Change-Id: I19f2554a15a4965c29f365ea873c093fc5910d1b
+---
+ .../src/bkr/inttest/server/selenium/test_jobs.py   | 32 ++++++++++++++++++++++
+ Server/bkr/server/jobs.py                          |  6 ++--
+ Server/bkr/server/util.py                          | 21 ++++++++++++++
+ 3 files changed, 56 insertions(+), 3 deletions(-)
+
+diff --git a/IntegrationTests/src/bkr/inttest/server/selenium/test_jobs.py b/IntegrationTests/src/bkr/inttest/server/selenium/test_jobs.py
+index d006e93..7671ccb 100644
+--- a/IntegrationTests/src/bkr/inttest/server/selenium/test_jobs.py
++++ b/IntegrationTests/src/bkr/inttest/server/selenium/test_jobs.py
+@@ -745,6 +745,38 @@ def test_useful_error_message_on_ksmeta_syntax_error(self):
+                 'Failed to import job because of: '
+                 'Error parsing ks_meta: No closing quotation')
+ 
++    # https://bugzilla.redhat.com/show_bug.cgi?id=1215020
++    def test_xml_external_entities_are_rejected(self):
++        b = self.browser
++        login(b)
++        b.get(get_server_base())
++        click_menu_item(b, 'Scheduler', 'New Job')
++        xml_file = tempfile.NamedTemporaryFile()
++        xml_file.write('''
++            <!DOCTYPE foo [
++            <!ELEMENT foo ANY >
++            <!ENTITY xxe SYSTEM "file:///etc/passwd" >]>
++            <job>
++                <whiteboard>&xxe;</whiteboard>
++                <recipeSet>
++                    <recipe>
++                        <distroRequires>
++                            <distro_name op="=" value="BlueShoeLinux5-5" />
++                        </distroRequires>
++                        <hostRequires/>
++                        <task name="/distribution/install"/>
++                    </recipe>
++                </recipeSet>
++            </job>
++            ''')
++        xml_file.flush()
++        b.find_element_by_id('jobs_filexml').send_keys(xml_file.name)
++        b.find_element_by_xpath('//button[text()="Submit Data"]').click()
++        b.find_element_by_xpath('//button[text()="Queue"]').click()
++        self.assertEquals(b.find_element_by_class_name('flash').text,
++                'Failed to import job because of: '
++                'XML entity with id file:///etc/passwd not permitted')
++
+ 
+ class JobAttributeChangeTest(WebDriverTestCase):
+ 
+diff --git a/Server/bkr/server/jobs.py b/Server/bkr/server/jobs.py
+index 9821ef4..0236675 100644
+--- a/Server/bkr/server/jobs.py
++++ b/Server/bkr/server/jobs.py
+@@ -38,7 +38,7 @@
+ 
+ from bkr.common.bexceptions import BeakerException, BX
+ 
+-import xmltramp
++from bkr.server.util import xmltramp_parse_untrusted
+ from bkr.server.jobxml import XmlJob
+ import cgi
+ from bkr.server.job_utilities import Utility
+@@ -334,7 +334,7 @@ def upload(self, jobxml, ignore_missing_tasks=False):
+         # xml.sax (and thus, xmltramp) expect raw bytes, not unicode
+         if isinstance(jobxml, unicode):
+             jobxml = jobxml.encode('utf8')
+-        xml = xmltramp.parse(jobxml)
++        xml = xmltramp_parse_untrusted(jobxml)
+         xmljob = XmlJob(xml)
+         job = self.process_xmljob(xmljob,identity.current.user,
+                 ignore_missing_tasks=ignore_missing_tasks)
+@@ -390,7 +390,7 @@ def clone(self, job_id=None, recipe_id=None, recipeset_id=None,
+                             options = {'xsd_errors': job_schema.error_log},
+                             value = dict(textxml=textxml, confirmed=True),
+                         )
+-                xmljob = XmlJob(xmltramp.parse(textxml))
++                xmljob = XmlJob(xmltramp_parse_untrusted(textxml))
+                 job = self.process_xmljob(xmljob,identity.current.user)
+                 session.flush()
+             except Exception,err:
+diff --git a/Server/bkr/server/util.py b/Server/bkr/server/util.py
+index 0802f22..cfda061 100644
+--- a/Server/bkr/server/util.py
++++ b/Server/bkr/server/util.py
+@@ -229,3 +229,24 @@ def convert_db_lookup_error(msg):
+         yield
+     except NoResultFound:
+         raise DatabaseLookupError(msg)
++
++def xmltramp_parse_untrusted(s):
++    """
++    Like xmltramp.parse but for untrusted (user-supplied) input.
++    """
++    from StringIO import StringIO
++    import xmltramp
++    from xml.sax import make_parser
++    from xml.sax.handler import feature_namespaces
++    class SafeSeeder(xmltramp.Seeder):
++        def resolveEntity(self, publicId, systemId):
++            raise ValueError('XML entity with id %s not permitted' % (publicId or systemId))
++        def skippedEntity(self, name):
++            raise ValueError('Undeclared XML entity &%s;' % name)
++    seeder = SafeSeeder()
++    parser = make_parser()
++    parser.setFeature(feature_namespaces, 1)
++    parser.setContentHandler(seeder)
++    parser.setEntityResolver(seeder)
++    parser.parse(StringIO(s))
++    return seeder.result
+-- 
+1.9.3
+

@@ -1,0 +1,90 @@
+From 36809a80741d572af124f2a15b1fdf5c581cde46 Mon Sep 17 00:00:00 2001
+From: Dan Callaghan <dcallagh@redhat.com>
+Date: Mon, 4 May 2015 17:50:00 +1000
+Subject: [PATCH 3/4] recipe set comments are text, not HTML
+
+Bug: 1215030
+---
+ .../bkr/inttest/server/selenium/test_job_ack.py    | 26 ++++++++++++++++++++++
+ .../javascript/{response_v4.js => response_v6.js}  |  6 ++---
+ Server/bkr/server/widgets.py                       |  2 +-
+ 3 files changed, 30 insertions(+), 4 deletions(-)
+ rename Server/bkr/server/static/javascript/{response_v4.js => response_v6.js} (97%)
+
+diff --git a/IntegrationTests/src/bkr/inttest/server/selenium/test_job_ack.py b/IntegrationTests/src/bkr/inttest/server/selenium/test_job_ack.py
+index 242a36a..ceed197 100644
+--- a/IntegrationTests/src/bkr/inttest/server/selenium/test_job_ack.py
++++ b/IntegrationTests/src/bkr/inttest/server/selenium/test_job_ack.py
+@@ -188,3 +188,29 @@ def test_record_ack_change(self):
+             self.assertEquals(job.recipesets[0].activity[0].object_name(), 'RecipeSet: %s' % job.recipesets[0].id)
+             self.assertEquals(job.recipesets[0].activity[0].old_value, u'ack')
+             self.assertEquals(job.recipesets[0].activity[0].new_value, u'nak')
++
++    # https://bugzilla.redhat.com/show_bug.cgi?id=1215030
++    def test_html_in_comments_is_escaped(self):
++        with session.begin():
++            owner = data_setup.create_user(password=u'owner')
++            job = data_setup.create_job(owner=owner)
++            data_setup.mark_job_complete(job)
++        bad_comment = '<script>alert("xss")</script>'
++        b = self.browser
++        login(b, user=owner.user_name, password='owner')
++        b.get(get_server_base() + 'jobs/%s' % job.id)
++        self.review(job.recipesets[0], comment=bad_comment)
++        # reload the page, showing the comment should not execute a script
++        b.get(get_server_base() + 'jobs/%s' % job.id)
++        rs = b.find_element_by_xpath('//*[@id="RS_%s"]' % job.recipesets[0].id)
++        # click comment link
++        rs.find_element_by_link_text('comment').click()
++        # check dialog contents
++        dialog_content = b.find_element_by_xpath('//*[contains(@class, "ui-dialog-content")]')
++        self.assertEquals(dialog_content.text, bad_comment)
++        # click edit button in modal
++        b.find_element_by_xpath('//*[contains(@class, "ui-dialog")]'
++                '//button[text()="Edit"]').click()
++        # check textarea contents
++        textarea = b.find_element_by_xpath('//*[contains(@class, "ui-dialog")]//textarea')
++        self.assertEquals(textarea.text, bad_comment)
+diff --git a/Server/bkr/server/static/javascript/response_v4.js b/Server/bkr/server/static/javascript/response_v6.js
+similarity index 97%
+rename from Server/bkr/server/static/javascript/response_v4.js
+rename to Server/bkr/server/static/javascript/response_v6.js
+index c9aa389..6aedea5 100644
+--- a/Server/bkr/server/static/javascript/response_v4.js
++++ b/Server/bkr/server/static/javascript/response_v6.js
+@@ -94,7 +94,7 @@ AckPanel.prototype.get_response_comment = function (id) {
+ AckPanel.prototype.show_comment = function(result) {
+         var rs_id = result.rs_id
+         var comment = result.comment
+-        var newspan = $('<span></span>').attr('id','comment_remote_response_text_' + rs_id).attr('title','Comment for RS# ' + rs_id).html(comment)
++        var newspan = $('<span></span>').attr('id','comment_remote_response_text_' + rs_id).attr('title','Comment for RS# ' + rs_id).text(comment)
+         $('#response_'+rs_id).after(newspan)
+ 
+         $('#comment_remote_response_text_' + rs_id).dialog({height:200,
+@@ -103,8 +103,8 @@ AckPanel.prototype.show_comment = function(result) {
+                                                         'Edit' : function() {
+                                                                 $(this).dialog('close') 
+                                                                 var t_box = $("<textarea></textarea>").
+-                                                                                html(newspan.
+-                                                                                text()).attr('title','Edit RS# '+ rs_id+' comment').
++                                                                                text(comment).
++                                                                                attr('title','Edit RS# '+ rs_id+' comment').
+                                                                                 attr('id','comment_textbox_' + rs_id)
+                                                                                 //addClass('hidden');
+ 
+diff --git a/Server/bkr/server/widgets.py b/Server/bkr/server/widgets.py
+index dc44a91..161f432 100644
+--- a/Server/bkr/server/widgets.py
++++ b/Server/bkr/server/widgets.py
+@@ -525,7 +525,7 @@ class AckPanel(RadioButtonList):
+ 
+     javascript = [LocalJSLink('bkr','/static/javascript/jquery-ui-1.9.2.min.js', order=3),
+                   LocalJSLink('bkr','/static/javascript/loader_v2.js'),
+-                  LocalJSLink('bkr','/static/javascript/response_v4.js')]
++                  LocalJSLink('bkr','/static/javascript/response_v6.js')]
+ 
+     css =  [LocalCSSLink('bkr', '/static/css/smoothness/jquery-ui.css')]
+     params = ['widget_name','unreal_response','comment_id','comment_class']
+-- 
+1.9.3
+

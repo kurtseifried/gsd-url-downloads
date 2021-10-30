@@ -1,0 +1,71 @@
+From 82f06b6ff419a849c41dd8a80d21aee79d833e54 Mon Sep 17 00:00:00 2001
+From: Randy Barlow <rbarlow@redhat.com>
+Date: Fri, 8 Apr 2016 15:35:50 -0400
+Subject: [PATCH] Safely create tmp dir for the Nodes certificate
+ (CVE-2016-3108).
+
+Security researcher Sander Bos contacted the Pulp team to notify us
+that the pulp-gen-nodes-certificate script suffers from the same
+exploit as was found in CVE-2016-3095, namely that the $TMP
+directory that contains the Nodes private key was created in an
+unsafe manner. This commit contains his proposed patch, using
+mktemp -d with a defined umask to safely create the directory.
+
+Additionally, I added a set -e so that the script would exit upon
+error.
+
+Thanks to Sander Bos for taking the time to carefully inspect the
+Pulp codebase and for writing a wonderfully detailed report
+describing the issue and the fix for it.
+
+Credit also goes to Jeremy Cline (Red Hat) for independently
+reporting this issue.
+
+https://pulp.plan.io/issues/1830
+
+fixes #1830
+---
+ nodes/common/bin/pulp-gen-nodes-certificate | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/nodes/common/bin/pulp-gen-nodes-certificate b/nodes/common/bin/pulp-gen-nodes-certificate
+index 009e67d..856d3a8 100755
+--- a/nodes/common/bin/pulp-gen-nodes-certificate
++++ b/nodes/common/bin/pulp-gen-nodes-certificate
+@@ -12,6 +12,7 @@
+ # granted to use or replicate Red Hat trademarks that are incorporated
+ # in this software or its documentation.
+ #
++set -e
+ 
+ READ_PULP_CONF=\
+ $(cat << END
+@@ -33,16 +34,16 @@ PULP_CONF=(`python -c "$READ_PULP_CONF"`)
+ NODE_CONF=(`python -c "$READ_NODE_CONF"`)
+ 
+ 
++# Safely create a temporary folder to be used to create the certificate authority.
++TMP=$(mktemp -d) || exit 1
+ NODE_CRT=${NODE_CONF[0]}
+ CA_KEY=${PULP_CONF[0]}
+ CA_CRT=${PULP_CONF[1]}
+ BASE='nodes'
+-TMP=/tmp/$RANDOM
+ CN=`hostname`
+ ORG="PULP"
+ ORG_UNIT="NODES"
+ 
+-mkdir -p $TMP
+ mkdir -p `dirname $NODE_CRT`
+ 
+ # create client key
+@@ -71,4 +72,4 @@ openssl x509 \
+ cat $TMP/$BASE.key $TMP/$BASE.xx > $NODE_CRT
+ 
+ # clean
+-rm -rf $TMP
+\ No newline at end of file
++rm -rf $TMP
+-- 
+2.5.5
+

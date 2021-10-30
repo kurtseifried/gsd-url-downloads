@@ -1,0 +1,65 @@
+commit 127022f1b1f4a0e7b0098da2349bdf952ae56d0e
+Author: Konstantin Khlebnikov <khlebnikov@openvz.org>
+Date:   Wed Jun 3 19:18:56 2009 +0400
+
+    ptrace dont wait signaled tasks
+    
+    fix deadlock with coredump_wait
+    
+    first task wait for second state switched to TRACED or STOPPED
+    and second wait until first got signal and be ready for coredump
+    
+    Fix-Idea-by: Pavel Emelyanov <xemul@openvz.org>
+    
+    --- SysRq-T trace
+    
+    expl_zap3     R ffff81003fa6cd70     0  8645  10409  8646               (NOTLB)
+     0000000000000068 ffffffff8006358b ffff81007e13f980 0000000000000000
+     ffff81003fa6cd70 ffff81003fa6cd70 0000013e867d5d52 0000027bcf133f75
+     ffff81003fa6cf80 ffffffff8046b780 ffffffff802fa680 ffff81003d0f1ec8
+    Call Trace:
+     [<ffffffff8006358b>] __sched_text_start+0x11b/0xfcb
+     [<ffffffff800863c2>] task_rq_lock+0x26/0x45
+     [<ffffffff80088be2>] sys_sched_yield+0xb1/0xb8
+     [<ffffffff800c8fa8>] ptrace_start+0x3bd/0x465
+     [<ffffffff80029223>] do_wait+0xafd/0xb99
+     [<ffffffff800c9cfb>] sys_ptrace+0x48/0x1f7
+     [<ffffffff80060477>] ptregscall_common+0x67/0xac
+     [<ffffffff80060166>] system_call+0x7e/0x83
+    
+    expl_zap3     D ffff81007ff395c0     0  8647   8645                8646 (NOTLB)
+     ffff81007f6abc58 0000000000000086 0000000000000006 ffff81007b944c30
+     ffff81007ff395c0 ffff81007ff33500 0000004ed2555339 0000009d55ffa665
+     ffff81007ff397c8 ffffffff8046b780 0000004ed2554f5e ffff81007ff33500
+    Call Trace:
+     [<ffffffff80086900>] __activate_task+0x92/0x157
+     [<ffffffff800492ac>] try_to_wake_up+0x3ce/0x3e0
+     [<ffffffff80064691>] wait_for_completion+0x79/0xa2
+     [<ffffffff80088417>] default_wake_function+0x0/0xe
+     [<ffffffff800ecbb5>] do_coredump+0x341/0x8a1
+     [<ffffffff800a32e5>] ub_slab_uncharge+0xd0/0xdb
+     [<ffffffff800a3493>] do_ub_siginfo_uncharge+0x42/0x55
+     [<ffffffff80096391>] recalc_sigpending+0xe/0x25
+     [<ffffffff8002c00a>] get_signal_to_deliver+0x434/0x46b
+     [<ffffffff8005d8f6>] do_notify_resume+0xd0/0x7e3
+     [<ffffffff80096f63>] __group_send_sig_info+0x89/0x94
+     [<ffffffff8005d26a>] group_send_sig_info+0x76/0x83
+     [<ffffffff80088a0d>] vcpu_put+0x8e/0x16e
+     [<ffffffff8004ea1d>] sys_kill+0x19f/0x1b2
+     [<ffffffff80088a0d>] vcpu_put+0x8e/0x16e
+     [<ffffffff800601ef>] sysret_signal+0x1c/0x27
+     [<ffffffff80060477>] ptregscall_common+0x67/0xac
+
+diff --git a/kernel/ptrace.c b/kernel/ptrace.c
+index d90f0b6..7323400 100644
+--- a/kernel/ptrace.c
++++ b/kernel/ptrace.c
+@@ -904,7 +904,7 @@ ptrace_start(long pid, long request,
+ 	 */
+ 	wait_task_inactive(child);
+ 	while (child->state != TASK_TRACED && child->state != TASK_STOPPED) {
+-		if (child->exit_state) {
++		if (child->exit_state || (child->flags & PF_SIGNALED)) {
+ 			__ptrace_state_free(state);
+ 			goto out_tsk;
+ 		}

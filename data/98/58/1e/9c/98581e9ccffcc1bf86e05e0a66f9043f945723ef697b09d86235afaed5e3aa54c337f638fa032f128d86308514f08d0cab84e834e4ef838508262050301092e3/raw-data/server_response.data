@@ -1,0 +1,100 @@
+*** vsftpd-2.0.1/main.c.old	2007-09-20 11:16:05.000000000 -0400
+--- vsftpd-2.0.1/main.c	2007-09-20 11:16:54.000000000 -0400
+***************
+*** 61,67 ****
+      /* Home directory */
+      INIT_MYSTR,
+      /* Secure connection state */
+!     0, 0, 0, 0, 0, 0, -1, -1
+    };
+    int config_specified = 0;
+    const char* p_config_name = VSFTP_DEFAULT_CONFIG;
+--- 61,69 ----
+      /* Home directory */
+      INIT_MYSTR,
+      /* Secure connection state */
+!     0, 0, 0, 0, 0, 0, -1, -1,
+!     /* Login fails */
+!     0
+    };
+    int config_specified = 0;
+    const char* p_config_name = VSFTP_DEFAULT_CONFIG;
+*** vsftpd-2.0.1/parseconf.c.old	2007-09-20 11:04:58.000000000 -0400
+--- vsftpd-2.0.1/parseconf.c	2007-09-20 11:05:19.000000000 -0400
+***************
+*** 120,125 ****
+--- 120,126 ----
+    { "file_open_mode", &tunable_file_open_mode },
+    { "max_per_ip", &tunable_max_per_ip },
+    { "trans_chunk_size", &tunable_trans_chunk_size },
++   { "max_login_fails", &tunable_max_login_fails },
+    { 0, 0 }
+  };
+  
+*** vsftpd-2.0.1/prelogin.c.old	2007-09-20 11:01:48.000000000 -0400
+--- vsftpd-2.0.1/prelogin.c	2007-09-20 11:02:53.000000000 -0400
+***************
+*** 216,221 ****
+--- 216,225 ----
+      vsf_two_process_login(p_sess, &p_sess->ftp_arg_str);
+    }
+    vsf_cmdio_write(p_sess, FTP_LOGINERR, "Login incorrect.");
++   if (++p_sess->login_fails >= tunable_max_login_fails)
++   {
++     vsf_sysutil_exit(0);
++   }
+    str_empty(&p_sess->user_str);
+    /* FALLTHRU if login fails */
+  }
+*** vsftpd-2.0.1/session.h.old	2007-09-20 11:06:05.000000000 -0400
+--- vsftpd-2.0.1/session.h	2007-09-20 11:06:33.000000000 -0400
+***************
+*** 90,95 ****
+--- 90,96 ----
+    int ssl_slave_active;
+    int ssl_slave_fd;
+    int ssl_consumer_fd;
++   unsigned int login_fails;
+  };
+  
+  #endif /* VSF_SESSION_H */
+*** vsftpd-2.0.1/tunables.c.old	2007-09-20 11:07:29.000000000 -0400
+--- vsftpd-2.0.1/tunables.c	2007-09-20 11:07:46.000000000 -0400
+***************
+*** 86,91 ****
+--- 86,92 ----
+  unsigned int tunable_file_open_mode = 0666;
+  unsigned int tunable_max_per_ip = 0;
+  unsigned int tunable_trans_chunk_size = 0;
++ unsigned int tunable_max_login_fails = 3;
+  
+  const char* tunable_secure_chroot_dir = "/usr/share/empty";
+  const char* tunable_ftp_username = "ftp";
+*** vsftpd-2.0.1/tunables.h.old	2007-09-20 11:08:14.000000000 -0400
+--- vsftpd-2.0.1/tunables.h	2007-09-20 11:08:29.000000000 -0400
+***************
+*** 80,85 ****
+--- 80,86 ----
+  extern unsigned int tunable_file_open_mode;
+  extern unsigned int tunable_max_per_ip;
+  extern unsigned int tunable_trans_chunk_size;
++ extern unsigned int tunable_max_login_fails;
+  
+  /* String defines */
+  extern const char* tunable_secure_chroot_dir;
+*** vsftpd-2.0.1/vsftpd.conf.5.old	2007-09-20 11:08:44.000000000 -0400
+--- vsftpd-2.0.1/vsftpd.conf.5	2007-09-20 11:11:33.000000000 -0400
+***************
+*** 594,599 ****
+--- 594,604 ----
+  
+  Default: 0 (unlimited)
+  .TP
++ .B max_login_fails
++ After this many login failures, the session is killed.
++ 
++ Default: 3
++ .TP
+  .B max_per_ip
+  If vsftpd is in standalone mode, this is the maximum number of clients which
+  may be connected from the same source internet address. A client will get an

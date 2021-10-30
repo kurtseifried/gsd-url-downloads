@@ -1,0 +1,139 @@
+There is a general problem with racoon parsing ISAKMP
+generic headers. The parsing code is:
+
+    /* parse through general headers */
+    while (0 < tlen && np != ISAKMP_NPTYPE_NONE) {
+[1]        if (tlen <= sizeof(struct isakmp_gen)) {
+                    /* don't send information, see isakmp_ident_r1() */
+                    plog(LLV_ERROR, LOCATION, NULL,
+                            "invalid length of payload\n");
+                    vfree(result);
+                    return NULL;
+            }
+
+            plog(LLV_DEBUG, LOCATION, NULL,
+                    "seen nptype=%u(%s)\n", np, s_isakmp_nptype(np));
+
+            p->type = np;
+[2]         p->len = ntohs(gen->len);
+[3]         if (p->len == 0 || p->len > tlen) {
+                    plog(LLV_DEBUG, LOCATION, NULL,
+                            "invalid length of payload\n");
+                    vfree(result);
+                    return NULL;
+            p->ptr = gen;
+            p++;
+            if (ep <= p) {
+                    int off;
+
+                    off = p - (struct isakmp_parse_t *)result->v;
+                    result = vrealloc(result, result->l * 2);
+                    if (result == NULL) {
+                            plog(LLV_DEBUG, LOCATION, NULL,
+                                    "failed to realloc buffer.\n");
+                            vfree(result);
+                            return NULL;
+                    }
+                    ep = (struct isakmp_parse_t *)
+                            (result->v + result->l - sizeof(*ep));
+                    p = (struct isakmp_parse_t *)result->v;
+                    p += off;
+            }
+
+            np = gen->np;
+            plen = ntohs(gen->len);
+            gen = (struct isakmp_gen *)((caddr_t)gen + plen);
+            tlen -= plen;
+    }
+
+
+The problem is that at [2] The length field is taken from the generic header.
+There is a check at [1] whether the len field is at least the size
+of a generic header, but this is only to check whether there is enough
+space in the packet to contain a generic header at least. If the np field
+says 'no more headers' the while loop is terminated. And there can
+be a p->len field of [1, ..., sizeof(isakmp_gen)]. 0 isnt possible because
+of the check at [3].
+After parsing the ISAKMP packet we have a list of generic headers where
+one or more of them could contain length fields shorter than minimum
+size.
+
+After parsing the packet, each header is processed and in a lot of
+places subtractions occur. Most of them are pre-authentication,
+in initiator AND responder side, so it is possible for an
+unauthenticated remote attacker to pass the evil headers to
+a VPN gateway which listens for incoming packets as well as
+to client side VPN endpoints whishing to establish a SA.
+They can be triggered in inform, quick and base mode.
+
+The problematic code-parts are:
+
+isakmp_quick.c:
+
+        plog(LLV_DEBUG, LOCATION, NULL, "HASH(1) validate:");
+        plogdump(LLV_DEBUG, r_hash, ntohs(hash->h.len) - sizeof(*hash));
+        ...
+        plog(LLV_DEBUG, LOCATION, NULL, "HASH(2) received:");
+        plogdump(LLV_DEBUG, r_hash, ntohs(hash->h.len) - sizeof(*hash));
+        ...
+        plog(LLV_DEBUG, LOCATION, NULL, "HASH(3) validate:");//AUD
+        plogdump(LLV_DEBUG, r_hash, ntohs(hash->h.len) - sizeof(*hash));
+        ...
+        plog(LLV_DEBUG, LOCATION, NULL, "HASH(4) validate:");
+        plogdump(LLV_DEBUG, r_hash, ntohs(hash->h.len) - sizeof(*hash));
+
+the hash->h.len is now the length from the generic header, typecasted
+to the isakmp_pl_hash header. The subtraction could now become
+negative, passed to the plogdump() function. plogdump() computes
+the space needed for a buffer to log it:
+
+        buflen = (len * 2) + (len / 4) + (len / 32) + 3
+
+Since we can have [0, -1,-2, -3] as input due to the subtraction (the size
+of a generic header is 4, and 0 for length is filtered, so -4 isnt possible).
+buflen may yield a value of ~1.2Gig. On some platforms, depending on
+the memory allocation this may succeed and the allocation yields
+a valid buffer. But there are no 1.2Gig of data in the packet,
+so reading from it crashes at some point. Since the serveice is UDP
+and doesnt for, you can bash the VPn gateway completely.
+
+More occurences of evil subtractions:
+
+oakley.c:
+        plog(LLV_DEBUG, LOCATION, NULL, "HASH received:");
+        plogdump(LLV_DEBUG, r_hash,
+                ntohs(iph1->pl_hash->h.len) - sizeof(*iph1->pl_hash));
+        ...
+        new->pl = vmalloc(ntohs(gen->len) - sizeof(*gen));
+        ...
+        iph1->key = vmalloc(keylen >> 3);
+        (there are some simmilar calls with vamlloc() and shifts inside)
+
+It may happen that this results in vmalloc(0) which might be bad
+if you add something to the length later or try to access
+it at index 0. Also, on some platforms vmalloc(-1) may succeed
+since underlying alloc adds some bytes for control structures
+and instead of malloc(-1), a malloc(7) indeed happens.
+
+
+ipsec_doi.c:
+
+        tlen = ntohs(prop->h.len)
+                - (sizeof(struct isakmp_pl_p) + prop->spi_size);
+
+I think this can also make problems.
+
+isakmp.c:
+        *buf = vmalloc(ntohs(gen->len) - sizeof(*gen));
+
+
+Suggested fix: check for a minimum size of the length of generic
+headers in isakmp_parswwoh(). Check whether 0 bytes are alloced,
+or ensure that if a 0-byte alloc could happen, nobody accesses
+the pointer if len == 0.
+
+I wrote a demo-program triggering a vmalloc(-3) via too short
+nonce-header-len field, so the assumption that the generic length field
+is passed unchecked was validated.
+
+
