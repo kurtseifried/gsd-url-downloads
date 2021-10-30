@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="profile" href="http://gmpg.org/xfn/11">
+<link rel="pingback" href="https://blog.cryptographyengineering.com/xmlrpc.php">
+
+<script>(function(html){html.className = html.className.replace(/\bno-js\b/,'js')})(document.documentElement);</script>
+<title>Attack of the week: 64-bit ciphers in TLS &#8211; A Few Thoughts on Cryptographic Engineering</title>
+<meta name='robots' content='max-image-preview:large' />
+
+<!-- Async WordPress.com Remote Login -->
+<script id="wpcom_remote_login_js">
+var wpcom_remote_login_extra_auth = '';
+function wpcom_remote_login_remove_dom_node_id( element_id ) {
+	var dom_node = document.getElementById( element_id );
+	if ( dom_node ) { dom_node.parentNode.removeChild( dom_node ); }
+}
+function wpcom_remote_login_remove_dom_node_classes( class_name ) {
+	var dom_nodes = document.querySelectorAll( '.' + class_name );
+	for ( var i = 0; i < dom_nodes.length; i++ ) {
+		dom_nodes[ i ].parentNode.removeChild( dom_nodes[ i ] );
+	}
+}
+function wpcom_remote_login_final_cleanup() {
+	wpcom_remote_login_remove_dom_node_classes( "wpcom_remote_login_msg" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_key" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_validate" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_js" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_request_access_iframe" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_request_access_styles" );
+}
+
+// Watch for messages back from the remote login
+window.addEventListener( "message", function( e ) {
+	if ( e.origin === "https://r-login.wordpress.com" ) {
+		var data = {};
+		try {
+			data = JSON.parse( e.data );
+		} catch( e ) {
+			wpcom_remote_login_final_cleanup();
+			return;
+		}
+
+		if ( data.msg === 'LOGIN' ) {
+			// Clean up the login check iframe
+			wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_key" );
+
+			var id_regex = new RegExp( /^[0-9]+$/ );
+			var token_regex = new RegExp( /^.*|.*|.*$/ );
+			if (
+				token_regex.test( data.token )
+				&& id_regex.test( data.wpcomid )
+			) {
+				// We have everything we need to ask for a login
+				var script = document.createElement( "script" );
+				script.setAttribute( "id", "wpcom_remote_login_validate" );
+				script.src = '/remote-login.php?wpcom_remote_login=validate'
+					+ '&wpcomid=' + data.wpcomid
+					+ '&token=' + encodeURIComponent( data.token )
+					+ '&host=' + window.location.protocol
+					+ '//' + window.location.hostname
+					+ '&postid=877'
+					+ '&is_singular=1';
+				document.body.appendChild( script );
+			}
+
+			return;
+		}
+
+		// Safari ITP, not logged in, so redirect
+		if ( data.msg === 'LOGIN-REDIRECT' ) {
+			window.location = 'https://wordpress.com/log-in?redirect_to=' + window.location.href;
+			return;
+		}
+
+		// Safari ITP, storage access failed, remove the request
+		if ( data.msg === 'LOGIN-REMOVE' ) {
+			var css_zap = 'html { -webkit-transition: margin-top 1s; transition: margin-top 1s; } /* 9001 */ html { margin-top: 0 !important; } * html body { margin-top: 0 !important; } @media screen and ( max-width: 782px ) { html { margin-top: 0 !important; } * html body { margin-top: 0 !important; } }';
+			var style_zap = document.createElement( 'style' );
+			style_zap.type = 'text/css';
+			style_zap.appendChild( document.createTextNode( css_zap ) );
+			document.body.appendChild( style_zap );
+
+			var e = document.getElementById( 'wpcom_request_access_iframe' );
+			e.parentNode.removeChild( e );
+
+			document.cookie = 'wordpress_com_login_access=denied; path=/; max-age=31536000';
+
+			return;
+		}
+
+		// Safari ITP
+		if ( data.msg === 'REQUEST_ACCESS' ) {
+			console.log( 'request access: safari' );
+
+			// Check ITP iframe enable/disable knob
+			if ( wpcom_remote_login_extra_auth !== 'safari_itp_iframe' ) {
+				return;
+			}
+
+			// If we are in a "private window" there is no ITP.
+			var private_window = false;
+			try {
+				var opendb = window.openDatabase( null, null, null, null );
+			} catch( e ) {
+				private_window = true;
+			}
+
+			if ( private_window ) {
+				console.log( 'private window' );
+				return;
+			}
+
+			var iframe = document.createElement( 'iframe' );
+			iframe.id = 'wpcom_request_access_iframe';
+			iframe.setAttribute( 'scrolling', 'no' );
+			iframe.setAttribute( 'sandbox', 'allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-top-navigation-by-user-activation' );
+			iframe.src = 'https://r-login.wordpress.com/remote-login.php?wpcom_remote_login=request_access&origin=' + encodeURIComponent( data.origin ) + '&wpcomid=' + encodeURIComponent( data.wpcomid );
+
+			var css = 'html { -webkit-transition: margin-top 1s; transition: margin-top 1s; } /* 9001 */ html { margin-top: 46px !important; } * html body { margin-top: 46px !important; } @media screen and ( max-width: 660px ) { html { margin-top: 71px !important; } * html body { margin-top: 71px !important; } #wpcom_request_access_iframe { display: block; height: 71px !important; } } #wpcom_request_access_iframe { border: 0px; height: 46px; position: fixed; top: 0; left: 0; width: 100%; min-width: 100%; z-index: 99999; background: #23282d; } ';
+
+			var style = document.createElement( 'style' );
+			style.type = 'text/css';
+			style.id = 'wpcom_request_access_styles';
+			style.appendChild( document.createTextNode( css ) );
+			document.body.appendChild( style );
+
+			document.body.appendChild( iframe );
+		}
+
+		if ( data.msg === 'DONE' ) {
+			wpcom_remote_login_final_cleanup();
+		}
+	}
+}, false );
+
+// Inject the remote login iframe after the page has had a chance to load
+// more critical resources
+window.addEventListener( "DOMContentLoaded", function( e ) {
+	var iframe = document.createElement( "iframe" );
+	iframe.style.display = "none";
+	iframe.setAttribute( "scrolling", "no" );
+	iframe.setAttribute( "id", "wpcom_remote_login_key" );
+	iframe.src = "https://r-login.wordpress.com/remote-login.php"
+		+ "?wpcom_remote_login=key"
+		+ "&origin=aHR0cHM6Ly9ibG9nLmNyeXB0b2dyYXBoeWVuZ2luZWVyaW5nLmNvbQ%3D%3D"
+		+ "&wpcomid=9549322"
+		+ "&time=1635609176";
+	document.body.appendChild( iframe );
+}, false );
+</script>
+<link rel='dns-prefetch' href='//s2.wp.com' />
+<link rel='dns-prefetch' href='//matthewdgreen.wordpress.com' />
+<link rel='dns-prefetch' href='//s0.wp.com' />
+<link rel='dns-prefetch' href='//fonts.googleapis.com' />
+<link rel="alternate" type="application/rss+xml" title="A Few Thoughts on Cryptographic Engineering &raquo; Feed" href="https://blog.cryptographyengineering.com/feed/" />
+<link rel="alternate" type="application/rss+xml" title="A Few Thoughts on Cryptographic Engineering &raquo; Comments Feed" href="https://blog.cryptographyengineering.com/comments/feed/" />
+<link rel="alternate" type="application/rss+xml" title="A Few Thoughts on Cryptographic Engineering &raquo; Attack of the week: 64-bit ciphers in&nbsp;TLS Comments Feed" href="https://blog.cryptographyengineering.com/2016/08/24/attack-of-week-64-bit-ciphers-in-tls/feed/" />
+	<script type="text/javascript">
+		/* <![CDATA[ */
+		function addLoadEvent(func) {
+			var oldonload = window.onload;
+			if (typeof window.onload != 'function') {
+				window.onload = func;
+			} else {
+				window.onload = function () {
+					oldonload();
+					func();
+				}
+			}
+		}
+		/* ]]> */
+	</script>
+			<script type="text/javascript">
+			window._wpemojiSettings = {"baseUrl":"https:\/\/s0.wp.com\/wp-content\/mu-plugins\/wpcom-smileys\/twemoji\/2\/72x72\/","ext":".png","svgUrl":"https:\/\/s0.wp.com\/wp-content\/mu-plugins\/wpcom-smileys\/twemoji\/2\/svg\/","svgExt":".svg","source":{"concatemoji":"https:\/\/s1.wp.com\/wp-includes\/js\/wp-emoji-release.min.js?m=1625065786h&ver=5.8.1"}};
+			!function(e,a,t){var n,r,o,i=a.createElement("canvas"),p=i.getContext&&i.getContext("2d");function s(e,t){var a=String.fromCharCode;p.clearRect(0,0,i.width,i.height),p.fillText(a.apply(this,e),0,0);e=i.toDataURL();return p.clearRect(0,0,i.width,i.height),p.fillText(a.apply(this,t),0,0),e===i.toDataURL()}function c(e){var t=a.createElement("script");t.src=e,t.defer=t.type="text/javascript",a.getElementsByTagName("head")[0].appendChild(t)}for(o=Array("flag","emoji"),t.supports={everything:!0,everythingExceptFlag:!0},r=0;r<o.length;r++)t.supports[o[r]]=function(e){if(!p||!p.fillText)return!1;switch(p.textBaseline="top",p.font="600 32px Arial",e){case"flag":return s([127987,65039,8205,9895,65039],[127987,65039,8203,9895,65039])?!1:!s([55356,56826,55356,56819],[55356,56826,8203,55356,56819])&&!s([55356,57332,56128,56423,56128,56418,56128,56421,56128,56430,56128,56423,56128,56447],[55356,57332,8203,56128,56423,8203,56128,56418,8203,56128,56421,8203,56128,56430,8203,56128,56423,8203,56128,56447]);case"emoji":return!s([10084,65039,8205,55357,56613],[10084,65039,8203,55357,56613])}return!1}(o[r]),t.supports.everything=t.supports.everything&&t.supports[o[r]],"flag"!==o[r]&&(t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&t.supports[o[r]]);t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&!t.supports.flag,t.DOMReady=!1,t.readyCallback=function(){t.DOMReady=!0},t.supports.everything||(n=function(){t.readyCallback()},a.addEventListener?(a.addEventListener("DOMContentLoaded",n,!1),e.addEventListener("load",n,!1)):(e.attachEvent("onload",n),a.attachEvent("onreadystatechange",function(){"complete"===a.readyState&&t.readyCallback()})),(n=t.source||{}).concatemoji?c(n.concatemoji):n.wpemoji&&n.twemoji&&(c(n.twemoji),c(n.wpemoji)))}(window,document,window._wpemojiSettings);
+		</script>
+		<style type="text/css">
+img.wp-smiley,
+img.emoji {
+	display: inline !important;
+	border: none !important;
+	box-shadow: none !important;
+	height: 1em !important;
+	width: 1em !important;
+	margin: 0 .07em !important;
+	vertical-align: -0.1em !important;
+	background: none !important;
+	padding: 0 !important;
+}
+</style>
+	<link rel='stylesheet' id='all-css-0-1' href='https://s1.wp.com/_static/??-eJyNkutOBCEMhV9IBokT1z/GZ+HSYNdyCYUdeXvZiZpx1l39QziU73DSIpcsbIoVYpWhiUzNY2S5ZJuC4IAEfacmy3wnf8cKkK7gRE5cd+oC+2J8G9JA8aNSQJ6Umg6TkqYhOWko2TdBaIouXXLtBN9GGC01ByyPLAM41EAQ1kAbkUl3KILAa9ungPFvfNS2+gd0PfyadJhBzfocWffUqvAF3S72vy2Krhg9X8E3XT/3bZyHrC/D38AWdB7GmMaVz72o8H4bWT+CMbkAsxhrwBZEfR1vrQN+Cc/q8WFW8+F+fjp+AOaW49o=?cssminify=yes' type='text/css' media='all' />
+<style id='wp-block-library-inline-css'>
+.has-text-align-justify {
+	text-align:justify;
+}
+</style>
+<style id='global-styles-inline-css'>
+body{--wp--preset--color--black: #000000;--wp--preset--color--cyan-bluish-gray: #abb8c3;--wp--preset--color--white: #ffffff;--wp--preset--color--pale-pink: #f78da7;--wp--preset--color--vivid-red: #cf2e2e;--wp--preset--color--luminous-vivid-orange: #ff6900;--wp--preset--color--luminous-vivid-amber: #fcb900;--wp--preset--color--light-green-cyan: #7bdcb5;--wp--preset--color--vivid-green-cyan: #00d084;--wp--preset--color--pale-cyan-blue: #8ed1fc;--wp--preset--color--vivid-cyan-blue: #0693e3;--wp--preset--color--vivid-purple: #9b51e0;--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple: linear-gradient(135deg,rgba(6,147,227,1) 0%,rgb(155,81,224) 100%);--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan: linear-gradient(135deg,rgb(122,220,180) 0%,rgb(0,208,130) 100%);--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange: linear-gradient(135deg,rgba(252,185,0,1) 0%,rgba(255,105,0,1) 100%);--wp--preset--gradient--luminous-vivid-orange-to-vivid-red: linear-gradient(135deg,rgba(255,105,0,1) 0%,rgb(207,46,46) 100%);--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray: linear-gradient(135deg,rgb(238,238,238) 0%,rgb(169,184,195) 100%);--wp--preset--gradient--cool-to-warm-spectrum: linear-gradient(135deg,rgb(74,234,220) 0%,rgb(151,120,209) 20%,rgb(207,42,186) 40%,rgb(238,44,130) 60%,rgb(251,105,98) 80%,rgb(254,248,76) 100%);--wp--preset--gradient--blush-light-purple: linear-gradient(135deg,rgb(255,206,236) 0%,rgb(152,150,240) 100%);--wp--preset--gradient--blush-bordeaux: linear-gradient(135deg,rgb(254,205,165) 0%,rgb(254,45,45) 50%,rgb(107,0,62) 100%);--wp--preset--gradient--luminous-dusk: linear-gradient(135deg,rgb(255,203,112) 0%,rgb(199,81,192) 50%,rgb(65,88,208) 100%);--wp--preset--gradient--pale-ocean: linear-gradient(135deg,rgb(255,245,203) 0%,rgb(182,227,212) 50%,rgb(51,167,181) 100%);--wp--preset--gradient--electric-grass: linear-gradient(135deg,rgb(202,248,128) 0%,rgb(113,206,126) 100%);--wp--preset--gradient--midnight: linear-gradient(135deg,rgb(2,3,129) 0%,rgb(40,116,252) 100%);--wp--preset--duotone--dark-grayscale: url('#wp-duotone-dark-grayscale');--wp--preset--duotone--grayscale: url('#wp-duotone-grayscale');--wp--preset--duotone--purple-yellow: url('#wp-duotone-purple-yellow');--wp--preset--duotone--blue-red: url('#wp-duotone-blue-red');--wp--preset--duotone--midnight: url('#wp-duotone-midnight');--wp--preset--duotone--magenta-yellow: url('#wp-duotone-magenta-yellow');--wp--preset--duotone--purple-green: url('#wp-duotone-purple-green');--wp--preset--duotone--blue-orange: url('#wp-duotone-blue-orange');--wp--preset--font-size--small: 13px;--wp--preset--font-size--normal: 16px;--wp--preset--font-size--medium: 20px;--wp--preset--font-size--large: 36px;--wp--preset--font-size--huge: 42px;}.has-black-color{color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-color{color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-color{color: var(--wp--preset--color--white) !important;}.has-pale-pink-color{color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-color{color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-color{color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-color{color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-color{color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-color{color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-color{color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-color{color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-color{color: var(--wp--preset--color--vivid-purple) !important;}.has-black-background-color{background-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-background-color{background-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-background-color{background-color: var(--wp--preset--color--white) !important;}.has-pale-pink-background-color{background-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-background-color{background-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-background-color{background-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-background-color{background-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-background-color{background-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-background-color{background-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-background-color{background-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-background-color{background-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-background-color{background-color: var(--wp--preset--color--vivid-purple) !important;}.has-black-border-color{border-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-border-color{border-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-border-color{border-color: var(--wp--preset--color--white) !important;}.has-pale-pink-border-color{border-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-border-color{border-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-border-color{border-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-border-color{border-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-border-color{border-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-border-color{border-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-border-color{border-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-border-color{border-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-border-color{border-color: var(--wp--preset--color--vivid-purple) !important;}.has-vivid-cyan-blue-to-vivid-purple-gradient-background{background: var(--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple) !important;}.has-light-green-cyan-to-vivid-green-cyan-gradient-background{background: var(--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan) !important;}.has-luminous-vivid-amber-to-luminous-vivid-orange-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange) !important;}.has-luminous-vivid-orange-to-vivid-red-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-orange-to-vivid-red) !important;}.has-very-light-gray-to-cyan-bluish-gray-gradient-background{background: var(--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray) !important;}.has-cool-to-warm-spectrum-gradient-background{background: var(--wp--preset--gradient--cool-to-warm-spectrum) !important;}.has-blush-light-purple-gradient-background{background: var(--wp--preset--gradient--blush-light-purple) !important;}.has-blush-bordeaux-gradient-background{background: var(--wp--preset--gradient--blush-bordeaux) !important;}.has-luminous-dusk-gradient-background{background: var(--wp--preset--gradient--luminous-dusk) !important;}.has-pale-ocean-gradient-background{background: var(--wp--preset--gradient--pale-ocean) !important;}.has-electric-grass-gradient-background{background: var(--wp--preset--gradient--electric-grass) !important;}.has-midnight-gradient-background{background: var(--wp--preset--gradient--midnight) !important;}.has-small-font-size{font-size: var(--wp--preset--font-size--small) !important;}.has-normal-font-size{font-size: var(--wp--preset--font-size--normal) !important;}.has-medium-font-size{font-size: var(--wp--preset--font-size--medium) !important;}.has-large-font-size{font-size: var(--wp--preset--font-size--large) !important;}.has-huge-font-size{font-size: var(--wp--preset--font-size--huge) !important;}
+</style>
+<link rel='stylesheet' id='independent-publisher-fonts-css'  href='https://fonts.googleapis.com/css?family=PT+Sans%3A400%2C700%2C400italic%2C700italic%7CPT+Serif%3A400%2C700%2C400italic%2C700italic&#038;subset=latin%2Clatin-ext' media='all' />
+<link rel='stylesheet' id='all-css-4-1' href='https://s0.wp.com/_static/??-eJyVj90KwjAMhV/IGqaC7EJ8lq2LXaRNSpMx9vZWvNnwB7wJ55B8OQnM2XlhQzZIk8txCsQKARkL1cYXufeqO1ixNmJChTz1QDxgxlrYXPWRdMQCakvE/zFi/0LdnL2ktwWrm2caApqCSXZZtKrPmZs3xUXxnZHwxrhb7Kj8Qgv2UUKVAerUyj6ha7o0p7Zpj4dz094fRDyGcQ==?cssminify=yes' type='text/css' media='all' />
+<style id='independent-publisher-style-inline-css'>
+#hero-header { background: url("https://matthewdgreen.files.wordpress.com/2016/07/2274252795_918bcffc01_b.jpg") no-repeat center; background-size: cover; background-attachment: scroll; }
+</style>
+<link rel='stylesheet' id='print-css-5-1' href='https://s2.wp.com/wp-content/mu-plugins/global-print/global-print.css?m=1465851035h&cssminify=yes' type='text/css' media='print' />
+<style id='jetpack-global-styles-frontend-style-inline-css'>
+:root { --font-headings: unset; --font-base: unset; --font-headings-default: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif; --font-base-default: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;}
+</style>
+<link rel='stylesheet' id='all-css-8-1' href='https://s0.wp.com/wp-content/themes/h4/global.css?m=1420737423h&cssminify=yes' type='text/css' media='all' />
+<script id='jetpack_related-posts-js-extra'>
+var related_posts_js_options = {"post_heading":"h4"};
+</script>
+<script id='wpcom-actionbar-placeholder-js-extra'>
+var actionbardata = {"siteID":"9549322","siteName":"A Few Thoughts on Cryptographic Engineering","siteURL":"https:\/\/blog.cryptographyengineering.com","siteHost":"blog.cryptographyengineering.com","icon":"<img alt='' src='https:\/\/s2.wp.com\/i\/logo\/wpcom-gray-white.png' class='avatar avatar-50' height='50' width='50' \/>","canManageOptions":"","canCustomizeSite":"","isFollowing":"","themeSlug":"pub\/independent-publisher","signupURL":"https:\/\/wordpress.com\/start\/","loginURL":"https:\/\/wordpress.com\/log-in?redirect_to=https%3A%2F%2Fr-login.wordpress.com%2Fremote-login.php%3Faction%3Dlink%26back%3Dhttps%253A%252F%252Fblog.cryptographyengineering.com%252F2016%252F08%252F24%252Fattack-of-week-64-bit-ciphers-in-tls%252F","themeURL":"","xhrURL":"https:\/\/blog.cryptographyengineering.com\/wp-admin\/admin-ajax.php","nonce":"8ec0ac2dfd","isSingular":"1","isFolded":"","isLoggedIn":"","isMobile":"","subscribeNonce":"<input type=\"hidden\" id=\"_wpnonce\" name=\"_wpnonce\" value=\"7ff7e05e76\" \/>","referer":"https:\/\/blog.cryptographyengineering.com\/2016\/08\/24\/attack-of-week-64-bit-ciphers-in-tls\/","canFollow":"1","feedID":"53033543","statusMessage":"","subsEmailDefault":"instantly","customizeLink":"https:\/\/matthewdgreen.wordpress.com\/wp-admin\/customize.php?url=https%3A%2F%2Fmatthewdgreen.wordpress.com%2F2016%2F08%2F24%2Fattack-of-week-64-bit-ciphers-in-tls%2F","postID":"877","shortlink":"https:\/\/wp.me\/pE4dk-e9","canEditPost":"","editLink":"https:\/\/wordpress.com\/post\/blog.cryptographyengineering.com\/877","statsLink":"https:\/\/wordpress.com\/stats\/post\/877\/blog.cryptographyengineering.com","i18n":{"view":"View site","follow":"Follow","following":"Following","edit":"Edit","login":"Log in","signup":"Sign up","customize":"Customize","report":"Report this content","themeInfo":"Get theme: Independent Publisher","shortlink":"Copy shortlink","copied":"Copied","followedText":"New posts from this site will now appear in your <a href=\"https:\/\/wordpress.com\/read\">Reader<\/a>","foldBar":"Collapse this bar","unfoldBar":"Expand this bar","editSubs":"Manage subscriptions","viewReader":"View site in Reader","viewReadPost":"View post in Reader","subscribe":"Sign me up","enterEmail":"Enter your email address","followers":"Join 815 other followers","alreadyUser":"Already have a WordPress.com account? <a href=\"https:\/\/wordpress.com\/log-in?redirect_to=https%3A%2F%2Fr-login.wordpress.com%2Fremote-login.php%3Faction%3Dlink%26back%3Dhttps%253A%252F%252Fblog.cryptographyengineering.com%252F2016%252F08%252F24%252Fattack-of-week-64-bit-ciphers-in-tls%252F\">Log in now.<\/a>","stats":"Stats","notifyNewPosts":"Notify me of new posts","notifyNewPostsDetails":"Receive web and mobile notifications for new posts from this site.","emailNewPosts":"Email me new posts","emailNewPostsDetails":"You can customize your notification settings further <a href=\"https:\/\/wordpress.com\/following\/manage?s=blog.cryptographyengineering.com\">here<\/a>.","emailNewComments":"Email me new comments","instantly":"Instantly","daily":"Daily","weekly":"Weekly"}};
+</script>
+<script crossorigin='anonymous' type='text/javascript' src='https://s1.wp.com/_static/??-eJyFjdEKwjAMRX/IrBaZPonfMrc4Wtq0Jilzf2+HCnMIPoVwz73HTBn6RIqkxovJSTSiSDdi42VnvtOYri4gFEGuACk4uqUtFwvkUEZHYhhDpzjAsrr5fqxzUMicHvMnc9SHMqAsob8X5Pl9mujoLwTRjVyFa3hlm3Kf4ssHjLUhWqlLPNvjwZ72rbWtfwIezmn6'></script>
+<script type='text/javascript'>
+	window.addEventListener( 'DOMContentLoaded', function() {
+		rltInitialize( {"token":null,"iframeOrigins":["https:\/\/widgets.wp.com"]} );
+	} );
+</script>
+<link rel="EditURI" type="application/rsd+xml" title="RSD" href="https://matthewdgreen.wordpress.com/xmlrpc.php?rsd" />
+<link rel="wlwmanifest" type="application/wlwmanifest+xml" href="https://s1.wp.com/wp-includes/wlwmanifest.xml" /> 
+<meta name="generator" content="WordPress.com" />
+<link rel="canonical" href="https://blog.cryptographyengineering.com/2016/08/24/attack-of-week-64-bit-ciphers-in-tls/" />
+<link rel='shortlink' href='https://wp.me/pE4dk-e9' />
+<link rel="alternate" type="application/json+oembed" href="https://public-api.wordpress.com/oembed/?format=json&amp;url=https%3A%2F%2Fblog.cryptographyengineering.com%2F2016%2F08%2F24%2Fattack-of-week-64-bit-ciphers-in-tls%2F&amp;for=wpcom-auto-discovery" /><link rel="alternate" type="application/xml+oembed" href="https://public-api.wordpress.com/oembed/?format=xml&amp;url=https%3A%2F%2Fblog.cryptographyengineering.com%2F2016%2F08%2F24%2Fattack-of-week-64-bit-ciphers-in-tls%2F&amp;for=wpcom-auto-discovery" />
+<!-- Jetpack Open Graph Tags -->
+<meta property="og:type" content="article" />
+<meta property="og:title" content="Attack of the week: 64-bit ciphers in TLS" />
+<meta property="og:url" content="https://blog.cryptographyengineering.com/2016/08/24/attack-of-week-64-bit-ciphers-in-tls/" />
+<meta property="og:description" content="A few months ago it was starting to seem like you couldn&#8217;t go a week without a new attack on TLS. In that context, this summer has been a blessed relief. Sadly, it looks like our vacation is …" />
+<meta property="article:published_time" content="2016-08-24T16:55:32+00:00" />
+<meta property="article:modified_time" content="2016-08-30T21:20:36+00:00" />
+<meta property="og:site_name" content="A Few Thoughts on Cryptographic Engineering" />
+<meta property="og:image" content="https://matthewdgreen.files.wordpress.com/2016/08/947ba-cbcgoogle.png" />
+<meta property="og:image:width" content="630" />
+<meta property="og:image:height" content="337" />
+<meta property="og:locale" content="en_US" />
+<meta name="twitter:site" content="@wordpressdotcom" />
+<meta name="twitter:text:title" content="Attack of the week: 64-bit ciphers in&nbsp;TLS" />
+<meta name="twitter:image" content="https://matthewdgreen.files.wordpress.com/2016/08/c09d0-vulnerablesites.png?w=640" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta property="article:publisher" content="https://www.facebook.com/WordPresscom" />
+
+<!-- End Jetpack Open Graph Tags -->
+<link rel="shortcut icon" type="image/x-icon" href="https://s1.wp.com/i/favicon.ico" sizes="16x16 24x24 32x32 48x48" />
+<link rel="icon" type="image/x-icon" href="https://s1.wp.com/i/favicon.ico" sizes="16x16 24x24 32x32 48x48" />
+<link rel="apple-touch-icon" href="https://s2.wp.com/i/webclip.png" />
+<link rel='openid.server' href='https://blog.cryptographyengineering.com/?openidserver=1' />
+<link rel='openid.delegate' href='https://blog.cryptographyengineering.com/' />
+<link rel="search" type="application/opensearchdescription+xml" href="https://blog.cryptographyengineering.com/osd.xml" title="A Few Thoughts on Cryptographic Engineering" />
+<link rel="search" type="application/opensearchdescription+xml" href="https://s1.wp.com/opensearch.xml" title="WordPress.com" />
+<meta name="application-name" content="A Few Thoughts on Cryptographic Engineering" /><meta name="msapplication-window" content="width=device-width;height=device-height" /><meta name="msapplication-tooltip" content="Some random thoughts about crypto. Notes from a course I teach. Pictures of my dachshunds." /><meta name="msapplication-task" content="name=Subscribe;action-uri=https://blog.cryptographyengineering.com/feed/;icon-uri=https://s1.wp.com/i/favicon.ico" /><meta name="msapplication-task" content="name=Sign up for a free blog;action-uri=http://wordpress.com/signup/;icon-uri=https://s1.wp.com/i/favicon.ico" /><meta name="msapplication-task" content="name=WordPress.com Support;action-uri=http://support.wordpress.com/;icon-uri=https://s1.wp.com/i/favicon.ico" /><meta name="msapplication-task" content="name=WordPress.com Forums;action-uri=http://forums.wordpress.com/;icon-uri=https://s1.wp.com/i/favicon.ico" /><meta name="description" content="A few months ago it was starting to seem like you couldn&#039;t go a week without a new attack on TLS. In that context, this summer has been a blessed relief. Sadly, it looks like our vacation is over, and it&#039;s time to go back to school. Today brings the news that Karthikeyan Bhargavan and Gaëtan Leurent&hellip;" />
+		<link rel="stylesheet" id="custom-css-css" type="text/css" href="https://s2.wp.com/?custom-css=1&#038;csblog=E4dk&#038;cscache=6&#038;csrev=14" />
+		<!-- Your Google Analytics Plugin is missing the tracking ID -->
+</head>
+
+<body class="post-template-default single single-post postid-877 single-format-standard customizer-styles-applied has-header-image has-sidebar gravatar-logo-disabled highlander-enabled highlander-light">
+
+<div id="page" class="hfeed site">
+	<a class="skip-link screen-reader-text" href="#content">Skip to content</a>
+
+	
+<div id="hero-header" class="site-hero-section">
+			<a id="slide-menu-toggle" class="menu-toggle" href="#slide-menu" aria-controls="slide-menu" aria-expanded="false" role="button" onclick="return false;">
+			Menu		</a><!-- #slide-menu-toggle -->
+	
+	<div class="inner">
+				<h1 class="site-title"><a href="https://blog.cryptographyengineering.com/" rel="home">A Few Thoughts on Cryptographic Engineering</a></h1>
+		<h2 class="site-description">Some random thoughts about crypto. Notes from a course I teach. Pictures of my dachshunds.</h2>
+
+			</div><!-- .inner -->
+</div><!-- #hero-header -->
+
+
+	<div id="content-wrapper">
+		<header id="masthead" class="site-header" role="banner">
+			
+			
+<div id="secondary" class="widget-area" role="complementary">
+	<aside id="media_image-3" class="widget widget_media_image"><style>.widget.widget_media_image { overflow: hidden; }.widget.widget_media_image img { height: auto; max-width: 100%; }</style><img class="image alignnone" src="https://matthewdgreen.files.wordpress.com/2016/08/matthew-green.jpg?w=200&#038;h=300" alt="" width="160" height="240" /></aside><aside id="text-4" class="widget widget_text"><h1 class="widget-title">Matthew Green</h1>			<div class="textwidget">I'm a cryptographer and professor at Johns Hopkins University. I've designed and analyzed cryptographic systems used in wireless networks, payment systems and digital content protection platforms. In my research I look at the various ways cryptography can be used to promote user privacy. 
+<p>
+<a href="https://isi.jhu.edu/~mgreen">My academic website</a><br>
+<a href="https://twitter.com/matthew_d_green">My twitter feed</a><br>
+<a href="https://blog.cryptographyengineering.com/top-posts/">Top Posts</a><br>
+<a href="https://staging.cryptographyengineering.com/useful-cryptography-resources/">Useful crypto resources</a><br>
+<a href="https://blog.cryptographyengineering.com/p/bitcoin-tipjar.html">
+Bitcoin tipjar</a><br>
+<a href="http://cryptopals.com/">Cryptopals challenges</a><br>
+<a href="https://acrab.isi.jhu.edu/">Applied Cryptography Research: A Board</a><p>
+
+<a href="http://www.springer.com/computer/security+and+cryptology/journal/13389">Journal of Cryptographic Engineering
+(not related to this blog)</a></div>
+		</aside><aside id="search-4" class="widget widget_search"><form role="search" method="get" class="search-form" action="https://blog.cryptographyengineering.com/">
+				<label>
+					<span class="screen-reader-text">Search for:</span>
+					<input type="search" class="search-field" placeholder="Search &hellip;" value="" name="s" />
+				</label>
+				<input type="submit" class="search-submit" value="Search" />
+			</form></aside><aside id="top-posts-4" class="widget widget_top-posts"><h1 class="widget-title">Top Posts &amp; Pages</h1><ul>				<li>
+					<a href="https://blog.cryptographyengineering.com/2014/11/27/zero-knowledge-proofs-illustrated-primer/" class="bump-view" data-bump-view="tp">Zero Knowledge Proofs: An illustrated primer</a>					</li>
+								<li>
+					<a href="https://blog.cryptographyengineering.com/2018/10/19/lets-talk-about-pake/" class="bump-view" data-bump-view="tp">Let&#039;s talk about PAKE</a>					</li>
+								<li>
+					<a href="https://blog.cryptographyengineering.com/2017/01/21/zero-knowledge-proofs-an-illustrated-primer-part-2/" class="bump-view" data-bump-view="tp">Zero Knowledge Proofs: An illustrated primer, Part 2</a>					</li>
+								<li>
+					<a href="https://blog.cryptographyengineering.com/2013/03/12/attack-of-week-rc4-is-kind-of-broken-in/" class="bump-view" data-bump-view="tp">Attack of the week: RC4 is kind of broken in TLS</a>					</li>
+								<li>
+					<a href="https://blog.cryptographyengineering.com/2012/05/19/how-to-choose-authenticated-encryption/" class="bump-view" data-bump-view="tp">How to choose an Authenticated Encryption mode</a>					</li>
+								<li>
+					<a href="https://blog.cryptographyengineering.com/useful-cryptography-resources/" class="bump-view" data-bump-view="tp">Useful Cryptography Resources</a>					</li>
+								<li>
+					<a href="https://blog.cryptographyengineering.com/2018/04/07/hash-based-signatures-an-illustrated-primer/" class="bump-view" data-bump-view="tp">Hash-based Signatures: An illustrated Primer</a>					</li>
+								<li>
+					<a href="https://blog.cryptographyengineering.com/why-ind-cpa-implies-randomized-encryption/" class="bump-view" data-bump-view="tp">Why IND-CPA implies randomized encryption</a>					</li>
+								<li>
+					<a href="https://blog.cryptographyengineering.com/2020/01/05/what-is-the-random-oracle-model-and-why-should-you-care-part-5/" class="bump-view" data-bump-view="tp">What is the random oracle model and why should you care? (Part 5)</a>					</li>
+								<li>
+					<a href="https://blog.cryptographyengineering.com/2014/04/24/attack-of-week-triple-handshakes-3shake/" class="bump-view" data-bump-view="tp">Attack of the Week: Triple Handshakes (3Shake)</a>					</li>
+				</ul></aside><aside id="text-6" class="widget widget_text">			<div class="textwidget"><i>Banner image by Matt Blaze</i></div>
+		</aside><aside id="archives-6" class="widget widget_archive"><h1 class="widget-title">Archives</h1>		<label class="screen-reader-text" for="archives-dropdown-6">Archives</label>
+		<select id="archives-dropdown-6" name="archive-dropdown">
+			
+			<option value="">Select Month</option>
+				<option value='https://blog.cryptographyengineering.com/2021/08/'> August 2021 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2021/07/'> July 2021 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2021/03/'> March 2021 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2020/11/'> November 2020 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2020/08/'> August 2020 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2020/07/'> July 2020 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2020/04/'> April 2020 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2020/03/'> March 2020 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2020/01/'> January 2020 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2019/12/'> December 2019 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2019/10/'> October 2019 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2019/09/'> September 2019 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2019/06/'> June 2019 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2019/02/'> February 2019 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2018/12/'> December 2018 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2018/10/'> October 2018 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2018/09/'> September 2018 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2018/07/'> July 2018 &nbsp;(2)</option>
+	<option value='https://blog.cryptographyengineering.com/2018/05/'> May 2018 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2018/04/'> April 2018 &nbsp;(3)</option>
+	<option value='https://blog.cryptographyengineering.com/2018/02/'> February 2018 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2018/01/'> January 2018 &nbsp;(2)</option>
+	<option value='https://blog.cryptographyengineering.com/2017/12/'> December 2017 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2017/11/'> November 2017 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2017/10/'> October 2017 &nbsp;(2)</option>
+	<option value='https://blog.cryptographyengineering.com/2017/09/'> September 2017 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2017/07/'> July 2017 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2017/03/'> March 2017 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2017/02/'> February 2017 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2017/01/'> January 2017 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2016/11/'> November 2016 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2016/08/'> August 2016 &nbsp;(2)</option>
+	<option value='https://blog.cryptographyengineering.com/2016/07/'> July 2016 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2016/06/'> June 2016 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2016/03/'> March 2016 &nbsp;(2)</option>
+	<option value='https://blog.cryptographyengineering.com/2015/12/'> December 2015 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2015/11/'> November 2015 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2015/10/'> October 2015 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2015/09/'> September 2015 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2015/08/'> August 2015 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2015/07/'> July 2015 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2015/05/'> May 2015 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2015/04/'> April 2015 &nbsp;(2)</option>
+	<option value='https://blog.cryptographyengineering.com/2015/03/'> March 2015 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2015/02/'> February 2015 &nbsp;(3)</option>
+	<option value='https://blog.cryptographyengineering.com/2015/01/'> January 2015 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2014/12/'> December 2014 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2014/11/'> November 2014 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2014/10/'> October 2014 &nbsp;(3)</option>
+	<option value='https://blog.cryptographyengineering.com/2014/09/'> September 2014 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2014/08/'> August 2014 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2014/07/'> July 2014 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2014/04/'> April 2014 &nbsp;(2)</option>
+	<option value='https://blog.cryptographyengineering.com/2014/03/'> March 2014 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2014/02/'> February 2014 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2014/01/'> January 2014 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2013/12/'> December 2013 &nbsp;(4)</option>
+	<option value='https://blog.cryptographyengineering.com/2013/10/'> October 2013 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2013/09/'> September 2013 &nbsp;(4)</option>
+	<option value='https://blog.cryptographyengineering.com/2013/08/'> August 2013 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2013/07/'> July 2013 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2013/06/'> June 2013 &nbsp;(2)</option>
+	<option value='https://blog.cryptographyengineering.com/2013/05/'> May 2013 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2013/04/'> April 2013 &nbsp;(2)</option>
+	<option value='https://blog.cryptographyengineering.com/2013/03/'> March 2013 &nbsp;(2)</option>
+	<option value='https://blog.cryptographyengineering.com/2013/02/'> February 2013 &nbsp;(3)</option>
+	<option value='https://blog.cryptographyengineering.com/2013/01/'> January 2013 &nbsp;(2)</option>
+	<option value='https://blog.cryptographyengineering.com/2012/12/'> December 2012 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2012/11/'> November 2012 &nbsp;(1)</option>
+	<option value='https://blog.cryptographyengineering.com/2012/10/'> October 2012 &nbsp;(4)</option>
+	<option value='https://blog.cryptographyengineering.com/2012/09/'> September 2012 &nbsp;(3)</option>
+	<option value='https://blog.cryptographyengineering.com/2012/08/'> August 2012 &nbsp;(4)</option>
+	<option value='https://blog.cryptographyengineering.com/2012/07/'> July 2012 &nbsp;(2)</option>
+	<option value='https://blog.cryptographyengineering.com/2012/06/'> June 2012 &nbsp;(3)</option>
+	<option value='https://blog.cryptographyengineering.com/2012/05/'> May 2012 &nbsp;(5)</option>
+	<option value='https://blog.cryptographyengineering.com/2012/04/'> April 2012 &nbsp;(6)</option>
+	<option value='https://blog.cryptographyengineering.com/2012/03/'> March 2012 &nbsp;(4)</option>
+	<option value='https://blog.cryptographyengineering.com/2012/02/'> February 2012 &nbsp;(7)</option>
+	<option value='https://blog.cryptographyengineering.com/2012/01/'> January 2012 &nbsp;(8)</option>
+	<option value='https://blog.cryptographyengineering.com/2011/12/'> December 2011 &nbsp;(11)</option>
+	<option value='https://blog.cryptographyengineering.com/2011/11/'> November 2011 &nbsp;(13)</option>
+	<option value='https://blog.cryptographyengineering.com/2011/10/'> October 2011 &nbsp;(7)</option>
+	<option value='https://blog.cryptographyengineering.com/2011/09/'> September 2011 &nbsp;(8)</option>
+
+		</select>
+
+<script type="text/javascript">
+/* <![CDATA[ */
+(function() {
+	var dropdown = document.getElementById( "archives-dropdown-6" );
+	function onSelectChange() {
+		if ( dropdown.options[ dropdown.selectedIndex ].value !== '' ) {
+			document.location.href = this.options[ this.selectedIndex ].value;
+		}
+	}
+	dropdown.onchange = onSelectChange;
+})();
+/* ]]> */
+</script>
+			</aside></div><!-- #secondary -->		</header><!-- #masthead -->
+
+		<div id="content" class="site-content">
+
+	<div id="primary" class="content-area">
+		<main id="main" class="site-main" role="main">
+
+		
+			
+<article id="post-877" class="post-877 post type-post status-publish format-standard hentry category-attacks category-tlsssl">
+			<div class="entry-meta light-text">
+			<a href="https://blog.cryptographyengineering.com/author/matthewdgreen/" title="Posts by Matthew Green" rel="author">Matthew Green</a>			<span class="cat-links">
+				in <a href="https://blog.cryptographyengineering.com/category/attacks/" rel="category tag">attacks</a>, <a href="https://blog.cryptographyengineering.com/category/tlsssl/" rel="category tag">TLS/SSL</a>			</span><!-- .cat-links -->
+
+			<span class="published-on"><time class="entry-date published" datetime="2016-08-24T16:55:32+00:00">August 24, 2016</time><time class="updated" datetime="2016-08-30T21:20:36+00:00">August 30, 2016</time></span>
+
+							<span class="word-count">1,605 Words</span>
+			
+					</div><!-- .entry-meta -->
+			<header class="entry-header">
+			<h1 class="entry-title">Attack of the week: 64-bit ciphers in&nbsp;TLS</h1>		</header><!-- .entry-header -->
+	<div class="entry-content">
+		<p>A few months ago it was starting to seem like you couldn&#8217;t go a week without a new attack<img class=" alignright" src="https://matthewdgreen.files.wordpress.com/2016/08/7b709-8251122311_a4779f152a_z.jpg?w=149&#038;h=200" width="149" height="200" border="0" /> on TLS. In that context, this summer has been a blessed relief. Sadly, it looks like our vacation is over, and it&#8217;s time to go back to school.</p>
+<p>Today brings the news that Karthikeyan Bhargavan and Gaëtan Leurent out of INRIA <a href="https://sweet32.info/SWEET32_CCS16.pdf">have a new paper</a> that demonstrates a practical attack on legacy ciphersuites in TLS (it&#8217;s called &#8220;Sweet32&#8221;, <a href="https://sweet32.info/">website here</a>). What they show is that ciphersuites that use 64-bit blocklength ciphers &#8212; notably 3DES &#8212; are vulnerable to plaintext recovery attacks that work <i>even if the attacker cannot recover the encryption key</i>.</p>
+<p>While the principles behind this attack are well known, there&#8217;s always a difference between attacks in principle and attacks in practice. What this paper shows is that we really need to start paying attention to the practice.</p>
+<h2><b>So what&#8217;s the matter with 64-bit block ciphers?</b></h2>
+<p>Block ciphers are one of the most widely-used cryptographic primitives. As the name<img class=" alignright" src="https://matthewdgreen.files.wordpress.com/2016/08/61156-blockcipherencrypt.png?w=200&#038;h=168" width="200" height="168" border="0" />implies, these are schemes designed to encipher data in blocks, rather than a single bit at a time.</p>
+<p>The two main parameters that define a block cipher are its <i>block size</i> (the number of bits it processes in one go), and its <i>key size.</i> The two parameters need not be related. So for example, <a href="https://en.wikipedia.org/wiki/Data_Encryption_Standard">DES</a> has a 56-bit key and a 64-bit block. Whereas <a href="https://en.wikipedia.org/wiki/Triple_DES">3DES</a> (which is built from DES) can use up to a 168-bit key and yet still has the same 64-bit block. More recent ciphers have opted for both larger blocks and larger keys.</p>
+<p>When it comes to the security provided by a block cipher, the most important parameter is generally the key size. A cipher like DES, with its tiny 56-bit key, is trivially vulnerable to <a href="https://en.wikipedia.org/wiki/Brute-force_attack">brute force</a> attacks that attempt decryption with every possible key (often using <a href="http://www.copacobana.org/">specialized hardware</a>). A cipher like <a href="https://en.wikipedia.org/wiki/Advanced_Encryption_Standard">AES</a> or 3DES is generally not vulnerable to this sort of attack, since the keys are much longer.</p>
+<p>However, as they say: <i>key </i>size is not everything. Sometimes the block size matters too.</p>
+<p>You see, in practice, we often need to encrypt messages that are longer than a single block. We also tend to want our encryption to be <a href="https://en.wikipedia.org/wiki/Probabilistic_encryption">randomized</a>. To accomplish this, most protocols use a block cipher in a scheme called a <a href="https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation">mode of operation</a>. The most popular mode used in TLS is <a href="https://en.wikipedia.org/wiki/Block_cipher_mode_of_operation#Cipher_Block_Chaining_.28CBC.29">CBC mode</a>. Encryption in CBC looks like this:</p>
+<figure style="width: 320px" class="wp-caption aligncenter"><img class=" aligncenter" src="https://matthewdgreen.files.wordpress.com/2016/08/67a52-cbc_encryption.png?w=320&#038;h=128" width="320" height="128" border="0" /><figcaption class="wp-caption-text">Source: Wikipedia</figcaption></figure>
+<p>The nice thing about CBC is that (leaving aside authentication issues) it can be <a href="http://web.cs.ucdavis.edu/~rogaway/papers/modes.pdf">proven</a> (semantically) secure if we make various assumptions about the security of the underlying block cipher. Yet these security proofs have one important requirement. Namely, <i>the attacker must not receive too much data encrypted with a single key.</i></p>
+<p>The reason for this can be illustrated via the following simple attack.</p>
+<p>Imagine that an honest encryptor is encrypting a bunch of messages using CBC mode. Following the diagram above, this involves selecting a random Initialization Vector (<img src="https://s0.wp.com/latex.php?latex=IV&#038;bg=ffffff&#038;fg=000000&#038;s=0&#038;c=20201002" alt="IV" class="latex" />) of size equal to the block size of the cipher, then XORing <img src="https://s0.wp.com/latex.php?latex=IV&#038;bg=ffffff&#038;fg=000000&#038;s=0&#038;c=20201002" alt="IV" class="latex" /> with the first plaintext block (<img src="https://s0.wp.com/latex.php?latex=P&#038;bg=ffffff&#038;fg=000000&#038;s=0&#038;c=20201002" alt="P" class="latex" />), and enciphering the result (<img src="https://s0.wp.com/latex.php?latex=P+%5Coplus+IV&#038;bg=ffffff&#038;fg=000000&#038;s=0&#038;c=20201002" alt="P &#92;oplus IV" class="latex" />). The <img src="https://s0.wp.com/latex.php?latex=IV&#038;bg=ffffff&#038;fg=000000&#038;s=0&#038;c=20201002" alt="IV" class="latex" /> is sent (in the clear) along with the ciphertext.</p>
+<p>Most of the time, the resulting ciphertext block will be unique &#8212; that is, it won&#8217;t match any previous ciphertext block that an attacker may have seen. However, if the encryptor processes enough messages, sooner or later the attacker will see a <i>collision. </i>That is, it will see a ciphertext block that is the same as some previous ciphertext block. Since the cipher is deterministic, this means the cipher&#8217;s input (<img src="https://s0.wp.com/latex.php?latex=P+%5Coplus+IV&#038;bg=ffffff&#038;fg=000000&#038;s=0&#038;c=20201002" alt="P &#92;oplus IV" class="latex" />) must be identical to the cipher&#8217;s previous input <img src="https://s0.wp.com/latex.php?latex=%28P%27%C2%A0%5Coplus+IV%27%29&#038;bg=ffffff&#038;fg=000000&#038;s=0&#038;c=20201002" alt="(P&#039; &#92;oplus IV&#039;)" class="latex" /> that created the previous block.</p>
+<p>In other words, we have <img src="https://s0.wp.com/latex.php?latex=%28P+%5Coplus+IV%29+%3D+%28P%27+%5Coplus+IV%27%29&#038;bg=ffffff&#038;fg=000000&#038;s=0&#038;c=20201002" alt="(P &#92;oplus IV) = (P&#039; &#92;oplus IV&#039;)" class="latex" />, which can be rearranged as <img src="https://s0.wp.com/latex.php?latex=%28P+%5Coplus+P%27%29+%3D+%28IV+%5Coplus+IV%27%29&#038;bg=ffffff&#038;fg=000000&#038;s=0&#038;c=20201002" alt="(P &#92;oplus P&#039;) = (IV &#92;oplus IV&#039;)" class="latex" />. Since the IVs are random and known to the attacker, the attacker has (with high probability) learned the XOR of two (unknown) plaintexts!</p>
+<p>What can you do with the XOR of two unknown plaintexts? Well, if you happen to <i>know</i> one of those two plaintext blocks &#8212; as you might if you were able to choose some of the plaintexts the encryptor was processing &#8212; then you can easily recover the other plaintext. Alternatively, there are <a href="https://www.cs.jhu.edu/~jason/papers/mason+al.ccs06.pdf">known techniques</a> that can sometimes recover useful data even when you don&#8217;t know both blocks.</p>
+<p>The main lesson here is that <i>this entire mess only occurs if the attacker sees a collision.</i> And the probability<i> </i>of such a collision is entirely dependent on the size of the cipher block. Worse, thanks to the (non-intuitive) nature of the <a href="https://en.wikipedia.org/wiki/Birthday_attack">birthday bound</a>, this happens much more quickly than you might think it would. Roughly speaking, if the cipher block is <i>b</i> bits long, then we should expect a collision after roughly <img src="https://s0.wp.com/latex.php?latex=2%5E%7Bb%2F2%7D&#038;bg=ffffff&#038;fg=000000&#038;s=0&#038;c=20201002" alt="2^{b/2}" class="latex" /> encrypted blocks.</p>
+<p>In the case of a 64-bit blocksize cipher like 3DES, this is somewhere in the vicinity of <img src="https://s0.wp.com/latex.php?latex=2%5E%7B32%7D&#038;bg=ffffff&#038;fg=000000&#038;s=0&#038;c=20201002" alt="2^{32}" class="latex" />, or around 4 billion enciphered blocks.</p>
+<p>(As a note, the collision does not really need to occur in the <i>first</i> block. Since all blocks in CBC are calculated in the same way, it could be a collision anywhere within the messages.)</p>
+<h2><b>Whew. I thought this was a <i>practical</i> attack. 4 billion is a big number!</b></h2>
+<p>It&#8217;s true that 4 billion blocks seems like an awfully large number. In a practical attack, the requirements would be even larger &#8212; since the most efficient attack is for the attacker to <i>know</i> a lot of the plaintexts, in the hope that she will be able to recover one unknown plaintext when she learns the value (<b>P</b> ⊕ <b>P&#8217;</b>).</p>
+<p>However, it&#8217;s worth keeping in mind that these traffic numbers aren&#8217;t absurd for TLS. In practice, 4 billion 3DES blocks works out to 32GB of raw ciphertext. A lot to be sure, but not impossible. If, as the Sweet32 authors do, we assume that half of the plaintext blocks are known to the attacker, we&#8217;d need to increase the amount of ciphertext to about 64GB. This is a lot, but not impossible.</p>
+<p>The Sweet32 authors take this one step further. They imagine that the ciphertext consists of many HTTPS connections, consisting of 512 bytes of plaintext, in each of which is embedded the same secret 8-byte cookie &#8212; and the rest of the session plaintext is known. Calculating from these values, they obtain a requirement of approximately 256GB of ciphertext needed to recover the cookie with high probability.</p>
+<p>That is really a lot.</p>
+<p>But keep in mind that TLS connections are being used to encipher increasingly more data. Moreover, a single open browser frame running attacker-controlled Javascript can produce many gigabytes of ciphertext in a single hour. So these attacks are not outside of the realm of what we can run today, and presumably will be very feasible in the future.</p>
+<p><b>How does the TLS attack work?</b></p>
+<p>While the cryptographic community has been largely pushing TLS <a href="https://security.googleblog.com/2013/11/a-roster-of-tls-cipher-suites-weaknesses.html"><i>away</i> from ciphersuites like CBC</a>, in favor of modern authenticated modes of operation, these modes still exist in TLS. And they exist not only for use not only with modern ciphers like AES, but they are often available for older ciphersuites like 3DES. For example, here&#8217;s a connection I just made to Google:</p>
+<p class="separator"><a href="https://matthewdgreen.files.wordpress.com/2016/08/947ba-cbcgoogle.png"><img class=" aligncenter" src="https://matthewdgreen.files.wordpress.com/2016/08/947ba-cbcgoogle.png?w=320&#038;h=171" width="320" height="171" border="0" /></a><b><br />
+</b>Of course, just because a server supports 3DES does <i>not</i> mean that it&#8217;s vulnerable to this attack. In order for a particular connection to be vulnerable, both the client and server must satisfy three main requirements:</p>
+<ol>
+<ol>
+<li><b>The client and server must negotiate a 64-bit cipher.</b> This is a relatively rare occurrence, but can happen in cases where one of the two sides is using an out-of-date client. For example, stock Windows XP does not support any of the AES-based ciphersuites. Similarly, SSL3 connections may negotiate 3DES ciphersuites.</li>
+<li><b>The server and client must support long-lived TLS sessions<i>, i.e.,</i> encrypting a great deal of data with the same key. </b>Unfortunately, most web browsers place no limit on the length of an HTTPS session if Keep-Alive is used, provided that the server allows the session. The Sweet32 authors scanned and discovered that many servers (including IIS) will allow sessions long enough to run their attack.<b> </b>Across the Internet, the percentage of vulnerable servers is small (less than 1%), but includes some important sites.</li>
+<li><b>The client must encipher a great deal of known data, including a secret session cookie.</b> This is generally achieved by running adversarial Javascript code in the browser, although it could be done using standard HTML as well.
+<p><figure style="width: 320px" class="wp-caption aligncenter"><img class=" aligncenter" src="https://matthewdgreen.files.wordpress.com/2016/08/c09d0-vulnerablesites.png?w=320&#038;h=195" width="320" height="195" border="0" /><figcaption class="wp-caption-text">Sites vulnerable to Sweet32. (<a href="https://sweet32.info/">source</a>)</figcaption></figure></li>
+</ol>
+</ol>
+<p>These caveats aside, the authors were able to run their attack using Firefox, sending at a rate of about 1500 connections per second. With a few optimizations, they were able to recover a 16-byte secret cookie in about 30 hours (a lucky result, given an expected 38 hour run time).The client must encipher a great deal of known data, including a secret session cookie. This is generally achieved by running adversarial Javascript code in the browser, although it could be done using standard HTML as well.</p>
+<h2><b>So what do we do now?</b></h2>
+<p>While this is not an earthshaking result, it&#8217;s roughly comparable to previous results we&#8217;ve seen with <a href="https://blog.cryptographyengineering.com/2013/03/attack-of-week-rc4-is-kind-of-broken-in.html">legacy ciphers like RC4</a>.</p>
+<p>In short, while these are not the <i>easiest</i> attacks to run, it&#8217;s a big problem that there <i>even exist</i> semi-practical attacks that undo the encryption used in standard encryption protocols. This is a problem that we should address, and these attack papers help to make those problems more clear.</p>
+<div id="jp-post-flair" class="sharedaddy sd-sharing-enabled">
+<div id='jp-relatedposts' class='jp-relatedposts' >
+	<h3 class="jp-relatedposts-headline"><em>Related</em></h3>
+</div></div>	</div><!-- .entry-content -->
+
+			<div class="entry-footer">
+			
+					</div><!-- .entry-footer -->
+	</article><!-- #post-## -->
+			
+	<nav class="navigation post-navigation" role="navigation" aria-label="Posts">
+		<h2 class="screen-reader-text">Post navigation</h2>
+		<div class="nav-links"><div class="nav-previous"><a href="https://blog.cryptographyengineering.com/2016/08/13/is-apples-cloud-key-vault-crypto/" rel="prev">Is Apple&#8217;s Cloud Key Vault a crypto&nbsp;backdoor?</a></div><div class="nav-next"><a href="https://blog.cryptographyengineering.com/2016/11/24/android-n-encryption/" rel="next">The limitations of Android N&nbsp;Encryption</a></div></div>
+	</nav>
+			
+<div id="comments" class="comments-area">
+
+	
+			<h2 class="comments-title">
+			3 thoughts on &ldquo;<span>Attack of the week: 64-bit ciphers in&nbsp;TLS</span>&rdquo;		</h2><!-- .comments-title -->
+
+		
+		<ol class="comment-list">
+					<li id="comment-2172" class="comment even thread-even depth-1 highlander-comment">
+			<article id="div-comment-2172" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://1.gravatar.com/avatar/4df24b7305305ad863a1be453358091b?s=48&#038;d=identicon&#038;r=PG' class='avatar avatar-48' height='48' width='48' />						<b class="fn">Nathan J. Yoder</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://blog.cryptographyengineering.com/2016/08/24/attack-of-week-64-bit-ciphers-in-tls/#comment-2172"><time datetime="2016-09-19T10:25:45+00:00">September 19, 2016 at 10:25 am</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>I have some questions:</p>
+<p>1. I realized the answer to my former question 1 after writing this, so instead: what is your favorite flavor of ice cream? </p>
+<p>2. I was under the impression that an SSL connection periodically generates new symmetric keys and new temporary public key pairs as well used to send the symmetric keys. Is this not the case? </p>
+<p>3. Don&#8217;t you only retrieve the data in the collision blocks? In others words, just 8 bytes of data. </p>
+<p>4. Isn&#8217;t it impossible to control where in the ciphertext the collision occurs? </p>
+<p>Given 3 &amp; 4, as well as the need to have a session transmit hundreds of gigs without the user or program  terminating it, this seems very impractical. Don&#8217;t get me wrong, I&#8217;m all for switching cipher modes when there is an even minutely &#8220;semi-practical&#8221;  break (such as the case here), but I do this it&#8217;s unlikely this will be put to practical use. If the goal is something like getting a cookie, there have been various vulnerabilities over the years that make getting it or using it without knowing it (eg XSS attacks) much more practical. </p>
+<p>I do appreciate the post though. It was very interesting. I just came across your blog linked from wikipedia on the nsa backdoored EC prng and may follow it more in the future.</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		</li><!-- #comment-## -->
+		<li id="comment-2177" class="comment odd alt thread-odd thread-alt depth-1 highlander-comment">
+			<article id="div-comment-2177" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://1.gravatar.com/avatar/4df24b7305305ad863a1be453358091b?s=48&#038;d=identicon&#038;r=PG' class='avatar avatar-48' height='48' width='48' />						<b class="fn">Nathan J Yoder</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://blog.cryptographyengineering.com/2016/08/24/attack-of-week-64-bit-ciphers-in-tls/#comment-2177"><time datetime="2016-09-19T18:45:26+00:00">September 19, 2016 at 6:45 pm</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>I have a followup to my previous questions. Excuse me as I&#8217;m about to go to bed and am half awake here. I think I may have realized the answer to another of my questions, but since my comment hasn&#8217;t been approved  yet, I can&#8217;t see it. If you see one asking about needing a collision to happen in the exact same spot, ignore it, since I realized that doesn&#8217;t matter because the calculation is for a single &#8220;chosen&#8221;  specific location. </p>
+<p>Anyway, I&#8217;m not so sure about their claim that &#8220;many&#8221; websites allow a &#8220;very large&#8221; number of connections. Even with IIS (ungh), in their test they ran for over 2 days straight, so I&#8217;d have imagine either due to sheer volume of requests or raw bandwidth usage from one ip, either a web or network admin would notice, for any website worth its salt. I also wonder if they throttled/limited their bandwidth in the rest  to be more realistic. I almost forgot, but some isp monthly usage limits (double ungh) are close to that, too.</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		</li><!-- #comment-## -->
+		<li id="comment-2520" class="comment even thread-even depth-1 highlander-comment">
+			<article id="div-comment-2520" class="comment-body">
+				<footer class="comment-meta">
+					<div class="comment-author vcard">
+						<img alt='' src='https://1.gravatar.com/avatar/a688b0923b4d9a239ec85effa1eee4e3?s=48&#038;d=identicon&#038;r=PG' class='avatar avatar-48' height='48' width='48' />						<b class="fn">amit</b> <span class="says">says:</span>					</div><!-- .comment-author -->
+
+					<div class="comment-metadata">
+						<a href="https://blog.cryptographyengineering.com/2016/08/24/attack-of-week-64-bit-ciphers-in-tls/#comment-2520"><time datetime="2016-10-13T16:55:25+00:00">October 13, 2016 at 4:55 pm</time></a>					</div><!-- .comment-metadata -->
+
+									</footer><!-- .comment-meta -->
+
+				<div class="comment-content">
+					<p>What is minimum attack complexity in solving following system of equation,<br />
+[-920 = [1 -1 -1 1    [x1]<br />
+  960    1 -1 1 -1]    x2<br />
+                       x3<br />
+                       x4]<br />
+where (x1,x2,x3,x4) is the correct possible combination of (310,20,1250,40)?</p>
+				</div><!-- .comment-content -->
+
+							</article><!-- .comment-body -->
+		</li><!-- #comment-## -->
+		</ol><!-- .comment-list -->
+
+		
+	
+			<p class="no-comments">Comments are closed.</p>
+	
+	
+</div><!-- #comments -->
+		
+		</main><!-- #main -->
+	</div><!-- #primary -->
+
+
+		</div><!-- #content -->
+
+		<footer id="colophon" class="site-footer" role="contentinfo">
+			<div class="site-info">
+				<a href="https://wordpress.com/?ref=footer_custom_svg" title="Create a website or blog at WordPress.com" rel="nofollow"><svg style="fill: currentColor; position: relative; top: 1px;" width="14px" height="15px" viewBox="0 0 14 15" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-labelledby="title" role="img">
+				<desc id="title">Create a website or blog at WordPress.com</desc>
+				<path d="M12.5225848,4.97949746 C13.0138466,5.87586309 13.2934037,6.90452431 13.2934037,7.99874074 C13.2934037,10.3205803 12.0351007,12.3476807 10.1640538,13.4385638 L12.0862862,7.88081544 C12.4453251,6.98296834 12.5648813,6.26504621 12.5648813,5.62667922 C12.5648813,5.39497674 12.549622,5.17994084 12.5225848,4.97949746 L12.5225848,4.97949746 Z M7.86730089,5.04801561 C8.24619178,5.02808979 8.58760099,4.98823815 8.58760099,4.98823815 C8.9267139,4.94809022 8.88671369,4.44972248 8.54745263,4.46957423 C8.54745263,4.46957423 7.52803983,4.54957381 6.86996227,4.54957381 C6.25158863,4.54957381 5.21247202,4.46957423 5.21247202,4.46957423 C4.87306282,4.44972248 4.83328483,4.96816418 5.17254589,4.98823815 C5.17254589,4.98823815 5.49358462,5.02808979 5.83269753,5.04801561 L6.81314716,7.73459399 L5.43565839,11.8651647 L3.14394256,5.04801561 C3.52312975,5.02808979 3.86416859,4.98823815 3.86416859,4.98823815 C4.20305928,4.94809022 4.16305906,4.44972248 3.82394616,4.46957423 C3.82394616,4.46957423 2.80475558,4.54957381 2.14660395,4.54957381 C2.02852925,4.54957381 1.88934333,4.54668493 1.74156477,4.54194422 C2.86690406,2.83350881 4.80113651,1.70529256 6.99996296,1.70529256 C8.638342,1.70529256 10.1302017,2.33173369 11.2498373,3.35765419 C11.222726,3.35602457 11.1962815,3.35261718 11.1683554,3.35261718 C10.5501299,3.35261718 10.1114609,3.89113285 10.1114609,4.46957423 C10.1114609,4.98823815 10.4107217,5.42705065 10.7296864,5.94564049 C10.969021,6.36482346 11.248578,6.90326506 11.248578,7.68133501 C11.248578,8.21992476 11.0413918,8.84503256 10.7696866,9.71584277 L10.1417574,11.8132391 L7.86730089,5.04801561 Z M6.99996296,14.2927074 C6.38218192,14.2927074 5.78595654,14.2021153 5.22195356,14.0362644 L7.11048207,8.54925635 L9.04486267,13.8491542 C9.05760348,13.8802652 9.07323319,13.9089317 9.08989995,13.9358945 C8.43574834,14.1661896 7.73285573,14.2927074 6.99996296,14.2927074 L6.99996296,14.2927074 Z M0.706448182,7.99874074 C0.706448182,7.08630113 0.902152921,6.22015756 1.25141403,5.43749503 L4.25357806,13.6627848 C2.15393732,12.6427902 0.706448182,10.4898387 0.706448182,7.99874074 L0.706448182,7.99874074 Z M6.99996296,0.999 C3.14016476,0.999 0,4.13905746 0,7.99874074 C0,11.8585722 3.14016476,14.999 6.99996296,14.999 C10.8596871,14.999 14,11.8585722 14,7.99874074 C14,4.13905746 10.8596871,0.999 6.99996296,0.999 L6.99996296,0.999 Z" id="wordpress-logo-simplified-cmyk" stroke="none" fill=“currentColor” fill-rule="evenodd"></path>
+			</svg></a>
+				
+							</div><!-- .site-info -->
+		</footer><!-- #colophon -->
+	</div><!-- #content-wrapper -->
+
+			<div id="slide-menu" aria-expanded="false">
+			<button class="menu-toggle" aria-controls="slide-menu" aria-expanded="false">Menu</button>
+
+			<h2 class="menu-title">Menu</h2>
+			<nav id="slide-navigation" class="main-slide-navigation" role="navigation">
+				<ul id="menu-about" class="menu"><li id="menu-item-860" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-860"><a href="https://matthewdgreen.wordpress.com">Home</a></li>
+<li id="menu-item-871" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-871"><a href="https://blog.cryptographyengineering.com/about-me/">About Me</a></li>
+<li id="menu-item-872" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-872"><a href="https://blog.cryptographyengineering.com/bitcoin-tipjar/">Bitcoin Tipjar</a></li>
+<li id="menu-item-1249" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1249"><a href="https://blog.cryptographyengineering.com/top-posts/">Top Posts</a></li>
+<li id="menu-item-1232" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-1232"><a href="https://blog.cryptographyengineering.com/all-posts/">All Posts</a></li>
+<li id="menu-item-873" class="menu-item menu-item-type-post_type menu-item-object-page menu-item-873"><a href="https://blog.cryptographyengineering.com/useful-cryptography-resources/">Useful Cryptography Resources</a></li>
+</ul>			</nav><!-- #slide-navigation -->
+
+					</div><!-- #slide-menu -->
+	</div><!-- #page -->
+
+<!--  -->
+<script src='//0.gravatar.com/js/gprofiles.js?ver=202143y' id='grofiles-cards-js'></script>
+<script id='wpgroho-js-extra'>
+var WPGroHo = {"my_hash":""};
+</script>
+<script crossorigin='anonymous' type='text/javascript' src='https://s1.wp.com/wp-content/mu-plugins/gravatar-hovercards/wpgroho.js?m=1610363240h'></script>
+
+	<script>
+		// Initialize and attach hovercards to all gravatars
+		( function() {
+			function init() {
+				if ( typeof Gravatar === 'undefined' ) {
+					return;
+				}
+
+				if ( typeof Gravatar.init !== 'function' ) {
+					return;
+				}
+
+				Gravatar.profile_cb = function ( hash, id ) {
+					WPGroHo.syncProfileData( hash, id );
+				};
+
+				Gravatar.my_hash = WPGroHo.my_hash;
+				Gravatar.init( 'body', '#wp-admin-bar-my-account' );
+			}
+
+			if ( document.readyState !== 'loading' ) {
+				init();
+			} else {
+				document.addEventListener( 'DOMContentLoaded', init );
+			}
+		} )();
+	</script>
+
+		<div style="display:none">
+	<div class="grofile-hash-map-4df24b7305305ad863a1be453358091b">
+	</div>
+	<div class="grofile-hash-map-a688b0923b4d9a239ec85effa1eee4e3">
+	</div>
+	</div>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-dark-grayscale"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0 0.49803921568627" /><feFuncG type="table" tableValues="0 0.49803921568627" /><feFuncB type="table" tableValues="0 0.49803921568627" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-grayscale"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0 1" /><feFuncG type="table" tableValues="0 1" /><feFuncB type="table" tableValues="0 1" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-purple-yellow"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0.54901960784314 0.98823529411765" /><feFuncG type="table" tableValues="0 1" /><feFuncB type="table" tableValues="0.71764705882353 0.25490196078431" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-blue-red"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0 1" /><feFuncG type="table" tableValues="0 0.27843137254902" /><feFuncB type="table" tableValues="0.5921568627451 0.27843137254902" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-midnight"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0 0" /><feFuncG type="table" tableValues="0 0.64705882352941" /><feFuncB type="table" tableValues="0 1" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-magenta-yellow"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0.78039215686275 1" /><feFuncG type="table" tableValues="0 0.94901960784314" /><feFuncB type="table" tableValues="0.35294117647059 0.47058823529412" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-purple-green"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0.65098039215686 0.40392156862745" /><feFuncG type="table" tableValues="0 1" /><feFuncB type="table" tableValues="0.44705882352941 0.4" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-blue-orange"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0.098039215686275 1" /><feFuncG type="table" tableValues="0 0.66274509803922" /><feFuncB type="table" tableValues="0.84705882352941 0.41960784313725" /></feComponentTransfer></filter></defs></svg>
+<script>
+window.addEventListener( "load", function( event ) {
+	var link = document.createElement( "link" );
+	link.href = "https://s0.wp.com/wp-content/mu-plugins/actionbar/actionbar.css?v=20210915";
+	link.type = "text/css";
+	link.rel = "stylesheet";
+	document.head.appendChild( link );
+
+	var script = document.createElement( "script" );
+	script.src = "https://s0.wp.com/wp-content/mu-plugins/actionbar/actionbar.js?v=20211021";
+	script.defer = true;
+	document.body.appendChild( script );
+} );
+</script>
+
+	<script crossorigin='anonymous' type='text/javascript' src='https://s0.wp.com/_static/??-eJydkEsOwjAMRC+EsYoQnwXiLGniFreJG8UJcHzMBiF2dGN5NJrnDz4y+EUqScVJMdCdPeXndtINfln1RokUc+uRJVAmK1LBdGS9UXlnhya+8iK6JqyRA4G4O4/uDVnFmDlDZJlhWHxTGPj/O1g8qi+cKzyyX9IvIDXIsY0sii4kFuhdweS0UrEOanF+/jzAYLEFm2fLmaTUU9hayPxrunSHbtedj6f9cXoBQxmR7A=='></script>
+<script type="text/javascript">
+// <![CDATA[
+(function() {
+try{
+  if ( window.external &&'msIsSiteMode' in window.external) {
+    if (window.external.msIsSiteMode()) {
+      var jl = document.createElement('script');
+      jl.type='text/javascript';
+      jl.async=true;
+      jl.src='/wp-content/plugins/ie-sitemode/custom-jumplist.php';
+      var s = document.getElementsByTagName('script')[0];
+      s.parentNode.insertBefore(jl, s);
+    }
+  }
+}catch(e){}
+})();
+// ]]>
+</script><script src="//stats.wp.com/w.js?62" defer></script> <script type="text/javascript">
+_tkq = window._tkq || [];
+_stq = window._stq || [];
+_tkq.push(['storeContext', {'blog_id':'9549322','blog_tz':'0','user_lang':'en','blog_lang':'en','user_id':'0'}]);
+_stq.push(['view', {'blog':'9549322','v':'wpcom','tz':'0','user_id':'0','post':'877','subd':'matthewdgreen'}]);
+_stq.push(['extra', {'crypt':'UE40eW5QN0p8M2Y/RE1TaVhzUzFMbjdWNHpwZGhTayxPSUFCMGNrd29+Smw0TDhnZmRTK0hlRi9QSGh6bi9GXVhBJWIlZlR5U1JMLU8/MkNtblkvY1dldi1Cdz1FW1N6S0NteFFsTTZdcCU0P29mXyxINV1GX24sZ3YuQ1UvQUNPazVmMmRhP0MreGVIcDlCYVslTVgmMjJuZXVFeGdKNXprZVJDX1V2S1c9fGlWeWMtTVEwfHcrNUclX2hTPUUraSZnUlRNRUksXW02Yl9xK2ZVLmZ3Rj80WGVmMlQ0RU1wVUlMQyxIZUdnOTRWM2E2SHgmZWREREhkeFpSU21mbi40Vk0zaGpFUEpFUHouZT03U25QVVpSK0F0QTQwTWQvS1t0SFRzaUJudCV5bjEyMGQsfFM/SFpTXXhSeFROaXxaM2s0eGwtT0puJXlkcVY='}]);
+_stq.push([ 'clickTrackerInit', '9549322', '877' ]);
+	</script>
+<noscript><img src="https://pixel.wp.com/b.gif?v=noscript" style="height:1px;width:1px;overflow:hidden;position:absolute;bottom:1px;" alt="" /></noscript>
+<script>
+if ( 'object' === typeof wpcom_mobile_user_agent_info ) {
+
+	wpcom_mobile_user_agent_info.init();
+	var mobileStatsQueryString = "";
+	
+	if( false !== wpcom_mobile_user_agent_info.matchedPlatformName )
+		mobileStatsQueryString += "&x_" + 'mobile_platforms' + '=' + wpcom_mobile_user_agent_info.matchedPlatformName;
+	
+	if( false !== wpcom_mobile_user_agent_info.matchedUserAgentName )
+		mobileStatsQueryString += "&x_" + 'mobile_devices' + '=' + wpcom_mobile_user_agent_info.matchedUserAgentName;
+	
+	if( wpcom_mobile_user_agent_info.isIPad() )
+		mobileStatsQueryString += "&x_" + 'ipad_views' + '=' + 'views';
+
+	if( "" != mobileStatsQueryString ) {
+		new Image().src = document.location.protocol + '//pixel.wp.com/g.gif?v=wpcom-no-pv' + mobileStatsQueryString + '&baba=' + Math.random();
+	}
+	
+}
+</script>
+</body>
+</html>

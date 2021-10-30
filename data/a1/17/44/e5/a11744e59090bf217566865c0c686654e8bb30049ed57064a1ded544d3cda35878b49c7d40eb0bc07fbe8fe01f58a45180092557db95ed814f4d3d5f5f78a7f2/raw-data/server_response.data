@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag -->
+<title>KeepKey Stack Buffer Overflow Vulnerability (CVE-2021-31616) | invd blog</title>
+<meta name="generator" content="Jekyll" />
+<meta property="og:title" content="KeepKey Stack Buffer Overflow Vulnerability (CVE-2021-31616)" />
+<meta name="author" content="Christian Reitter" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="I have recently discovered a serious vulnerability in the KeepKey hardware wallet. Through a stack buffer overflow, remote or local attackers can execute code on the device and perform actions such as stealing the wallet keys from within a malicious website. The vulnerability was introduced with firmware v7.0.3 and patched with v7.1.0 after my disclosure." />
+<meta property="og:description" content="I have recently discovered a serious vulnerability in the KeepKey hardware wallet. Through a stack buffer overflow, remote or local attackers can execute code on the device and perform actions such as stealing the wallet keys from within a malicious website. The vulnerability was introduced with firmware v7.0.3 and patched with v7.1.0 after my disclosure." />
+<link rel="canonical" href="https://blog.inhq.net/posts/keepkey-CVE-2021-31616/" />
+<meta property="og:url" content="https://blog.inhq.net/posts/keepkey-CVE-2021-31616/" />
+<meta property="og:site_name" content="invd blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2021-04-30T18:45:00+02:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="KeepKey Stack Buffer Overflow Vulnerability (CVE-2021-31616)" />
+<script type="application/ld+json">
+{"description":"I have recently discovered a serious vulnerability in the KeepKey hardware wallet. Through a stack buffer overflow, remote or local attackers can execute code on the device and perform actions such as stealing the wallet keys from within a malicious website. The vulnerability was introduced with firmware v7.0.3 and patched with v7.1.0 after my disclosure.","@type":"BlogPosting","datePublished":"2021-04-30T18:45:00+02:00","url":"https://blog.inhq.net/posts/keepkey-CVE-2021-31616/","mainEntityOfPage":{"@type":"WebPage","@id":"https://blog.inhq.net/posts/keepkey-CVE-2021-31616/"},"author":{"@type":"Person","name":"Christian Reitter"},"headline":"KeepKey Stack Buffer Overflow Vulnerability (CVE-2021-31616)","dateModified":"2021-04-30T18:45:00+02:00","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/css/style.css"><link type="application/atom+xml" rel="alternate" href="https://blog.inhq.net/feed.xml" title="invd blog" /><script type="text/javascript">
+  var _paq = window._paq || [];
+  _paq.push(['trackPageView']);
+  _paq.push(['enableLinkTracking']);
+  _paq.push(['setSecureCookie', true]);
+  _paq.push(['setVisitorCookieTimeout', 60 * 60 * 24 * 90]);
+  _paq.push(['setReferralCookieTimeout', 60 * 60 * 24 * 90]);
+  _paq.push(['appendToTrackingUrl', 'bots=1']);
+  (function() {
+    var u="https://mato.inhq.net/";
+    _paq.push(['setTrackerUrl', u+'m']);
+    _paq.push(['setSiteId', '1']);
+    var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+    g.type='text/javascript'; g.async=true; g.defer=true; g.src=u+'mat.js'; s.parentNode.insertBefore(g,s);
+  })();
+  </script></head>
+<body><header class="site-header"><noscript><img src="https://mato.inhq.net/m?rec=1&bots=1&idsite=1" alt="" style="position:absolute; visibility:hidden" /></noscript><div class="wrapper"><a class="site-title" rel="author" href="/">invd blog</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger">
+        <a class="page-link" href="/archive/">Archive</a><a class="page-link" href="/cve/">CVEs</a><a class="page-link" href="/consulting/">Consulting</a><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">KeepKey Stack Buffer Overflow Vulnerability (CVE-2021-31616)</h1>
+    <p class="post-meta"><time class="dt-published" datetime="2021-04-30T18:45:00+02:00" itemprop="datePublished">
+        Apr 30, 2021
+      </time>• <span itemprop="author" itemscope itemtype="http://schema.org/Person">
+            <span class="p-author h-card" itemprop="name">Christian Reitter</span></span><br/>ID:
+        
+          
+          <span>CVE-2021-31616</span>
+        <br/>
+      Related articles:
+      <a href="/posts/keepkey-glitching-vuln-21020/">Glitching over KeepKey Firmware Protections (VULN-21020)</a>
+          • <a href="/posts/faulty-stack-canary-arm-systems/">Faulty Stack Smashing Protection on ARM Systems</a>
+          • <a href="/posts/exploiting-CVE-2021-31616-part1/">Exploiting KeepKey CVE-2021-31616 - Part I</a>
+          </p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>I have recently discovered a serious vulnerability in the KeepKey hardware wallet.<br />
+Through a stack buffer overflow, remote or local attackers can execute code on the device and perform actions such as stealing the wallet keys from within a malicious website.
+The vulnerability was introduced with firmware <strong><em>v7.0.3</em></strong> and patched with <strong><em>v7.1.0</em></strong> after my disclosure.
+<br /></p>
+
+<div id="toc-container">
+  <h2 class="no_toc">Contents</h2>
+<ul id="markdown-toc">
+  <li><a href="#consulting" id="markdown-toc-consulting">Consulting</a></li>
+  <li><a href="#introduction" id="markdown-toc-introduction">Introduction</a></li>
+  <li><a href="#the-vulnerability" id="markdown-toc-the-vulnerability">The Vulnerability</a>    <ul>
+      <li><a href="#exploiting-the-stack-buffer-overflow" id="markdown-toc-exploiting-the-stack-buffer-overflow">Exploiting the Stack Buffer Overflow</a></li>
+      <li><a href="#the-fix" id="markdown-toc-the-fix">The Fix</a></li>
+      <li><a href="#attack-scenario-and-security-implications" id="markdown-toc-attack-scenario-and-security-implications">Attack Scenario and Security Implications</a></li>
+      <li><a href="#proof-of-concept-poc" id="markdown-toc-proof-of-concept-poc">Proof of Concept (PoC)</a></li>
+      <li><a href="#version-overview" id="markdown-toc-version-overview">Version Overview</a></li>
+    </ul>
+  </li>
+  <li><a href="#general-summary-of-the-issue" id="markdown-toc-general-summary-of-the-issue">General Summary of the Issue</a></li>
+  <li><a href="#coordinated-disclosure" id="markdown-toc-coordinated-disclosure">Coordinated disclosure</a>    <ul>
+      <li><a href="#relevant-product" id="markdown-toc-relevant-product">Relevant product</a></li>
+      <li><a href="#detailed-timeline" id="markdown-toc-detailed-timeline">Detailed timeline</a></li>
+      <li><a href="#credits" id="markdown-toc-credits">Credits</a></li>
+      <li><a href="#a-note-about-research-affiliation" id="markdown-toc-a-note-about-research-affiliation">A Note About Research Affiliation</a></li>
+      <li><a href="#bug-bounty" id="markdown-toc-bug-bounty">Bug bounty</a></li>
+    </ul>
+  </li>
+</ul>
+
+</div>
+
+<h2 id="consulting">Consulting</h2>
+
+<p><i>I’m a freelance Security Consultant and currently available for new projects.
+  If you are looking for assistance to secure your projects or organization, <a href="/consulting">get in touch</a>.</i></p>
+
+<h2 id="introduction">Introduction</h2>
+<p><em>As with many of my previous blog articles, this is going to be a technical deep-dive into a complex security bug.
+Correspondingly, the article is written for technical readers with a background in the area of IT security.
+Go to <a href="#general-summary-of-the-issue">the general summary of the issue</a> if you are interested in the less technical version.</em></p>
+
+<p>The ShapeShift KeepKey is a cryptocurrency hardware wallet with an open source firmware.
+I have done a lot of independent security research on over the last years,
+mainly through extensive automated testing with a custom fuzzing setup in combination with manual auditing.
+See my other blog articles for more context on this topic and discovered issues.</p>
+
+<p>ShapeShift has recently integrated logic for the <em>THORChain</em> network into their exchange,
+which included new code changes and logic for their KeepKey wallet firmware.
+More specifically, the new logic is located in the Ethereum handling.
+As it turns out, it contains a major flaw:</p>
+
+<figure role="group">
+<img style="max-width: 1024px;" src="/assets/images/resized/600/keepkey_cve-2021-31616_poc.jpg" alt="&lt;i&gt;See the following sections for details on this attack.&lt;/i&gt;" srcset="    /assets/images/resized/600/keepkey_cve-2021-31616_poc.jpg 600w, /assets/images/keepkey_cve-2021-31616_poc.jpg 1024w" sizes="(min-width: 1150px) 1150px, (min-width: 600px) 600px" class="" />
+<figcaption><i>See the following sections for details on this attack.</i></figcaption>
+</figure>
+
+<h2 id="the-vulnerability">The Vulnerability</h2>
+
+<p>For the purposes of this bug, it is sufficient to know that the <em>THORChain</em> usage is related to a special subset of Ethereum transactions.
+The issue is in the new Ethereum signing code that was introduced to handle this new logic.</p>
+
+<p>As with regular Ethereum transactions on the KeepKey, a <code class="language-plaintext highlighter-rouge">MessageType_EthereumSignTx</code> protobuf message from the host computer triggers some
+finite state machine behavior, which includes the <code class="language-plaintext highlighter-rouge">ethereum_signing_init()</code> function:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="kt">void</span> <span class="nf">ethereum_signing_init</span><span class="p">(</span><span class="n">EthereumSignTx</span> <span class="o">*</span><span class="n">msg</span><span class="p">,</span> <span class="k">const</span> <span class="n">HDNode</span> <span class="o">*</span><span class="n">node</span><span class="p">,</span>
+                           <span class="n">bool</span> <span class="n">needs_confirm</span><span class="p">)</span> <span class="p">{</span></code></pre></figure>
+
+<p><a href="https://github.com/keepkey/keepkey-firmware/blob/902cd3a286f18b774b5422610dd7969b5c21073e/lib/firmware/ethereum.c#L590-L591" class="highlightref">ethereum.c</a></p>
+
+<p>Initially, the code checks a few basic properties of the received request message, for example via <code class="language-plaintext highlighter-rouge">ethereum_signing_check()</code>.
+It rejects the most problematic messages that satisfy error conditions such as <code class="language-plaintext highlighter-rouge">if (msg-&gt;data_length &gt; 16000000) {</code>.<br />
+However, these functions do not perform any in-depth validity checks on the message properties,
+and many of the message fields cannot be checked during the initial message processing due to how the protocol is designed.
+This is relevant for later.</p>
+
+<p>Ethereum transmission requests that satisfy the <code class="language-plaintext highlighter-rouge">ethereum_isThorchainSwap(msg)</code> check will be processed with
+the newly introduced <code class="language-plaintext highlighter-rouge">ethereum_extractThorchainSwapData()</code> function early in the message handling:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c">  <span class="c1">// Detect THORChain swap</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">ethereum_isThorchainSwap</span><span class="p">(</span><span class="n">msg</span><span class="p">))</span> <span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">token</span> <span class="o">==</span> <span class="nb">NULL</span> <span class="o">&amp;&amp;</span> <span class="n">data_total</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">data_needs_confirm</span><span class="p">)</span> <span class="p">{</span>
+      <span class="kt">char</span> <span class="n">swap_data</span><span class="p">[</span><span class="mi">256</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="sc">'\0'</span><span class="p">};</span>
+      <span class="kt">uint8_t</span> <span class="n">swap_data_len</span> <span class="o">=</span> <span class="n">ethereum_extractThorchainSwapData</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">swap_data</span><span class="p">);</span></code></pre></figure>
+
+<p><a href="https://github.com/keepkey/keepkey-firmware/blob/902cd3a286f18b774b5422610dd7969b5c21073e/lib/firmware/ethereum.c#L677-L681" class="highlightref">ethereum.c</a></p>
+
+<p>This is the problematic path that can be attacked.</p>
+
+<p>As it can be seen in the code excerpt below, the first parameter for the <code class="language-plaintext highlighter-rouge">ethereum_extractThorchainSwapData(const EthereumSignTx *msg, char *buffer)</code> function call is the received message <code class="language-plaintext highlighter-rouge">msg</code>
+and the second parameter is the local stack buffer <code class="language-plaintext highlighter-rouge">swap_data[256]</code> from the <code class="language-plaintext highlighter-rouge">ethereum_signing_init()</code> function context.</p>
+
+<p>Quick challenge for the more experienced security people among the readers: consider the following code snippet for a minute or two.<br />
+Can you spot the bug and what it does?</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="kt">uint8_t</span> <span class="nf">ethereum_extractThorchainSwapData</span><span class="p">(</span><span class="k">const</span> <span class="n">EthereumSignTx</span> <span class="o">*</span><span class="n">msg</span><span class="p">,</span>
+                                          <span class="kt">char</span> <span class="o">*</span><span class="n">buffer</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// Swap data begins 164 chars into data buffer:</span>
+  <span class="c1">// offset = deposit function hash + address + address + uint256</span>
+  <span class="kt">uint16_t</span> <span class="n">offset</span> <span class="o">=</span> <span class="mi">4</span> <span class="o">+</span> <span class="p">(</span><span class="mi">5</span> <span class="o">*</span> <span class="mi">32</span><span class="p">);</span>
+  <span class="kt">int16_t</span> <span class="n">len</span> <span class="o">=</span> <span class="n">msg</span><span class="o">-&gt;</span><span class="n">data_length</span> <span class="o">-</span> <span class="n">offset</span><span class="p">;</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">msg</span><span class="o">-&gt;</span><span class="n">has_data_length</span> <span class="o">&amp;&amp;</span> <span class="n">len</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">memcpy</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="n">msg</span><span class="o">-&gt;</span><span class="n">data_initial_chunk</span><span class="p">.</span><span class="n">bytes</span> <span class="o">+</span> <span class="n">offset</span><span class="p">,</span> <span class="n">len</span><span class="p">);</span>
+    <span class="c1">// String length must be &lt; 255 characters</span>
+    <span class="k">return</span> <span class="n">len</span> <span class="o">&lt;</span> <span class="mi">256</span> <span class="o">?</span> <span class="p">(</span><span class="kt">uint8_t</span><span class="p">)</span><span class="n">len</span> <span class="o">:</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+<span class="p">}</span></code></pre></figure>
+
+<p><a href="https://github.com/keepkey/keepkey-firmware/blob/902cd3a286f18b774b5422610dd7969b5c21073e/lib/firmware/ethereum.c#L90-L102" class="highlightref">ethereum.c</a></p>
+
+<p>To answer this, the essential weakness here is related to the length field, more specifically, the attacker-controlled <code class="language-plaintext highlighter-rouge">msg-&gt;data_length</code> field.
+It is incorrectly treated as a <strong>trusted input</strong> and allowed to influence low-level memory operations,
+similar to multiple previous security issues that I’ve discovered in other products through fuzzing.<br />
+Fuzzers have a good nose for reaching branches in the code while at the same time having basically no understanding of how the branch is <em>supposed</em> to be reached.
+So they’re ideal to trigger this type of edge case with an unusual length value. Sanitizers like AddressSanitizer can then detect the memory corruption that follows,
+revealing the issue out of millions of other unproblematic fuzzer runs.</p>
+
+<p>In this specific case, the <code class="language-plaintext highlighter-rouge">msg-&gt;data_length</code> field is basically an arbitrary <code class="language-plaintext highlighter-rouge">uint32_t</code> integer that can be set by the attacker.
+It is only slightly constrained to a value of <code class="language-plaintext highlighter-rouge">&lt; 16M</code> through the previously mentioned check in the parent function, which is of no practical relevance.
+More essentially, this length field is not limited to the maximum size of the <code class="language-plaintext highlighter-rouge">swap_data</code> (256 byte) or even <code class="language-plaintext highlighter-rouge">msg-&gt;data_initial_chunk</code> (1024 byte) buffers.<br />
+The <code class="language-plaintext highlighter-rouge">msg-&gt;data_length</code> represents the data size that is announced to the wallet as the <em>total length</em> of the transaction data that is supposed to follow in
+future messages. <code class="language-plaintext highlighter-rouge">msg-&gt;data_initial_chunk</code> is just the initial data section if the total expected length is bigger than the first chunk field can hold.
+For practical attacks, the <code class="language-plaintext highlighter-rouge">&lt;= 1024</code> of this initial chunk is sufficient, as we’ll see in later descriptions, so there is no need to actually send followup messages with additional data.</p>
+
+<p>In the code snippet above, the <code class="language-plaintext highlighter-rouge">int16_t len</code> value is directly computed from the foreign <code class="language-plaintext highlighter-rouge">msg-&gt;data_length</code> value minus the fixed <code class="language-plaintext highlighter-rouge">offset</code> of <code class="language-plaintext highlighter-rouge">164</code>.
+There is a <code class="language-plaintext highlighter-rouge">len &gt; 0</code> check to make sure the result is not used when it is zero or negative,
+which is meaningful, but fails to catch the even more important case for <code class="language-plaintext highlighter-rouge">len</code> values that are bigger than expected.<br />
+For some reason, the developers were anticipating that <code class="language-plaintext highlighter-rouge">len &gt;= 256</code> values end up in this code branch since they included a special check to set the returned length to <code class="language-plaintext highlighter-rouge">0</code> in this case.
+However, there is no check to prevent the problematic memory corruption behavior that <em>also</em> happens with <code class="language-plaintext highlighter-rouge">len &gt; 256</code>!<br />
+At those lengths, the <code class="language-plaintext highlighter-rouge">memcpy()</code> call results in an out of bounds write on the stack behind <code class="language-plaintext highlighter-rouge">swap_data</code>, which is located in the stack frame of the <em>caller</em> function.</p>
+
+<p>In practical terms, this means that an attacker can manipulate the length parameter of the <code class="language-plaintext highlighter-rouge">memcpy()</code> arbitrarily through <code class="language-plaintext highlighter-rouge">msg-&gt;data_length</code> to values between 1 and 32767.
+The target buffer is always of fixed size 256 via <code class="language-plaintext highlighter-rouge">char swap_data[256]</code>.
+Since the destination buffer is nulled before usage, there is no information disclosure when performing a partial overwrite through <code class="language-plaintext highlighter-rouge">memcpy()</code> with for smaller lengths than usual.
+Therefore lengths <code class="language-plaintext highlighter-rouge">&gt;256</code> are interesting for an attack.</p>
+
+<p>To make matters worse, the main source of the copied data is the large byte field <code class="language-plaintext highlighter-rouge">msg-&gt;data_initial_chunk.bytes</code>,
+which is a fully attacker controllable byte array in the same message that triggers the attack.
+Up to <code class="language-plaintext highlighter-rouge">1024 - offset</code> = 860 bytes of data can be copied directly from there.
+For even bigger <code class="language-plaintext highlighter-rouge">memcpy()</code> operations, the source values are fetched as out of bounds reads from other fields of the same <code class="language-plaintext highlighter-rouge">msg</code> message,
+and so they are also controllable by the attacker to a large degree.</p>
+
+<p>So to summarize, one large Ethereum-related message is sufficient to trigger a large and very controllable out of bounds write on the stack.</p>
+
+<h3 id="exploiting-the-stack-buffer-overflow">Exploiting the Stack Buffer Overflow</h3>
+
+<p>The technical aspects will be presented in multiple additional blog articles,
+since the analysis is complex and involves a second coordinated disclosure.</p>
+
+<ul>
+  <li><a href="/posts/exploiting-CVE-2021-31616-part1/">Part I of the analysis can be found here</a>.</li>
+  <li><a href="/posts/faulty-stack-canary-arm-systems/">Disclosure article on the faulty stack smashing protection</a>.</li>
+</ul>
+
+<p><em>This section will be updated once additional articles are available.</em></p>
+
+<h3 id="the-fix">The Fix</h3>
+<p>For obvious reasons, I recommended stronger limits for the length parameter of <code class="language-plaintext highlighter-rouge">memcpy()</code> as a first step to the vendor when reporting the issue.</p>
+
+<p>This was done through a patch in firmware <code class="language-plaintext highlighter-rouge">v7.1.0</code>, which is fairly compact:</p>
+
+<figure class="highlight"><pre><code class="language-diff" data-lang="diff"><span class="p">@@ -93,10 +93,10 @@</span> uint8_t ethereum_extractThorchainData(const EthereumSignTx *msg,
+   // offset = deposit function hash + address + address + uint256
+   uint16_t offset = 4 + (5 * 32);
+   int16_t len = msg-&gt;data_length - offset;
+<span class="gd">-  if (msg-&gt;has_data_length &amp;&amp; len &gt; 0) {
+</span><span class="gi">+  if (msg-&gt;has_data_length &amp;&amp; len &gt; 0 &amp;&amp; len &lt; 256) {
+</span>    memcpy(buffer, msg-&gt;data_initial_chunk.bytes + offset, len);
+    // String length must be &lt; 255 characters
+<span class="gd">-    return len &lt; 256 ? (uint8_t)len : 0;
+</span><span class="gi">+    return (uint8_t)len;
+</span>   }
+   return 0;
+ }</code></pre></figure>
+
+<p><a href="https://github.com/keepkey/keepkey-firmware/commit/930d6ada7a15b3fd00bfef78ec855ae6fa7cc870#diff-a29702be230c2b876e019a5e1c332362d39b775607e1ef9200b46b06dd4a72bc" class="highlightref">ethereum.c</a></p>
+
+<p>Going forward, I recommend to make the magic <code class="language-plaintext highlighter-rouge">256</code> limit value more explicit in that data handling, either by taking it as a length parameter in the function or by adding documentation to the function body.
+Additionally, the fixed <code class="language-plaintext highlighter-rouge">offset</code> could be an explicit constant and the integer overflow handling from the larger <code class="language-plaintext highlighter-rouge">msg-&gt;data_length</code> could be better,
+but neither of them is a security problem as of now.</p>
+
+<h3 id="attack-scenario-and-security-implications">Attack Scenario and Security Implications</h3>
+<p>The target device needs to be in an unlocked state to be vulnerable:</p>
+<ul>
+  <li>on devices without a PIN, this is automatically the case</li>
+  <li>otherwise the PIN has to be entered once (and is then cached)</li>
+  <li>the correct passphrase is not necessary to trigger the attack even if enabled (but is also affected if cached)</li>
+</ul>
+
+<p>Details of the unlock state of the KeepKey can be checked repeatedly by an attacker through a <code class="language-plaintext highlighter-rouge">GetFeatures</code> protobuf message.
+Once the reported conditions on the device are good, an attacker can then send the problematic USB packets to the device to trigger the exploit.</p>
+
+<p>The attack has been confirmed to work</p>
+<ol>
+  <li>through malicious JavaScript and WebUSB in Chrome/Chromium
+    <ul>
+      <li>the user needs to accept the generic WebUSB browser dialog to connect the device</li>
+    </ul>
+  </li>
+  <li>through programs with local user privileges
+    <ul>
+      <li>no user interaction required</li>
+      <li>depends on the necessary drivers and configuration</li>
+    </ul>
+  </li>
+</ol>
+
+<h4 id="observed-impact">Observed Impact</h4>
+
+<p>I have shown that it is possible to get code execution on the device by smashing the stack and then manipulating the instruction flow.</p>
+
+<p>Through Return Oriented Programming (ROP), an attacker can very deliberately trigger a number of code snippets
+from existing functions and combine them with unusual parameters to basically do anything they want.
+For example, one particularly problematic action is making the device send USB protobuf messages filled with <em>secret stack memory</em> from the <code class="language-plaintext highlighter-rouge">CONFIDENTIAL</code> memory area.
+Based on this attack approach, the decrypted BIP39 mnemonic and cached passphrase (if available) can be copied from the device to the attacker.</p>
+
+<p>Fundamentally, the main security guarantees of a hardware wallet and U2F 2nd factor device are compromised once the secret keys are known.
+So this attack breaks most aspects of the KeepKey security model.</p>
+
+<p>Other impacts that I’ve been able to trigger include setting of new passphrases, PINs or BIP39 seed erasure.
+This could be problematic for users who do not have a paper wallet backup at hand.
+However, in most cases it would be quicker for an attacker to steal the funds instead,
+unless they have a reason to intentionally trigger device problems, e.g. as a coverup for the theft or some other specific scenario.</p>
+
+<p>Interestingly, it is also possible to artificially trigger my previously discovered <a href="/posts/keepkey-CVE-2019-18672/">CVE-2019-18672</a> issue through this bug,
+but then again - that’s less interesting to the attacker than simply getting the valid U2F device private key itself.</p>
+
+<p>One of the technically interesting questions here is whether this attack can result in persistent firmware modifications.
+In other words, can you start trusting the device again after you’ve wiped it and installed a new firmware, or could it still contain malicious code or settings?<br />
+Although it is possible for attackers to change some regions of the device flash,
+my current understanding is that this does not allow persistent modifications to the firmware code without also alerting the user on the next device boot.
+The existing security configurations such as the internally dropped microcontroller permission levels,
+memory protection unit settings and limitations on flash writes through the supervisor abstraction <em>should</em> prevent an
+overwrite of the bootloader.
+If this is satisified, the still-genuine bootloader will detect that the modified firmware is no longer correctly signed
+as part of the typical boot check, leading to a “Unofficial Firmware” security warning and mandatory user interaction.
+Which isn’t perfect, but better than silently running with a modified bootloader/firmware combination
+(which could falsely report that it is correctly updated to a newer version to evade detection, for example).
+Note that the error also depends on the bootloader version, of which multiple are in use (at least <code class="language-plaintext highlighter-rouge">bl1.1.0</code> and <code class="language-plaintext highlighter-rouge">bl2.0.0</code> are relevant).</p>
+
+<p>So after upgrading to a new and signed firmware version and wiping the previous settings, the device and firmware <em>should</em> be trustable again.
+I have not looked at this scenario long enough to vouch for it, though.</p>
+
+<h4 id="formal-scoring">Formal Scoring</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>Description</th>
+      <th>CVSS 3.1</th>
+      <th>Score</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>WebUSB-based attack with connect dialog interaction, full impact</td>
+      <td><a href="https://www.first.org/cvss/calculator/3.1#CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:U/C:H/I:H/A:H">AV:N/AC:L/PR:L/UI:R/S:U/C:H/I:H/A:H</a></td>
+      <td>8.0 (High)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Notes:</p>
+<ul>
+  <li>Having both <code class="language-plaintext highlighter-rouge">PR:L</code> and <code class="language-plaintext highlighter-rouge">UI:R</code> is probably over-accounting for the WebUSB connection dialog.</li>
+</ul>
+
+<h3 id="proof-of-concept-poc">Proof of Concept (PoC)</h3>
+<p>I’ve sent four different PoCs to the vendor:</p>
+<ol>
+  <li>Denial of service via crash (the bug is reachable)</li>
+  <li>Custom display content (reliable code execution)</li>
+  <li>Copying BIP39 seed off the device (breaking confidentiality)</li>
+  <li>Copying cached passphrase off the device (breaking confidentiality)</li>
+</ol>
+
+<p>They are not published at the moment. I’m planning to release more technical information on the attack soon.
+<br />
+<br />
+Here is how the modified No.2 PoC works on the device:</p>
+
+<figure>
+<video muted="" playsinline="" controls="">
+    <source src="/assets/video/keepkey_cve-2021-31616_poc.mp4" type="video/mp4" />
+    <source src="/assets/video/keepkey_cve-2021-31616_poc.webm" type="video/webm; codecs=vp9" />
+    <p>Video not supported</p>
+</video>
+<figcaption>
+<i>Details: device without PIN for demonstration purposes, USB attack at 0:10 triggers an "impossible" layout_warning_static() call</i>
+</figcaption>
+</figure>
+
+<h3 id="version-overview">Version Overview</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Version</th>
+      <th>Status</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong><em>v6.x.x</em></strong> and earlier</td>
+      <td>not vulnerable ✓</td>
+      <td>Firmware versions do not contain the problematic code</td>
+    </tr>
+    <tr>
+      <td><strong><em>v7.0.3</em></strong></td>
+      <td>🔥 <strong>firmware vulnerable</strong> 🔥</td>
+      <td>Update <strong>as soon as possible</strong> and consider switching to a different BIP39 mnemonic.</td>
+    </tr>
+    <tr>
+      <td><strong>v7.1.x</strong></td>
+      <td>firmware not vulnerable</td>
+      <td>🔎⚠️ Remaining security concern if the device was used with firmware <em>v7.0.3</em> previously.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="general-summary-of-the-issue">General Summary of the Issue</h2>
+
+<p>This publication is about a serious bug in the specific KeepKey firmware <strong><em>v7.0.3</em></strong> that was released in March 2021.<br />
+Devices with this version can be attacked. All other versions are OK.</p>
+
+<p>Basically, an attacker can command the device to reveal or manipulate any wallet secrets that are known to the device at the time of the attack.
+They can change the PIN, erase the device or do other weird things.
+Depending on how the device is used and when the attack happens,
+the entered secret passphrase can be stolen as well.
+This means that all cryptocurrency funds for all coin variants “on” the wallet can be transferred out to the attacker right away (or months later!)
+since they can create an identical copy of the wallet.</p>
+
+<p>The attack is possible as soon as the device is connected to a computer and unlocked.
+Unlocking is usually done by entering the PIN and special passphrase through a normal dialog on the computer, if either of those are used.
+Otherwise the device is unlocked and vulnerable by default.</p>
+
+<p>Attack scenarios:</p>
+<ol>
+  <li>If the attack is triggered by malicious software on the computer that the KeepKey is attached to, it is silent and without any user interaction.</li>
+  <li>If the attack happens through a malicious webpage, it requires a click on the normal browser confirmation dialog (for the device connection).</li>
+</ol>
+
+<p>So there is not a lot one can do to prevent the attack, and one cannot find out if any of the sneakier attack variants already happened.</p>
+
+<p>As vulnerabilities go, this is pretty bad.</p>
+
+<p>Some good news:</p>
+<ul>
+  <li>I found the bug quickly after it got introduced.</li>
+  <li>I went directly to the vendor with it while keeping it a secret (coordinated disclosure).</li>
+  <li>The vendor realized that the issue was serious and quickly released a fix.</li>
+</ul>
+
+<p>I obviously recommend upgrading from the problematic firmware to a patched version right away.
+Unfortunately, this might not be sufficient.
+If other people on the Internet have found the bug in the past weeks independently and realized its potential,
+they could have systematically attacked vulnerable KeepKey users.
+This is not that unlikely, since the v7.1.0 release changes showed where the bug was, for example.
+So it is generally plausible that wallet keys have been copied by an attack “in the wild” somewhere,
+since it is proven that this is possible from the technical side.</p>
+
+<p>So if you 1. had the dangerous firmware version on a device with significant funds and 2. used it on any computer or website that you don’t <em>really, really</em> trust,
+now would be a good time to check your funds and move them to another BIP39 seed and another passphrase.</p>
+
+<h2 id="coordinated-disclosure">Coordinated disclosure</h2>
+
+<p>I’ve now reported security issues for the KeepKey for four consecutive years, and this has been generally positive, but there were some ups and downs along the way.
+For example, there have been a few minor security reports to ShapeShift that dragged on through most of 2020 with months of delayed feedback and a lack of code changes.
+As someone with professional software developer experience,
+I understand that backlogs can be full and lower rated issues get passed over again and again as a consequence.
+However, from the researcher side, having to keep the ball rolling on unresolved topics is draining energy from other things.
+Running into a situation like that will naturally lower my interest in researching and reporting future security bugs for a given software, particularly in case of minor bugs.</p>
+
+<p>Given this background, it was refreshing that the ShapeShift vulnerability handling processes have changed in 2021 and that the situation has significantly improved.
+It is not ideal yet, but it is definitely getting better.</p>
+
+<p>I want to positively mention:</p>
+<ul>
+  <li>their initial reaction time of <strong>less than 24 hours</strong> for human feedback on the issue</li>
+  <li>the quick patch rollout of <strong>less than 6 days</strong> from disclosure to release</li>
+  <li>from what I understand, ShapeShift has enabled urgent upgrade warnings for affected users on their platform</li>
+  <li>the opportunity to do a call and discuss the issue in person (although late in the disclosure)</li>
+</ul>
+
+<p>However, there are also several areas that can still be improved:</p>
+<ul>
+  <li>publishing <strong>timely security advisories</strong> within a few days of public security patches</li>
+  <li>informing the reporting researcher of relevant patches, releases and planned time frames of related topics</li>
+  <li>reducing miscommunications within the team</li>
+</ul>
+
+<p>Since I’ve noted missing security advisories <a href="/posts/keepkey-CVE-2019-18672/#coordinated-disclosure">during previous KeepKey disclosures</a>, I
+recommend that they look into how to improve their advisory processes for future issues,
+so that customers can make better informed decisions when tasked with upgrades and warnings.
+Particularly with a complex and dangerous issue such as this one, having “Security fixes” in a changelog as the only public information is simply insufficient,
+even more so if some risk for users remains after the update, which is the case here in my opinion.</p>
+
+<p>This has been a big and complex disclosure, but I’m definitely quite satisfied with the research results.<br />
+Stay tuned for more technical details on this topic.</p>
+
+<h3 id="relevant-product">Relevant product</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Product</th>
+      <th>Source</th>
+      <th>Fixed Version</th>
+      <th>Patch</th>
+      <th>Publications</th>
+      <th>IDs</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>ShapeShift KeepKey</td>
+      <td><a href="https://github.com/keepkey/keepkey-firmware/">Github</a></td>
+      <td>fix: <strong>v7.1.0</strong><br />recommended: <strong>v7.1.2</strong></td>
+      <td><a href="https://github.com/keepkey/keepkey-firmware/commit/930d6ada7a15b3fd00bfef78ec855ae6fa7cc870#diff-a29702be230c2b876e019a5e1c332362d39b775607e1ef9200b46b06dd4a72bcR96">patch</a></td>
+      <td><a href="https://github.com/keepkey/keepkey-firmware/releases/tag/v7.1.0">v7.1.0 changelog</a>, <a href="https://shapeshift.com/library/keepkey-important-update-issued-april-4-required">ShapeShift advisory</a></td>
+      <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-31616">CVE-2021-31616</a>, VULN-21011</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>I’m not aware of other affected hardware wallets.</p>
+
+<h3 id="detailed-timeline">Detailed timeline</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Information</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2021-03-24</td>
+      <td>Affected firmware version v7.0.3 is released</td>
+    </tr>
+    <tr>
+      <td>2021-04-08</td>
+      <td>I discover the vulnerability</td>
+    </tr>
+    <tr>
+      <td>2021-04-08</td>
+      <td>Confidential disclosure to ShapeShift</td>
+    </tr>
+    <tr>
+      <td>2021-04-08</td>
+      <td>ShapeShift acknowledges the issue and assigns VULN identifier</td>
+    </tr>
+    <tr>
+      <td>2021-04-12</td>
+      <td>ShapeShift releases patched firmware version 7.1.0 for download</td>
+    </tr>
+    <tr>
+      <td>2021-04-14</td>
+      <td>ShapeShift publishes the code for firmware version 7.1.0 on Github</td>
+    </tr>
+    <tr>
+      <td>2021-04-21</td>
+      <td>CVE request sent to MITRE</td>
+    </tr>
+    <tr>
+      <td>2021-04-23</td>
+      <td>MITRE assigns CVE-2021-31616</td>
+    </tr>
+    <tr>
+      <td>2021-04-26</td>
+      <td>Technical call with ShapeShift</td>
+    </tr>
+    <tr>
+      <td>2021-04-27</td>
+      <td>ShapeShift releases firmware version 7.1.2 on Github</td>
+    </tr>
+    <tr>
+      <td>2021-04-30</td>
+      <td>Publication of this blog article</td>
+    </tr>
+    <tr>
+      <td>2021-05-03</td>
+      <td>Corrections to the ShapeShift security advisory (see notes)</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Notes:</p>
+<ul>
+  <li>The ShapeShift security advisory originally referenced April 4th as the patch release date, which was a numerical error that has been corrected.</li>
+  <li>My timeline uses the source code tags to determine the time of publication, but I’m told that the actual firmware availability was a bit earlier. This was added to the timeline, where known.</li>
+</ul>
+
+<h3 id="credits">Credits</h3>
+<p>I want to give special thanks to Dr. Jochen Hoenicke, who has helped in later stages of the research.</p>
+
+<h3 id="a-note-about-research-affiliation">A Note About Research Affiliation</h3>
+<p>I want to emphasize that this research was done on my own time and initiative.
+In particular, it was not sponsored by SatoshiLabs, for whom I do some paid freelance security research on the related Trezor project.</p>
+
+<h3 id="bug-bounty">Bug bounty</h3>
+<p>ShapeShift has paid a bug bounty for this issue.</p>
+
+  </div>
+
+
+  <a class="u-url" href="/posts/keepkey-CVE-2021-31616/" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col one-half"><ul class="contact-list">
+          <li class="p-name">
+            <b>Christian Reitter</b>
+          </li></ul></div>
+
+      <div class="footer-col one-half">
+        <p>Information security and other interests.</p>
+      </div>
+    </div>
+
+    <div class="social-ref"><ul class="social-ref-list"><li><a rel="me" href="https://github.com/invd" title="invd"><svg class="svg-icon grey"><use xlink:href="/assets/minima-icons.svg#github"></use></svg></a></li><li><a href="/feed.xml" title="rss"><svg class="svg-icon grey"><use xlink:href="/assets/minima-icons.svg#rss"></use></svg></a></li></ul>
+</div>
+
+  </div>
+</footer>
+</body>
+
+</html>

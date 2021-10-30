@@ -1,0 +1,1082 @@
+
+<!DOCTYPE HTML>
+<html lang="en" data-template="post-page">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Root Cause Analysis of Windows Kernel UAF Vulnerability lead to CVE-2016-3310</title>
+    <meta name="keywords" content="security research,Threat Research"/>
+    <meta name="description" content=" 
+
+In the first quarter of 2016, we realized that there were tons of windows kernel use-after-free (UAF) vulnerability patches in Microsoft bulletins where most of the vulnerabilities came from Google Project Zero, which is favourable to us because we can easily access those proof-of-concepts (POC). While doing a root cause analysis of one of the UAF vulnerabilities stated in CVE-2015-6100, we discovered that there is an alternative way to trigger the same UAF vulnerability, even after the specified patch has been applied due to weak security..."/>
+    <meta name="template" content="post-page"/>
+    
+
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+
+<meta name="google-site-verification" content="tiQ03tSujT2TSsWJ6tNHiiUn8cwYVmdMQrGUCNrPQmo"/>
+
+<meta property="og:site_name" content="Fortinet Blog"/>
+<meta property="og:title" content="Root Cause Analysis of Windows Kernel UAF Vulnerability lead to CVE-2016-3310"/>
+<meta property="og:url" content="https://www.fortinet.com/blog/threat-research/root-cause-analysis-of-windows-kernel-uaf-vulnerability-lead-to-cve-2016-3310.html"/>
+<meta property="og:type" content="article"/>
+<meta property="og:description" content=" 
+
+In the first quarter of 2016, we realized that there were tons of windows kernel use-after-free (UAF) vulnerability patches in Microsoft bulletins where most of the vulnerabilities came from G…"/>
+<meta property="og:image" content="https://www.fortinet.com/content/dam/fortinet-blog/article-images/individual-images/root-cause-analysis-of-windows-kernel-uaf-vulnerability.jpg"/>
+
+<meta property="twitter:card" content="summary"/>
+<meta property="twitter:site" content="@Fortinet"/>
+
+<meta property="article:author" content="Wayne Chin Yick Low"/>
+
+    <meta property="article:section" content="Threat Research"/>
+
+
+    <meta property="article:published_time" content="2016-08-16T00:00:00.000-07:00"/>
+
+
+    <meta property="article:tag" content="security research"/>
+
+
+<link rel="shortcut icon" href="/etc/designs/fortinet-blog/favicon.ico"/>
+
+
+    
+<link rel="stylesheet" href="/etc.clientlibs/fortinet-blog/clientlibs/clientlib-base.min.css" type="text/css">
+
+
+
+
+
+
+
+
+
+
+<!-- SEO Script -->
+
+
+
+
+<!-- OneTrust Cookies Consent Notice start for fortinet.com -->
+
+
+
+    <script src="https://cdn.cookielaw.org/scripttemplates/otSDKStub.js" data-document-language="true" type="text/javascript" charset="UTF-8" data-domain-script="f85f39fc-d7aa-467a-b762-fbb722748016"></script>
+    <script type="text/javascript">
+
+function OptanonWrapper() {
+    {
+       try{
+            $('#cookiescript_injected').remove(); // remove old cookie script
+        }catch(e){}
+        window.dataLayer.push({
+            event: 'OneTrustGroupsUpdated'
+        });
+        Optanon.InsertScript('//assets.adobedtm.com/launch-EN23cb8375449840dc93b13f34d935b8b9.min.js','head',null, null, '1',true);
+    }
+}
+
+</script>
+
+
+<!-- OneTrust Cookies Consent Notice end for fortinet.com -->
+    
+    
+    
+
+    
+    
+
+    
+    
+    
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+</head>
+<body>
+
+
+
+
+
+<div class="root responsivegrid">
+
+
+<div class="aem-Grid aem-Grid--12 aem-Grid--default--12 ">
+    
+    <div class="b1-header aem-GridColumn aem-GridColumn--default--12">
+
+
+<header class="b1-header__container">
+    <div class="b1-header__logo">
+        <a href="https://www.fortinet.com">
+            
+            <img class="desktop-logo" src="/content/dam/fortinet-blog/fortinet-logo-white.svg" alt="Root Cause Analysis of Windows Kernel UAF Vulnerability lead to CVE-2016-3310"/>
+            <img class="mobile-logo" src="/content/dam/fortinet-blog/fortinet-logo-white.svg" alt="Root Cause Analysis of Windows Kernel UAF Vulnerability lead to CVE-2016-3310"/>
+        </a>
+    </div>
+
+    <div class="b1-header__cta-list">
+      <a class="b1-header__cta-list-item " href="https://www.fortinet.com/blog">
+          <span>Blog</span>
+      </a>
+    </div>
+
+    <div class="b1-header__nav"><div class="b2-navigation">
+
+
+
+
+    <ul class="b2-navigation__list">
+        
+            <li class="b2-navigation-categories"><div class="b2-navigation__list-item nav-dropdown-title">Categories</div>
+                <ul class="navdropdown">
+                    
+                        <li>
+                            <a class="b2-navigation__dropdown__list-item" href="/blog/business-and-technology">
+                                <span>Business &amp; Technology </span>
+                            </a>
+                        </li>
+                    
+                
+                    
+                        <li>
+                            <a class="b2-navigation__dropdown__list-item" href="/blog/threat-research">
+                                <span>Threat Research</span>
+                            </a>
+                        </li>
+                    
+                
+                    
+                        <li>
+                            <a class="b2-navigation__dropdown__list-item" href="/blog/industry-trends">
+                                <span>Industry Trends</span>
+                            </a>
+                        </li>
+                    
+                
+                    
+                        <li>
+                            <a class="b2-navigation__dropdown__list-item" href="/blog/partners">
+                                <span>Partners</span>
+                            </a>
+                        </li>
+                    
+                
+                    
+                        <li>
+                            <a class="b2-navigation__dropdown__list-item" href="/blog/customer-stories">
+                                <span>Customer Stories</span>
+                            </a>
+                        </li>
+                    
+                
+                    
+                        <li>
+                            <a class="b2-navigation__dropdown__list-item" href="/blog/psirt-blogs">
+                                <span>PSIRT Blogs</span>
+                            </a>
+                        </li>
+                    
+                </ul>
+            </li>
+
+        
+            <li class="m-nav-item">
+                <a class="b2-navigation__list-item false" href="/blog/business-and-technology">
+                    <span>Business &amp; Technology </span>
+                </a>
+            </li>
+        
+            <li class="m-nav-item">
+                <a class="b2-navigation__list-item false" href="/blog/threat-research">
+                    <span>Threat Research</span>
+                </a>
+            </li>
+        
+            <li class="m-nav-item">
+                <a class="b2-navigation__list-item false" href="/blog/industry-trends">
+                    <span>Industry Trends</span>
+                </a>
+            </li>
+        
+            <li class="m-nav-item">
+                <a class="b2-navigation__list-item false" href="/blog/partners">
+                    <span>Partners</span>
+                </a>
+            </li>
+        
+            <li class="m-nav-item">
+                <a class="b2-navigation__list-item false" href="/blog/customer-stories">
+                    <span>Customer Stories</span>
+                </a>
+            </li>
+        
+            <li class="m-nav-item">
+                <a class="b2-navigation__list-item false" href="/blog/psirt-blogs">
+                    <span>PSIRT Blogs</span>
+                </a>
+            </li>
+        
+        
+        
+            <li>
+                <a class="b2-navigation__list-item false" href="/blog/ciso-collective">
+                    <span>CISO Collective</span>
+                </a>
+            </li>
+        
+    </ul>
+
+
+    
+
+</div>
+</div>
+
+    <div class="b1-header__search"><div class="b3-searchbox">
+
+
+<form class="b3-searchbox__form" action="/blog/search" method="get">
+    <input class="b3-searchbox__input" type="text" name="q" placeholder="Search Blogs"/>
+    <button class="b3-searchbox__icon" aria-label="Search" type="submit">
+        
+    <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+        <path d="M15.688 14.18l-4.075-4.075C12.36 9.06 12.8 7.78 12.8 6.4 12.8 2.87 9.93 0 6.4 0 2.87 0 0 2.87 0 6.4c0 3.53 2.87 6.4 6.4 6.4 1.38 0 2.66-.44 3.705-1.187l4.075 4.075c.207.208.48.312.753.312.274 0 .547-.104.755-.312.416-.417.416-1.093 0-1.51zM2.133 6.4c0-2.357 1.91-4.267 4.267-4.267s4.267 1.91 4.267 4.267-1.91 4.267-4.267 4.267S2.133 8.757 2.133 6.4z" fill="#fff">
+        </path>
+    </svg>
+
+    </button>
+</form>
+
+
+    
+
+</div>
+</div>
+
+    <div class="b1-header__search-toggle">
+        
+    <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+        <path d="M15.688 14.18l-4.075-4.075C12.36 9.06 12.8 7.78 12.8 6.4 12.8 2.87 9.93 0 6.4 0 2.87 0 0 2.87 0 6.4c0 3.53 2.87 6.4 6.4 6.4 1.38 0 2.66-.44 3.705-1.187l4.075 4.075c.207.208.48.312.753.312.274 0 .547-.104.755-.312.416-.417.416-1.093 0-1.51zM2.133 6.4c0-2.357 1.91-4.267 4.267-4.267s4.267 1.91 4.267 4.267-1.91 4.267-4.267 4.267S2.133 8.757 2.133 6.4z">
+        </path>
+    </svg>
+
+        <div class="b1-header__search-toggle-close">
+            <span class="b1-header__search-toggle-close-line"></span>
+            <span class="b1-header__search-toggle-close-line"></span>
+        </div>
+    </div>
+
+    <div class="b1-header__nav-toggle" aria-hidden="true">
+        <span class="b1-header__nav-toggle-line"></span>
+        <span class="b1-header__nav-toggle-line"></span>
+        <span class="b1-header__nav-toggle-line"></span>
+    </div>
+</header>
+
+    
+
+</div>
+<section class="b4-hero aem-GridColumn aem-GridColumn--default--12">
+
+
+
+<div class="b4-hero__container" style="background-image:url(/content/dam/fortinet-blog/article-images/individual-images/root-cause-analysis-of-windows-kernel-uaf-vulnerability.jpg);">
+    <img class="ratio" alt="Root Cause Analysis of Windows Kernel UAF Vulnerability lead to CVE-2016-3310" aria-hidden="true" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAQAAAAe/WZNAAAADklEQVR42mNkgAJGDAYAAFEABCaLYqoAAAAASUVORK5CYII="/>
+    <div class="b4-hero__text text-container">
+        <p data-ly-test class="b4-hero__kicker">Threat Research</p>
+        
+        
+        <h1 class="b4-hero__headline">Root Cause Analysis of Windows Kernel UAF Vulnerability lead to CVE-2016-3310</h1>
+        
+    </div>
+</div>
+</section>
+<section class="b15-blog-meta aem-GridColumn aem-GridColumn--default--12">
+
+<div class="b15-blog-meta__container text-container">
+    <span>By </span>
+
+    <span class="b15-blog-meta__author">
+
+        
+					
+
+                        
+
+                                  
+                                      
+                                            
+                                              <a href="/blog/search?author=Wayne+Chin+Yick+Low">Wayne Chin Yick Low</a>
+                                          
+                                          
+                                           
+                                      
+                                  
+                          
+                    
+        
+    </span>
+    <span class="b15-blog-meta__">
+        
+
+              </span>
+
+
+
+    <span class="b15-blog-meta__date"> | August 16, 2016</span>
+</div>
+</section>
+<div class="responsivegrid aem-GridColumn aem-GridColumn--default--12">
+
+
+<div class="aem-Grid aem-Grid--12 aem-Grid--default--12 ">
+    
+    <div class="raw-import aem-GridColumn aem-GridColumn--default--12">
+<div class="text-container"><style>
+@media (max-width: 767px)
+{
+#sblogs img
+{
+max-width: 100%;
+}
+#sblogs, li, p, pre code, pre
+	{
+		white-space: initial;
+		word-break: break-word;
+	}
+
+}
+@media (min-width: 768px)
+{
+#sblogs img
+{
+max-width: 100%;
+}
+}
+</style>
+
+
+<div id="sblogs">
+<p>In the first quarter of 2016, we realized that there were tons of windows kernel use-after-free (UAF) vulnerability patches in Microsoft bulletins where most of the vulnerabilities came from Google Project Zero, which is favourable to us because we can easily access those proof-of-concepts (POC). While doing a root cause analysis of one of the UAF vulnerabilities stated in CVE-2015-6100, we discovered that there is an alternative way to trigger the same UAF vulnerability, even after the specified patch has been applied due to weak security fixes. In this blog post, we will discuss the journey of unveiling CVE-2016-3310 as specified in <a href="https://technet.microsoft.com/library/security/MS16-098">MS16-098</a></p>
+
+<p>&nbsp;</p>
+
+<h3>Root cause analysis of CVE-2015-6100</h3>
+
+<p>Before we started analysing the POC, we first enabled special pool on the target machine using verifier.exe to could help us to identify the exact faulty code that triggered the UAF. After special pool was set accordingly, we easily spotted the UAF by running the POC (please note that this analysis was performed on a Windows 7 x86 platform):</p>
+
+<p>&nbsp;</p>
+
+<blockquote>
+<p>eax=000013ec ebx=90a20402 ecx=fb864da8 edx=000019c8 esi=fab18728 edi=00000000</p>
+
+<p>eip=90a30e64 esp=92cebcf8 ebp=92cebd08 iopl=0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; nv up ei ng nz na po nc</p>
+
+<p>cs=0008&nbsp; ss=0010&nbsp; ds=0023&nbsp; es=0023&nbsp; fs=0030&nbsp; gs=0000&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; efl=00010282</p>
+
+<p>win32k!DC::bMakeInfoDC+0xf5:</p>
+
+<p>90a30e64 394120&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; cmp&nbsp;&nbsp;&nbsp;&nbsp; dword ptr [ecx+20h],eax ds:0023:fb864dc8=????????</p>
+
+<p>Resetting default scope</p>
+
+<p>LAST_CONTROL_TRANSFER:&nbsp; from 82931ce7 to 828cd308</p>
+
+<p>STACK_TEXT:&nbsp;</p>
+
+<p>92ceb7d4 82931ce7 00000003 12cf79fe 00000065 nt!RtlpBreakWithStatusInstruction</p>
+
+<p>92ceb824 829327e5 00000003 00000000 000fb7f2 nt!KiBugCheckDebugBreak+0x1c</p>
+
+<p>92cebbe8 828e03c1 00000050 fb864dc8 00000000 nt!KeBugCheck2+0x68b</p>
+
+<p>92cebc6c 82892be8 00000000 fb864dc8 00000000 nt!MmAccessFault+0x104</p>
+
+<p>92cebc6c 90a30e64 00000000 fb864dc8 00000000 nt!KiTrap0E+0xdc</p>
+
+<p><strong>92cebd08 90a20427 00000000 0027fb98 fab18728 win32k!DC::bMakeInfoDC+0xf5</strong></p>
+
+<p>92cebd24 8288fa06 1d210408 00000000 0027fbc0 win32k!NtGdiMakeInfoDC+0x25</p>
+
+<p>92cebd24 76ec71b4 1d210408 00000000 0027fbc0 nt!KiSystemServicePostCall</p>
+
+<p>0027fb84 75376f81 75367e2b 1d210408 00000000 ntdll!KiFastSystemCallRet</p>
+
+<p>0027fb88 75367e2b 1d210408 00000000 00010000 GDI32!NtGdiMakeInfoDC+0xc</p>
+
+<p>0027fbc0 75357a04 1d210408 0027fc28 010272f4 GDI32!MFP_StartPage+0x84</p>
+
+<p>0027fbd8 00ff11e3 1d210408 000000f6 070c0ad7 GDI32!ExtFloodFill+0x93</p>
+</blockquote>
+
+<p>&nbsp;</p>
+
+<p align="center"><u>Listing 1: Faulty code that trigger use-after-free vulnerability</u></p>
+
+<p>After some back-tracing, the offending code was found at <em>win32k!DC::bMakeInfoDC</em>. We were then able to determine that the freed object is a surface object (also known as a bitmap object in user-mode context), which is located at the HDCOBJ+1F8. Next, we tried to find out the type of the freed object. Note that at this point we disabled the special pool in the following WinDBG output in order to find out the object type of the pointer stored at HDCOBJ+1F8:</p>
+
+<blockquote>
+<p>win32k!DC::bMakeInfoDC+0xd3:</p>
+
+<p>91440e42 8d8ef8010000&nbsp;&nbsp;&nbsp; lea&nbsp;&nbsp;&nbsp;&nbsp; ecx,[esi+1F8h]</p>
+
+<p>kd&gt; r</p>
+
+<p>eax=fe8b5ff0 ebx=91430402 ecx=00000030 edx=fe8bd170 esi=fe8b5728 edi=00000000</p>
+
+<p>eip=91440e42 esp=96e43cf8 ebp=96e43d08 iopl=0&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;nv up ei pl nz na pe nc</p>
+
+<p>cs=0008&nbsp; ss=0010&nbsp; ds=0023&nbsp; es=0023&nbsp; fs=0030&nbsp; gs=0000&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; efl=00000206</p>
+
+<p>win32k!DC::bMakeInfoDC+0xd3:</p>
+
+<p>91440e42 8d8ef8010000&nbsp;&nbsp;&nbsp; lea&nbsp;&nbsp;&nbsp;&nbsp; ecx,[esi+1F8h]</p>
+
+<p>kd&gt; .load pykd.pyd</p>
+
+<p>kd&gt; dc fe8b5728 l1</p>
+
+<p>fe8b5728&nbsp; 1a210433&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;3.!.</p>
+
+<p>kd&gt; !py E:\_Scripts\_PyKd\findGDIAddressByGDIHandle.py -v 0x1a210433</p>
+
+<p>PEB: 0x7ffde000</p>
+
+<p>TEB: 0x7ffdf000</p>
+
+<p>Process name: C:\Users\analyst\Desktop\cve-2015-6100-poc.exe</p>
+
+<p>GdiShareHandleTable (KM): 0xffffffffff810000</p>
+
+<p>GdiShareHandleTable (UM): 0x520000</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ======== Requested GDI object with handle (1a210433) ========</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; GDI_TABLE_ENTRY:</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; pKernelAddress: 0xfe8b5728</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; wProcessId: 0x988</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; wCount: 0x0</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; wUpper: 0x1a21</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&nbsp; wType: 0x4401 (DC)</p>
+
+<p>kd&gt; p</p>
+
+<p>win32k!DC::bMakeInfoDC+0xd9:</p>
+
+<p>91440e48 8911&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; mov &nbsp;&nbsp;&nbsp;&nbsp;dword ptr [ecx],edx</p>
+
+<p>kd&gt; p</p>
+
+<p>win32k!DC::bMakeInfoDC+0xdb:</p>
+
+<p>91440e4a 8bca&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; mov&nbsp;&nbsp;&nbsp;&nbsp; ecx,edx</p>
+
+<p>kd&gt; !pool fe8bd170</p>
+
+<p>Pool page fe8bd170 region is Paged session pool</p>
+
+<p>fe8bd000 is not a valid large pool allocation, checking large session pool...</p>
+
+<p>&nbsp;fe8bd158 size:&nbsp;&nbsp;&nbsp; 8 previous size:&nbsp;&nbsp;&nbsp; 0&nbsp; (Allocated)&nbsp; Frag</p>
+
+<p>&nbsp;fe8bd160 size:&nbsp;&nbsp;&nbsp; 8 previous size:&nbsp;&nbsp;&nbsp; 8&nbsp; (Free)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Free</p>
+
+<p>*fe8bd168 size:&nbsp; 260 previous size:&nbsp;&nbsp;&nbsp; 8&nbsp; (Allocated) *Gla5</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Pooltag Gla5 : GDITAG_HMGR_LOOKASIDE_SURF_TYPE, Binary : win32k.sys</p>
+
+<p>&nbsp;fe8bd3c8 size:&nbsp; 620 previous size:&nbsp; 260&nbsp; (Allocated)&nbsp; Gh14</p>
+
+<p>&nbsp;fe8bd9e8 size:&nbsp;&nbsp; 30 previous size:&nbsp; 620&nbsp; (Free)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Geto</p>
+
+<p>&nbsp;fe8bda18 size:&nbsp; 5e8 previous size:&nbsp;&nbsp; 30&nbsp; (Free )&nbsp; Ussc Process: 86527918</p>
+</blockquote>
+
+<p>&nbsp;</p>
+
+<p align="center"><u>Listing 2: Determine the freed object type</u></p>
+
+<p>One of the important questions that needed to be answered when it came to our vulnerability analysis is how did the UAF occur in the first place? If we look at the POC, we can see the <em>gdi32!NtGdiStartPage</em> call is wrapped around by a try-catch block. As commented by the POC, a user-mode exception occurs when the function <em>gdi32!NtGdiStartPage</em> is called. The following diagram depicts its call sequences:</p>
+
+<p><img alt="" src="/content/dam/fortinet-blog/new-images/uploads/root-cause-analysis-of-windows-kernel-uaf-vulnerability-lead-to-cve-2016-3310-1846.png" data-style="width: 650px; height: 239px;"/></p>
+
+<p align="center">&nbsp;</p>
+
+<p align="center"><u>Figure 1: Call-sequences lead to user-mode exception</u></p>
+
+<p>&nbsp;</p>
+
+<p>In a nutshell, when we looked at the code where the user-mode exception occurred, we were able to determine that the UAF happened due to an invalid GDI object handle being passed to <em>gdi32!NtGdiStartPage</em>. Our findings were confirmed when we discovered that the CVE-2015-6100 patch contains additional code validating the GDI object handle value on the affected GDI functions after diffing against win32k.sys binaries (See Figure 2). Based on the diffing result, we knew that some of the affected GDI functions that can lead to the same user-mode exception include:</p>
+
+<ul>
+	<li><em>win32k!NtGdiStartPage</em></li>
+	<li><em>win32k!NtGdiEndPage</em></li>
+	<li><em>win32k!GreStartDocInternal</em></li>
+	<li><em>win32k!bEndDocInternal</em></li>
+</ul>
+
+<p><!-- width="453" height="452" src="file://localhost/Users/John/Library/Caches/TemporaryItems/msoclip/0/clip_image003.png" /--></p>
+
+<p><img alt="" src="/content/dam/fortinet-blog/new-images/uploads/root-cause-analysis-of-windows-kernel-uaf-vulnerability-lead-to-cve-2016-3310-1847.png" data-style="width: 800px; height: 798px;"/></p>
+
+<p align="center"><u>Figure 2: Unpatched win32k.sys 6.1.7601.18985 (left) VS patched win32k.sys 6.1.7601.19054 (right)</u></p>
+
+<p>&nbsp;</p>
+
+<p><img alt="" src="/content/dam/fortinet-blog/new-images/uploads/root-cause-analysis-of-windows-kernel-uaf-vulnerability-lead-to-cve-2016-3310-1848.png" data-style="width: 800px; height: 465px;"/></p>
+
+<p align="center"><u>Figure 3: win32k!NtGdiStartPage epilog</u></p>
+
+<p>&nbsp;</p>
+
+<p>Our next question was &ldquo;when did the surface object pointed at HDCOBJ+1F8&rdquo; get freed? In the event of the crash being handled by POC, it would continue to execute and return to the caller of the user-mode callback function <em>user32!__ClientPrinterThunk</em>. As demonstrated by the code block in Figure 3, we can clearly show that if the user-mode callback function has failed to execute properly and returns NULL, it will proceed to the branch <em>loc_BF99F796</em> in an attempt to disable and then free the surface object. It is important to note that by disabling the surface object, it synonymously decreases the reference count of the target object stored at GDIOBJ+0x4, as seen in this example:</p>
+
+<p>&nbsp;</p>
+
+<p><img alt="" src="/content/dam/fortinet-blog/new-images/uploads/root-cause-analysis-of-windows-kernel-uaf-vulnerability-lead-to-cve-2016-3310-1849.png" data-style="width: 700px; height: 772px;"/></p>
+
+<p align="center"><u>Listing 3: Demonstrate the reference count and exclusive lock of a GDI object</u></p>
+
+<p>&nbsp;</p>
+
+<p>Some GDI objects can only be freed when the object reference count and its exclusive lock become NULL. This is exactly the routine carried out by <em>win32k!bEndDocInternal </em>upon returning from <em>win32k!UMPDDrvStartPage</em>. The following pseudo-code briefly illustrates the operations of <em>win32k!bEndDocInternal</em>:</p>
+
+<p>&nbsp;</p>
+
+<div>
+<p><img alt="" src="/content/dam/fortinet-blog/new-images/uploads/root-cause-analysis-of-windows-kernel-uaf-vulnerability-lead-to-cve-2016-3310-1850.png" data-style="width: 750px; height: 301px;"/></p>
+</div>
+
+<p align="center"><u>Listing 4: Pseudocode to show the operations of <em>win32k!bEndDocInternal</em></u></p>
+
+<p>In short, the code figure above instructs another user-mode callback function to disable the surface object through <em>win32k!UMPDDrvDisableSurface, </em>which eventually triggers the user-mode callback to free the target surface object, as can be seen in the following call-stack:</p>
+
+<p>&nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;</p>
+
+<blockquote>
+<p>&nbsp; &nbsp; &nbsp; &nbsp;a1377c50 915ed154 76050364 00000000 00000001 win32k!HmgRemoveObject+0x7c</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; a1377cf4 915ed000 00000000 00000000 0014d048 win32k!SURFACE::bDeleteSurface+0x143</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; a1377d08 915d7446 00000000 0014d048 fb1d8da8 win32k!SURFREF::bDeleteSurface+0x14</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; a1377d1c 916e3c8b 76050364 a1377d34 82892a06 win32k!bDeleteSurface+0x20</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; a1377d28 82892a06 76050364 0014d058 777871b4 win32k!NtGdiEngDeleteSurface+0x19</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; a1377d28 777871b4 76050364 0014d058 777871b4 nt!KiSystemServicePostCall</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 0014d038 779872a1 6d7ac504 76050364 00000000 ntdll!KiFastSystemCallRet</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 0014d03c 6d7ac504 76050364 00000000 76050364 GDI32!NtGdiEngDeleteSurface+0xc</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 0014d058 779519a2 002f2508 00000000 0014d8f4 mxdwdrv!DrvDisableSurface+0x6c</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 0014d08c 75a714bc 0014d8f4 0014d0a4 00000000 GDI32!GdiPrinterThunk+0x252</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 0014d8dc 777870ee 0014d8f4 00000018 0014d934 USER32!__ClientPrinterThunk+0x28</p>
+
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 0014d908 7778555c 777870b8 00000000 00000000 ntdll!KiUserCallbackDispatcher+0x2e</p>
+</blockquote>
+
+<p align="center">&nbsp;</p>
+
+<p align="center"><u>Listing 5: Call-stack when the surface object is freed upon calling <em>win32k!UMPDDrvDisableSurface</em></u></p>
+
+<p>In summary, we drew the following conclusion on how and when the UAF occurred:</p>
+
+<ul>
+	<li>When an invalid GDI object handle passed to GDI printing functions, it could cause user-mode code exception</li>
+	<li>If the exception was handled by the program, one could free and delete the surface object specified in the device context via <em>win32k!bEndDocInternal</em></li>
+	<li>Afterwards, any GDI printing function call that dereferences the freed surface object will also lead to a use-after-free vulnerability&nbsp;</li>
+</ul>
+
+<p><!-- width="454" height="113" src="file://localhost/Users/John/Library/Caches/TemporaryItems/msoclip/0/clip_image007.png" /--></p>
+
+<h3>Abusing user-mode callback leads to arbitrary free of GDI object &ndash; CVE-2016-3310</h3>
+
+<p>After some reverse-engineering, we discovered that one can free a surface object under a device context (DC) by calling either one of the following win32k GDI functions:</p>
+
+<ol>
+	<li><em>win32k!NtGdiAbortDoc</em></li>
+	<li><em>win32k!NtGdiEndDoc</em></li>
+	<li><em>win32k!NtGdiStartPage</em></li>
+</ol>
+
+<p>To recap, the surface object is freed under <em>win32k!NtGdiStartPage</em> upon failing to execute the user-mode callback routine because of the access violation triggered in <em>user32!__ClientPrinterThunk</em> when an invalid printer DC was passed to the function. If the exception is caught by the program, then the UAFvulnerability can be triggered.</p>
+
+<p>In the response from MSRC, the affected GDI functions were patched in such a way that the input DC handle is now being validated, and only printer DC is allowed to execute the identified routines. This seemed to be an easy and straight forward fix to prevent the surface object from being freed on demand. However there is alternative way to free the surface object.</p>
+
+<p>It&rsquo;s worth mentioning here that every surface object stores a reference count and exclusive lock in order to prevent the object from being freed a user mode API call, like the <em>gdi32!DeleteObject</em> function. However, one can first disable the surface object and then free the surface object using user-mode API <em>gdi32!DeleteObject</em>. While there didn&rsquo;t seem to be any apparent way to disable the surface object, we discovered that we could take advantage of one of the GDI functions highlighted in Figure 4 that would eventually call <em>win32k!PDEVOBJ::vDisableSurface</em> to disable the target surface object.</p>
+
+<p><img alt="" src="/content/dam/fortinet-blog/new-images/uploads/root-cause-analysis-of-windows-kernel-uaf-vulnerability-lead-to-cve-2016-3310-1851.png" data-style="width: 700px; height: 105px;"/></p>
+
+<p align="center"><u>Figure 4: Xrefs of <em>win32k!bEndDocInternal</em></u></p>
+
+<p>Either <em>win32k!NtGdiAbortDoc</em> or <em>win32k!NtGdiEndDoc </em>appeared to be a good candidate for us. However, there are some requirements that need to be met in order to properly lead us to the code path that will execute the <em>win32k!PDEVOBJ::vDisableSurface </em>function:</p>
+
+<ol data-style="list-style-type:lower-roman;">
+	<li>Printer DC is needed</li>
+	<li>The surface object pointer at HDC+1F8 cannot be NULL; it will be scrutinized in <em>win32k!XDCOBJ::bValidSurf</em></li>
+</ol>
+
+<p>The first requirement can be easily achieved by creating a printer DC using &ldquo;winspool&rdquo; as a driver name in the <em>CreateDC</em> function. After further reverse-engineering to better understand the highlighted function in Listing 1, we realized that it plays a crucial role that could greatly help us achieve our second objective. In general, the steps can be summarized as follows:</p>
+
+<ol>
+	<li>Get a printer DC and then start the print job.</li>
+	<li>Call <em>win32k!NtGdiMakeInfoDC </em>to store the surface object pointer at HDC+0x8C8 to HDC+0x1F8</li>
+	<li>Hook <em>user32!__ClientPrinterThunk</em>. The hook handler will be triggered when <em>win32k!NtGdiEndDoc </em>is executed, and it then executes the <em>win32k!NtGdiMakeInfoDC</em> function to restore the surface object pointer from HDC+0x1F8 to HDC+0x8C8.</li>
+	<li>At the epilogue of <em>win32k!bEndDocInternal</em>, the surface object reference count will then be disabled by decreasing the reference count to 0.</li>
+	<li>From our controlled program, we were now able to free the disabled surface object simply by calling the <em>gdi32!DeleteObject</em> API function.</li>
+</ol>
+
+<p>Here is the result:</p>
+
+<blockquote>
+<p>STACK_COMMAND:&nbsp; kb</p>
+
+<p>FOLLOWUP_IP:</p>
+
+<p>win32k!DC::bMakeInfoDC+f5</p>
+
+<p>945d2889 394120&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; cmp&nbsp;&nbsp;&nbsp;&nbsp; dword ptr [ecx+20h],eax</p>
+
+<p>SYMBOL_STACK_INDEX:&nbsp; 5</p>
+
+<p>SYMBOL_NAME:&nbsp; win32k!DC::bMakeInfoDC+f5</p>
+
+<p>FOLLOWUP_NAME:&nbsp; MachineOwner</p>
+
+<p>IMAGE_VERSION:&nbsp; 6.1.7601.23452</p>
+
+<p>FAILURE_BUCKET_ID:&nbsp; 0xD5_VRF_win32k!DC::bMakeInfoDC+f5</p>
+
+<p>BUCKET_ID:&nbsp; 0xD5_VRF_win32k!DC::bMakeInfoDC+f5</p>
+
+<p>ANALYSIS_SOURCE:&nbsp; KM</p>
+
+<p>FAILURE_ID_HASH_STRING:&nbsp; km:0xd5_vrf_win32k!dc::bmakeinfodc+f5</p>
+
+<p>FAILURE_ID_HASH:&nbsp; {0a3b4edd-f3e1-fb09-5501-23e8947579df}</p>
+
+<p>Followup: MachineOwner</p>
+
+<p>---------</p>
+
+<p>kd&gt; lmvm win32k.sys</p>
+
+<p>start&nbsp;&nbsp;&nbsp; end&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; module name</p>
+
+<p>kd&gt; lmvm win32k.</p>
+
+<p>start&nbsp;&nbsp;&nbsp; end&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; module name</p>
+
+<p>kd&gt; lmvm win32k</p>
+
+<p>start&nbsp;&nbsp;&nbsp; end&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; module name</p>
+
+<p>94400000 9465d000&nbsp;&nbsp; win32k&nbsp;&nbsp;&nbsp;&nbsp; (pdb symbols)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; e:\symbols\win32k.pdb\3B7E088E7D3E4382B161AA168A7C93872\win32k.pdb</p>
+
+<p>&nbsp;&nbsp;&nbsp; Loaded symbol image file: win32k.sys</p>
+
+<p>&nbsp;&nbsp;&nbsp; Image path: \SystemRoot\System32\win32k.sys</p>
+
+<p>&nbsp;&nbsp;&nbsp; Image name: win32k.sys</p>
+
+<p>&nbsp;&nbsp;&nbsp; Timestamp:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Thu May 12 22:54:44 2016 (57349934)</p>
+
+<p>&nbsp;&nbsp;&nbsp; CheckSum:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 002502B1</p>
+
+<p>&nbsp;&nbsp;&nbsp; ImageSize:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 0025D000</p>
+
+<p>&nbsp;&nbsp;&nbsp; File version:&nbsp;&nbsp;&nbsp;&nbsp; 6.1.7601.23452</p>
+
+<p>&nbsp;&nbsp;&nbsp; Product version:&nbsp; 6.1.7601.23452</p>
+
+<p>&nbsp;&nbsp;&nbsp; File flags:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 0 (Mask 3F)</p>
+
+<p>&nbsp;&nbsp;&nbsp; File OS:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 40004 NT Win32</p>
+
+<p>&nbsp;&nbsp;&nbsp; File type:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 3.7 Driver</p>
+
+<p>&nbsp;&nbsp;&nbsp; File date:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 00000000.00000000</p>
+
+<p>&nbsp;&nbsp;&nbsp; Translations:&nbsp;&nbsp;&nbsp;&nbsp; 0409.04b0</p>
+
+<p>&nbsp;&nbsp;&nbsp; CompanyName:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Microsoft Corporation</p>
+
+<p>&nbsp;&nbsp;&nbsp; ProductName:&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Microsoft&reg; Windows&reg; Operating System</p>
+
+<p>&nbsp;&nbsp;&nbsp; InternalName:&nbsp;&nbsp;&nbsp;&nbsp; win32k.sys</p>
+
+<p>&nbsp;&nbsp;&nbsp; OriginalFilename: win32k.sys</p>
+
+<p>&nbsp;&nbsp;&nbsp; ProductVersion:&nbsp;&nbsp; 6.1.7601.23452</p>
+
+<p>&nbsp;&nbsp;&nbsp; FileVersion:&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;6.1.7601.23452 (win7sp1_ldr.160512-0600)</p>
+
+<p>&nbsp;&nbsp;&nbsp; FileDescription:&nbsp; Multi-User Win32 Driver</p>
+
+<p>&nbsp;&nbsp;&nbsp; LegalCopyright:&nbsp;&nbsp; &copy; Microsoft Corporation. All rights reserved.&nbsp;&nbsp;&nbsp;&nbsp;</p>
+</blockquote>
+
+<p>In summary, the use-after-free (UAF) vulnerability in CVE-2016-3310 is somewhat related to the previously patched CVE-2015-6100 &nbsp;vulnerability, which is a low-hanging fruit opportunity that can be spotted by understanding the root cause of the original vulnerability through manual analysis, binary diffing, and code auditing. However, engineering bug-free software, especially for robust software, remains highly challenging, so we should not point the finger at any software vendors who puts software security as their first priority. At Fortinet, weactively participate in coordinated vulnerability disclosures with major software vendors to proactively protect end-users.</p>
+
+<p>Signing off</p>
+
+<p>-= FortiGuard Lion Team =-</p>
+
+<p>&nbsp;</p>
+
+<p><!--![endif]----></p>
+
+
+</div></div>
+</div>
+
+    
+</div>
+</div>
+<div class="b16-blog-tags aem-GridColumn aem-GridColumn--default--12">
+
+
+
+  <div class="b16-blog-tags__container text-container">
+    <span class="b16-blog-tags__headline">Tags:</span>
+    <p class="b16-blog-tags__tag-links">
+      <a href="https://www.fortinet.com/blog/tags-search.html?tag=security-research">security research</a>
+    </p>
+  </div>
+
+</div>
+<section class="b12-related aem-GridColumn aem-GridColumn--default--12">
+
+
+
+
+<div class="b12-related__container text-container">
+    
+
+    
+    
+    <h3>Related Posts</h3>
+    <div class="b12-related__posts">
+        
+        <a href="/content/fortinet-blog/us/en/threat-research/android-malware-masquerades-as-banking-app-part-ii.html" class="b12-related__post b12-related__post-0">
+            <div class="b12-related__image" style="background-image:url(/content/dam/fortinet-blog/article-images/individual-images/android-malware-masquerades-as-banking-app-part-2.jpg.thumb.319.319.png);">
+                <img class="ratio" alt="Android Malware Masquerades as Banking App, Part II" aria-hidden="true" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAQAAAAe/WZNAAAADklEQVR42mNkgAJGDAYAAFEABCaLYqoAAAAASUVORK5CYII="/>
+            </div>
+
+            <div class="b12-related__text">
+                <p class="b12-related__category">
+                    Threat Research
+                </p>
+                <h5 class="b12-related__title">Android Malware Masquerades as Banking App, Part II</h5>
+            </div>
+        </a>
+    
+    
+        
+        <a href="/content/fortinet-blog/us/en/threat-research/defending-against-the-new-vpnfilter-botnet.html" class="b12-related__post b12-related__post-1">
+            <div class="b12-related__image" style="background-image:url(/content/dam/fortinet-blog/article-images/defending_against_the_new_vpnfilter_botnet/cta_research_thumbnail.png.thumb.319.319.png);">
+                <img class="ratio" alt="Defending Against the New VPNFilter Botnet" aria-hidden="true" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAQAAAAe/WZNAAAADklEQVR42mNkgAJGDAYAAFEABCaLYqoAAAAASUVORK5CYII="/>
+            </div>
+
+            <div class="b12-related__text">
+                <p class="b12-related__category">
+                    Threat Research
+                </p>
+                <h5 class="b12-related__title">Defending Against the New VPNFilter Botnet</h5>
+            </div>
+        </a>
+    
+    
+        
+        <a href="/content/fortinet-blog/us/en/threat-research/new-jrat-adwind-variant-being-spread-with-package-delivery-scam.html" class="b12-related__post b12-related__post-2">
+            <div class="b12-related__image" style="background-image:url(/content/dam/fortinet-blog/article-images/new-jrat-adwind-variant-being-spread-with-package-delivery-scam/jrat_fig_1.png.thumb.319.319.png);">
+                <img class="ratio" alt="New jRAT/Adwind Variant Being Spread With Package Delivery Scam" aria-hidden="true" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAQAAAAe/WZNAAAADklEQVR42mNkgAJGDAYAAFEABCaLYqoAAAAASUVORK5CYII="/>
+            </div>
+
+            <div class="b12-related__text">
+                <p class="b12-related__category">
+                    Threat Research
+                </p>
+                <h5 class="b12-related__title">New jRAT/Adwind Variant Being Spread With Package Delivery Scam</h5>
+            </div>
+        </a>
+    
+    </div>
+</div>
+
+
+</section>
+<div class="b13-comment-section aem-GridColumn aem-GridColumn--default--12">
+
+
+<div class="b13-comment-section__container text-container">
+
+
+  <!--data-sly-test="true - got replaced with false to disable the discussion event-->
+  
+</div>
+</div>
+<div class="b6-footer aem-GridColumn aem-GridColumn--default--12">
+
+
+  
+
+  <div class="b6-footer__container text-container">
+    <div class="b6-footer__footer-info">
+      <div class="b6-footer__logo">
+        <a href="https://www.fortinet.com" target="_blank">
+          <img src="/content/dam/fortinet-blog/fortinet-logo-white.svg" alt="Fortinet"/>
+        </a>
+      </div>
+      <div class="b6-footer__social-footer">
+        <ul>
+          
+            <li class="social-icon facebook">
+              <a href="https://www.facebook.com/fortinet" target="_blank">
+                
+    <svg viewBox="0 0 9 18" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8.934.758v3.385H7.24c-.583 0-.845.685-.845 1.27v2.114h2.54v3.385h-2.54v6.77H3.01v-6.77H.472V7.527H3.01V4.143c0-1.87 1.516-3.385 3.385-3.385h2.54z" fill-opacity=".8" fill="#fff" fill-rule="evenodd"></path>
+    </svg>
+
+              </a>
+            </li>
+          
+            <li class="social-icon twitter">
+              <a href="https://www.twitter.com/fortinet" target="_blank">
+                
+    <svg viewBox="0 0 19 15" xmlns="http://www.w3.org/2000/svg">
+        <path d="M18.17 2.296c-.652.296-1.354.49-2.082.584.745-.448 1.32-1.16 1.59-2.014-.702.423-1.48.72-2.3.89-.67-.73-1.61-1.152-2.675-1.152-1.988 0-3.613 1.625-3.613 3.63 0 .288.034.567.093.83-3.012-.153-5.694-1.6-7.48-3.792-.313.534-.49 1.16-.49 1.82 0 1.26.634 2.377 1.616 3.012-.61 0-1.16-.17-1.65-.423v.03c0 1.76 1.25 3.237 2.91 3.567-.31.084-.63.127-.96.127-.23 0-.46-.026-.68-.07.455 1.43 1.784 2.497 3.383 2.52-1.235.984-2.8 1.56-4.51 1.56-.288 0-.575-.018-.863-.05 1.61 1.03 3.52 1.632 5.57 1.632 6.667 0 10.33-5.534 10.33-10.332 0-.16 0-.313-.007-.474.71-.508 1.32-1.15 1.81-1.888z" fill-opacity=".8" fill="#fff" fill-rule="evenodd"></path>
+    </svg>
+
+              </a>
+            </li>
+          
+            <li class="social-icon youtube">
+              <a href="https://www.youtube.com/user/SecureNetworks" target="_blank">
+                
+    <svg viewBox="0 0 18 14" xmlns="http://www.w3.org/2000/svg">
+        <path d="M7.472 11.027V3.412L12.55 7.22l-5.08 3.806zM15.934.787C15.426.62 12.294.45 9.164.45c-3.13 0-6.26.16-6.77.322-1.32.44-1.69 3.4-1.69 6.447 0 3.03.37 6 1.69 6.43.51.17 3.64.33 6.77.33 3.13 0 6.262-.16 6.77-.33 1.32-.43 1.692-3.4 1.692-6.44 0-3.047-.372-6-1.692-6.43z" fill-opacity=".8" fill="#fff" fill-rule="evenodd"></path>
+    </svg>
+
+              </a>
+            </li>
+          
+            <li class="social-icon linkedin">
+              <a href="https://www.linkedin.com/company/fortinet" target="_blank">
+                
+    <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+        <path d="M15.934 15.835H12.55v-5.712c0-.897-1.008-1.64-1.905-1.64s-1.48.743-1.48 1.64v5.712H5.78V5.68h3.385v1.693c.558-.905 1.996-1.49 2.96-1.49 2.116 0 3.81 1.727 3.81 3.817v6.135zm-11.846 0H.703V5.68h3.385v10.155zM2.395.605c.935 0 1.693.757 1.693 1.69 0 .936-.758 1.694-1.693 1.694S.703 3.23.703 2.29C.703 1.36 1.46.6 2.395.6z" fill-opacity=".8" fill="#fff" fill-rule="evenodd"></path>
+    </svg>
+
+              </a>
+            </li>
+          
+            <li class="social-icon instagram">
+              <a href="https://www.instagram.com/behindthefirewall/" target="_blank">
+                
+    <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <path class="st0" d="M16,3.7c4,0,4.5,0,6.1,0.1c1.5,0.1,2.3,0.3,2.8,0.5c0.7,0.3,1.2,0.6,1.7,1.1c0.5,0.5,0.8,1,1.1,1.7
+          c0.2,0.5,0.4,1.3,0.5,2.8c0.1,1.6,0.1,2.1,0.1,6.1s0,4.5-0.1,6.1c-0.1,1.5-0.3,2.3-0.5,2.8c-0.3,0.7-0.6,1.2-1.1,1.7
+          c-0.5,0.5-1,0.8-1.7,1.1c-0.5,0.2-1.3,0.4-2.8,0.5c-1.6,0.1-2.1,0.1-6.1,0.1s-4.5,0-6.1-0.1c-1.5-0.1-2.3-0.3-2.8-0.5
+          c-0.7-0.3-1.2-0.6-1.7-1.1c-0.5-0.5-0.8-1-1.1-1.7c-0.2-0.5-0.4-1.3-0.5-2.8C3.7,20.5,3.7,20,3.7,16s0-4.5,0.1-6.1
+          c0.1-1.5,0.3-2.3,0.5-2.8C4.6,6.5,4.9,6,5.4,5.4c0.5-0.5,1-0.8,1.7-1.1c0.5-0.2,1.3-0.4,2.8-0.5C11.5,3.7,12,3.7,16,3.7 M16,1
+          c-4.1,0-4.6,0-6.2,0.1C8.2,1.2,7.1,1.4,6.2,1.8c-1,0.4-1.8,0.9-2.7,1.7C2.7,4.4,2.2,5.2,1.8,6.2c-0.4,1-0.6,2-0.7,3.6
+          C1,11.4,1,11.9,1,16c0,4.1,0,4.6,0.1,6.2c0.1,1.6,0.3,2.7,0.7,3.6c0.4,1,0.9,1.8,1.7,2.7c0.8,0.8,1.7,1.3,2.7,1.7
+          c1,0.4,2,0.6,3.6,0.7C11.4,31,11.9,31,16,31s4.6,0,6.2-0.1c1.6-0.1,2.7-0.3,3.6-0.7c1-0.4,1.8-0.9,2.7-1.7c0.8-0.8,1.3-1.7,1.7-2.7
+          c0.4-1,0.6-2,0.7-3.6C31,20.6,31,20.1,31,16s0-4.6-0.1-6.2c-0.1-1.6-0.3-2.7-0.7-3.6c-0.4-1-0.9-1.8-1.7-2.7
+          c-0.8-0.8-1.7-1.3-2.7-1.7c-1-0.4-2-0.6-3.6-0.7C20.6,1,20.1,1,16,1L16,1z" fill-opacity=".8" fill="#fff" fill-rule="evenodd"></path>
+        <path class="st0" d="M16,8.3c-4.3,0-7.7,3.4-7.7,7.7s3.4,7.7,7.7,7.7s7.7-3.4,7.7-7.7S20.3,8.3,16,8.3z M16,21c-2.8,0-5-2.2-5-5
+          s2.2-5,5-5s5,2.2,5,5S18.8,21,16,21z" fill-opacity=".8" fill="#fff" fill-rule="evenodd"></path>
+        <circle class="st0" cx="24" cy="8" r="1.8" fill-opacity=".8" fill="#fff" fill-rule="evenodd"></circle>
+    </svg>
+
+              </a>
+            </li>
+          
+            <li class="social-icon rss">
+              <a href="https://www.fortinet.com/rss-feeds.html" target="_blank">
+                
+    <svg viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3.072 17.68c-1.27 0-2.37-1.1-2.37-2.368 0-1.27 1.1-2.37 2.37-2.37s2.37 1.1 2.37 2.37-1.016 2.37-2.37 2.37zM.702.76v2.538c7.955 0 14.386 6.43 14.386 14.385h2.538C17.626 8.336 10.05.76.703.76zm0 5.162V8.46c5.078 0 9.224 4.146 9.224 9.223h2.54c0-6.514-5.248-11.76-11.763-11.76z" fill-opacity=".8" fill="#fff" fill-rule="evenodd"></path>
+    </svg>
+
+              </a>
+            </li>
+          
+        </ul>
+      </div>
+    </div>
+    <div class="b6-footer__footer-links">
+      
+        <div class="b6-footer__footer-links-column">
+          <h4 class="b6-footer__header">News &amp; Articles</h4>
+          <ul>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/newsroom/press-releases.html" target="_self">News Releases</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/newsroom/news.html" target="_blank">News Articles</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/contact-us/fortinet-trademark-guidelines.html" target="_self">Trademarks</a>
+              </li>
+            
+          </ul>
+        </div>
+      
+        <div class="b6-footer__footer-links-column">
+          <h4 class="b6-footer__header">Security Research</h4>
+          <ul>
+            
+              <li>
+                <a href="https://www.fortinet.com/fortiguard/threat-intelligence/threat-research.html" target="_self">Threat Research</a>
+              </li>
+            
+              <li>
+                <a href="https://fortiguard.com/" target="_self">FortiGuard Labs</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/fortiguard/threat-intelligence/threat-map.html" target="_self">Threat Map</a>
+              </li>
+            
+              <li>
+                <a href="https://secure.fortinet.com/fortiguard" target="_blank">Threat Briefs</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/solutions/ransomware.html" target="_self">Ransomware</a>
+              </li>
+            
+          </ul>
+        </div>
+      
+        <div class="b6-footer__footer-links-column">
+          <h4 class="b6-footer__header">Connect With Us</h4>
+          <ul>
+            
+              <li>
+                <a href="/content/fortinet-blog/us/en" target="_self">Blog</a>
+              </li>
+            
+              <li>
+                <a href="https://fusecommunity.fortinet.com" target="_self">Fuse Community</a>
+              </li>
+            
+          </ul>
+        </div>
+      
+        <div class="b6-footer__footer-links-column">
+          <h4 class="b6-footer__header">Company</h4>
+          <ul>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/about-us.html" target="_blank">About Us</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/why-fortinet.html" target="_blank">Why Fortinet</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/security-fabric.html" target="_self">Security Fabric</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/executive-management.html" target="_self">Exec Mgmt</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/careers.html" target="_self">Careers</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/product-certifications.html" target="_self">Certifications</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/events.html" target="_self">Events</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/industry-awards.html" target="_self">Industry Awards</a>
+              </li>
+            
+          </ul>
+        </div>
+      
+      <div class="b6-footer__contact-info">
+        <h4 class="b6-footer__header">Contact Us</h4>
+        <ul>
+          <li>(866) 868-3678</li>
+        </ul>
+      </div>
+    </div>
+    <div class="b6-footer__copyright">
+      <div class="b6-footer__copyright-info">
+        <p class="b6-footer__copyright-text">Copyright © 2021 Fortinet, Inc. All Rights Reserved</p>
+        
+          <a class="b6-footer__copyright-link" href="https://www.fortinet.com/corporate/about-us/legal.html" target="_blank">Terms of Services</a>
+        
+          <a class="b6-footer__copyright-link" href="https://www.fortinet.com/corporate/about-us/privacy.html" target="_blank">Privacy Policy</a>
+        
+        <span class="ot-ftnt-cookie-settings"> | <a href="#" onclick="Optanon.ToggleInfoDisplay()">Cookie Settings</a></span>
+      </div>
+    </div>
+  </div>
+
+<!-- Launch COnfiguration -->
+
+
+<!-- END Launch COnfiguration --></div>
+
+    
+</div>
+</div>
+
+
+
+    
+    
+
+    
+    
+<script type="text/javascript" src="/etc.clientlibs/fortinet-blog/clientlibs/clientlib-base.min.js"></script>
+
+
+
+
+
+    
+
+
+
+
+</body>
+</html>

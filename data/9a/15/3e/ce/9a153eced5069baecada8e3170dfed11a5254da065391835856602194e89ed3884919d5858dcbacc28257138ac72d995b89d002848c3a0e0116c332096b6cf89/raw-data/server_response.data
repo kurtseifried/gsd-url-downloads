@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <title>Bleichenbacher&#x27;06 signature forgery in python-rsa</title>
+
+    <meta name="HandheldFriendly" content="True" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="shortcut icon" href="/favicon.ico">
+
+    <link rel="stylesheet" type="text/css" href="/assets/css/screen.css?v=7f0b6d17f9" />
+    <link rel="stylesheet" type="text/css" href="/assets/fonts/fonts.css?v=7f0b6d17f9" />
+
+    <link rel="canonical" href="https://blog.filippo.io/bleichenbacher-06-signature-forgery-in-python-rsa/" />
+    <meta name="referrer" content="no-referrer-when-downgrade" />
+    
+    <meta property="og:site_name" content="Filippo.io" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Bleichenbacher&#x27;06 signature forgery in python-rsa" />
+    <meta property="og:description" content="While looking at the source of python-rsa (&amp;gt;100K daily downloads) I found it vulnerable to a straightforward variant of the Bleichenbacher&#x27;06 attack against RSA signature verification with low public exponent.  The bug allows us to forge signatures for arbitrary messages, as long as the public key has a low" />
+    <meta property="og:url" content="https://blog.filippo.io/bleichenbacher-06-signature-forgery-in-python-rsa/" />
+    <meta property="article:published_time" content="2016-01-05T00:21:08.000Z" />
+    <meta property="article:modified_time" content="2016-05-13T18:03:33.000Z" />
+    <meta property="article:tag" content="Crypto" />
+    <meta property="article:tag" content="Mainline" />
+    
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Bleichenbacher&#x27;06 signature forgery in python-rsa" />
+    <meta name="twitter:description" content="While looking at the source of python-rsa (&amp;gt;100K daily downloads) I found it vulnerable to a straightforward variant of the Bleichenbacher&#x27;06 attack against RSA signature verification with low public exponent.  The bug allows us to forge signatures for arbitrary messages, as long as the public key has a low" />
+    <meta name="twitter:url" content="https://blog.filippo.io/bleichenbacher-06-signature-forgery-in-python-rsa/" />
+    <meta name="twitter:label1" content="Written by" />
+    <meta name="twitter:data1" content="Filippo Valsorda" />
+    <meta name="twitter:label2" content="Filed under" />
+    <meta name="twitter:data2" content="Crypto, Mainline" />
+    
+    <script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "publisher": {
+        "@type": "Organization",
+        "name": "Filippo.io",
+        "url": "https://blog.filippo.io/",
+        "logo": {
+            "@type": "ImageObject",
+            "url": "https://blog.filippo.io/favicon.ico",
+            "width": 48,
+            "height": 48
+        }
+    },
+    "author": {
+        "@type": "Person",
+        "name": "Filippo Valsorda",
+        "url": "https://blog.filippo.io/author/filippo/",
+        "sameAs": []
+    },
+    "headline": "Bleichenbacher&#x27;06 signature forgery in python-rsa",
+    "url": "https://blog.filippo.io/bleichenbacher-06-signature-forgery-in-python-rsa/",
+    "datePublished": "2016-01-05T00:21:08.000Z",
+    "dateModified": "2016-05-13T18:03:33.000Z",
+    "keywords": "Crypto, Mainline",
+    "description": "While looking at the source of python-rsa\n[https://bitbucket.org/sybren/python-rsa] (&gt;100K daily downloads\n[https://pypi.python.org/pypi/rsa]) I found it vulnerable to a straightforward\nvariant of the Bleichenbacher&#x27;06 attack\n[https://www.ietf.org/mail-archive/web/openpgp/current/msg00999.html] against\nRSA signature verification with low public exponent.\n\nThe bug allows us to forge signatures for arbitrary messages, as long as the\npublic key has a low exponent (e), like 3. Thankfully keys genera",
+    "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "https://blog.filippo.io/"
+    }
+}
+    </script>
+
+    <meta name="generator" content="Ghost 3.42" />
+    <link rel="alternate" type="application/rss+xml" title="Filippo.io" href="https://blog.filippo.io/rss/" />
+</head>
+
+<body class="post-template tag-crypto tag-mainline">
+
+    
+
+<main class="content" role="main">
+
+    <article class="post tag-crypto tag-mainline no-image">
+
+        <header class="post-header">
+            <a class="blog-logo" href="/">
+                <span class="blog-title">Filippo.io</span>
+            </a>
+        </header>
+
+
+        <span class="post-meta"><a href="/author/filippo/">Filippo Valsorda</a>, <time
+                datetime="2016-01-04">04 Jan 2016</time>
+            on <a href="/tag/crypto/">Crypto</a> | <a href="/tag/mainline/">Mainline</a></span>
+
+        <h1 class="post-title">Bleichenbacher&#x27;06 signature forgery in python-rsa</h1>
+
+        <section class="post-content">
+            <!--kg-card-begin: markdown--><p>While looking at the source of <a href="https://bitbucket.org/sybren/python-rsa">python-rsa</a> (<a href="https://pypi.python.org/pypi/rsa">&gt;100K daily downloads</a>) I found it vulnerable to a straightforward variant of the <strong><a href="https://www.ietf.org/mail-archive/web/openpgp/current/msg00999.html">Bleichenbacher'06 attack</a></strong> against RSA signature verification with low public exponent.</p>
+<p>The bug allows us to forge signatures for arbitrary messages, as long as the public key has a low exponent (<code>e</code>), like 3. Thankfully keys generated with python-rsa have <code>e=65537</code> hardcoded, but the library offers a lot of options to import existing keys, which might very well have <code>e=3</code>.</p>
+<p><strong>Update</strong>: the issue was assigned <a href="https://web.nvd.nist.gov/view/vuln/detail?vulnId=CVE-2016-1494">CVE-2016-1494</a>.</p>
+<p>I'm taking the occasion to explain the background and details of the attack, which happens to be one of my favorites because of its simplicity. If you already know about it or are just interested in the 'sploit, skip the next section.</p>
+<h2 id="bleichenbacher06">Bleichenbacher'06</h2>
+<p>RSA is just math. When you generate a keypair you get three numbers, <code>N</code>, <code>e</code> and <code>d</code>. The cool thing is that if you take a number <code>m</code> and elevate it to both <code>e</code> and <code>d</code> modulus <code>N</code>, you get back <code>m</code>. If you keep <code>d</code> secret and publish <code>e</code> and <code>N</code>, it's extremely difficult for an attacker to do <code>d</code>'s job (because root and logarithm are hard in modular arithmetics).</p>
+<p>To use RSA as a public key encryption primitive, you give out <code>(N, e)</code>, Alice sends you <code>m ^ e mod N</code>, and you decrypt performing <code>(m ^ e) ^ d = m mod N</code>. Signing is the other way around: to sign a message you generate <code>m ^ d mod N</code>, and the recipient uses <code>(N, e)</code> to perform <code>(m ^ d) ^ e = m mod N</code>. Only you, having <code>d</code>, can create a signature (<code>m ^ d mod N</code>) that elevated to <code>e</code> mod <code>N</code> gives exactly <code>m</code>.</p>
+<p>You might have noticed that <code>m</code> is not a real arbitrary message, but actually a number, that needs to be smaller than <code>N</code>. So to encrypt arbitrary messages we usually encrypt a symmetric (like, AES) key, and to sign arbitrary messages we sign the hash (like, SHA2) of the message. Both are short enough to be converted to a number lower than <code>N</code>.</p>
+<p>The most widely used scheme for RSA signing until ~10 years ago (and sadly still prevalent in legacy-ridden protocols like TLS and DNSSEC) is <a href="https://tools.ietf.org/html/rfc3447#section-8.2.2">PKCS#1 1.5</a>. PKCS#1 1.5 signing works like this: you take the hash of the message you want to sign, and then you encode it like this</p>
+<pre><code class="language-no-highlight">00 01 FF FF ... FF FF 00 ASN.1 HASH
+</code></pre>
+<p>where <code>ASN.1</code> is a very complex binary encoding of the hash type and length. And then you sign that encoding with RSA. <code>FF</code> bytes provide padding to make the message exactly as long as the modulus <code>N</code>.</p>
+<p>The intuition behind the BB'06 attack is that while it's impossible (without <code>d</code>) to find a number that elevated to <code>e</code> gives <em>exactly</em> the encoding above, we can get to an approximation, for example by taking the e-th root of the target message. If e is small enough, the approximation might be good enough to get a message like</p>
+<pre><code class="language-no-highlight">00 01 FF 00 ASN.1 HASH GARBAGE
+</code></pre>
+<p>If the verification function fails to check that the hash is aligned at the end of the message (i.e. that there are enough <code>FF</code> bytes), we can then forge signatures that will work with any public key using a certain small <code>e</code>. As you can see, <code>N</code> becomes completely irrelevant because exponentiation by <code>e</code> never wraps past the modulus. It helps that the second most used value for <code>e</code> (which is picked arbitrarily during key generation) is 3. <code>=)</code></p>
+<p>Bleichenbacher, while presenting the attack at the rump session of CRYPTO'06, provided a &quot;pen and paper&quot; method of generating such a number <code>s</code> that when elevated to a small <code>e</code> gives a message with the intended prefix, as <a href="https://www.ietf.org/mail-archive/web/openpgp/current/msg00999.html">documented by Hal Finney</a>. However, I like the cube-root-and-round-up method for its simplicity.</p>
+<p>At the time, both OpenSSL and NSS were vulnerable to a trivial version of the attack. Since then, variants of the vulnerability were found in all sort of libraries, making the attack one of the evergreens of offensive cryptography engineering. The recent <a href="https://github.com/FiloSottile/BERserk#the-attack">BERserk</a> attack against NSS was nothing else than BB'06 using an ASN.1 bug to hide the garbage in two parts in the middle of the message. The <a href="http://cryptopals.com/sets/6/challenges/42/">cryptopals</a> level on BB'06 even has a &quot;Crypto-tourism informational placard&quot;!</p>
+<h2 id="thepythonrsavulnerability">The python-rsa vulnerability</h2>
+<p>The python-rsa bug is not a vanilla BB'06, because the hash is compared to all the data following the ASN.1 blob, but a simple variant.</p>
+<p>Here is the source of the <a href="https://bitbucket.org/sybren/python-rsa/src/2baab06c8b867b01ec82b02118d4872a931a0437/rsa/pkcs1.py?at=default&amp;fileviewer=file-view-default#pkcs1.py-279"><code>verify()</code></a> function:</p>
+<pre><code class="language-python">def verify(message, signature, pub_key):
+    blocksize = common.byte_size(pub_key.n)
+    encrypted = transform.bytes2int(signature)
+    decrypted = core.decrypt_int(encrypted, pub_key.e, pub_key.n)
+    clearsig = transform.int2bytes(decrypted, blocksize)
+
+    # If we can't find the signature  marker, verification failed.
+    if clearsig[0:2] != b('\x00\x01'):
+        raise VerificationError('Verification failed')
+    
+    # Find the 00 separator between the padding and the payload
+    try:
+        sep_idx = clearsig.index(b('\x00'), 2)
+    except ValueError:
+        raise VerificationError('Verification failed')
+    
+    # Get the hash and the hash method
+    (method_name, signature_hash) = _find_method_hash(clearsig[sep_idx+1:])
+    message_hash = _hash(message, method_name)
+
+    # Compare the real hash to the hash in the signature
+    if message_hash != signature_hash:
+        raise VerificationError('Verification failed')
+
+    return True
+
+def _find_method_hash(method_hash):
+    for (hashname, asn1code) in HASH_ASN1.items():
+        if not method_hash.startswith(asn1code):
+            continue
+        
+        return (hashname, method_hash[len(asn1code):])
+    
+    raise VerificationError('Verification failed')
+
+HASH_ASN1 = {
+    'MD5': b('\x30\x20\x30\x0c\x06\x08\x2a\x86'
+             '\x48\x86\xf7\x0d\x02\x05\x05\x00\x04\x10'),
+    'SHA-1': b('\x30\x21\x30\x09\x06\x05\x2b\x0e'
+               '\x03\x02\x1a\x05\x00\x04\x14'),
+    'SHA-256': b('\x30\x31\x30\x0d\x06\x09\x60\x86'
+                 '\x48\x01\x65\x03\x04\x02\x01\x05\x00\x04\x20'),
+    'SHA-384': b('\x30\x41\x30\x0d\x06\x09\x60\x86'
+                 '\x48\x01\x65\x03\x04\x02\x02\x05\x00\x04\x30'),
+    'SHA-512': b('\x30\x51\x30\x0d\x06\x09\x60\x86'
+                 '\x48\x01\x65\x03\x04\x02\x03\x05\x00\x04\x40'),
+}
+</code></pre>
+<p>You can see that this parser will accept anything of the form</p>
+<pre><code class="language-no-highlight">00 01 XX XX ... XX XX 00 ASN.1 HASH
+</code></pre>
+<p>where <code>XX</code> are non-<code>00</code> bytes. The relevant line, which jumps to the next <code>00</code> after the <code>00 01</code> prefix is:</p>
+<pre><code class="language-python">sep_idx = clearsig.index(b('\x00'), 2)
+</code></pre>
+<p>There is no check that the padding bytes are actually <code>FF</code> bytes. This means <strong>we can hide imperfect cube-rooting garbage</strong> in the space between the <code>00 01</code> prefix and the <code>00</code> separator.</p>
+<p>Such a variant is already well known in the <a href="https://www.cdc.informatik.tu-darmstadt.de/reports/reports/sigflaw.pdf">literature</a> and is actually a subset of the recent <a href="https://github.com/FiloSottile/BERserk#the-attack">BERserk</a> attack. There are many ways to efficiently exploit it; I used the method I implemented for BERserk, which I find pretty intuitive.</p>
+<p>Our target is making <strong>a message that, when cubed, has a given prefix</strong> (<code>00 01</code>) <strong>and suffix</strong> (<code>00 ASN.1 HASH</code>). Prefix is easy (cube root will do), so let's start with the suffix. We will call the crafted message <code>s</code>, and its cube <code>c</code>. We will count bits from 0, where the 0th bit is the rightmost, least significant one.</p>
+<p>The base intuition is that flipping the Nth bit in <code>s</code> causes the Nth bit in <code>c</code> to flip, and leaves all bits from 0 to N-1 unaffected. If you are having trouble imagining this try visualizing the pen-and-paper column operation. Using this property, we can build <code>s</code> simply by <strong>iterating over the bits in the suffix from the right, flipping the bit in <code>s</code> whenever the bit in <code>c</code> is not the one we want</strong>.</p>
+<p>Let's see an example: searching for a <code>s</code> that cubes to a <code>c</code> ending in <code>1010101101</code>.</p>
+<pre><code class="language-no-highlight">
+       9876543210  &lt;- Indexes
+
+s:     0000000001  &lt;- Initial s
+c:     0000000001  &lt;- Bit 0 an 1 match, skip
+tgt:   1010101101  &lt;- Target suffix of c
+
+s:     0000000001
+c:     0000000001  &lt;- Bit 2 doesn't match, flip in s
+tgt:   1010101101
+
+s:     0000000101
+c:     0001111101  &lt;- Bit 3 matches, skip 
+tgt:   1010101101
+
+s:     0000000101
+c:     0001111101  &lt;- Bit 4 doesn't, flip in s
+tgt:   1010101101
+
+s:     0000010101
+c: 10010000101101  &lt;- Bit 7 doesn't match, flip in s
+tgt:   1010101101
+
+s:     0010010101
+c: ...00110101101  &lt;- Bit 8 doesn't match, flip in s
+tgt:   1010101101
+
+s:     0110010101
+c: ...10010101101  &lt;- Bit 9 doesn't match, flip in s
+tgt:   1010101101
+
+s:     1110010101
+c: ...01010101101  &lt;- Done!
+tgt:   1010101101
+
+1110010101 ^ 3 = 101101111101011111101010101101
+                                     ^^^^^^^^^^
+</code></pre>
+<p>There we have it. If our signature ends in <code>1110010101</code>, the cubed &quot;clearsig&quot; will end in <code>1010101101</code>. If we apply the same process to the target suffix <code>00 ASN.1 HASH</code> we get the final part of our fake signature.</p>
+<p>The prefix is easier to craft: just take the cube root of <code>00 01 XX XX ...</code> where XX are random bytes, as many as are needed to make the string as long as the public key. It won't be an exact cube root, but it will be precise enough to keep the first two bytes intact. (This step is pure BB'06).</p>
+<p>Now just stitch the two parts together by truncating <code>len(sig_suffix)</code> bytes at the end of the prefix cube root and concatenating. The suffix is short enough that changing it probably won't affect the two high bytes of the cube, and we know that adding bits to the left does not corrupt the cube suffix.</p>
+<p>Final problem: there must be no other <code>00</code> bytes in the cube. Lazy solution: repeat the prefix computation with different filler random bytes until there aren't. (Yeah, I know. So what? :P)</p>
+<p>You can find an iPython notebook putting it all together and validating it against python-rsa below. (These things are amazing for presenting algorithms!)</p>
+<script src="https://gist.github.com/FiloSottile/9a1832541a7d01237ad6.js"></script>
+<h2 id="practicesafecrypto">Practice safe crypto</h2>
+<p>Reading about how often this vulnerability was found in the wild in the last 10 years, you might think that RSA signature verification is just a hard problem, and that we are bound to get it wrong over and over again. Or at least that PKCS#1 1.5 is.</p>
+<p>Well, even if PKCS#1 1.5 <strong>is</strong> atrocious, it's perfectly possible to implement verification safely: instead of trying to parse the encoded signature, generate what you <em>expect</em> the signature to look like, complete of padding, ASN.1 and hash, and then <strong>simply compare</strong> the user/attacker's one. (Remember kids: parsing is dangerous!) <a href="https://www.imperialviolet.org/2014/09/26/pkcs1.html">AGL</a> and <a href="https://news.ycombinator.com/item?id=3715393">tqbf</a> explain it better than I do, anyway.</p>
+<p>This entirely kills any opportunity for the attacker to sling garbage past you.</p>
+<p>As usual, the fact that it's possible to implement a dangerous algorithm correctly, doesn't mean it's <em>humanely</em> possible, and safer algorithms (and primitives) must <em>always</em> be preferred. (See also: deterministic ECDSA.)</p>
+<p>Moreover, there are extremely fast algorithms to perform RSA with <code>e=65537</code>, so there's no reason to expose yourself to vulnerable implementations by using keys with <code>e=3</code>.</p>
+<h2 id="nextsteps">Next steps</h2>
+<p>I <a href="http://www.openwall.com/lists/oss-security/2016/01/05/3">applied for a CVE</a> (CVE-2016-1494) and <a href="https://bitbucket.org/sybren/python-rsa/pull-requests/14/security-fix-bb06-attack-in-verify-by">submitted a patch</a>.</p>
+<p>To prove once more how dangerous it is to hand-roll crypto, I found that also my old implementation of RSA verification in youtube-dl (used to verify updates) is vulnerable to a similar attack. Since youtube-dl can't import any dependencies, I <a href="https://github.com/rg3/youtube-dl/pull/8142">replaced the verify function with a build-and-compare one</a>. For the record, youtube-dl users were never at risk because I had hardcoded a public key with <code>e=65537</code>.</p>
+<p>For more cryptography failures, <a href="https://twitter.com/FiloSottile">follow me on Twitter</a>.</p>
+<!--kg-card-end: markdown-->
+        </section>
+
+        <footer class="post-footer">
+
+            <section class="author">
+                <h4><a href="/author/filippo/">Filippo Valsorda</a></h4>
+                <p>Cryptogopher on the Go team at Google. RC F&#x27;13, F2&#x27;17. You might know me as @FiloSottile.</p>
+                <div class="author-meta">
+                    
+                    
+                </div>
+                <div class="rc-scout"></div>
+                <script async defer
+                    src="https://www.recurse-scout.com/loader.js?t=e2e278036cc95428674cb2f247dfbc01"></script>
+                <p>Sign up to my newsletter—<a
+                        href="https://buttondown.email/cryptography-dispatches?tag=blog">Cryptography
+                        Dispatches</a>—for more frequent, lightly edited writings on cryptography.</p>
+                <iframe scrolling="no"
+                    style="width:100%!important;height:220px;border:1px #ccc solid !important;margin:0"
+                    src="https://buttondown.email/cryptography-dispatches?tag=blog&as_embed=true"></iframe>
+            </section>
+
+        </footer>
+
+
+    </article>
+
+</main>
+
+
+    <footer class="site-footer">
+        <a class="subscribe icon-feed" href="https://blog.filippo.io/rss/"><span class="tooltip">Subscribe!</span></a>
+        <div class="inner">
+            <section class="copyright">All content copyright <a href="https://blog.filippo.io/">Filippo.io</a> &copy;
+                2021 &bull; All rights reserved.</section>
+            <section class="poweredby">Proudly published with <a class="icon-ghost" href="https://ghost.org">Ghost</a>
+            </section>
+        </div>
+    </footer>
+
+    <!-- Piwik -->
+<script type="text/javascript">
+  var _paq = _paq || [];
+  _paq.push(['trackPageView']);
+  _paq.push(['enableLinkTracking']);
+  _paq.push(['enableHeartBeatTimer', 10]);
+  (function() {
+    _paq.push(['setTrackerUrl',  'https://api-05bc671b63643e3999ba178bd0e968a3.filippo.sandcats.io:6080']);
+    _paq.push(['setSiteId', 1]);
+    _paq.push(['setApiToken', '1BcN9mly-Ur1UhNBek6k0a1qW-Y12e9X-XlwyVfVeRl']);
+    var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+    g.type='text/javascript'; g.async=true; g.defer=true; g.src='https://ls4an735rucvfa6ps6bb.filippo.sandcats.io:6080/embed.js'; s.parentNode.insertBefore(g,s);
+  })();
+</script>
+<!-- End Piwik Code -->
+
+</body>
+
+</html>

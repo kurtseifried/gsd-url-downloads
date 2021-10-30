@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag -->
+<title>Yubico libyubihsm Vulnerabilities (CVE-2021-27217, CVE-2021-32489) | invd blog</title>
+<meta name="generator" content="Jekyll" />
+<meta property="og:title" content="Yubico libyubihsm Vulnerabilities (CVE-2021-27217, CVE-2021-32489)" />
+<meta name="author" content="Christian Reitter" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="I’ve continued my research on weaknesses in the Yubico HSM library and recently found additional vulnerabilities in it through fuzzing. A malicious HSM device with authentication can trigger out of bounds read operations (CVE-2021-27217) on the host that may lead to segmentation faults and crash the program." />
+<meta property="og:description" content="I’ve continued my research on weaknesses in the Yubico HSM library and recently found additional vulnerabilities in it through fuzzing. A malicious HSM device with authentication can trigger out of bounds read operations (CVE-2021-27217) on the host that may lead to segmentation faults and crash the program." />
+<link rel="canonical" href="https://blog.inhq.net/posts/yubico-libyubihsm-vuln2/" />
+<meta property="og:url" content="https://blog.inhq.net/posts/yubico-libyubihsm-vuln2/" />
+<meta property="og:site_name" content="invd blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2021-03-04T20:30:00+01:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Yubico libyubihsm Vulnerabilities (CVE-2021-27217, CVE-2021-32489)" />
+<script type="application/ld+json">
+{"description":"I’ve continued my research on weaknesses in the Yubico HSM library and recently found additional vulnerabilities in it through fuzzing. A malicious HSM device with authentication can trigger out of bounds read operations (CVE-2021-27217) on the host that may lead to segmentation faults and crash the program.","@type":"BlogPosting","datePublished":"2021-03-04T20:30:00+01:00","url":"https://blog.inhq.net/posts/yubico-libyubihsm-vuln2/","mainEntityOfPage":{"@type":"WebPage","@id":"https://blog.inhq.net/posts/yubico-libyubihsm-vuln2/"},"author":{"@type":"Person","name":"Christian Reitter"},"headline":"Yubico libyubihsm Vulnerabilities (CVE-2021-27217, CVE-2021-32489)","dateModified":"2021-03-04T20:30:00+01:00","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/css/style.css"><link type="application/atom+xml" rel="alternate" href="https://blog.inhq.net/feed.xml" title="invd blog" /><script type="text/javascript">
+  var _paq = window._paq || [];
+  _paq.push(['trackPageView']);
+  _paq.push(['enableLinkTracking']);
+  _paq.push(['setSecureCookie', true]);
+  _paq.push(['setVisitorCookieTimeout', 60 * 60 * 24 * 90]);
+  _paq.push(['setReferralCookieTimeout', 60 * 60 * 24 * 90]);
+  _paq.push(['appendToTrackingUrl', 'bots=1']);
+  (function() {
+    var u="https://mato.inhq.net/";
+    _paq.push(['setTrackerUrl', u+'m']);
+    _paq.push(['setSiteId', '1']);
+    var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+    g.type='text/javascript'; g.async=true; g.defer=true; g.src=u+'mat.js'; s.parentNode.insertBefore(g,s);
+  })();
+  </script></head>
+<body><header class="site-header"><noscript><img src="https://mato.inhq.net/m?rec=1&bots=1&idsite=1" alt="" style="position:absolute; visibility:hidden" /></noscript><div class="wrapper"><a class="site-title" rel="author" href="/">invd blog</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger">
+        <a class="page-link" href="/archive/">Archive</a><a class="page-link" href="/cve/">CVEs</a><a class="page-link" href="/consulting/">Consulting</a><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Yubico libyubihsm Vulnerabilities (CVE-2021-27217, CVE-2021-32489)</h1>
+    <p class="post-meta"><time class="dt-published" datetime="2021-03-04T20:30:00+01:00" itemprop="datePublished">
+        Mar 4, 2021
+      </time>• <span itemprop="author" itemscope itemtype="http://schema.org/Person">
+            <span class="p-author h-card" itemprop="name">Christian Reitter</span></span><br/>ID:
+        
+          
+          <span>CVE-2021-27217</span>,
+          
+          <span>CVE-2021-32489</span>
+        <br/>
+      Related articles:
+      <a href="/posts/yubico-libyubihsm-vuln/">Yubico libyubihsm Vulnerabilities</a>
+          • <a href="/posts/yubico-libykpiv-vuln/">Yubico libykpiv Vulnerabilities</a>
+          • <a href="/posts/yubico-libu2f-host-vuln-part2/">Yubico libu2f-host Vulnerability - Part Two</a>
+          </p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>I’ve continued my research on <a href="/posts/yubico-libyubihsm-vuln/">weaknesses in the Yubico HSM library</a> and recently found additional vulnerabilities in it through fuzzing.<br />
+A malicious HSM device with authentication can trigger out of bounds read operations (<a href="/posts/yubico-libyubihsm-vuln2/#cve-2021-27217">CVE-2021-27217</a>) on the host that may lead to segmentation faults and crash the program.</p>
+
+<p>This article will describe the issues and give some background information on how they were found.</p>
+
+<div id="toc-container">
+  <h2 class="no_toc">Contents</h2>
+<ul id="markdown-toc">
+  <li><a href="#consulting" id="markdown-toc-consulting">Consulting</a></li>
+  <li><a href="#fuzzing-methodology" id="markdown-toc-fuzzing-methodology">Fuzzing Methodology</a></li>
+  <li><a href="#the-vulnerabilities" id="markdown-toc-the-vulnerabilities">The Vulnerabilities</a>    <ul>
+      <li><a href="#cve-2021-27217" id="markdown-toc-cve-2021-27217">CVE-2021-27217</a></li>
+      <li><a href="#cve-2021-32489" id="markdown-toc-cve-2021-32489">CVE-2021-32489</a></li>
+      <li><a href="#attack-scenario-and-security-implications" id="markdown-toc-attack-scenario-and-security-implications">Attack Scenario and Security Implications</a></li>
+      <li><a href="#proof-of-concept" id="markdown-toc-proof-of-concept">Proof Of Concept</a></li>
+    </ul>
+  </li>
+  <li><a href="#coordinated-disclosure" id="markdown-toc-coordinated-disclosure">Coordinated Disclosure</a>    <ul>
+      <li><a href="#relevant-yubihsm-shell-sources" id="markdown-toc-relevant-yubihsm-shell-sources">Relevant yubihsm-shell Sources</a></li>
+      <li><a href="#detailed-timeline" id="markdown-toc-detailed-timeline">Detailed Timeline</a></li>
+      <li><a href="#bug-bounty" id="markdown-toc-bug-bounty">Bug Bounty</a></li>
+    </ul>
+  </li>
+</ul>
+
+</div>
+
+<h2 id="consulting">Consulting</h2>
+
+<p><i>I’m a freelance Security Consultant and currently available for new projects.
+  If you are looking for assistance to secure your projects or organization, <a href="/consulting">get in touch</a>.</i></p>
+
+<h2 id="fuzzing-methodology">Fuzzing Methodology</h2>
+<p>Please see the previous <a href="/posts/yubico-libyubihsm-vuln/#fuzzing-methodology">yubihsm-shell article</a> for a summary of the automated testing approach and technical background.</p>
+
+<p>Notably, the necessary fuzzer progress for the new discovery was achieved by weakening the normal message authentication checks in the code sufficiently to make the fuzzer pass them with some inputs. 
+This allowed the fuzzer + sanitizer combination to discover problematic code located behind that barrier.</p>
+
+<p>Without this strategic adjustment, passing the authentication checks with fuzzer-provided input would otherwise be equal to a brute-force attack on the valid message authentication code (<em>a specific 64 bit value</em>), which is very hard for a generic fuzzer to do.</p>
+
+<p>Note that this step also corresponds to a change in the attacker model from “man-in-the-middle without knowledge of secrets” to “malicious HSM device with knowledge of secrets”, 
+since the latter is required to accurately compute the required MAC. More on this in later sections.</p>
+
+<p>Conceptual overview of the fuzzing setup:</p>
+<pre><code class="language-C">yubishm-  +-----------------+
+shell     |    libyubihsm   |
+fuzzer    |                 |
+          |   USB handling  |
+          +--------^--------+
+                   |
+                   |
+          +--------+--------+
+          | mod. USB backend|
+          |    libfuzzer    |
+          +-----------------+
+</code></pre>
+
+<h2 id="the-vulnerabilities">The Vulnerabilities</h2>
+
+<h3 id="cve-2021-27217">CVE-2021-27217</h3>
+
+<p>The underlying code issue is near the location of <a href="/posts/yubico-libyubihsm-vuln/#cve-2020-24388">CVE-2020-24388</a> and triggered similarly, so I recommend reading the original issue description to understand this issue.</p>
+
+<p>In short, the libyubihsm code and the HSM are interacting via USB messages, which are commonly transported over other network protocols in remote setups via the <a href="https://developers.yubico.com/YubiHSM2/Component_Reference/yubihsm-connector/">yubihsm-connector</a>.
+After sending a secure message to the HSM via <code class="language-plaintext highlighter-rouge">_send_secure_msg()</code>, the host program expects the HSM to respond with an authenticated and encrypted message that contains some response data related to the request, for example a status code and response data for the requested HSM action.</p>
+
+<p>The response message is initially checked as follows:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="n">yrc</span> <span class="o">=</span> <span class="n">send_authenticated_msg</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">msg</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">response_msg</span><span class="p">);</span>
+<span class="c1">// [...] error handling for send_authenticated_msg()</span>
+
+<span class="c1">// Response is MAC'ed and encrypted. Unwrap it</span>
+<span class="n">out_len</span> <span class="o">=</span> <span class="n">response_msg</span><span class="p">.</span><span class="n">st</span><span class="p">.</span><span class="n">len</span><span class="p">;</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">out_len</span> <span class="o">&lt;</span> <span class="n">SCP_MAC_LEN</span> <span class="o">-</span> <span class="mi">3</span> <span class="o">||</span>
+    <span class="p">(</span><span class="kt">size_t</span><span class="p">)(</span><span class="mi">3</span> <span class="o">+</span> <span class="n">out_len</span> <span class="o">-</span> <span class="n">SCP_MAC_LEN</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">work_buf</span><span class="p">))</span> <span class="p">{</span>
+  <span class="n">DBG_ERR</span><span class="p">(</span><span class="s">"Received invalid length %u"</span><span class="p">,</span> <span class="n">out_len</span><span class="p">);</span>
+  <span class="n">yrc</span> <span class="o">=</span> <span class="n">YHR_BUFFER_TOO_SMALL</span><span class="p">;</span>
+  <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+<span class="p">}</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/yubihsm-shell/blob/a2d66a90426dddac0d2060d2b4fce5c7545a6bc8/lib/yubihsm.c#L344-L369" class="highlightref">yubihsm.c</a></p>
+
+<p>For the previous CVE-2020-24388 issue, messages with <code class="language-plaintext highlighter-rouge">response_msg.st.len &lt; SCP_MAC_LEN - 3</code> caused dangerous <code class="language-plaintext highlighter-rouge">memcpy()</code> problems during the early parsing steps.
+In particular, the problematic <code class="language-plaintext highlighter-rouge">memcpy()</code> happened <strong>before</strong> the message authentication field was checked, so an unauthenticated man-in-the-middle attacker could trigger it.
+This problem was fixed in libyubihsm <strong>2.0.3</strong> by - among other things - requiring <code class="language-plaintext highlighter-rouge">response_msg.st.len &gt;= SCP_MAC_LEN - 3</code> as seen above.</p>
+
+<p>Overall, the steps towards the MAC comparison now appear to be safe from this kind of attack based on problematic length fields.</p>
+
+<p>However, it turns out that the <strong>2.0.3</strong> patches failed to prevent length-related issues that happen <strong>after</strong> the MAC comparison.
+Let’s assume that libyubihsm is interacting with a malicious HSM device that <strong>has access</strong> to the correct secrets for authentication &amp; encryption measures between the HSM and host.</p>
+
+<p>The program looks as follows after the authentication stage:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="n">DBG_INFO</span><span class="p">(</span><span class="s">"Response MAC successfully verified"</span><span class="p">);</span>
+
+<span class="n">out_len</span> <span class="o">-=</span> <span class="n">SCP_MAC_LEN</span><span class="p">;</span>
+
+<span class="k">if</span> <span class="p">(</span><span class="n">session</span><span class="o">-&gt;</span><span class="n">s</span><span class="p">.</span><span class="n">sid</span> <span class="o">!=</span> <span class="n">response_msg</span><span class="p">.</span><span class="n">st</span><span class="p">.</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="p">{</span>
+  <span class="n">DBG_ERR</span><span class="p">(</span><span class="s">"Session ID mismatch, expected %d, got %d"</span><span class="p">,</span> <span class="n">session</span><span class="o">-&gt;</span><span class="n">s</span><span class="p">.</span><span class="n">sid</span><span class="p">,</span>
+          <span class="n">response_msg</span><span class="p">.</span><span class="n">st</span><span class="p">.</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span>
+  <span class="n">yrc</span> <span class="o">=</span> <span class="n">YHR_GENERIC_ERROR</span><span class="p">;</span>
+  <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="n">out_len</span> <span class="o">-=</span> <span class="mi">1</span><span class="p">;</span>
+
+<span class="c1">// Recompute IV, apparently OpenSSL's CBC destroys it</span>
+<span class="n">aes_set_encrypt_key</span><span class="p">((</span><span class="kt">uint8_t</span> <span class="o">*</span><span class="p">)</span> <span class="n">session</span><span class="o">-&gt;</span><span class="n">s</span><span class="p">.</span><span class="n">s_enc</span><span class="p">,</span> <span class="n">SCP_KEY_LEN</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">aes_ctx</span><span class="p">);</span>
+<span class="n">aes_encrypt</span><span class="p">(</span><span class="n">session</span><span class="o">-&gt;</span><span class="n">s</span><span class="p">.</span><span class="n">ctr</span><span class="p">,</span> <span class="n">encrypted_ctr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">aes_ctx</span><span class="p">);</span>
+
+<span class="n">aes_set_decrypt_key</span><span class="p">(</span><span class="n">session</span><span class="o">-&gt;</span><span class="n">s</span><span class="p">.</span><span class="n">s_enc</span><span class="p">,</span> <span class="n">SCP_KEY_LEN</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">aes_ctx</span><span class="p">);</span>
+
+<span class="n">DBG_CRYPTO</span><span class="p">(</span><span class="n">response_msg</span><span class="p">.</span><span class="n">st</span><span class="p">.</span><span class="n">data</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">out_len</span><span class="p">,</span>
+           <span class="s">"CBC decrypting (%3d Bytes): "</span><span class="p">,</span> <span class="n">out_len</span><span class="p">);</span>
+<span class="n">DBG_CRYPTO</span><span class="p">(</span><span class="n">encrypted_ctr</span><span class="p">,</span> <span class="n">SCP_PRF_LEN</span><span class="p">,</span> <span class="s">"IV: "</span><span class="p">);</span>
+
+<span class="n">aes_cbc_decrypt</span><span class="p">(</span><span class="n">response_msg</span><span class="p">.</span><span class="n">st</span><span class="p">.</span><span class="n">data</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">decrypted_data</span><span class="p">,</span> <span class="n">out_len</span><span class="p">,</span>
+                <span class="n">encrypted_ctr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">aes_ctx</span><span class="p">);</span>
+<span class="n">aes_remove_padding</span><span class="p">(</span><span class="n">decrypted_data</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">out_len</span><span class="p">);</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/yubihsm-shell/blob/a2d66a90426dddac0d2060d2b4fce5c7545a6bc8/lib/yubihsm.c#L386-L410" class="highlightref">yubihsm.c</a></p>
+
+<p>Since the libyubihsm &lt;&gt; HSM interaction happens in several logical message flows called <strong>sessions</strong>, the code first checks if the response message is actually meant for the current session to prevent mixups between concurrent sessions due to race conditions.
+The main message payload within the data section of the message is then decrypted and any remaining AES padding is removed.</p>
+
+<p>Unfortunately, the <code class="language-plaintext highlighter-rouge">aes_remove_padding()</code> function that is called at the end of the code excerpt makes dangerous assumptions about the memory contents and length variable that it operates on:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="kt">void</span> <span class="nf">aes_remove_padding</span><span class="p">(</span><span class="kt">uint8_t</span> <span class="o">*</span><span class="n">in</span><span class="p">,</span> <span class="kt">uint16_t</span> <span class="o">*</span><span class="n">len</span><span class="p">)</span> <span class="p">{</span>
+
+  <span class="k">while</span> <span class="p">(</span><span class="n">in</span><span class="p">[(</span><span class="o">*</span><span class="n">len</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="p">(</span><span class="o">*</span><span class="n">len</span><span class="p">)</span><span class="o">--</span><span class="p">;</span>
+  <span class="p">}</span>
+
+  <span class="p">(</span><span class="o">*</span><span class="n">len</span><span class="p">)</span><span class="o">--</span><span class="p">;</span>
+<span class="p">}</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/yubihsm-shell/blob/a2d66a90426dddac0d2060d2b4fce5c7545a6bc8/aes_cmac/aes.c#L322-L329" class="highlightref">yubihsm.c</a></p>
+
+<p>As you can see, the function mainly cares about the memory contents at <code class="language-plaintext highlighter-rouge">in</code>, and not at all about the boundary conditions related to <code class="language-plaintext highlighter-rouge">len</code>.</p>
+
+<p>If the function is called with <code class="language-plaintext highlighter-rouge">len = 0</code> or a pointer to a buffer filled with <code class="language-plaintext highlighter-rouge">0x00</code> bytes, then it will continue reading data and walking over memory <strong>in front of the provided buffer</strong> until it encounters a non-null data byte. This type of out-of-bounds memory access will not leak a lot of information, but ignores any memory boundaries that are in place along the way.
+Depending on the memory contents in front of the buffer and general memory layout, this can cause the libyubihsm program to be terminated with a segmentation fault.</p>
+
+<p>Due to the way that the message parsing logic is written, it is in fact possible for a crafted message to reach <code class="language-plaintext highlighter-rouge">aes_remove_padding()</code> with an <code class="language-plaintext highlighter-rouge">out_len = 0</code> value. 
+Messages with <code class="language-plaintext highlighter-rouge">response_msg.st.len = 9</code> are accepted and <code class="language-plaintext highlighter-rouge">SCP_MAC_LEN + 1 = 9</code> is subtracted from that length value during the parsing steps.</p>
+
+<p>A problematic message would therefore consist of</p>
+<ul>
+  <li>an acceptable response code such as <code class="language-plaintext highlighter-rouge">YHR_SUCCESS</code></li>
+  <li>the length value <code class="language-plaintext highlighter-rouge">0x0009</code></li>
+  <li>the correct session ID</li>
+  <li>a valid 8-byte MAC code</li>
+</ul>
+
+<p>During parsing, the code will then call <code class="language-plaintext highlighter-rouge">aes_remove_padding()</code> on a 0-byte inner data payload segment with length 0, which triggers the out-of-bounds read operations.</p>
+
+<p>Since the attack scenario assumes that the HSM is malicious and also knows the encryption keys, it is also possible for the HSM to send a longer message of size <code class="language-plaintext highlighter-rouge">response_msg.st.len &gt; 9</code> where the <em>encrypted</em> inner data payload section is chosen so that it decodes to all <code class="language-plaintext highlighter-rouge">0x00</code> bytes. This causes the <code class="language-plaintext highlighter-rouge">aes_remove_padding()</code> call to step over the provided payload buffer and then perform the same out of bounds reads as with the previous case. 
+This means that both additional length checks as well as a better <code class="language-plaintext highlighter-rouge">aes_remove_padding()</code> have to be put in place to avoid this.</p>
+
+<p>During execution, there are three possible outcomes:</p>
+<ol>
+  <li>
+    <p>Depending on compiler settings and other factors, the program memory can be such that <code class="language-plaintext highlighter-rouge">aes_remove_padding()</code> walks until reaching external memory boundaries of the program, causing a segmentation fault.
+This is the problematic outcome that represents a <strong>denial of service</strong> impact.</p>
+  </li>
+  <li>
+    <p>If the conditions are not right for a segmentation fault (<em>the attacker has no influence over this</em>), the program execution continues as <code class="language-plaintext highlighter-rouge">aes_remove_padding()</code> returns with some <code class="language-plaintext highlighter-rouge">out_len</code> value. Due to the unsigned integer overflow, this is usually a large value which is exceeding the allocated buffer size.
+In this case, a defense condition that was meant for another fault condition is triggered.
+The function then returns with an explicit <code class="language-plaintext highlighter-rouge">YHR_BUFFER_TOO_SMALL</code> error, halting further processing and preventing any practical impact:</p>
+  </li>
+</ol>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c">    <span class="n">out_len</span> <span class="o">-=</span> <span class="mi">3</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">out_len</span> <span class="o">&gt;</span> <span class="o">*</span><span class="n">response_len</span><span class="p">)</span> <span class="p">{</span>
+      <span class="n">yrc</span> <span class="o">=</span> <span class="n">YHR_BUFFER_TOO_SMALL</span><span class="p">;</span>
+      <span class="k">goto</span> <span class="n">cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+    </code></pre></figure>
+
+<p><a href="https://github.com/Yubico/yubihsm-shell/blob/6bad872d780e9c2e0d4a04480c751d51e9877075/lib/yubihsm.c#L446-L450" class="highlightref">yubihsm.c</a>
+3<em>.</em> Like 2), but with <code class="language-plaintext highlighter-rouge">0 &lt; out_len &lt; *response_len</code>. This has not been observed in practice and was not investigated further, but may cause additional memory problems.</p>
+
+<div id="second-attack-variant-cve-pending"></div>
+<h3 id="cve-2021-32489">CVE-2021-32489</h3>
+
+<p>While documenting <a href="#cve-2021-27217">CVE-2021-27217</a>, I noticed a curious edge case. 
+<code class="language-plaintext highlighter-rouge">response_msg.st.len = 9</code> looks like the shortest message length that can ever be accepted. 
+After all, the library code wants 1 byte of valid channel ID and 8 bytes for the MAC data, so shorter messages are rejected automatically, right?</p>
+
+<p>Actually, no. Looking closely at the code showed that the two fields are read from different sides of the payload:</p>
+
+<p>The <code class="language-plaintext highlighter-rouge">sid</code> is read from the lowest memory position of the buffer:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c">  <span class="k">if</span> <span class="p">(</span><span class="n">session</span><span class="o">-&gt;</span><span class="n">s</span><span class="p">.</span><span class="n">sid</span> <span class="o">!=</span> <span class="n">response_msg</span><span class="p">.</span><span class="n">st</span><span class="p">.</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="p">{</span></code></pre></figure>
+
+<p>The <code class="language-plaintext highlighter-rouge">MAC</code> is read from the highest memory position of the buffer:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c">  <span class="k">if</span> <span class="p">(</span><span class="n">memcmp</span><span class="p">(</span><span class="n">response_msg</span><span class="p">.</span><span class="n">st</span><span class="p">.</span><span class="n">data</span> <span class="o">+</span> <span class="n">response_msg</span><span class="p">.</span><span class="n">st</span><span class="p">.</span><span class="n">len</span> <span class="o">-</span> <span class="n">SCP_MAC_LEN</span><span class="p">,</span> <span class="n">mac_buf</span><span class="p">,</span>
+             <span class="n">SCP_MAC_LEN</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span></code></pre></figure>
+
+<p>So the two fields may actually overlap, meaning that the first MAC byte can be a valid session ID, making the message valid!</p>
+
+<p>Let’s assume for a minute that both checks <strong>do pass</strong> on a message that was received with <code class="language-plaintext highlighter-rouge">response_msg.st.len = 8</code>.
+In this case, the <code class="language-plaintext highlighter-rouge">uint16_t out_len</code> variable is decremented too far by the combination of <code class="language-plaintext highlighter-rouge">out_len -= 8</code> and <code class="language-plaintext highlighter-rouge">out_len -= 1</code>.
+As a result, it overflows to <code class="language-plaintext highlighter-rouge">65535</code>.</p>
+
+<p>This becomes a significant problem a few steps further into the parsing when running the AES decryption step:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c">  <span class="n">aes_cbc_decrypt</span><span class="p">(</span><span class="n">response_msg</span><span class="p">.</span><span class="n">st</span><span class="p">.</span><span class="n">data</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">decrypted_data</span><span class="p">,</span> <span class="n">out_len</span><span class="p">,</span>
+                  <span class="n">encrypted_ctr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">aes_ctx</span><span class="p">);</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/yubihsm-shell/blob/6bad872d780e9c2e0d4a04480c751d51e9877075/lib/yubihsm.c#L408-L409" class="highlightref">yubihsm.c</a></p>
+
+<p>Through <code class="language-plaintext highlighter-rouge">aes_cbc_decrypt()</code>, OpenSSL is now told to work on a buffer of size 65535 while the buffer handed to it is actually far smaller. 
+Unsurprisingly, this leads to a segmentation fault in OpenSSL, here shown in <code class="language-plaintext highlighter-rouge">gdb</code>:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="n">Thread</span> <span class="mi">1</span> <span class="s">"yubihsm-shell"</span> <span class="n">received</span> <span class="n">signal</span> <span class="n">SIGSEGV</span><span class="p">,</span> <span class="n">Segmentation</span> <span class="n">fault</span><span class="p">.</span>
+<span class="mh">0x00007ffff7d35ee7</span> <span class="n">in</span> <span class="n">AES_decrypt</span> <span class="p">()</span> <span class="n">from</span> <span class="o">/</span><span class="n">usr</span><span class="o">/</span><span class="n">lib</span><span class="o">/</span><span class="n">x86_64</span><span class="o">-</span><span class="n">linux</span><span class="o">-</span><span class="n">gnu</span><span class="o">/</span><span class="n">libcrypto</span><span class="p">.</span><span class="n">so</span><span class="p">.</span><span class="mi">1</span><span class="p">.</span><span class="mi">1</span>
+<span class="p">(</span><span class="n">gdb</span><span class="p">)</span> <span class="n">bt</span>
+<span class="cp">#0  0x00007ffff7d35ee7 in AES_decrypt () from /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1
+#1  0x00007ffff7e36796 in CRYPTO_cbc128_decrypt () from /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1
+#2  0x00007ffff7c14a17 in aes_cbc_decrypt (
+</span>  <span class="n">in</span><span class="o">=</span><span class="n">in</span><span class="err">@</span><span class="n">entry</span><span class="o">=</span><span class="mh">0x7fffffff9b14</span> <span class="s">"</span><span class="se">\353</span><span class="s">[ޔ</span><span class="se">\214\032</span><span class="s">܏.</span><span class="se">\374\020</span><span class="s">N</span><span class="se">\315</span><span class="s">~S</span><span class="se">\306\316</span><span class="s">)</span><span class="se">\030</span><span class="s">:</span><span class="se">\355\206\n</span><span class="s">."</span><span class="p">,</span>
+  <span class="n">out</span><span class="o">=</span><span class="n">out</span><span class="err">@</span><span class="n">entry</span><span class="o">=</span><span class="mh">0x7fffffffa340</span> <span class="o">&lt;</span><span class="n">incomplete</span> <span class="n">sequence</span> <span class="err">\</span><span class="mi">353</span><span class="o">&gt;</span><span class="p">,</span> 
+  <span class="n">len</span><span class="o">=</span><span class="mi">65535</span><span class="p">,</span>
+  <span class="n">iv</span><span class="o">=</span><span class="n">iv</span><span class="err">@</span><span class="n">entry</span><span class="o">=</span><span class="mh">0x7fffffffa320</span> <span class="s">"</span><span class="se">\373\031\031</span><span class="s">N</span><span class="se">\035\243\036\345\353\351\036\221</span><span class="s">j</span><span class="se">\005\354\227</span><span class="s">:</span><span class="se">\236</span><span class="s">f</span><span class="se">\020\370</span><span class="s">c</span><span class="se">\016</span><span class="s">ӛ</span><span class="se">\373\346\344\241</span><span class="s">D</span><span class="se">\276\247</span><span class="s">"</span><span class="p">,</span>
+  <span class="o">&lt;</span><span class="n">incomplete</span> <span class="n">sequence</span> <span class="err">\</span><span class="mi">353</span><span class="o">&gt;</span><span class="p">,</span>
+  <span class="n">ctx</span><span class="o">=</span><span class="n">ctx</span><span class="err">@</span><span class="n">entry</span><span class="o">=</span><span class="mh">0x7fffffff9200</span><span class="p">)</span> 
+<span class="n">at</span> <span class="p">..</span><span class="o">/</span><span class="n">aes_cmac</span><span class="o">/</span><span class="n">aes</span><span class="p">.</span><span class="n">c</span><span class="o">:</span><span class="mi">307</span></code></pre></figure>
+
+<p>Unlike the distinct <code class="language-plaintext highlighter-rouge">aes_remove_padding()</code> based problem, this code path will always crash and does not depend on certain memory layouts.</p>
+
+<p>This leaves us with the question: how can an attacker pass the session ID and message authentication checks in order to reach this case?</p>
+
+<p>The slow and “naive” attack variant consists of the the HSM behaving “harmlessly” by generally responding to request messages with non-malicious response messages.
+At the same time, it silently computes the potential MAC of a short attack message based on the current cryptographic parameters of the communication.
+Only if the first byte of this MAC matches the session ID of the request, it launches the attack and sends a short reply message.</p>
+
+<p>Due to the cryptographic properties of the MAC, the relevant first MAC byte is basically changing in a random fashion and the average chance of a match with the current <code class="language-plaintext highlighter-rouge">sid</code> value is 1/256 for each request. 
+So on average there is an attack opportunity every few hundred messages. This is plausible to reach in an automated setup where the HSM is queried regularly over some time.
+However, this situation does put some limits on the attack for an HSM that is queried rarely.</p>
+
+<p>After thinking about this problem for a bit, I figured out an optimized attack variant that does this with significantly less message request opportunities.<br />
+Our crafted message looks somewhat like this when plotted with the individual fields and offsets:</p>
+
+<pre><code class="language-C">  1      2      3      4      5      6      7      8      9      10     11    |    byte position
+[cmd]                                                                         |
+     [length field]                                                           |    field usage
+                    [ sid ]                                                   |
+                    [                     MAC field                       ]   |
+</code></pre>
+
+<p>Normally, the MAC is computed over <code class="language-plaintext highlighter-rouge">[cmd] [length field] [payload data without MAC section]</code>, but since the remaining payload data has shrunk to zero and the length is fixed in our attack, 
+the MAC is effectively just computed over the meta section <code class="language-plaintext highlighter-rouge">[cmd] [0x0008]</code>.</p>
+
+<p>This appears somewhat hopeless at first since there apparently is no room for variations of the message, until one looks at the limits imposed on <code class="language-plaintext highlighter-rouge">cmd</code> during the parsing:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="k">if</span> <span class="p">(</span><span class="n">response_msg</span><span class="p">.</span><span class="n">st</span><span class="p">.</span><span class="n">cmd</span> <span class="o">==</span> <span class="n">YHC_ERROR</span><span class="p">)</span> <span class="p">{</span>
+  <span class="c1">// [...] error handling, returns with error</span>
+<span class="p">}</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/yubihsm-shell/blob/a2d66a90426dddac0d2060d2b4fce5c7545a6bc8/lib/yubihsm.c#L350-L360" class="highlightref">yubihsm.c</a></p>
+
+<p>We can change <code class="language-plaintext highlighter-rouge">cmd</code> to any value except the error code <code class="language-plaintext highlighter-rouge">YHC_ERROR = 0x7f</code> when trying to trigger the bug!</p>
+
+<p>Since message authentication codes are supposed to change wildly for each variation of the message, 
+trying out the 255 different accepted variants for <code class="language-plaintext highlighter-rouge">cmd</code> results in the excellent <em>average</em> chance of 255/256 = <code class="language-plaintext highlighter-rouge">~99,6%</code> for a valid <code class="language-plaintext highlighter-rouge">sid &lt;&gt; first MAC byte</code> match that allows the attack.
+At worst, the malicious HSM has to wait out a few requests for an attack opportunity, but not a few hundred. 
+That’s a decent improvement.</p>
+
+<h3 id="attack-scenario-and-security-implications">Attack Scenario and Security Implications</h3>
+
+<p>Please note that the vulnerabilities are in libyubihsm on the host side. 
+They can only be triggered by a trusted but malicious HSM or a man-in-the-middle attacker with similar knowledge of secrets.
+This is a very specific attack subclass that requires a lot of preparation and sophistication by the attacker. 
+However, given that supply chain attacks are harder to defend against than most people realize (<em>see <a href="/posts/tamper-evident-seals1/#re-sealable-plastic-enclosures">enclosure</a> and <a href="/posts/tamper-evident-seals2/#hiding-seal-defects">tamper evident seal</a> issues of the YubiHSM2 packaging</em>), it is beneficial to research and improve the defenses in this scenario as well.</p>
+
+<p>If you are confident that your physical HSM2 modules are genuine or that your software stacks exclude libyubihsm then the described issues do not affect you.</p>
+
+<h4 id="cvss-score">CVSS Score</h4>
+
+<p>Yubico has rated the issues as follows:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>CVSS 3.1 Score</th>
+      <th>Parameters</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-27217">CVE-2021-27217</a></td>
+      <td>4.4 (Medium)</td>
+      <td><a href="https://nvd.nist.gov/vuln-metrics/cvss/v3-calculator?vector=AV:N/AC:H/PR:H/UI:N/S:U/C:N/I:N/A:H">AV:N/AC:H/PR:H/UI:N/S:U/C:N/I:N/A:H</a></td>
+    </tr>
+    <tr>
+      <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-32489">CVE-2021-32489</a></td>
+      <td>4.4 (Medium)</td>
+      <td><a href="https://nvd.nist.gov/vuln-metrics/cvss/v3-calculator?vector=AV:N/AC:H/PR:H/UI:N/S:U/C:N/I:N/A:H">AV:N/AC:H/PR:H/UI:N/S:U/C:N/I:N/A:H</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Note that the initial YSA-2021-01 advisory included inaccurate CVSS score information, but has been updated.</p>
+
+<h3 id="proof-of-concept">Proof Of Concept</h3>
+<p>The following patches simulate the attack with limited code changes to a vulnerable library version.
+This can be tested with an expendable HSM2 device to validate the error behavior without a complex hardware setup.</p>
+
+<p><strong>WARNING: use the following code at your own risk. Although not intended, please assume that this will PERMANENTLY overwrite data on the HSM device that you have connected.</strong></p>
+
+<p>Procedure:</p>
+<ol>
+  <li>Rebuild libyubihsm and all relevant programs with the specified patch, example: <a href="https://github.com/Yubico/yubihsm-shell/tree/a2d66a90426dddac0d2060d2b4fce5c7545a6bc8">vulnerable repo version</a></li>
+  <li>Insert a test HSM device in factory settings</li>
+  <li>Run a basic command to test the impact</li>
+</ol>
+
+<ul>
+  <li>Variant A: yubihsm-connector is running on localhost, run 
+<code class="language-plaintext highlighter-rouge">./yubihsm-shell -a blink-device -p password</code></li>
+  <li>Variant B: direct USB connection, run
+<code class="language-plaintext highlighter-rouge">./yubihsm-shell -C yhusb:// -a blink-device -p password</code></li>
+</ul>
+
+<p>If you observe connection problems, please make sure that your setup is working with the regular unmodified CLI.</p>
+
+<h4 id="cve-2021-27217-1">CVE-2021-27217</h4>
+
+<figure class="highlight"><pre><code class="language-diff" data-lang="diff"><span class="gh">diff --git a/lib/yubihsm.c b/lib/yubihsm.c
+index 647eada..7e4cfc5 100644
+</span><span class="gd">--- a/lib/yubihsm.c
+</span><span class="gi">+++ b/lib/yubihsm.c
+</span><span class="p">@@ -360,8 +360,15 @@</span> static yh_rc _send_secure_msg(yh_session *session, yh_cmd cmd,
+     goto cleanup;
+   }
+
++
+<span class="gi">+  // POC: simulate 9-byte payload response
++  if(response_msg.st.len == 25) {
++    response_msg.st.len = 9;
++  }
++
+</span>   // Response is MAC'ed and encrypted. Unwrap it
+   out_len = response_msg.st.len;
+<span class="p">@@ -376,6 +383,8 @@</span> static yh_rc _send_secure_msg(yh_session *session, yh_cmd cmd,
+                    session-&gt;s.s_rmac, SCP_KEY_LEN, mac_buf);
+   response_msg.st.len = ntohs(response_msg.st.len);
+
++
+<span class="gi">+  // POC: assume MAC is correct
++  /*
+</span>   if (memcmp(response_msg.st.data + response_msg.st.len - SCP_MAC_LEN, mac_buf,
+              SCP_MAC_LEN) != 0) {
+     DBG_DUMPERR(response_msg.st.data + out_len - SCP_MAC_LEN, SCP_MAC_LEN,
+<span class="p">@@ -383,7 +392,7 @@</span> static yh_rc _send_secure_msg(yh_session *session, yh_cmd cmd,
+     yrc = YHR_MAC_MISMATCH;
+     goto cleanup;
+   }
+<span class="gd">-
+</span><span class="gi">+  */
+</span>   DBG_INFO("Response MAC successfully verified");
+
+   out_len -= SCP_MAC_LEN;</code></pre></figure>
+
+<p>As described previously, whether or not this leads to a segmentation fault is affected by compiler settings such as <code class="language-plaintext highlighter-rouge">-O0</code> and not expected to happen on all systems and configurations.</p>
+
+<h4 id="second-issue-variant">Second Issue Variant</h4>
+
+<figure class="highlight"><pre><code class="language-diff" data-lang="diff"><span class="gh">diff --git a/lib/yubihsm.c b/lib/yubihsm.c
+index 647eada..5c7da2e 100644
+</span><span class="gd">--- a/lib/yubihsm.c
+</span><span class="gi">+++ b/lib/yubihsm.c
+</span><span class="p">@@ -360,6 +360,14 @@</span> static yh_rc _send_secure_msg(yh_session *session, yh_cmd cmd,
+     goto cleanup;
+   }
+ 
+<span class="gi">+  // POC: simulate malicious message
++  if(response_msg.st.len == 25) {
++    // copy the original MAC to the front of the data section
++    memcpy(response_msg.st.data, response_msg.st.data + response_msg.st.len - SCP_MAC_LEN, SCP_MAC_LEN);
++    // simulate the problematic length
++    response_msg.st.len = 8;
++  }
++
+</span>   // Response is MAC'ed and encrypted. Unwrap it
+   out_len = response_msg.st.len;
+   if (out_len &lt; SCP_MAC_LEN - 3 ||
+<span class="p">@@ -376,6 +384,8 @@</span> static yh_rc _send_secure_msg(yh_session *session, yh_cmd cmd,
+                    session-&gt;s.s_rmac, SCP_KEY_LEN, mac_buf);
+   response_msg.st.len = ntohs(response_msg.st.len);
+ 
+<span class="gi">+  // POC: assume MAC is correct, a malicious HSM can compute valid codes
++  /*
+</span>   if (memcmp(response_msg.st.data + response_msg.st.len - SCP_MAC_LEN, mac_buf,
+              SCP_MAC_LEN) != 0) {
+     DBG_DUMPERR(response_msg.st.data + out_len - SCP_MAC_LEN, SCP_MAC_LEN,
+<span class="p">@@ -383,17 +393,22 @@</span> static yh_rc _send_secure_msg(yh_session *session, yh_cmd cmd,
+     yrc = YHR_MAC_MISMATCH;
+     goto cleanup;
+   }
+<span class="gd">-
+</span><span class="gi">+  */
+</span>   DBG_INFO("Response MAC successfully verified");
+ 
+   out_len -= SCP_MAC_LEN;
+ 
+<span class="gi">+  // POC: the contents at data[0] have to match the sid,
++  // which a malicious HSM can prepare for by mutations of `cmd`.
++  // Assume that this check is passed.
++  /*
+</span>   if (session-&gt;s.sid != response_msg.st.data[0]) {
+     DBG_ERR("Session ID mismatch, expected %d, got %d", session-&gt;s.sid,
+             response_msg.st.data[0]);
+     yrc = YHR_GENERIC_ERROR;
+     goto cleanup;
+   }
+<span class="gi">+  */
+</span>   out_len -= 1;
+ 
+   // Recompute IV, apparently OpenSSL's CBC destroys it</code></pre></figure>
+
+<p>Example log:</p>
+<pre><code class="language-C">./yubihsm-shell --connector=yhusb:// -a blink-device -p password
+Session keepalive set up to run every 15 seconds
+Created session 1
+Segmentation fault
+</code></pre>
+
+<h2 id="coordinated-disclosure">Coordinated Disclosure</h2>
+<p>Due to previous disclosures on this product with Yubico, there was a lot of familiar ground, although the communciation was not as fluid as with the last disclosures.</p>
+
+<p>Time-wise, the patch response time remains close to the 90 day mark. This is likely connected to the YubiHSM2 SDK release process that focuses on major releases.
+Although faster patch times would be preferrable to me as a researcher, in this particular case the vulnerabilities are not really grave enough as to require an urgent release.</p>
+
+<p>Overall, the disclosure process was okay, but there is some room for improvement.</p>
+
+<h3 id="relevant-yubihsm-shell-sources">Relevant yubihsm-shell Sources</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>variant</th>
+      <th>source</th>
+      <th>fix</th>
+      <th>references</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Yubico upstream</td>
+      <td><a href="https://github.com/Yubico/yubihsm-shell">Github</a></td>
+      <td>version <strong>2.1.0</strong>, bundled in SDK release <a href="https://developers.yubico.com/YubiHSM2/Releases">2021.03</a></td>
+      <td><a href="https://www.yubico.com/support/security-advisories/ysa-2021-01">YSA-2021-01</a></td>
+    </tr>
+    <tr>
+      <td>Fedora</td>
+      <td><a href="https://src.fedoraproject.org/rpms/yubihsm-shell">Fedora</a></td>
+      <td>TBD</td>
+      <td><a href="https://bugzilla.redhat.com/show_bug.cgi?id=1936041">Bug 1936041</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="detailed-timeline">Detailed Timeline</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>info</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2020-12-14</td>
+      <td>Disclosure of issue #1 to Yubico</td>
+    </tr>
+    <tr>
+      <td>2020-12-15</td>
+      <td>Yubico acknowledges receiving the report</td>
+    </tr>
+    <tr>
+      <td>2020-12-15</td>
+      <td>POC for issue #1 provided to Yubico</td>
+    </tr>
+    <tr>
+      <td>2021-01-04</td>
+      <td>Yubico confirms issue #1</td>
+    </tr>
+    <tr>
+      <td>2021-01-18</td>
+      <td>Yubico shares proposed fix</td>
+    </tr>
+    <tr>
+      <td>2021-01-18</td>
+      <td>Positive feedback on fix, recommendation of additional parsing changes</td>
+    </tr>
+    <tr>
+      <td>2021-02-05</td>
+      <td>Yubico communicates planned disclosure date: 2021-02-22</td>
+    </tr>
+    <tr>
+      <td>2021-02-13</td>
+      <td>Disclosure of issue #2 to Yubico</td>
+    </tr>
+    <tr>
+      <td>2021-02-16</td>
+      <td>Yubico communicates CVE-2021-27217 as ID for the primary issue</td>
+    </tr>
+    <tr>
+      <td>2021-02-19</td>
+      <td>Yubico postpones planned disclosure date</td>
+    </tr>
+    <tr>
+      <td>2021-02-25</td>
+      <td>Yubico communicates planned disclosure date: 2021-03-04</td>
+    </tr>
+    <tr>
+      <td>2021-03-04</td>
+      <td>Release of patched HSM2 SDK version and Yubico advisory YSA-2021-01</td>
+    </tr>
+    <tr>
+      <td>2021-03-04</td>
+      <td>Publication of this blog post</td>
+    </tr>
+    <tr>
+      <td>2021-03-10</td>
+      <td>Yubico updates YSA-2021-01</td>
+    </tr>
+    <tr>
+      <td>2021-05-10</td>
+      <td>Yubico obtains second CVE</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Note that the initial Yubico YSA-2021-01 advisory contained an incorrect publication date.</p>
+
+<h3 id="bug-bounty">Bug Bounty</h3>
+<p>Yubico provided hardware as a bug bounty for this issue.</p>
+
+  </div>
+
+
+  <a class="u-url" href="/posts/yubico-libyubihsm-vuln2/" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col one-half"><ul class="contact-list">
+          <li class="p-name">
+            <b>Christian Reitter</b>
+          </li></ul></div>
+
+      <div class="footer-col one-half">
+        <p>Information security and other interests.</p>
+      </div>
+    </div>
+
+    <div class="social-ref"><ul class="social-ref-list"><li><a rel="me" href="https://github.com/invd" title="invd"><svg class="svg-icon grey"><use xlink:href="/assets/minima-icons.svg#github"></use></svg></a></li><li><a href="/feed.xml" title="rss"><svg class="svg-icon grey"><use xlink:href="/assets/minima-icons.svg#rss"></use></svg></a></li></ul>
+</div>
+
+  </div>
+</footer>
+</body>
+
+</html>

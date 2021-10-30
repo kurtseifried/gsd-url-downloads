@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+<head>
+   <meta charset="utf-8">
+   <meta name="viewport" content="width=device-width">
+   <title>Playing in the Remote Sandbox: Adobe Flash Windows User Credentials Disclosure Vulnerability (CVE-2017-3085) | Björn Ruytenberg
+</title>
+   <link rel="icon" type="image/x-icon" href="/favicon.ico"/>
+   <link rel="icon" type="image/png" href="/favicon.png"/>
+   <link rel="apple-touch-icon" href="/favicon_mobile.png"/>
+   <link rel="stylesheet" type="text/css" href="/css/style.css" >
+   <link rel="stylesheet" type="text/css" href="//cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" >
+   <link rel="alternate" type="application/atom+xml" href="/feed.xml" title="RSS Feed">
+</head>
+<body>
+<div class="container">
+<div class="masthead">
+<div class="masthead-bwlogo"><a href="https://blog.bjornweb.nl"><img src="/assets/bjornweblogo.svg" alt="bjornweb.nl"></a></div>   
+   <h3 class="masthead-title">
+     <small>
+       &nbsp;&nbsp;&nbsp;<a href="/">about</a>
+     </small>
+	 <small>
+       &nbsp;&nbsp;&nbsp;<a href="/#blog">blog</a>
+     </small>
+     <small>
+       &nbsp;&nbsp;&nbsp;<a href="/feed.xml"><i class="fa fa-rss" aria-hidden="true"></i>
+feed</a>
+     </small>
+     <small>
+        &nbsp;&nbsp;&nbsp;<a href="/archive/">archive</a>
+     </small>
+   </h3>
+</div>
+
+<div id="content">
+  <article class='post'>
+  <h1 class='post-title'>Playing in the Remote Sandbox: Adobe Flash Windows User Credentials Disclosure Vulnerability (CVE-2017-3085)</h1>
+  <div class="post-date">Aug 8, 2017</div>
+
+<p>Recently, I posted a writeup on a Flash sandbox escape flaw that ultimately led to the demise of Flash Player’s decade-old local security sandbox. This post is a follow up.</p>
+
+<p>Tracked as <a href="/2017/02/flash-bypassing-local-sandbox-data-exfiltration-credentials-leak/">CVE-2016-4271</a>, the former flaw highlights the importance of proper input validation. Feeding the Flash runtime a mixture of UNC and File URI schemes turned out sufficient to <a href="/2017/02/flash-bypassing-local-sandbox-data-exfiltration-credentials-leak/#whats-in-a-scheme-exfiltrating-local-data">exfiltrate local data</a>, and <a href="/2017/02/flash-bypassing-local-sandbox-data-exfiltration-credentials-leak/#smb-at-play-leaking-windows-user-credentials">disclose Windows user credentials</a> to a remote SMB server.</p>
+
+<p>Flash Player 23 dropped the <code class="highlighter-rouge">local-with-filesystem</code> sandbox, effectively solving both issues from the local perspective. Interestingly though, the <a href="https://forums.adobe.com/thread/2209269" title="9/13/2016 - Release - Flash Player 23 | Adobe Community">release notes</a> quietly disregarded the two remaining sandboxes - <code class="highlighter-rouge">local-with-networking</code> and <code class="highlighter-rouge">remote</code> - leaving me to wonder whether these had been patched as well.</p>
+
+<p>Indeed, initial tests show Flash rejects any UNC or File-style paths. By extension, neither sandbox seems to accept any non-HTTP URLs. Hence, this raises the obvious question of interest: what if we approach this issue the other way around? Can we change input expression meaning <em>after</em> having passed input validation?</p>
+
+<p>In short, Adobe Flash can be rendered susceptible to a known Windows vulnerability. Albeit partially mitigated by a runtime security measure, the latter was designed for a different purpose, and can therefore be circumvented. These two facts combined turn out sufficient to workaround Flash Player’s new input validation, restoring an attacker’s ability to obtain Windows user credentials.</p>
+
+<p>This post is a writeup on a flaw I recently reported to Adobe, acknowledged in <a href="https://helpx.adobe.com/security/products/flash-player/apsb17-23.html">APSB17-23</a>, and assigned <a href="https://www.cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2017-3085">CVE-2017-3085</a>.</p>
+
+<h3 id="http-cant-redirect-this">HTTP: Can’t Redirect This</h3>
+
+<p>To reiterate, key to exploiting the previous flaw is having our malicious Flash application connect to our SMB server. By denying access without authentication, the server then triggers Windows clients to conveniently send their user credentials.</p>
+
+<p>Adobe seems well aware of this attack vector. While previously Flash would load resources from any SMB server, version 23 rejects any <a href="/2017/02/flash-bypassing-local-sandbox-data-exfiltration-credentials-leak/#by-definition-not-so-local">UNC and File-style paths</a> - two schemes used to reference SMB hosts. Example paths now being rejected include, respectively, <code class="highlighter-rouge">\\10.0.0.1\some\file.txt</code> and the equivalent <code class="highlighter-rouge">file://///10.0.0.1/some/file.txt</code>.</p>
+
+<p>Unfortunately, taking <a href="https://docs.microsoft.com/en-us/windows/uwp/launch-resume/reserved-uri-scheme-names">Microsoft’s URI list</a> for some creative URL generation does not yield any results. In neither sandbox, <code class="highlighter-rouge">URLLoader</code> appears to accept any paths not being prefixed by either HTTP or HTTPS. It seems Adobe has stepped up their game by switching to a whitelist approach.</p>
+
+<p>Now, what if we could change the requested path <em>after</em> having passed input validation? Seeing as we are restricted to HTTP, this would translate to leveraging HTTP redirection for accessing SMB hosts.</p>
+
+<p>Fortunately, SMB and HTTP are not an unlikely combination. Immediately coming to mind is a Windows vulnerability known as <a href="https://www.cylance.com/content/dam/cylance/pdfs/white_papers/redirect-to-smb-20151012.pdf">Redirect-to-SMB</a>. By setting the HTTP <code class="highlighter-rouge">Location</code> header and an appropriate response code (e.g. 301, 302), this vulnerability can be used to redirect HTTP requests to a malicious SMB server. An attack can be executed as shown in the following screenshot:</p>
+
+<p class="img-caption"><img src="https://blog.bjornweb.nl/resources/rdr2smb_httpresponse.png" alt="rdr2smb_httpresponse" class="center-image" />
+Figure 1. Attacker redirecting victim to attacker’s SMB server</p>
+
+<h3 id="susceptible-or-is-it">Susceptible, or is it?</h3>
+
+<p>In our attacker scenario, the malicious Flash application as well as SMB server are hosted on a machine having the IP address <code class="highlighter-rouge">23.100.122.2</code>. This Flash application runs on the victim’s local machine in the <code class="highlighter-rouge">remote</code> sandbox. That is, the runtime prohibits local file system access but allows remote connections.</p>
+
+<p>Tracing back to the Win32 API, the <a href="https://www.kb.cert.org/vuls/id/672268">functions affected by Redirect-to-SMB</a> reside in <code class="highlighter-rouge">urlmon.dll</code>. Hence, Internet Explorer and any third-party applications using them are vulnerable.</p>
+
+<p>Having generated quite some media attention, the vulnerability triggered many vendors to patch up their products. So, what about Adobe Flash? Attempting to redirect an outbound <code class="highlighter-rouge">GET /somefile.txt</code> request gives:</p>
+
+<p class="img-caption"><img src="https://blog.bjornweb.nl/resources/secerror2032.png" alt="rdr2smb_httpresponse" class="center-image" />
+Figure 2. URLLoader output when redirecting victim to SMB</p>
+
+<p>Code #2032 is Flash terminology for <em>Stream Error</em>. From last time, we know anything but #2048 may indicate success. Let’s see what actually happens:</p>
+
+<p class="img-caption"><img src="https://blog.bjornweb.nl/resources/fail_clipped.png" alt="rdr2smb_httpresponse" class="center-image" />
+Figure 3. Wireshark trace for initial attempt</p>
+
+<p>Alas, it seems Flash Player is not susceptible - our <code class="highlighter-rouge">HTTP/1.1 302</code> response does not trigger SMB traffic. However, notice there is a <code class="highlighter-rouge">GET</code> request for <code class="highlighter-rouge">crossdomain.xml</code>. Dubbed the <a href="https://www.adobe.com/devnet/adobe-media-server/articles/cross-domain-xml-for-streaming.html">cross-domain policy file</a>, it dictates when a Flash client is allowed to load resources from a different domain other than the originating one. For example, if not explicitly allowed by <em>domain-b.com</em>, the runtime will not load images from that domain if the Flash application is hosted on <em>domain-a.com</em>.</p>
+
+<p>The careful reader might notice that Adobe’s definition, unlike <a href="https://www.w3.org/TR/cors/#terminology">HTTP CORS</a> (referencing <a href="https://tools.ietf.org/html/rfc6454#section-5">RFC6454</a>), restricts itself to <em>cross-domain</em> data handling. More specifically, it does not take into account differing <em>protocols</em>. This security mechanism should therefore be unrelated to our blocked attack: we are trying to redirect to SMB, a different protocol, on the same host ;-).</p>
+
+<p>Interestingly however, our Wireshark trace seemingly suggests otherwise: <code class="highlighter-rouge">crossdomain.xml</code> is being requested from the same host that serves our Flash application. Hence, we proceed by constructing a least-restrictive cross-domain policy. Taking the syntax from Adobe’s developer guide, we have:</p>
+
+<figure class="highlight"><pre><code class="language-xml" data-lang="xml"><span class="cp">&lt;?xml version="1.0"?&gt;</span>
+<span class="cp">&lt;!DOCTYPE cross-domain-policy SYSTEM "http://www.adobe.com/xml/dtds/cross-domain-policy.dtd"&gt;</span>
+<span class="nt">&lt;cross-domain-policy&gt;</span>
+    <span class="nt">&lt;site-control</span> <span class="na">permitted-cross-domain-policies=</span><span class="s">"all"</span><span class="nt">/&gt;</span>
+    <span class="nt">&lt;allow-access-from</span> <span class="na">domain=</span><span class="s">"*"</span> <span class="na">secure=</span><span class="s">"false"</span><span class="nt">/&gt;</span>
+    <span class="nt">&lt;allow-http-request-headers-from</span> <span class="na">domain=</span><span class="s">"*"</span> <span class="na">headers=</span><span class="s">"*"</span> <span class="na">secure=</span><span class="s">"false"</span><span class="nt">/&gt;</span>
+<span class="nt">&lt;/cross-domain-policy&gt;</span></code></pre></figure>
+
+<p>Finally, we reload our Flash application and observe what happens:</p>
+
+<p class="img-caption"><img src="https://blog.bjornweb.nl/resources/success.png" alt="rdr2smb_httpresponse" class="center-image" />
+Figure 4. Wireshark trace after consuming crossdomain.xml</p>
+
+<p>Success! We have established an SMB connection from the victim’s machine (23.100.122.3) to our remote server (23.100.122.2). From here, we simply reiterate <a href="/2017/02/flash-bypassing-local-sandbox-data-exfiltration-credentials-leak/#smb-at-play-leaking-windows-user-credentials">what we did last time</a>. A Python script called <em>SMBTrap</em> operates as our malicious SMB server, and captures any incoming requests along with the victim’s user credentials:</p>
+
+<p class="img-caption"><img src="https://blog.bjornweb.nl/resources/smbtrap_usercred_only.png" alt="smbtrap_output" class="center-image" />
+Figure 5. SMBTrap output</p>
+
+<h3 id="a-word-about-affected-environments">A word about affected environments</h3>
+
+<p>Interestingly, and in contrast to the previous flaw, Edge as well as Chrome (with Flash enabled) are unaffected. While otherwise showing similar behavior, including a cross-domain policy file request, both browsers appear to prevent Flash from connecting to SMB hosts.</p>
+
+<p>That said, Firefox as well as Internet Explorer <em>are</em> vulnerable. This also applies to all current versions of Microsoft Office. In addition, the flaw affects both <code class="highlighter-rouge">remote</code> and <code class="highlighter-rouge">local-with-networking</code> sandboxes.</p>
+
+<h3 id="conclusion">Conclusion</h3>
+
+<p>Having introduced new input validation measures, Flash Player 23 minimizes potential attack vectors by rejecting any outbound requests for non-HTTP URLs. Quite unexpectedly, however, input validation is only done once: while the initial HTTP request is validated, consecutive redirects are not. Combined with the fact Flash is still susceptible to a known Windows vulnerability therefore effectively kills a seemingly solid approach. This is unfortunate, and perhaps once again illustrates the underlying problem that platform-specific vulnerabilities need to be taken into account whenever possible.</p>
+
+<p>Flash Player 26.0.0.151 fixes this issue, and can be downloaded through Windows Update and <a href="https://get.adobe.com/flashplayer/">Adobe’s website</a>.
+<br /><br /></p>
+
+<h3 id="overview">Overview</h3>
+
+<h5 id="affected-host-environments">Affected host environments</h5>
+<div class="highlighter-rouge"><pre class="highlight"><code>Firefox
+Internet Explorer
+Microsoft Office 2010, 2013 and 2016
+</code></pre>
+</div>
+
+<h5 id="affected-platforms">Affected platforms</h5>
+<div class="highlighter-rouge"><pre class="highlight"><code>Flash Player 23.0.0.162 to 26.0.0.137
+Windows XP, Vista, 7, 8.x and 10
+</code></pre>
+</div>
+
+<h5 id="timeline">Timeline</h5>
+<div class="highlighter-rouge"><pre class="highlight"><code>11-02-2017: Vulnerability reported to Trend Micro Zero Day Initiative.
+21-04-2017: ZDI acknowledges the vulnerability and assigns it ZDI-17-634.
+05-06-2017: Requested status update. Adobe replies Flash Player 26, to be released in July 2017, is being targeted to fix the vulnerability.
+12-07-2017: Requested status update. Adobe replies it is still working on a fix, moving its expected release to August 2017.
+08-08-2017: Adobe fixes the vulnerability in Flash Player 26.0.0.151.
+08-08-2017: Vulnerability published.
+</code></pre>
+</div>
+
+<h5 id="related-articles">Related articles</h5>
+<ul>
+  <li><a href="https://helpx.adobe.com/security/products/flash-player/apsb17-23.html">Adobe Security Bulletin APSB17-23</a></li>
+  <li><a href="https://www.cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2017-3085">CVE-2017-3085</a></li>
+  <li><a href="https://www.zerodayinitiative.com/advisories/ZDI-17-634/">ZDI-17-634</a></li>
+  <li><a href="https://threatpost.com/patched-flash-player-sandbox-escape-leaked-windows-credentials/127378/">Threatpost - Patched Flash Player Sandbox Escape Leaked Windows Credentials</a></li>
+  <li><a href="https://www.scmagazineuk.com/recently-patched-flash-player-sandbox-leaks-windows-credentials/article/681278/">SC Magazine UK - Recently patched Flash Player sandbox leaks Windows credentials</a></li>
+  <li><a href="https://www.bleepingcomputer.com/news/security/recently-patched-flash-bug-can-leak-windows-credentials/">BleepingComputer - Recently Patched Flash Bug Can Leak Windows Credentials</a></li>
+  <li><a href="https://wccftech.com/adobe-bugs-flash-player-acrobat-reader/">WCCFtech - Adobe Addresses Several Vulnerabilities in Flash Player, Acrobat, and Reader</a></li>
+  <li><a href="https://www.security.nl/posting/527299/Radboud-student+ontdekt+opnieuw+lek+in+Adobe+Flash+Player">Security.NL (Dutch) - Radboud-student ontdekt opnieuw lek in Adobe Flash Player</a></li>
+  <li><a href="http://www.zdnet.de/88307845/flash-luecke-erlaubt-diebstahl-von-windows-anmeldedaten/">ZDNet (German) - Flash-Lücke erlaubt Diebstahl von Windows-Anmeldedaten</a></li>
+  <li><a href="https://secnews.gr/160142/flash-player-new-bug/">SecNews (Greek) - Flash Player μετά την ενημέρωση: ευπάθεια και πάλι</a></li>
+  <li><a href="http://www.securitytracker.com/id/1039088">SecurityTracker - Adobe Flash Player Bugs Let Remote Users Obtain Potentially Sensitive Information and Execute Arbitrary Code</a></li>
+</ul>
+
+<section id="social-share-section">
+
+  
+  <!--- Share on Twitter -->
+    <a href="https://twitter.com/intent/tweet?text=Playing+in+the+Remote+Sandbox%3A+Adobe+Flash+Windows+User+Credentials+Disclosure+Vulnerability+%28CVE-2017-3085%29+https://blog.bjornweb.nl/2017/08/flash-remote-sandbox-escape-windows-user-credentials-leak/"
+      class="btn btn-social-icon btn-twitter" title="Share on Twitter">
+      <span class="fa fa-fw fa-twitter" aria-hidden="true"></span>
+    </a>
+  
+
+  
+  <!--- Share on Facebook -->
+    <a href="https://www.facebook.com/sharer/sharer.php?u=https://blog.bjornweb.nl/2017/08/flash-remote-sandbox-escape-windows-user-credentials-leak/"
+      class="btn btn-social-icon btn-facebook" title="Share on Facebook">
+      <span class="fa fa-fw fa-facebook" aria-hidden="true"></span>
+    </a>
+  
+
+  
+
+  
+  <!--- Share on LinkedIn -->
+    <a href="https://www.linkedin.com/shareArticle?mini=true&url=https://blog.bjornweb.nl/2017/08/flash-remote-sandbox-escape-windows-user-credentials-leak/"
+      class="btn btn-social-icon btn-linkedin" title="Share on LinkedIn">
+      <span class="fa fa-fw fa-linkedin" aria-hidden="true"></span>
+    </a>
+  
+
+</section>
+
+
+<small>Tags: 
+
+  <a href="/tags#vulnerability research">vulnerability research</a>&nbsp;</li>
+
+  <a href="/tags#adobe flash">adobe flash</a>&nbsp;</li>
+
+  <a href="/tags#smb">smb</a>&nbsp;</li>
+
+</small>
+
+</article>
+
+<ul class="pager">
+        
+          <a href="/2017/02/flash-bypassing-local-sandbox-data-exfiltration-credentials-leak/" data-toggle="tooltip" data-placement="top" title="Adobe Flash: Bypassing the local sandbox to exfiltrate data, obtain Windows user credentials (CVE-2016-4271)">&larr; Adobe Flash: Bypassing the local sandbox to exfiltrate data, obtain Windows user credentials (CVE-2016-4271)</a>
+			
+        
+        
+</ul>
+
+</div>
+
+<div class="footer">
+  <a href="/feed.xml" title="RSS Feed">
+      <span class="fa fa-rss" aria-hidden="true"></span>
+   </a>
+   <!--sse--><a href="/cdn-cgi/l/email-protection#f1d7d2c8c9cad7d2c0c1c7cad7d2c0c0c0cad7d2c0c0c5cad7d2c0c0c1cad7d2c7c5cad7d2c8c9cad7d2c0c1c7cad7d2c0c0c0cad7d2c0c0c5cad7d2c0c0c1cad7d2c0c0c8cad7d2c0c1c0cad7d2c8c9cad7d2c5c7cad7d2c0c0c1cad7d2c0c1c9ca" title="Contact Me">
+      <span class="fa fa-envelope" aria-hidden="true"></span>
+   </a><!--/sse-->
+   <a href="https://twitter.com/0Xiphorus" title="@0Xiphorus">
+      <span class="fa fa-twitter" aria-hidden="true"></span>
+   </a>
+</div>
+
+</div><!-- .container -->
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"rayId":"6a65cf41691861e9","version":"2021.10.0","r":1,"token":"9d66a571a8a24eaf88d9a19d942ffa38","si":100}'></script>
+</body>
+</html>

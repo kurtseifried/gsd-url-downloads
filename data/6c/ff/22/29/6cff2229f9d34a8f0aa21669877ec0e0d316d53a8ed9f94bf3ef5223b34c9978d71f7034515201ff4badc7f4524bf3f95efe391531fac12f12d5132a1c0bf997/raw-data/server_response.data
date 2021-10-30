@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+
+
+<html lang="en-us" data-theme="">
+<head>
+    
+        
+<meta charset="utf-8">
+<meta name="HandheldFriendly" content="True">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer-when-downgrade">
+
+<title>SQLi in ph_simpleblog CVE-2021-36748 - Sorcery Blog</title>
+<meta name="description" content="">
+
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="apple-touch-icon-precomposed" href="favicon.png">
+
+
+
+
+
+<link rel="stylesheet" href="/css/style.bb96fd315dd35ff3162f4a19fe9ef9d1259274e37555145edc78e9fe914db7aa.css" integrity="sha256-u5b9MV3TX/MWL0oZ/p750SWSdON1VRRe3Hjp/pFNt6o=">
+
+<link rel="stylesheet" href="css/my.css?rnd=1633364048">
+
+<script src="js/main.js?rnd=1633364048" type="text/javascript" charset="utf-8"></script>
+
+<meta property="og:title" content="SQLi in ph_simpleblog CVE-2021-36748" />
+<meta property="og:description" content="This blog post details an SQLi I found in Blog for Prestashop (ph_simpleblog) by Prestahome, it is also my first CVE 😊
+To begin with I had to identify that the module was installed, it is a blog plugin so this can generally be spotted by looking at the page source of the blog but you can also test if Prestashop modules are installed more directly by checking https://example.com/modules/ph_simpleblog/config.xml.
+This Prestashop module uses the controller functionality so that&rsquo;s where I started to look as it&rsquo;s usually where the user input will go first." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="/posts/ph_simpleblog_sqli/" />
+<meta property="og:image" content="images/og-featured.png"/>
+<meta property="article:published_time" content="2021-08-18T00:00:00+00:00" />
+<meta property="article:modified_time" content="2021-08-18T00:00:00+00:00" />
+
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:image" content="images/og-featured.png"/>
+
+<meta name="twitter:title" content="SQLi in ph_simpleblog CVE-2021-36748"/>
+<meta name="twitter:description" content="This blog post details an SQLi I found in Blog for Prestashop (ph_simpleblog) by Prestahome, it is also my first CVE 😊
+To begin with I had to identify that the module was installed, it is a blog plugin so this can generally be spotted by looking at the page source of the blog but you can also test if Prestashop modules are installed more directly by checking https://example.com/modules/ph_simpleblog/config.xml.
+This Prestashop module uses the controller functionality so that&rsquo;s where I started to look as it&rsquo;s usually where the user input will go first."/>
+
+
+
+
+
+
+
+
+
+    
+</head>
+<body>
+    <a class="skip-main" href="#main">Skip to main content</a>
+    <div class="container">
+        <header class="common-header"> 
+            
+                <h1 class="site-title">
+    <a href="/">Sorcery Blog</a>
+</h1>
+
+    <nav>
+        
+        
+        <a class="" href="https://twitter.com/sorceryie" title="Twitter">Twitter</a>
+        
+        <a class="" href="/posts/" title="Archive">Archive</a>
+        
+        <a class="" href="/tags/" title="">Tags</a>
+        
+        <a class="" href="https://sorcery.ie" title="Main Site">Main Site</a>
+        
+    </nav>
+
+
+            
+        </header>
+        <main id="main" tabindex="-1"> 
+            
+    
+    
+    <article class="post">
+        <header class="post-header">
+            <h1 class="post-title">SQLi in ph_simpleblog CVE-2021-36748</h1>
+        </header>
+        <div class="content">
+            <p>This blog post details an SQLi I found in Blog for Prestashop (ph_simpleblog) by <a href="https://prestahome.com/">Prestahome</a>, it is also my first CVE 😊</p>
+<p>To begin with I had to identify that the module was installed, it is a blog plugin so this can generally be spotted by looking at the page source of the blog but you can also test if Prestashop modules are installed more directly by checking <code>https://example.com/modules/ph_simpleblog/config.xml</code>.</p>
+<p>This Prestashop module uses the controller functionality so that&rsquo;s where I started to look as it&rsquo;s usually where the user input will go first.</p>
+<p>The controllers of interest were <code>controllers/front/list.php</code> and <code>controllers/front/single.php</code>.  In Prestashop modules the init() and initContent() functions are called whenever the endpoint is reached.
+In the init function we can see that the <code>sb_category</code> parameter isn&rsquo;t sanitised.
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-php" data-lang="php"><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">init</span>(){
+	<span style="color:#66d9ef">parent</span><span style="color:#f92672">::</span><span style="color:#a6e22e">init</span>();
+	$sb_category <span style="color:#f92672">=</span> <span style="color:#a6e22e">Tools</span><span style="color:#f92672">::</span><span style="color:#a6e22e">getValue</span>(<span style="color:#e6db74">&#39;sb_category&#39;</span>);
+	<span style="color:#75715e">// ...
+</span><span style="color:#75715e"></span>	<span style="color:#66d9ef">if</span>($sb_category) $this<span style="color:#f92672">-&gt;</span><span style="color:#a6e22e">sb_category</span> <span style="color:#f92672">=</span> $sb_category;
+	<span style="color:#75715e">//more code...
+</span><span style="color:#75715e"></span>}
+</code></pre></div>
+Later in the initContent() function sb_category gets passed to the getByRewrite() function in the SimpleBlogCategory class.
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-php" data-lang="php"><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">initContent</span>(){
+	<span style="color:#75715e">// ...
+</span><span style="color:#75715e"></span>	<span style="color:#66d9ef">if</span>($this<span style="color:#f92672">-&gt;</span><span style="color:#a6e22e">sb_category</span> <span style="color:#f92672">!=</span> <span style="color:#e6db74">&#39;&#39;</span>){
+		$this<span style="color:#f92672">-&gt;</span><span style="color:#a6e22e">context</span><span style="color:#f92672">-&gt;</span><span style="color:#a6e22e">smarty</span><span style="color:#f92672">-&gt;</span><span style="color:#a6e22e">assign</span>(<span style="color:#e6db74">&#39;is_category&#39;</span>, <span style="color:#66d9ef">true</span>);
+		$SimpleBlogCategory <span style="color:#f92672">=</span>
+		<span style="color:#a6e22e">SimpleBlogCategory</span><span style="color:#f92672">::</span><span style="color:#a6e22e">getByRewrite</span>($this<span style="color:#f92672">-&gt;</span><span style="color:#a6e22e">sb_category</span>, $id_lang);
+</code></pre></div>
+In the getByRewrite function we can see it gets used in an SQL query without any sanitisation.
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-php" data-lang="php"><span style="color:#66d9ef">public</span> <span style="color:#66d9ef">static</span> <span style="color:#66d9ef">function</span> <span style="color:#a6e22e">getByRewrite</span>($rewrite <span style="color:#f92672">=</span> <span style="color:#66d9ef">null</span>, $id_lang <span style="color:#f92672">=</span> <span style="color:#66d9ef">false</span>){
+	<span style="color:#66d9ef">if</span>(<span style="color:#f92672">!</span>$rewrite) <span style="color:#66d9ef">return</span>;
+	$sql <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">DbQuery</span>();
+	$sql<span style="color:#f92672">-&gt;</span><span style="color:#a6e22e">select</span>(<span style="color:#e6db74">&#39;l.id_simpleblog_category&#39;</span>);
+	$sql<span style="color:#f92672">-&gt;</span><span style="color:#a6e22e">from</span>(<span style="color:#e6db74">&#39;simpleblog_category_lang&#39;</span>, <span style="color:#e6db74">&#39;l&#39;</span>);
+	<span style="color:#66d9ef">if</span>($id_lang)
+		$sql<span style="color:#f92672">-&gt;</span><span style="color:#a6e22e">where</span>(<span style="color:#e6db74">&#39;l.link_rewrite = \&#39;&#39;</span><span style="color:#f92672">.</span>$rewrite<span style="color:#f92672">.</span><span style="color:#e6db74">&#39;\&#39; AND l.id_lang =
+</span><span style="color:#e6db74">	&#39;</span><span style="color:#f92672">.</span>(<span style="color:#a6e22e">int</span>)$id_lang);
+	<span style="color:#66d9ef">else</span>
+		$sql<span style="color:#f92672">-&gt;</span><span style="color:#a6e22e">where</span>(<span style="color:#e6db74">&#39;l.link_rewrite = \&#39;&#39;</span><span style="color:#f92672">.</span>$rewrite<span style="color:#f92672">.</span><span style="color:#e6db74">&#39;\&#39;&#39;</span>);
+	$category <span style="color:#f92672">=</span> <span style="color:#66d9ef">new</span> <span style="color:#a6e22e">SimpleBlogCategory</span>(<span style="color:#a6e22e">Db</span><span style="color:#f92672">::</span><span style="color:#a6e22e">getInstance</span>()<span style="color:#f92672">-&gt;</span><span style="color:#a6e22e">getValue</span>($sql),
+	$id_lang);
+	<span style="color:#66d9ef">return</span> $category;
+}
+</code></pre></div></p>
+<p>Okay, success, found the SQLi but where is this endpoint?
+In Prestashop the controllers for modules are located at <code>/module/modulename/filename</code> (not <code>/modules</code>!) so for this case: <code>https://example.com/module/ph_simpleblog/list?sb_category=*</code>.
+No exploit script or manual SQLi was required as sqlmap was able to detect it as boolean-based blind.</p>
+<h1 id="fixing-the-issue">Fixing the issue</h1>
+<p>Prestashop provide a built in function for sanitising strings to be used in SQL queries called pSQL. This is the quick fix in situations like this but one must be sure to surround the parameter with quotes or the query will still be vulnerable to SQLi as I will show in the next blog post.</p>
+<p>The most correct way to patch this would be to use PDO as desribed in Prestashop&rsquo;s <a href="https://doc.prestashop.com/pages/viewpage.action?pageId=51184692">Best Practices for the DB Class</a>. PDO eliminates the risks of faulty parameter sanitisation and makes it hard to do things the wrong way.</p>
+<p>I found the contact details for the developer of the module and they were quickly able to patch the issue.</p>
+<h1 id="timeline">Timeline</h1>
+<table>
+<thead>
+<tr>
+<th>Date</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>18/06/2021</td>
+<td>Issue discovered during a pentest</td>
+</tr>
+<tr>
+<td>13/07/2021</td>
+<td>Reported issue to Prestahome</td>
+</tr>
+<tr>
+<td>14/07/2021</td>
+<td>Prestahome patched the issue in version 1.7.8</td>
+</tr>
+<tr>
+<td>15/07/2021</td>
+<td>Number <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-36748">CVE-2021-36748</a> assigned</td>
+</tr>
+<tr>
+<td>18/08/2021</td>
+<td>Blog post released</td>
+</tr>
+<tr>
+<td>20/08/2021</td>
+<td><a href="https://github.com/pajoda">pajoda</a> released a <a href="https://github.com/projectdiscovery/nuclei-templates/pull/2446">Nuclei template</a> for this CVE</td>
+</tr>
+</tbody>
+</table>
+
+        </div>
+        
+
+    
+
+
+<div class="post-info">
+    
+        <div class="post-date">2021-08-18</div>
+    
+    <div class="post-taxonomies">
+        
+            
+                <ul class="post-tags">
+                    
+                        <li><a href="tags/ph_simpleblog">#ph_simpleblog</a></li>
+                    
+                        <li><a href="tags/simpleblog">#simpleblog</a></li>
+                    
+                        <li><a href="tags/prestahome">#prestahome</a></li>
+                    
+                        <li><a href="tags/cve-2021-36748">#CVE-2021-36748</a></li>
+                    
+                </ul>
+        
+    </div>
+</div>
+
+    </article>
+
+    
+        
+    <div class="pagination post-pagination">
+        <div class="left pagination-item ">
+            
+                <a href="/posts/smartblog_sqli/">SQLi in SmartBlog CVE-2021-37538</a>
+            
+        </div>
+        <div class="right pagination-item ">
+            
+                <a href="/posts/adminer/">Adminer - A Guide For All its Vulnerabilities</a>
+            
+        </div>
+    </div>
+
+    
+
+    
+
+
+        </main>
+        
+            <footer class="common-footer">
+    
+    
+
+    <div class="common-footer-bottom">
+        
+        <div class="copyright">
+            <p>© Sorcery Ltd, 2021<br>
+            Powered by <a target="_blank" rel="noopener noreferrer" href="https://gohugo.io/">Hugo</a>, theme <a target="_blank" rel="noopener noreferrer" href="https://github.com/mitrichius/hugo-theme-anubis">Anubis</a>.
+            </p>  
+        </div> 
+
+        
+
+    
+
+
+
+    <button class="theme-switcher">
+        Dark theme
+    </button>
+
+    <script>
+    const STORAGE_KEY = 'user-color-scheme'
+    const defaultTheme = "light"
+
+    let currentTheme
+    let switchButton
+    let autoDefinedScheme = window.matchMedia('(prefers-color-scheme: dark)')
+
+    const autoChangeScheme = e => {
+        currentTheme = e.matches ? 'dark' : 'light'
+        document.documentElement.setAttribute('data-theme', currentTheme)
+        changeButtonText()
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        switchButton = document.querySelector('.theme-switcher')
+        currentTheme = detectCurrentScheme()
+        if (currentTheme == 'dark') {
+            document.documentElement.setAttribute('data-theme', 'dark')
+        }
+        if (currentTheme == 'auto') {
+            autoChangeScheme(autoDefinedScheme);
+            autoDefinedScheme.addListener(autoChangeScheme);
+        }
+        changeButtonText()
+        switchButton.addEventListener('click', switchTheme, false)
+    })
+
+    function detectCurrentScheme() {
+        if (localStorage.getItem(STORAGE_KEY)) {
+            return localStorage.getItem(STORAGE_KEY)
+        } 
+        if (defaultTheme) {
+            return defaultTheme
+        } 
+        if (!window.matchMedia) {
+            return 'light'
+        } 
+        if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            return 'dark'
+        }
+        return 'light'
+    }
+
+    function changeButtonText()
+    {   
+        switchButton.textContent = currentTheme == 'dark' ?  "Light theme" : "Dark theme"
+    }
+
+    function switchTheme(e) {
+        if (currentTheme == 'dark') {
+            localStorage.setItem(STORAGE_KEY, 'light')
+            document.documentElement.setAttribute('data-theme', 'light')
+            currentTheme = 'light'
+        } else {
+            localStorage.setItem(STORAGE_KEY, 'dark')
+            document.documentElement.setAttribute('data-theme', 'dark')
+            currentTheme = 'dark'
+        }
+        changeButtonText()
+    }
+    </script>
+   
+    </div>
+</footer>
+
+        
+    </div>
+</body>
+</html>

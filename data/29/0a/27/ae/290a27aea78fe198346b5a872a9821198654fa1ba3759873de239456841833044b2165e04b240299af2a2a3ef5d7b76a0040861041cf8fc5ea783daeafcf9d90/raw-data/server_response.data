@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  
+  <title>Disclosure: WordPress WPDB SQL Injection - Technical | ircmaxell&#39;s Blog</title>
+  <meta name="description" content="A blog about PHP, Security, Performance and general web application development." />
+  <meta name="keywords" content="" />
+  <meta name="HandheldFriendly" content="True" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="shortcut icon" href="/">
+  <link rel="alternate" href="/feeds/posts/default/index.xml" title="ircmaxell's Blog" >
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+  <meta name="description" content="Today, a significant SQL-Injection vulnerability was fixed in WordPress 4.8.3. Before reading further, if you haven’t updated yet stop right now and update. The foundations of this vulnerability was r">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Disclosure: WordPress WPDB SQL Injection - Technical">
+<meta property="og:url" content="https://blog.ircmaxell.com/2017/10/disclosure-wordpress-wpdb-sql-injection-technical.html">
+<meta property="og:site_name" content="ircmaxell&#39;s Blog">
+<meta property="og:description" content="Today, a significant SQL-Injection vulnerability was fixed in WordPress 4.8.3. Before reading further, if you haven’t updated yet stop right now and update. The foundations of this vulnerability was r">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2017-10-31T04:00:00.000Z">
+<meta property="article:modified_time" content="2021-03-19T15:27:29.475Z">
+<meta property="article:author" content="Anthony Ferrara">
+<meta property="article:tag" content="PHP">
+<meta property="article:tag" content="Security">
+<meta property="article:tag" content="Open Source">
+<meta property="article:tag" content="Disclosure">
+<meta property="article:tag" content="SQL Injection">
+<meta name="twitter:card" content="summary">
+    
+  <link href="https://fonts.googleapis.com/css?family=Inconsolata|Titillium+Web|Roboto+Mono" rel="stylesheet">
+  <link rel="stylesheet" href="/style_1616167669959.css"></link>
+<meta name="generator" content="Hexo 5.4.0"><link rel="stylesheet" href="/css/prism-xonokai.css" type="text/css">
+<link rel="stylesheet" href="/css/prism-line-numbers.css" type="text/css"></head>
+
+<body id="ircmaxell-blog">
+  <header class="l_header">
+	<div class='wrapper'>
+		<div class="nav-main container container--flex">
+			<a class="logo flat-box" href='/' >
+				ircmaxell's Blog
+			</a>
+			<div class='menu'>
+				<ul class='h-list'>
+					
+						<li>
+						  
+									<a class='flat-box nav-home' href='/'>
+							
+								Home
+							</a>
+						</li>
+					
+						<li>
+						  
+									<a href="https://github.com/ircmaxell" class='flat-box nav-github' rel="noopener nofollow" target="_blank">
+							
+								GitHub
+							</a>
+						</li>
+					
+						<li>
+						  
+									<a href="https://github.com/ircmaxell/resume" class='flat-box nav-Resume' rel="noopener nofollow" target="_blank">
+							
+								Resume
+							</a>
+						</li>
+					
+				</ul>
+				<div class='underline'></div>
+			</div>
+			
+				<div class="m_search">
+					<form name="searchform" class="form u-search-form">
+						<input type="text" class="input u-search-input" placeholder="Search" />
+						<span class="icon icon-search"></span>
+					</form>
+				</div>
+			
+			<ul class='switcher h-list'>
+				
+					<li class='s-search'><a href='javascript:void(0)'><span class="icon icon-search flat-box"></span></a></li>
+				
+				<li class='s-menu'><a href='javascript:void(0)'><span class="icon icon-menu flat-box"></span></a></li>
+			</ul>
+		</div>
+		
+		<div class='nav-sub container container--flex'>
+			<a class="logo" class="flat-box" href='javascript:void(0)'>
+				Word of Forks
+			</a>
+
+			<ul class='switcher h-list'>
+				<li class='s-comment'><a href='javascript:void(0)'><span class="icon icon-chat_bubble_outline flat-box"></span></a></li>
+				<li class='s-top'><a href='javascript:void(0)'><span class="icon icon-arrow_upward flat-box"></span></a></li>
+				<li class='s-toc'><a href='javascript:void(0)'><span class="icon icon-format_list_numbered flat-box"></span></a></li>
+			</ul>
+		</div>
+	</div>
+</header>
+<aside class="menu-phone">
+	<nav>
+		
+			<a href="/" class="nav-home nav">
+						
+				Home
+			</a>
+		
+			<a href="https://github.com/ircmaxell" class="nav-github nav" rel="noopener nofollow" target="_blank">
+						
+				GitHub
+			</a>
+		
+			<a href="https://github.com/ircmaxell/resume" class="nav-Resume nav" rel="noopener nofollow" target="_blank">
+						
+				Resume
+			</a>
+		
+	</nav>
+</aside>
+
+  <div class="l_body">
+    <div class='container clearfix'>
+      <div class='l_main'>
+        <article id="post-disclosure-wordpress-wpdb-sql-injection-technical"
+  class="post white-box article-type-post"
+  itemscope itemprop="blogPost">
+	<section class='meta'>
+	<h2 class="title">
+  	<a href="/2017/10/disclosure-wordpress-wpdb-sql-injection-technical.html">
+    	Disclosure: WordPress WPDB SQL Injection - Technical
+    </a>
+  </h2>
+	<time>
+	  Oct 31, 2017
+	</time>
+	
+    
+    <div class='cats'>
+        <a href="/categories/Security/">Security</a>
+    </div>
+
+	</section>
+	
+		<section class="toc-wrapper">
+      <div class="nav">
+        <span>Table Of Contents</span>
+      </div>
+      <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#What-Site-Owners-Should-Do"><span class="toc-number">1.</span> <span class="toc-text">What Site Owners Should Do</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#What-Hosts-Should-Do"><span class="toc-number">2.</span> <span class="toc-text">What Hosts Should Do</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#What-Plugin-Developers-Should-Do"><span class="toc-number">3.</span> <span class="toc-text">What Plugin Developers Should Do</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#The-Original-Vulnerability"><span class="toc-number">4.</span> <span class="toc-text">The Original Vulnerability</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#The-Original-Fix"><span class="toc-number">5.</span> <span class="toc-text">The Original Fix</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#The-First-Issue-With-The-Fix"><span class="toc-number">6.</span> <span class="toc-text">The First Issue With The Fix.</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#The-full-breach"><span class="toc-number">7.</span> <span class="toc-text">The full breach</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#The-Simple-Fix"><span class="toc-number">8.</span> <span class="toc-text">The Simple Fix</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#The-Mitigation-Fix"><span class="toc-number">9.</span> <span class="toc-text">The Mitigation Fix</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#The-Correct-Fix"><span class="toc-number">10.</span> <span class="toc-text">The Correct Fix</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Also"><span class="toc-number">11.</span> <span class="toc-text">Also</span></a></li></ol>
+    </section>
+	
+	<section class="article typo">
+  	<div class="article-entry" itemprop="articleBody">
+    	<p>Today, a significant SQL-Injection vulnerability was fixed in WordPress 4.8.3. Before reading further, if you haven’t updated yet stop right now and update.</p>
+<p>The foundations of this vulnerability was reported via Hacker-One on September 20th, 2017.</p>
+<p>This post will detail the technical vulnerability as well as how to mitigate it. There is another post which deals with the <a href="/2017/10/disclosure-wordpress-wpdb-sql-injection-background.html">background and time-lines</a>.<br><span id="more"></span></p>
+<h2 id="What-Site-Owners-Should-Do"><a href="#What-Site-Owners-Should-Do" class="headerlink" title="What Site Owners Should Do"></a>What Site Owners Should Do</h2><p>Simply upgrade to 4.8.3 <strong>and</strong> update any plugins that override <code>$wpdb</code> (like HyperDB, LudicrousDB , etc). That <em>should</em> be enough to prevent these sorts of issues. </p>
+<h2 id="What-Hosts-Should-Do"><a href="#What-Hosts-Should-Do" class="headerlink" title="What Hosts Should Do"></a>What Hosts Should Do</h2><p>Upgrade <code>wp-db.php</code> for clients. </p>
+<p>There may be some firewall rules in the mean time that you could implement (such as blocking <code>%s</code> and other <code>sprintf()</code> values), but your mileage may vary.</p>
+<h2 id="What-Plugin-Developers-Should-Do"><a href="#What-Plugin-Developers-Should-Do" class="headerlink" title="What Plugin Developers Should Do"></a>What Plugin Developers Should Do</h2><p>To prevent this issue? Nothing, it’s been mitigated at the WP layer.</p>
+<p>In general however, go through and remove all user input from the <code>$query</code> side of <code>-&gt;prepare()</code>. <strong>NEVER</strong> pass user input to the query side. Meaning, never do this (in any form):</p>
+<pre class="line-numbers language-php"><code class="language-php"><span class="token variable">$where</span> <span class="token operator">=</span> <span class="token variable">$wpdb</span><span class="token operator">-</span><span class="token operator">></span><span class="token function">prepare</span><span class="token punctuation">(</span><span class="token string">" WHERE foo = %s"</span><span class="token punctuation">,</span> <span class="token variable">$_GET</span><span class="token punctuation">[</span><span class="token string">'data'</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token variable">$query</span> <span class="token operator">=</span> <span class="token variable">$wpdb</span><span class="token operator">-</span><span class="token operator">></span><span class="token function">prepare</span><span class="token punctuation">(</span><span class="token string">"SELECT * FROM something $where LIMIT %d, %d"</span><span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">,</span> <span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+<p>This is known as “double-preparing” and is not a good design.</p>
+<p>Also, don’t do this:</p>
+<pre class="line-numbers language-php"><code class="language-php"><span class="token variable">$where</span> <span class="token operator">=</span> <span class="token string">"WHERE foo = '"</span> <span class="token punctuation">.</span> <span class="token function">esc_sql</span><span class="token punctuation">(</span><span class="token variable">$_GET</span><span class="token punctuation">[</span><span class="token string">'data'</span><span class="token punctuation">]</span><span class="token punctuation">)</span> <span class="token punctuation">.</span> <span class="token string">"'"</span><span class="token punctuation">;</span>
+<span class="token variable">$query</span> <span class="token operator">=</span> <span class="token variable">$wpdb</span><span class="token operator">-</span><span class="token operator">></span><span class="token function">prepare</span><span class="token punctuation">(</span><span class="token string">"SELECT * FROM something $where LIMIT %d, %d"</span><span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">,</span> <span class="token number">2</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+<p>This is also conceptually unsafe.</p>
+<p>Instead, build your queries and arguments separately, and then prepare in one shot:</p>
+<pre class="line-numbers language-php"><code class="language-php"><span class="token variable">$where</span> <span class="token operator">=</span> <span class="token string">"WHERE foo = %s"</span><span class="token punctuation">;</span>
+<span class="token variable">$args</span> <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token variable">$_GET</span><span class="token punctuation">[</span><span class="token string">'data'</span><span class="token punctuation">]</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+<span class="token variable">$args</span><span class="token punctuation">[</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token number">1</span><span class="token punctuation">;</span>
+<span class="token variable">$args</span><span class="token punctuation">[</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token number">2</span><span class="token punctuation">;</span>
+<span class="token variable">$query</span> <span class="token operator">=</span> <span class="token variable">$wpdb</span><span class="token operator">-</span><span class="token operator">></span><span class="token function">prepare</span><span class="token punctuation">(</span><span class="token string">"SELECT * FROM something $where LIMIT %d, %d"</span><span class="token punctuation">,</span> <span class="token variable">$args</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>Let’s look at why:</p>
+<h2 id="The-Original-Vulnerability"><a href="#The-Original-Vulnerability" class="headerlink" title="The Original Vulnerability"></a>The Original Vulnerability</h2><p><strong>Many</strong> months ago, a vulnerability was reported dealing with how <code>WPDB</code> internally prepares vulnerable code. Let’s talk about the original vulnerability.</p>
+<p>To understand it, you need to first understand the internals of <code>WPDB::prepare</code>. Let’s look at the source (before 4.8.2):</p>
+<pre class="line-numbers language-php"><code class="language-php"><span class="token keyword">public</span> <span class="token keyword">function</span> <span class="token function">prepare</span><span class="token punctuation">(</span> <span class="token variable">$query</span><span class="token punctuation">,</span> <span class="token variable">$args</span> <span class="token punctuation">)</span> <span class="token punctuation">{</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span> <span class="token function">is_null</span><span class="token punctuation">(</span> <span class="token variable">$query</span> <span class="token punctuation">)</span> <span class="token punctuation">)</span>
+        <span class="token keyword">return</span><span class="token punctuation">;</span>
+    <span class="token comment" spellcheck="true">// This is not meant to be foolproof -- but it will catch obviously incorrect usage.</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span> <span class="token function">strpos</span><span class="token punctuation">(</span> <span class="token variable">$query</span><span class="token punctuation">,</span> <span class="token string">'%'</span> <span class="token punctuation">)</span> <span class="token operator">===</span> <span class="token boolean">false</span> <span class="token punctuation">)</span> <span class="token punctuation">{</span>
+        <span class="token function">_doing_it_wrong</span><span class="token punctuation">(</span> <span class="token string">'wpdb::prepare'</span><span class="token punctuation">,</span> <span class="token function">sprintf</span><span class="token punctuation">(</span> <span class="token function">__</span><span class="token punctuation">(</span> <span class="token string">'The query argument of %s must have a placeholder.'</span> <span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">'wpdb::prepare()'</span> <span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string">'3.9.0'</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+    <span class="token variable">$args</span> <span class="token operator">=</span> <span class="token function">func_get_args</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token function">array_shift</span><span class="token punctuation">(</span> <span class="token variable">$args</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token comment" spellcheck="true">// If args were passed as an array (as in vsprintf), move them up</span>
+    <span class="token keyword">if</span> <span class="token punctuation">(</span> <span class="token function">isset</span><span class="token punctuation">(</span> <span class="token variable">$args</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span> <span class="token punctuation">)</span> <span class="token operator">&amp;&amp;</span> <span class="token function">is_array</span><span class="token punctuation">(</span><span class="token variable">$args</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">)</span> <span class="token punctuation">)</span>
+        <span class="token variable">$args</span> <span class="token operator">=</span> <span class="token variable">$args</span><span class="token punctuation">[</span><span class="token number">0</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+    <span class="token variable">$query</span> <span class="token operator">=</span> <span class="token function">str_replace</span><span class="token punctuation">(</span> <span class="token string">"'%s'"</span><span class="token punctuation">,</span> <span class="token string">'%s'</span><span class="token punctuation">,</span> <span class="token variable">$query</span> <span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment" spellcheck="true">// in case someone mistakenly already singlequoted it</span>
+    <span class="token variable">$query</span> <span class="token operator">=</span> <span class="token function">str_replace</span><span class="token punctuation">(</span> <span class="token string">'"%s"'</span><span class="token punctuation">,</span> <span class="token string">'%s'</span><span class="token punctuation">,</span> <span class="token variable">$query</span> <span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment" spellcheck="true">// doublequote unquoting</span>
+    <span class="token variable">$query</span> <span class="token operator">=</span> <span class="token function">preg_replace</span><span class="token punctuation">(</span> <span class="token string">'|(?&lt;!%)%f|'</span> <span class="token punctuation">,</span> <span class="token string">'%F'</span><span class="token punctuation">,</span> <span class="token variable">$query</span> <span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment" spellcheck="true">// Force floats to be locale unaware</span>
+    <span class="token variable">$query</span> <span class="token operator">=</span> <span class="token function">preg_replace</span><span class="token punctuation">(</span> <span class="token string">'|(?&lt;!%)%s|'</span><span class="token punctuation">,</span> <span class="token string">"'%s'"</span><span class="token punctuation">,</span> <span class="token variable">$query</span> <span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment" spellcheck="true">// quote the strings, avoiding escaped strings like %%s</span>
+    <span class="token function">array_walk</span><span class="token punctuation">(</span> <span class="token variable">$args</span><span class="token punctuation">,</span> <span class="token keyword">array</span><span class="token punctuation">(</span> <span class="token variable">$this</span><span class="token punctuation">,</span> <span class="token string">'escape_by_ref'</span> <span class="token punctuation">)</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token keyword">return</span> @<span class="token function">vsprintf</span><span class="token punctuation">(</span> <span class="token variable">$query</span><span class="token punctuation">,</span> <span class="token variable">$args</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>Notice three things. First, it uses <code>vsprintf</code> (which is basically identical to <code>sprintf</code>) to replace placeholders with values. Second, it uses <code>str_replace</code> to quote placeholders properly (even unquoting first to prevent double quotes). Third, if passed a single argument <em>and</em> that argument is an array, then it will replace the arguments with the value of that array. Meaning that calling <code>$wpdb-&gt;prepare($sql, [1, 2])</code> is identical to calling <code>$wpdb-&gt;prepare($sql, 1, 2)</code>. This will be important later.</p>
+<p>The original reported vulnerability (months ago, not by me) relied on the following theoretical (well, many plugins had this pattern) server-side code:</p>
+<pre class="line-numbers language-php"><code class="language-php"><span class="token variable">$items</span> <span class="token operator">=</span> <span class="token function">implode</span><span class="token punctuation">(</span><span class="token string">", "</span><span class="token punctuation">,</span> <span class="token function">array_map</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token variable">$wpdb</span><span class="token punctuation">,</span> <span class="token string">'_real_escape'</span><span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token variable">$_GET</span><span class="token punctuation">[</span><span class="token string">'items'</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token variable">$sql</span> <span class="token operator">=</span> <span class="token string">"SELECT * FROM foo WHERE bar IN ($items) AND baz = %s"</span><span class="token punctuation">;</span>
+
+<span class="token variable">$query</span> <span class="token operator">=</span> <span class="token variable">$wpdb</span><span class="token operator">-</span><span class="token operator">></span><span class="token function">prepare</span><span class="token punctuation">(</span><span class="token variable">$sql</span><span class="token punctuation">,</span> <span class="token variable">$_GET</span><span class="token punctuation">[</span><span class="token string">'baz'</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span></span></code></pre>
+<p>The original reported vulnerability used a sneaky feature in <code>vsprintf</code> to allow you to “absolute reference” arguments. Let’s look at an example:</p>
+<pre class="line-numbers language-php"><code class="language-php"><span class="token function">vsprintf</span><span class="token punctuation">(</span><span class="token string">'%s, %d, %s'</span><span class="token punctuation">,</span> <span class="token punctuation">[</span><span class="token string">"a"</span><span class="token punctuation">,</span> <span class="token number">1</span><span class="token punctuation">,</span> <span class="token string">"b"</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment" spellcheck="true">// "a, 1, b"</span>
+<span class="token function">vsprintf</span><span class="token punctuation">(</span><span class="token string">'%s, %d, %1$s'</span><span class="token punctuation">,</span> <span class="token punctuation">[</span><span class="token string">"a"</span><span class="token punctuation">,</span> <span class="token number">2</span><span class="token punctuation">,</span> <span class="token string">"b"</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span> <span class="token comment" spellcheck="true">// "a, 2, a"</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+<p>Notice that <code>%n$s</code> will not read the next argument, but the one at the position specified by <code>n</code>.</p>
+<p>We can use this fact to inject into the original query. Imagine that we instead passed the following information to the request:</p>
+<pre class="line-numbers language-php"><code class="language-php"><span class="token variable">$_GET</span><span class="token punctuation">[</span><span class="token string">'items'</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token string">'%1$s'</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+<span class="token variable">$_GET</span><span class="token punctuation">[</span><span class="token string">'baz'</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token string">"test"</span><span class="token punctuation">;</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+<p>Now, the query will be changed to <code>SELECT * FROM foo WHERE bar IN (&#39;test&#39;) AND baz = &#39;test&#39;;</code> Not good (we’ve successfully changed the meaning of the query), but also not incredibly bad on the surface. </p>
+<p>There’s one other key piece of information that the original report included to change this into a full-blown SQL Injection. <code>sprintf</code> also accepts another type of parameter: <code>%c</code> which acts like <code>chr()</code> and converts a decimal digit into a character. So now, the attacker can do this:</p>
+<pre class="line-numbers language-php"><code class="language-php"><span class="token variable">$_GET</span><span class="token punctuation">[</span><span class="token string">'items'</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token string">'%1$c) OR 1 = 1 /*'</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+<span class="token variable">$_GET</span><span class="token punctuation">[</span><span class="token string">'baz'</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token number">39</span><span class="token punctuation">;</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+<p>Checking an ASCII table, <code>39</code> is the ASCII code for <code>&#39;</code> (a single quote). So now, our rendered query becomes:</p>
+<pre class="line-numbers language-sql"><code class="language-sql"><span class="token keyword">SELECT</span> <span class="token operator">*</span> <span class="token keyword">FROM</span> foo <span class="token keyword">WHERE</span> bar <span class="token operator">IN</span> <span class="token punctuation">(</span><span class="token string">''</span><span class="token punctuation">)</span> <span class="token operator">OR</span> <span class="token number">1</span> <span class="token operator">=</span> <span class="token number">1</span> <span class="token operator">/</span><span class="token operator">*</span><span class="token string">' AND baz = '</span>test'<span class="token punctuation">;</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+<p>Which means that it’s injected.</p>
+<p>This sounds like a long shot. It requires passing in attacker-controlled input to the <code>query</code> parameter of prepare. But as it turns out, this exists in core in <code>/wp-includes/meta.php</code>:</p>
+<pre class="line-numbers language-php"><code class="language-php"><span class="token keyword">if</span> <span class="token punctuation">(</span> <span class="token variable">$delete_all</span> <span class="token punctuation">)</span> <span class="token punctuation">{</span>
+  <span class="token variable">$value_clause</span> <span class="token operator">=</span> <span class="token string">''</span><span class="token punctuation">;</span>
+  <span class="token keyword">if</span> <span class="token punctuation">(</span> <span class="token string">''</span> <span class="token operator">!==</span> <span class="token variable">$meta_value</span> <span class="token operator">&amp;&amp;</span> <span class="token keyword">null</span> <span class="token operator">!==</span> <span class="token variable">$meta_value</span> <span class="token operator">&amp;&amp;</span> <span class="token boolean">false</span> <span class="token operator">!==</span> <span class="token variable">$meta_value</span> <span class="token punctuation">)</span> <span class="token punctuation">{</span>
+    <span class="token variable">$value_clause</span> <span class="token operator">=</span> <span class="token variable">$wpdb</span><span class="token operator">-</span><span class="token operator">></span><span class="token function">prepare</span><span class="token punctuation">(</span> <span class="token string">" AND meta_value = %s"</span><span class="token punctuation">,</span> <span class="token variable">$meta_value</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+  <span class="token variable">$object_ids</span> <span class="token operator">=</span> <span class="token variable">$wpdb</span><span class="token operator">-</span><span class="token operator">></span><span class="token function">get_col</span><span class="token punctuation">(</span> <span class="token variable">$wpdb</span><span class="token operator">-</span><span class="token operator">></span><span class="token function">prepare</span><span class="token punctuation">(</span> <span class="token string">"SELECT $type_column FROM $table WHERE meta_key = %s $value_clause"</span><span class="token punctuation">,</span> <span class="token variable">$meta_key</span> <span class="token punctuation">)</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<h2 id="The-Original-Fix"><a href="#The-Original-Fix" class="headerlink" title="The Original Fix"></a>The Original Fix</h2><p>When 4.8.2 was released, it included a “fix” for the above issue. The “fix” was entirely contained in <code>WPDB::prepare()</code>. The attempt to fix was basically the addition of a single line:</p>
+<pre class="line-numbers language-php"><code class="language-php"><span class="token variable">$query</span> <span class="token operator">=</span> <span class="token function">preg_replace</span><span class="token punctuation">(</span> <span class="token string">'/%(?:%|$|([^dsF]))/'</span><span class="token punctuation">,</span> <span class="token string">'%%\\1'</span><span class="token punctuation">,</span> <span class="token variable">$query</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+<p>This does two fundamental things. First, it removes any <code>sprintf</code> token other than <code>%d</code>, <code>%s</code> and <code>%F</code>. This should nullify the original vulnerability since it relied on <code>%c</code> (or so it seemed). Second, it removed the ability to do positional substitutions (meaning <code>%1$s</code> was no longer valid).</p>
+<p>This caused a massive outrage. WordPress originally (years ago) documented that you should only use <code>%d</code>, <code>%s</code> and <code>%F</code>. In fact, here’s <a target="_blank" rel="noopener" href="https://developer.wordpress.org/reference/classes/wpdb/prepare/">the quote from their docs</a>:</p>
+<blockquote>
+<p>This function only supports a small subset of the <code>sprintf</code> syntax; it only supports %d (integer), %f (float), and %s (string). Does not support sign, padding, alignment, width or precision specifiers. Does not support argument numbering/swapping.</p>
+</blockquote>
+<p>Even though it was documented as undocumented, several <strong>million</strong> queries in third party code (millions of lines of affected code) used the former syntax (securely I may add). </p>
+<p>WordPress’s response to the outrage was <a target="_blank" rel="noopener" href="https://core.trac.wordpress.org/ticket/41925">won’t fix, sorry</a>. They cited security as the reason and refused to elaborate.</p>
+<h2 id="The-First-Issue-With-The-Fix"><a href="#The-First-Issue-With-The-Fix" class="headerlink" title="The First Issue With The Fix."></a>The First Issue With The Fix.</h2><p>Looking at the fix, something felt wrong. To me, the vulnerability was with passing user-input to the <code>query</code> side of prepare, even if passed through a “escaper” before.</p>
+<p>The original proof-of-concept I shared was the following. Given the formerly secure query:</p>
+<pre class="line-numbers language-php"><code class="language-php"><span class="token variable">$db</span><span class="token operator">-</span><span class="token operator">></span><span class="token function">prepare</span><span class="token punctuation">(</span><span class="token string">"SELECT * FROM foo WHERE name= '%4s' AND user_id = %d"</span><span class="token punctuation">,</span> <span class="token variable">$_GET</span><span class="token punctuation">[</span><span class="token string">'name'</span><span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token function">get_current_user_id</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+<p>With the change made in 4.8.2, the <code>%4s</code> will be rewritten to <code>%%4s</code> (in other words a literal <code>%</code> followed by a literal <code>4s</code>. No substitution will be done). This will mean the <code>%d</code> would be rebound to <code>$_GET[&#39;name&#39;]</code>, giving the attacker control over the user id. This could be used for privilege escalations, etc.</p>
+<p>The response (a day later) was thank you followed by a close as “we don’t support that”. I replied a few times and got no response.</p>
+<h2 id="The-full-breach"><a href="#The-full-breach" class="headerlink" title="The full breach"></a>The full breach</h2><p>So I went back and crafted a different proof of concept that leveraged another key fact to prove the vulnerability wasn’t <code>%1$s</code> but in fact passing user input to the query side of prepare:</p>
+<p>Given the <code>meta.php</code> file cited before:</p>
+<pre class="line-numbers language-php"><code class="language-php"><span class="token keyword">if</span> <span class="token punctuation">(</span> <span class="token variable">$delete_all</span> <span class="token punctuation">)</span> <span class="token punctuation">{</span>
+  <span class="token variable">$value_clause</span> <span class="token operator">=</span> <span class="token string">''</span><span class="token punctuation">;</span>
+  <span class="token keyword">if</span> <span class="token punctuation">(</span> <span class="token string">''</span> <span class="token operator">!==</span> <span class="token variable">$meta_value</span> <span class="token operator">&amp;&amp;</span> <span class="token keyword">null</span> <span class="token operator">!==</span> <span class="token variable">$meta_value</span> <span class="token operator">&amp;&amp;</span> <span class="token boolean">false</span> <span class="token operator">!==</span> <span class="token variable">$meta_value</span> <span class="token punctuation">)</span> <span class="token punctuation">{</span>
+    <span class="token variable">$value_clause</span> <span class="token operator">=</span> <span class="token variable">$wpdb</span><span class="token operator">-</span><span class="token operator">></span><span class="token function">prepare</span><span class="token punctuation">(</span> <span class="token string">" AND meta_value = %s"</span><span class="token punctuation">,</span> <span class="token variable">$meta_value</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+  <span class="token punctuation">}</span>
+  <span class="token variable">$object_ids</span> <span class="token operator">=</span> <span class="token variable">$wpdb</span><span class="token operator">-</span><span class="token operator">></span><span class="token function">get_col</span><span class="token punctuation">(</span> <span class="token variable">$wpdb</span><span class="token operator">-</span><span class="token operator">></span><span class="token function">prepare</span><span class="token punctuation">(</span> <span class="token string">"SELECT $type_column FROM $table WHERE meta_key = %s $value_clause"</span><span class="token punctuation">,</span> <span class="token variable">$meta_key</span> <span class="token punctuation">)</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></code></pre>
+<p>Given input of:</p>
+<pre class="line-numbers language-php"><code class="language-php"><span class="token variable">$meta_value</span> <span class="token operator">=</span> <span class="token string">' %s '</span><span class="token punctuation">;</span>
+<span class="token variable">$meta_key</span> <span class="token operator">=</span> <span class="token punctuation">[</span><span class="token string">'dump'</span><span class="token punctuation">,</span> <span class="token string">' OR 1=1 /*'</span><span class="token punctuation">]</span><span class="token punctuation">;</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span><span></span></span></code></pre>
+<p>Will generate the following query:</p>
+<pre class="line-numbers language-sql"><code class="language-sql"><span class="token keyword">SELECT</span> <span class="token keyword">type</span> <span class="token keyword">FROM</span> <span class="token keyword">table</span> <span class="token keyword">WHERE</span> meta_key <span class="token operator">=</span> <span class="token string">'dump'</span> <span class="token operator">AND</span> meta_value <span class="token operator">=</span> <span class="token string">''</span> <span class="token operator">OR</span> <span class="token number">1</span><span class="token operator">=</span><span class="token number">1</span> <span class="token operator">/</span><span class="token operator">*</span>'
+<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+<p>And there we have it. We have successfully injected core. (It’s worth noting that both <code>$meta_value</code> and <code>$meta_key</code> come directly from user input).</p>
+<p>This works, because the value clause will be generated as:</p>
+<pre class="line-numbers language-sql"><code class="language-sql"> <span class="token operator">AND</span> meta_value <span class="token operator">=</span> <span class="token string">' %s '</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+<p>Remember that unquoted <code>%s</code> are replaced by a quoted <code>&#39;%s&#39;</code> via prepare. So the second call to <code>-&gt;prepare()</code> turns the clause into <code>AND meta_value = &#39; &#39;%s&#39; &#39;</code> and enables the injection.</p>
+<p>I stress that this vulnerability <strong>cannot</strong> be fixed in <code>WPDB::prepare()</code> but instead was a problem in <code>meta.php</code>. Yes, you could mitigate it by preventing “double prepare calls”, but you wouldn’t fix the original issue (which didn’t use prepare, but <code>_real_escape()</code>).</p>
+<h2 id="The-Simple-Fix"><a href="#The-Simple-Fix" class="headerlink" title="The Simple Fix"></a>The Simple Fix</h2><p>The simple fix is to not pass user input to the <code>$query</code> parameter to <code>WPDB::prepare()</code> in <code>meta.php</code>.</p>
+<p>Passing user input to <code>$query</code> is always wrong. Full stop.</p>
+<h2 id="The-Mitigation-Fix"><a href="#The-Mitigation-Fix" class="headerlink" title="The Mitigation Fix"></a>The Mitigation Fix</h2><p>The next step would be to somehow “quote” placeholders in prepared queries and then restore the placeholders before executing the query. This patch also exists.</p>
+<p>Basically, the fix would modify <code>WPDB::prepare()</code> (and all of the escape functions such as <code>_real_escape()</code>) to do a replacement of any <code>%</code> placeholder with a random string. Something like:</p>
+<pre class="line-numbers language-php"><code class="language-php"><span class="token variable">$query</span> <span class="token operator">=</span> <span class="token function">str_replace</span><span class="token punctuation">(</span><span class="token string">'%'</span><span class="token punctuation">,</span> <span class="token string">"{$this->placeholder_escape}"</span><span class="token punctuation">,</span> <span class="token variable">$query</span> <span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span aria-hidden="true" class="line-numbers-rows"><span></span></span></code></pre>
+<p>Then, in <code>WPDB::_do_query()</code> remove the placeholder to restore the original user input.</p>
+<p>This “works” by preventing this specific vector.</p>
+<p>I still stand by that passing user input to the query side of prepare is potentially dangerous and fundamentally unsafe, even if “escaped”. And double-preparing a string (by passing the output of one “prepare” into another) is <strong>extremely</strong> dangerous and will always be unsafe, even if you may mitigate known vulnerabilities.</p>
+<p><em>Note:</em> It’s worth noting that this looks <em>similar</em> to my original suggestion of <em>Add a check in prepare to check for and reject double-prepares (using a comment to indicate prior prepares)</em> The important difference is that I suggest bailing out if you detect a double-prepare and showing the developer an error, rather than “trying to make it work”.</p>
+<p>This is precisely how 4.8.3 “fixes” the vulnerability. It still doesn’t address the root issue though (passing user input to the query side of prepare)…</p>
+<h2 id="The-Correct-Fix"><a href="#The-Correct-Fix" class="headerlink" title="The Correct Fix"></a>The Correct Fix</h2><p>The correct fix is to ditch this whole prepare mechanism (which returns a string SQL query). Do what basically everyone else does and return a statement/query object <em>or</em> execute the query directly. That way you can’t double-prepare a string.</p>
+<p>It’s worth saying that this would be a <strong>major</strong> breaking change for WP. One that many other platforms have done successfully (PHPBB did this exact thing, and went from having massive SQL Injection vulnerabilities to almost none). </p>
+<p>It doesn’t need to be (and in practice shouldn’t) overnight - they can do it in parallel with the existing API, deprecating the old one and removing in time - but it does need to happen. </p>
+<p>The current system is <em>insecure-by-design</em>. That doesn’t mean it’s always hackable, but it means you have to actively work to make it not attackable. It’s better to switch to a design that’s secure-by-default and make the insecure the exceptional case.</p>
+<p>The best path forward would be to switch to PDO/MySQLi and use <em>real</em> prepared statements and not emulate them in PHP land. That’s the best path forward.</p>
+<p>But if that’s not acceptable, then at least move to a statement object style system where <code>prepare</code> returns an object which is then executed. And for the love of god get rid of <code>escape_by_ref</code>/<code>esc_sql</code> as well as the still-existent <code>_weak_escape</code> (which calls <code>addslashes()</code> and has been “deprecated” for 4 years and still somehow exists)… </p>
+<p>These changes won’t prevent misuse, but it will make it far harder. It will make the default usage secure making developers go out of their way to make it insecure (where today is precisely the opposite).</p>
+<h2 id="Also"><a href="#Also" class="headerlink" title="Also"></a>Also</h2><p>It’s also worth noting that with this mitigation technique, support for positional placeholders was added back in (though a subset of what was possible, it should be the vast majority of use-cases).</p>
+
+  	</div>
+	  
+	  <div class="article-tags tags">
+      
+        <a href="/tags/PHP/">PHP</a>
+      
+        <a href="/tags/Security/">Security</a>
+      
+        <a href="/tags/Open-Source/">Open Source</a>
+      
+        <a href="/tags/Disclosure/">Disclosure</a>
+      
+        <a href="/tags/SQL-Injection/">SQL Injection</a>
+      
+	  </div>
+    
+		
+	
+		<div class="art-item-footer">
+				
+					<span class="art-item-left"><i class="icon icon-chevron-thin-left"></i>prev：<a href="/2018/06/protecting-rails-xss.html" rel="prev"  title="Protecting Against XSS In RAILS - JavaScript Contexts">
+						Protecting Against XSS In RAILS - JavaScript Contexts 
+					</a></span>
+				
+				
+					<span class="art-item-right">next：<a href="/2017/10/disclosure-wordpress-wpdb-sql-injection-background.html" rel="next"  title="Disclosure: WordPress WPDB SQL Injection - Background">
+						Disclosure: WordPress WPDB SQL Injection - Background
+					</a><i class="icon icon-chevron-thin-right"></i></span>
+				
+		</div>
+	
+	</section>
+	
+		<section id="comments">
+			<div id="disqus_thread"></div>
+		</section>
+	
+</article>
+<script>
+	window.subData = {
+		title: 'Disclosure: WordPress WPDB SQL Injection - Technical',
+		tools: true
+	}
+</script>
+
+      </div>
+      <aside class='l_side'>
+        
+  <section class='m_widget about'>
+  <img class='avatar waves-image' src='/images/anthony_avatar.jpg' />
+  <div class='header'>Anthony Ferrara</div>
+  <div class='content'>
+    <div class='desc'>
+      Technologist, leader and purveyor of rants. All opinions my own.
+    </div>
+    <div class='social'>
+      <dl>
+        <dt>Email</dt><dd><a href="mailto:blog@ircmaxell.com">blog@ircmaxell.com</a></dd>
+        <dt>Resume</td><dd><a href="https://www.github.com/ircmaxell/resume" rel="noopener noreferrer" target="_blank">On GitHub</a></dd>
+        <dt>GitHub</dt><dd><a href="https://www.github.com/ircmaxell" rel="noopener noreferrer" target="_blank">ircmaxell</a></dd>
+        <dt>Twitter</dt><dd><a href="https://www.twitter.com/ircmaxell" rel="noopener noreferrer" target="_blank">@ircmaxell</a></dd>
+        <dt>YouTube</dt><dd><a href="https://www.youtube.com/user/ircmaxell" rel="noopener noreferrer" target="_blank">ircmaxell</a></dd>
+        <dt>LinkedIn</dt><dd><a href="https://www.linkedin.com/in/ircmaxell" rel="noopener noreferrer" target="_blank">ircmaxell</a></dd>
+      </dl>
+    </div>
+    <div class="job">
+      
+    </div>
+  </div>
+</section>
+  
+      <section class="m_widget ad">
+        <script async src="//pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>
+        <ins class="adsbygoogle"
+             style="display:block"
+             data-ad-format="fluid"
+             data-ad-layout-key="-8d+2n-gm+b5+tt"
+             data-ad-client="ca-pub-8322654260452484"
+             data-ad-slot="4698393880"
+             ></ins>
+        <noscript>
+          <div class="noads content">If you're using an adblocker, please consider supporting this site via <a target="_blank" rel="noopener" href="https://www.patreon.com/ircmaxell">Patreon</a> or <a target="_blank" rel="noopener" href="https://paypal.me/ircmaxell">PayPal</a></div>
+        </noscript>
+        <div id="ebeg" class="noads content" style="display:none">If you're using an adblocker, please consider supporting this site via <a target="_blank" rel="noopener" href="https://www.patreon.com/ircmaxell">Patreon</a> or <a target="_blank" rel="noopener" href="https://paypal.me/ircmaxell">PayPal</a></div>
+        <script>
+            adsbygoogle = window.adsbygoogle || [];
+            adsbygoogle.push({});
+            document.getElementById('ebeg').style.display = "block";
+            adsbygoogle.onload = function() {
+                document.getElementById('ebeg').style.display = "none";
+            };
+        </script>
+      </section>
+    
+
+  <section class='m_widget categories'>
+<div class='header'>Categories</div>
+<div class='content'>
+    
+    <ul class="entry">
+    
+        <li><a class="flat-box" href="/categories/Architecture/"><div class='name'>Architecture</div><div class='badget'>14</div></a></li>
+    
+        <li><a class="flat-box" href="/categories/Community/"><div class='name'>Community</div><div class='badget'>1</div></a></li>
+    
+        <li><a class="flat-box" href="/categories/Hobby/"><div class='name'>Hobby</div><div class='badget'>2</div></a></li>
+    
+        <li><a class="flat-box" href="/categories/Home-Networking/"><div class='name'>Home Networking</div><div class='badget'>1</div></a></li>
+    
+        <li><a class="flat-box" href="/categories/Meta/"><div class='name'>Meta</div><div class='badget'>20</div></a></li>
+    
+        <li><a class="flat-box" href="/categories/Open-Source/"><div class='name'>Open Source</div><div class='badget'>5</div></a></li>
+    
+        <li><a class="flat-box" href="/categories/Other/"><div class='name'>Other</div><div class='badget'>3</div></a></li>
+    
+        <li><a class="flat-box" href="/categories/PHP/"><div class='name'>PHP</div><div class='badget'>13</div></a></li>
+    
+        <li><a class="flat-box" href="/categories/Performance/"><div class='name'>Performance</div><div class='badget'>1</div></a></li>
+    
+        <li><a class="flat-box" href="/categories/Process/"><div class='name'>Process</div><div class='badget'>1</div></a></li>
+    
+        <li><a class="flat-box" href="/categories/Programming/"><div class='name'>Programming</div><div class='badget'>23</div></a></li>
+    
+        <li><a class="flat-box" href="/categories/Rant/"><div class='name'>Rant</div><div class='badget'>14</div></a></li>
+    
+        <li><a class="flat-box" href="/categories/Security/"><div class='name'>Security</div><div class='badget'>25</div></a></li>
+    
+        <li><a class="flat-box" href="/categories/Slides/"><div class='name'>Slides</div><div class='badget'>15</div></a></li>
+    
+        <li><a class="flat-box" href="/categories/Testing/"><div class='name'>Testing</div><div class='badget'>2</div></a></li>
+    
+        <li><a class="flat-box" href="/categories/Video/"><div class='name'>Video</div><div class='badget'>12</div></a></li>
+    
+    </ul>
+    
+</div>
+</section>
+  
+
+  
+<div class="m_widget tagcloud">
+    <div class="header">Tags</div>
+    <div class='content'>
+        <a href="/tags/8-bit-Computer/" style="font-size: 14px; color: #808080">8-bit Computer</a> <a href="/tags/API/" style="font-size: 14px; color: #808080">API</a> <a href="/tags/Agile/" style="font-size: 14px; color: #808080">Agile</a> <a href="/tags/Analysis/" style="font-size: 14px; color: #808080">Analysis</a> <a href="/tags/Anatomy-of-an-Attack/" style="font-size: 14.27px; color: #7a7a7a">Anatomy of an Attack</a> <a href="/tags/Answers/" style="font-size: 14.55px; color: #747474">Answers</a> <a href="/tags/Anti-Paradigm/" style="font-size: 14.27px; color: #7a7a7a">Anti-Paradigm</a> <a href="/tags/Anti-Pattern/" style="font-size: 15.64px; color: #5d5d5d">Anti-Pattern</a> <a href="/tags/Architecture/" style="font-size: 17.82px; color: #2f2f2f">Architecture</a> <a href="/tags/Arduino/" style="font-size: 14px; color: #808080">Arduino</a> <a href="/tags/Autoloading/" style="font-size: 14px; color: #808080">Autoloading</a> <a href="/tags/BCrypt/" style="font-size: 14.55px; color: #747474">BCrypt</a> <a href="/tags/Best-Practice/" style="font-size: 19.18px; color: #111">Best Practice</a> <a href="/tags/Beyond/" style="font-size: 15.09px; color: #696969">Beyond</a> <a href="/tags/Books/" style="font-size: 14px; color: #808080">Books</a> <a href="/tags/Build/" style="font-size: 14px; color: #808080">Build</a> <a href="/tags/CSRF/" style="font-size: 14.27px; color: #7a7a7a">CSRF</a> <a href="/tags/Career/" style="font-size: 14px; color: #808080">Career</a> <a href="/tags/Change/" style="font-size: 14.82px; color: #6f6f6f">Change</a> <a href="/tags/Closures/" style="font-size: 14px; color: #808080">Closures</a> <a href="/tags/Code-Review/" style="font-size: 14.55px; color: #747474">Code Review</a> <a href="/tags/Comments/" style="font-size: 14px; color: #808080">Comments</a> <a href="/tags/Community/" style="font-size: 16.18px; color: #515151">Community</a> <a href="/tags/Compiler/" style="font-size: 14.55px; color: #747474">Compiler</a> <a href="/tags/Composition/" style="font-size: 14px; color: #808080">Composition</a> <a href="/tags/Computer/" style="font-size: 14px; color: #808080">Computer</a> <a href="/tags/Conference/" style="font-size: 16.45px; color: #4c4c4c">Conference</a> <a href="/tags/CryptLib/" style="font-size: 14.55px; color: #747474">CryptLib</a> <a href="/tags/Cryptography/" style="font-size: 15.64px; color: #5d5d5d">Cryptography</a> <a href="/tags/Data-Structures/" style="font-size: 14.27px; color: #7a7a7a">Data Structures</a> <a href="/tags/Database/" style="font-size: 14.27px; color: #7a7a7a">Database</a> <a href="/tags/Dependency-Injection/" style="font-size: 14.82px; color: #6f6f6f">Dependency Injection</a> <a href="/tags/Design/" style="font-size: 14.27px; color: #7a7a7a">Design</a> <a href="/tags/Design-Patterns/" style="font-size: 17.27px; color: #3a3a3a">Design Patterns</a> <a href="/tags/Disclosure/" style="font-size: 14.55px; color: #747474">Disclosure</a> <a href="/tags/Drupal/" style="font-size: 14px; color: #808080">Drupal</a> <a href="/tags/Economics/" style="font-size: 14px; color: #808080">Economics</a> <a href="/tags/Education/" style="font-size: 15.36px; color: #636363">Education</a> <a href="/tags/Email-Response/" style="font-size: 14.55px; color: #747474">Email Response</a> <a href="/tags/Engineering/" style="font-size: 14px; color: #808080">Engineering</a> <a href="/tags/Events/" style="font-size: 14.55px; color: #747474">Events</a> <a href="/tags/Exceptions/" style="font-size: 14px; color: #808080">Exceptions</a> <a href="/tags/External-Post/" style="font-size: 14px; color: #808080">External-Post</a> <a href="/tags/Forward-Compatibility/" style="font-size: 14.27px; color: #7a7a7a">Forward Compatibility</a> <a href="/tags/Framework/" style="font-size: 16.45px; color: #4c4c4c">Framework</a> <a href="/tags/Functional-Programming/" style="font-size: 14.82px; color: #6f6f6f">Functional Programming</a> <a href="/tags/Generators/" style="font-size: 14px; color: #808080">Generators</a> <a href="/tags/Global-Variables/" style="font-size: 14px; color: #808080">Global Variables</a> <a href="/tags/Good-Enough/" style="font-size: 17.82px; color: #2f2f2f">Good Enough</a> <a href="/tags/Google-Glass/" style="font-size: 14px; color: #808080">Google Glass</a> <a href="/tags/HHVM/" style="font-size: 14.55px; color: #747474">HHVM</a> <a href="/tags/Hardware/" style="font-size: 14px; color: #808080">Hardware</a> <a href="/tags/Hobby/" style="font-size: 14px; color: #808080">Hobby</a> <a href="/tags/Home/" style="font-size: 14px; color: #808080">Home</a> <a href="/tags/IT/" style="font-size: 14px; color: #808080">IT</a> <a href="/tags/Inconsistencies/" style="font-size: 14.82px; color: #6f6f6f">Inconsistencies</a> <a href="/tags/Internet/" style="font-size: 14.27px; color: #7a7a7a">Internet</a> <a href="/tags/Interviews/" style="font-size: 14px; color: #808080">Interviews</a> <a href="/tags/Iterators/" style="font-size: 14px; color: #808080">Iterators</a> <a href="/tags/Javascript/" style="font-size: 14.27px; color: #7a7a7a">Javascript</a> <a href="/tags/Jenkins/" style="font-size: 14px; color: #808080">Jenkins</a> <a href="/tags/JitFu/" style="font-size: 14px; color: #808080">JitFu</a> <a href="/tags/Language-Agnostic/" style="font-size: 18.64px; color: #1d1d1d">Language Agnostic</a> <a href="/tags/Language-Design/" style="font-size: 14px; color: #808080">Language-Design</a> <a href="/tags/Large-Scale-Applications/" style="font-size: 14.27px; color: #7a7a7a">Large Scale Applications</a> <a href="/tags/Learning/" style="font-size: 18.36px; color: #232323">Learning</a> <a href="/tags/Lexer/" style="font-size: 14.27px; color: #7a7a7a">Lexer</a> <a href="/tags/Library/" style="font-size: 16.18px; color: #515151">Library</a> <a href="/tags/Logic/" style="font-size: 14px; color: #808080">Logic</a> <a href="/tags/Logic-Gates/" style="font-size: 14px; color: #808080">Logic Gates</a> <a href="/tags/MVC/" style="font-size: 14.55px; color: #747474">MVC</a> <a href="/tags/Mathematics/" style="font-size: 14.27px; color: #7a7a7a">Mathematics</a> <a href="/tags/Meta/" style="font-size: 15.91px; color: #575757">Meta</a> <a href="/tags/Micro-Framework/" style="font-size: 14.55px; color: #747474">Micro Framework</a> <a href="/tags/Middleware/" style="font-size: 14px; color: #808080">Middleware</a> <a href="/tags/Monads/" style="font-size: 14px; color: #808080">Monads</a> <a href="/tags/Networking/" style="font-size: 14px; color: #808080">Networking</a> <a href="/tags/Object-Oriented-Programming/" style="font-size: 18.36px; color: #232323">Object Oriented Programming</a> <a href="/tags/Open-Source/" style="font-size: 18.09px; color: #292929">Open Source</a> <a href="/tags/Open-Standards/" style="font-size: 14.82px; color: #6f6f6f">Open Standards</a> <a href="/tags/Optimization/" style="font-size: 14.82px; color: #6f6f6f">Optimization</a> <a href="/tags/PHP/" style="font-size: 20px; color: #000">PHP</a> <a href="/tags/PHP-Source-Code-For-PHP-Developers-Series/" style="font-size: 14.82px; color: #6f6f6f">PHP Source Code For PHP Developers Series</a> <a href="/tags/PHP-FIG/" style="font-size: 14.55px; color: #747474">PHP-FIG</a> <a href="/tags/PHP-Internals/" style="font-size: 17.27px; color: #3a3a3a">PHP-Internals</a> <a href="/tags/PHP-Versions/" style="font-size: 14.55px; color: #747474">PHP-Versions</a> <a href="/tags/Parser/" style="font-size: 14.27px; color: #7a7a7a">Parser</a> <a href="/tags/Passion/" style="font-size: 14px; color: #808080">Passion</a> <a href="/tags/Password-Hashing/" style="font-size: 16.45px; color: #4c4c4c">Password-Hashing</a> <a href="/tags/PasswordLib/" style="font-size: 14.82px; color: #6f6f6f">PasswordLib</a> <a href="/tags/Performance/" style="font-size: 15.09px; color: #696969">Performance</a> <a href="/tags/Philosophy/" style="font-size: 16.73px; color: #464646">Philosophy</a> <a href="/tags/Presentation/" style="font-size: 17.55px; color: #343434">Presentation</a> <a href="/tags/Procedural-Programming/" style="font-size: 14.82px; color: #6f6f6f">Procedural Programming</a> <a href="/tags/Programming/" style="font-size: 19.73px; color: #060606">Programming</a> <a href="/tags/Programming-With-Anthony/" style="font-size: 17px; color: #404040">Programming With Anthony</a> <a href="/tags/Promise/" style="font-size: 14px; color: #808080">Promise</a> <a href="/tags/Radix-Tree/" style="font-size: 14px; color: #808080">Radix Tree</a> <a href="/tags/Rainbow-Table/" style="font-size: 14.82px; color: #6f6f6f">Rainbow Table</a> <a href="/tags/Random/" style="font-size: 14px; color: #808080">Random</a> <a href="/tags/Rant/" style="font-size: 19.45px; color: #0c0c0c">Rant</a> <a href="/tags/Recki-CT/" style="font-size: 14.27px; color: #7a7a7a">Recki-CT</a> <a href="/tags/Response/" style="font-size: 14.27px; color: #7a7a7a">Response</a> <a href="/tags/Responsive-Design/" style="font-size: 14px; color: #808080">Responsive Design</a> <a href="/tags/Review/" style="font-size: 14px; color: #808080">Review</a> <a href="/tags/Routing/" style="font-size: 14px; color: #808080">Routing</a> <a href="/tags/Ruby/" style="font-size: 14px; color: #808080">Ruby</a> <a href="/tags/Ruby-On-Rails/" style="font-size: 14px; color: #808080">Ruby-On-Rails</a> <a href="/tags/SQL-Injection/" style="font-size: 14.55px; color: #747474">SQL Injection</a> <a href="/tags/Scalar/" style="font-size: 14px; color: #808080">Scalar</a> <a href="/tags/Scrum/" style="font-size: 14px; color: #808080">Scrum</a> <a href="/tags/Security/" style="font-size: 18.91px; color: #171717">Security</a> <a href="/tags/Sexism/" style="font-size: 14px; color: #808080">Sexism</a> <a href="/tags/Silly/" style="font-size: 14px; color: #808080">Silly</a> <a href="/tags/Slides/" style="font-size: 15.91px; color: #575757">Slides</a> <a href="/tags/StackOverflow/" style="font-size: 14.27px; color: #7a7a7a">StackOverflow</a> <a href="/tags/Templates/" style="font-size: 14px; color: #808080">Templates</a> <a href="/tags/Thoughts/" style="font-size: 14px; color: #808080">Thoughts</a> <a href="/tags/Timing-Attack/" style="font-size: 14px; color: #808080">Timing-Attack</a> <a href="/tags/Traits/" style="font-size: 14px; color: #808080">Traits</a> <a href="/tags/Trie/" style="font-size: 14.27px; color: #7a7a7a">Trie</a> <a href="/tags/Trolls/" style="font-size: 14px; color: #808080">Trolls</a> <a href="/tags/Trust/" style="font-size: 14px; color: #808080">Trust</a> <a href="/tags/Types/" style="font-size: 14.27px; color: #7a7a7a">Types</a> <a href="/tags/Unit-Testing/" style="font-size: 14.55px; color: #747474">Unit Testing</a> <a href="/tags/Video/" style="font-size: 17px; color: #404040">Video</a> <a href="/tags/WTF/" style="font-size: 14.55px; color: #747474">WTF</a> <a href="/tags/Web-Application-Security-Series/" style="font-size: 14.27px; color: #7a7a7a">Web Application Security Series</a> <a href="/tags/Web-Design/" style="font-size: 14px; color: #808080">Web Design</a> <a href="/tags/Weird-Behavior/" style="font-size: 14px; color: #808080">Weird Behavior</a> <a href="/tags/Wiring/" style="font-size: 14px; color: #808080">Wiring</a> <a href="/tags/WordPress/" style="font-size: 14px; color: #808080">WordPress</a> <a href="/tags/Work/" style="font-size: 14px; color: #808080">Work</a> <a href="/tags/XSS/" style="font-size: 14.82px; color: #6f6f6f">XSS</a> <a href="/tags/Year-In-Review/" style="font-size: 14.55px; color: #747474">Year In Review</a> <a href="/tags/libgccjit/" style="font-size: 14px; color: #808080">libgccjit</a> <a href="/tags/libjit/" style="font-size: 14.27px; color: #7a7a7a">libjit</a> <a href="/tags/llvm/" style="font-size: 14px; color: #808080">llvm</a>
+    </div>
+</div>
+
+
+  
+
+      </aside>
+    </div>
+  </div>
+  <footer id="footer" class="clearfix">
+
+	<div class="social-wrapper">
+  	
+      
+        <a href="https://github.com/ircmaxell" class="social github"
+          target="_blank" rel="external noopener">
+          <span class="icon icon-github"></span>
+        </a>
+      
+        <a href="https://twitter.com/ircmaxell" class="social twitter"
+          target="_blank" rel="external noopener">
+          <span class="icon icon-twitter"></span>
+        </a>
+      
+        <a href="/rss.xml" class="social rss"
+          target="_blank" rel="external noopener">
+          <span class="icon icon-rss"></span>
+        </a>
+      
+    
+  </div>
+  
+  <div>Copyright ©2011-2021 Anthony Ferrara, all rights reserved.</div>
+
+</footer>
+
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-677798-8"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-677798-8');
+</script>
+  
+<script>
+  var disqus_shortname = 'blog-ircmaxell';
+  
+  var disqus_url = 'https://blog.ircmaxell.com/2017/10/disclosure-wordpress-wpdb-sql-injection-technical.html';
+  
+  (function(){
+    var dsq = document.createElement('script');
+    dsq.type = 'text/javascript';
+    dsq.async = true;
+    dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+    (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+  })();
+</script>
+
+
+<script src="//code.jquery.com/jquery-3.4.0.slim.min.js"></script>
+<script src='//cdn.bootcss.com/node-waves/0.7.6/waves.min.js'></script>
+<script>
+	var GOOGLE_CUSTOM_SEARCH_API_KEY = "";
+	var GOOGLE_CUSTOM_SEARCH_ENGINE_ID = "";
+	var ALGOLIA_API_KEY = "";
+	var ALGOLIA_APP_ID = "";
+	var ALGOLIA_INDEX_NAME = "";
+  var AZURE_SERVICE_NAME = "";
+  var AZURE_INDEX_NAME = "";
+  var AZURE_QUERY_KEY = "";
+  var BAIDU_API_ID = "";
+  var SEARCH_SERVICE = "hexo";
+  var ROOT = "/"||"/";
+  if(!ROOT.endsWith('/'))ROOT += '/';
+</script>
+<script type="text/javascript" src="/js/search_1616167669959.js"></script>
+<script type="text/javascript" src="/js/app_1616167669959.js"></script>
+
+</body>
+</html>

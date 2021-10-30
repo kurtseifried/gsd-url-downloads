@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag -->
+<title>KeepKey Key Erasure Vulnerability (CVE-2019-18672) | invd blog</title>
+<meta name="generator" content="Jekyll" />
+<meta property="og:title" content="KeepKey Key Erasure Vulnerability (CVE-2019-18672)" />
+<meta name="author" content="Christian Reitter" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="The article describes a vulnerability in the KeepKey hardware wallet which allows an attacker to erase a cryptographic key and compromise the U2F 2nd factor protection of the KeepKey. I discovered this issue by fuzzing a custom KeepKey emulator setup with libFuzzer and AddressSanitizer. The vulnerability was fixed with firmware v6.2.2 in September 2019." />
+<meta property="og:description" content="The article describes a vulnerability in the KeepKey hardware wallet which allows an attacker to erase a cryptographic key and compromise the U2F 2nd factor protection of the KeepKey. I discovered this issue by fuzzing a custom KeepKey emulator setup with libFuzzer and AddressSanitizer. The vulnerability was fixed with firmware v6.2.2 in September 2019." />
+<link rel="canonical" href="https://blog.inhq.net/posts/keepkey-CVE-2019-18672/" />
+<meta property="og:url" content="https://blog.inhq.net/posts/keepkey-CVE-2019-18672/" />
+<meta property="og:site_name" content="invd blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-02-23T22:30:00+01:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="KeepKey Key Erasure Vulnerability (CVE-2019-18672)" />
+<script type="application/ld+json">
+{"description":"The article describes a vulnerability in the KeepKey hardware wallet which allows an attacker to erase a cryptographic key and compromise the U2F 2nd factor protection of the KeepKey. I discovered this issue by fuzzing a custom KeepKey emulator setup with libFuzzer and AddressSanitizer. The vulnerability was fixed with firmware v6.2.2 in September 2019.","@type":"BlogPosting","datePublished":"2020-02-23T22:30:00+01:00","url":"https://blog.inhq.net/posts/keepkey-CVE-2019-18672/","mainEntityOfPage":{"@type":"WebPage","@id":"https://blog.inhq.net/posts/keepkey-CVE-2019-18672/"},"author":{"@type":"Person","name":"Christian Reitter"},"headline":"KeepKey Key Erasure Vulnerability (CVE-2019-18672)","dateModified":"2020-02-23T22:30:00+01:00","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/css/style.css"><link type="application/atom+xml" rel="alternate" href="https://blog.inhq.net/feed.xml" title="invd blog" /><script type="text/javascript">
+  var _paq = window._paq || [];
+  _paq.push(['trackPageView']);
+  _paq.push(['enableLinkTracking']);
+  _paq.push(['setSecureCookie', true]);
+  _paq.push(['setVisitorCookieTimeout', 60 * 60 * 24 * 90]);
+  _paq.push(['setReferralCookieTimeout', 60 * 60 * 24 * 90]);
+  _paq.push(['appendToTrackingUrl', 'bots=1']);
+  (function() {
+    var u="https://mato.inhq.net/";
+    _paq.push(['setTrackerUrl', u+'m']);
+    _paq.push(['setSiteId', '1']);
+    var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+    g.type='text/javascript'; g.async=true; g.defer=true; g.src=u+'mat.js'; s.parentNode.insertBefore(g,s);
+  })();
+  </script></head>
+<body><header class="site-header"><noscript><img src="https://mato.inhq.net/m?rec=1&bots=1&idsite=1" alt="" style="position:absolute; visibility:hidden" /></noscript><div class="wrapper"><a class="site-title" rel="author" href="/">invd blog</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger">
+        <a class="page-link" href="/archive/">Archive</a><a class="page-link" href="/cve/">CVEs</a><a class="page-link" href="/consulting/">Consulting</a><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">KeepKey Key Erasure Vulnerability (CVE-2019-18672)</h1>
+    <p class="post-meta"><time class="dt-published" datetime="2020-02-23T22:30:00+01:00" itemprop="datePublished">
+        Feb 23, 2020
+      </time>• <span itemprop="author" itemscope itemtype="http://schema.org/Person">
+            <span class="p-author h-card" itemprop="name">Christian Reitter</span></span><br/>ID:
+        
+          
+          <span>CVE-2019-18672</span>
+        <br/>
+      Related articles:
+      <a href="/posts/keepkey-glitching-vuln-21020/">Glitching over KeepKey Firmware Protections (VULN-21020)</a>
+          • <a href="/posts/faulty-stack-canary-arm-systems/">Faulty Stack Smashing Protection on ARM Systems</a>
+          • <a href="/posts/exploiting-CVE-2021-31616-part1/">Exploiting KeepKey CVE-2021-31616 - Part I</a>
+          </p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>The article describes a vulnerability in the KeepKey hardware wallet which allows an attacker to <strong>erase a cryptographic key</strong> and <strong>compromise the U2F 2nd factor protection</strong> of the KeepKey. I discovered this issue by fuzzing a custom KeepKey emulator setup with libFuzzer and AddressSanitizer. The vulnerability was fixed with firmware <strong>v6.2.2</strong> in September 2019.</p>
+
+<p>See the <a href="/posts/keepkey-CVE-2019-18671/">CVE-2019-18671</a> article for another KeepKey vulnerability that I reported during the same disclosure process.</p>
+
+<p><i><strong>Please note:</strong> As with other articles, this is going to be a technical deep-dive into the specific details that are relevant for the issue.<br />
+Correspondingly, the article is written for technical readers with IT security and coding experience.</i></p>
+
+<div id="toc-container">
+  <h2 class="no_toc">Contents</h2>
+<ul id="markdown-toc">
+  <li><a href="#consulting" id="markdown-toc-consulting">Consulting</a></li>
+  <li><a href="#technical-background" id="markdown-toc-technical-background">Technical background</a></li>
+  <li><a href="#the-vulnerability" id="markdown-toc-the-vulnerability">The vulnerability</a>    <ul>
+      <li><a href="#related-issue" id="markdown-toc-related-issue">Related issue</a></li>
+      <li><a href="#the-fix" id="markdown-toc-the-fix">The fix</a></li>
+      <li><a href="#attack-scenario-and-security-implications" id="markdown-toc-attack-scenario-and-security-implications">Attack scenario and security implications</a></li>
+    </ul>
+  </li>
+  <li><a href="#coordinated-disclosure" id="markdown-toc-coordinated-disclosure">Coordinated disclosure</a>    <ul>
+      <li><a href="#relevant-product" id="markdown-toc-relevant-product">Relevant product</a></li>
+      <li><a href="#detailed-timeline" id="markdown-toc-detailed-timeline">Detailed timeline</a></li>
+      <li><a href="#bug-bounty" id="markdown-toc-bug-bounty">Bug bounty</a></li>
+    </ul>
+  </li>
+</ul>
+
+</div>
+
+<h2 id="consulting">Consulting</h2>
+
+<p><i>I’m a freelance Security Consultant and currently available for new projects.
+  If you are looking for assistance to secure your projects or organization, <a href="/consulting">get in touch</a>.</i></p>
+
+<h2 id="technical-background">Technical background</h2>
+
+<p>As explained in a previous <a href="/posts/trezor-one-dry-run-recovery-stack-overflow/">Trezor One vulnerability</a> article, the private key at the heart of a cryptocurrency hardware wallet is usually encoded as a human-readable <strong>seed phrase</strong> of standardized English words in accordance with the <a href="https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki">BIP39</a> standard. The secret key is normally generated <strong>on the device</strong> in a random fashion during the initial wallet initialization and only displayed <strong>once</strong> to the user.
+Among other things, this ensures that the owner can create an appropriate backup of the key (<em>e.g. on paper or another analog medium</em>) and <strong>restore</strong> the wallet later in case of issues or migration between devices.</p>
+
+<p>At the request of the user, the KeepKey can be initialized directly from such a <strong>pre-existing</strong> BIP39 seed phrase to <strong>import</strong> the wallet(s) associated with this private key. This workflow is called <strong>recovery</strong>.</p>
+
+<p>In my opinion, this flexibility and ownership over the private key is an important and advantageous design property of a hardware wallet. However, this functionality exposes an interesting attack surface for adversaries (<em>handling of sensitive data, flash writes</em>) and has to be secured against misuse.<br />
+Unfortunately, some parts of the KeepKey recovery functionality were not correctly protected.</p>
+
+<h2 id="the-vulnerability">The vulnerability</h2>
+
+<p>During fuzzing-based research, interesting discoveries often begin with sanitizer warnings, in this case with memory corruption:</p>
+<pre>
+==16601==ERROR: AddressSanitizer: global-buffer-overflow on address
+0x000001a2049f at pc 0x00000055d7b1 bp 0x7fffa1f850f0 sp 0x7fffa1f850e8
+WRITE of size 1 at 0x000001a2049f thread T0
+    #0 0x55d7b0 in recovery_cipher_finalize
+[...]
+</pre>
+<p><br />
+Digging into the function backtrace, one can see the following code path:</p>
+
+<p><code>usbPoll</code> -&gt; <code>handle_usb_rx</code> -&gt; <code>usb_rx_helper</code> -&gt; <code>dispatch</code> -&gt; <code>fsm_msgCharacterAck</code> -&gt; <code>recovery_cipher_finalize</code></p>
+
+<p>This path makes sense <em>in general</em> since <strong>CharacterAck</strong> messages are used to enter individual parts of the seed words during the KeepKey recovery procedure which uses a specific character entry combined with a substitution matrix shown on the display.</p>
+
+<p>Closer inspection shows that the problematic fuzzing input consists of a <strong>single USB packet</strong>. Why is <code>recovery_cipher_finalize</code> called after processing the <strong>first</strong> <code>MessageType_MessageType_CharacterAck</code> protobuf message?</p>
+
+<p>Code analysis shows that it is indeed possible to jump from the <code>fsm_msgCharacterAck</code> function directly to the <code>recovery_cipher_finalize</code> function if the decoded protobuf message has the <code>msg-&gt;has_done</code> and <code>msg-&gt;done</code> flags set:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="kt">void</span> <span class="nf">fsm_msgCharacterAck</span><span class="p">(</span><span class="n">CharacterAck</span> <span class="o">*</span><span class="n">msg</span><span class="p">)</span>
+<span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">msg</span><span class="o">-&gt;</span><span class="n">has_delete</span> <span class="o">&amp;&amp;</span> <span class="n">msg</span><span class="o">-&gt;</span><span class="n">del</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">recovery_delete_character</span><span class="p">();</span>
+  <span class="p">}</span> <span class="k">else</span> <span class="k">if</span><span class="p">(</span><span class="n">msg</span><span class="o">-&gt;</span><span class="n">has_done</span> <span class="o">&amp;&amp;</span> <span class="n">msg</span><span class="o">-&gt;</span><span class="n">done</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">recovery_cipher_finalize</span><span class="p">();</span></code></pre></figure>
+
+<p><a href="https://github.com/keepkey/keepkey-firmware/blob/dccc1518476bfb5936a4c0253ff59ee78c48f05c/lib/firmware/fsm_msg_common.h#L521-L526" class="highlightref">fsm_msg_common.h</a></p>
+
+<p>In the “normal” workflow, <code>recovery_cipher_finalize</code> is called on an <strong>uninitialized</strong> (<em>brand-new or “wiped”</em>) device after a number of seed words <strong>have been entered</strong>. However, it appears that all relevant security checks in <code>recovery_cipher_init()</code> can be circumvented by an attacker by simply calling <code>recovery_cipher_finalize</code> without doing the initialization.</p>
+
+<p>There are no checks at all to prevent this call on an <strong>initialized</strong> device (<em>that is in active use and has a valid secret key</em>). Even worse, it can be done on a device in <strong>locked</strong> state (<em>without PIN checks</em>) and <strong>without physical button interaction</strong>.</p>
+
+<p>The beginning of the <code>recovery_cipher_finalize()</code> function looks like this:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="kt">void</span> <span class="nf">recovery_cipher_finalize</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">static</span> <span class="kt">char</span> <span class="n">CONFIDENTIAL</span> <span class="n">new_mnemonic</span><span class="p">[</span><span class="n">MNEMONIC_BUF</span><span class="p">]</span> <span class="o">=</span> <span class="s">""</span><span class="p">;</span>
+    <span class="k">static</span> <span class="kt">char</span> <span class="n">CONFIDENTIAL</span> <span class="n">temp_word</span><span class="p">[</span><span class="n">CURRENT_WORD_BUF</span><span class="p">];</span>
+    <span class="k">volatile</span> <span class="n">bool</span> <span class="n">auto_completed</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span></code></pre></figure>
+
+<p><a href="https://github.com/keepkey/keepkey-firmware/blob/c65b1b73ee37ca3dfaf49c5837f3da90625ab905/lib/firmware/recovery_cipher.c#L449-L453" class="highlightref">recovery_cipher.c</a></p>
+
+<p><code>new_mnemonic</code> is the target buffer for the new “recovered” secret seed phrase that should be stored in the device flash by the recovery operation.</p>
+
+<p>The code expects the related <code>mnemonic</code> variable to be filled with space-separated words by the regular recovery steps. However, the attacker can skip those steps by not sending the messages, so <code>mnemonic</code> it is still at it’s initial <code>0x00</code> state:</p>
+<pre>
+(gdb) print mnemonic
+$1 = '\000' &lt;repeats 287 times&gt;
+</pre>
+<p><br /></p>
+
+<p>Correspondingly, <code>char *tok = strtok(mnemonic, " ");</code> only assigns a <code>NULL</code> pointer because there is no space-separated word left in <code>mnemonic</code> and so the string copy routine that copies words from <code>mnemonic</code> to <code>new_mnemonic</code> is <strong>skipped</strong> completely.</p>
+
+<p>Interestingly, this also keeps <code>auto_completed</code> at its previous value of <strong>true</strong> and so the following error handling is <strong>not</strong> executed:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">auto_completed</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">enforce_wordlist</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">dry_run</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">storage_reset</span><span class="p">();</span>
+  <span class="p">}</span>
+  <span class="n">fsm_sendFailure</span><span class="p">(</span><span class="n">FailureType_Failure_SyntaxError</span><span class="p">,</span>
+                 <span class="s">"Words were not entered correctly. Make sure you are using the substitution cipher."</span><span class="p">);</span>
+  <span class="n">awaiting_character</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+  <span class="n">layoutHome</span><span class="p">();</span>
+  <span class="k">return</span><span class="p">;</span>
+<span class="p">}</span></code></pre></figure>
+
+<p><a href="https://github.com/keepkey/keepkey-firmware/blob/c65b1b73ee37ca3dfaf49c5837f3da90625ab905/lib/firmware/recovery_cipher.c#L470-L479" class="highlightref">recovery_cipher.c</a></p>
+
+<p>Since <code>new_mnemonic</code> is still an empty string at this point, its <code>strlen(new_mnemonic)</code> value is <strong>0</strong>, which makes the following assignment an <strong>out of bounds write</strong> before the buffer:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="n">new_mnemonic</span><span class="p">[</span><span class="n">strlen</span><span class="p">(</span><span class="n">new_mnemonic</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="sc">'\0'</span><span class="p">;</span></code></pre></figure>
+
+<p><a href="https://github.com/keepkey/keepkey-firmware/blob/c65b1b73ee37ca3dfaf49c5837f3da90625ab905/lib/firmware/recovery_cipher.c#L482" class="highlightref">recovery_cipher.c</a></p>
+
+<p>This is the global-buffer-overflow one byte out-of-bounds write that the Address Sanitizer complained about as shown in the beginning of the article.</p>
+
+<p>Depending on the data that is saved in the buffer before <code>new_mnemonic</code> and how it is accessed, this out of bounds write would be an interesting memory corruption issue on its own under different circumstances, but in this case it is largely irrelevant due to the steps that follow it.
+A relevant aspect here is that the protections of the microcontroller will <strong>not</strong> detect any issues with this statement and the execution continues normally (<em>since the out of bounds write before the buffer is in the .bss segment</em>).</p>
+
+<p>The next code lines are crucial:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">dry_run</span> <span class="o">&amp;&amp;</span> <span class="p">(</span><span class="o">!</span><span class="n">enforce_wordlist</span> <span class="o">||</span> <span class="n">mnemonic_check</span><span class="p">(</span><span class="n">new_mnemonic</span><span class="p">)))</span> <span class="p">{</span>
+  <span class="n">storage_setMnemonic</span><span class="p">(</span><span class="n">new_mnemonic</span><span class="p">);</span>
+  <span class="n">memzero</span><span class="p">(</span><span class="n">new_mnemonic</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">new_mnemonic</span><span class="p">));</span>
+  <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">enforce_wordlist</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// not enforcing =&gt; mark storage as imported</span>
+    <span class="n">storage_setImported</span><span class="p">(</span><span class="nb">true</span><span class="p">);</span>
+  <span class="p">}</span>
+  <span class="n">storage_commit</span><span class="p">();</span>
+  <span class="n">fsm_sendSuccess</span><span class="p">(</span><span class="s">"Device recovered"</span><span class="p">);</span></code></pre></figure>
+
+<p><a href="https://github.com/keepkey/keepkey-firmware/blob/c65b1b73ee37ca3dfaf49c5837f3da90625ab905/lib/firmware/recovery_cipher.c#L484-L492" class="highlightref">recovery_cipher.c</a></p>
+
+<p>Despite the broken state and empty <code>new_mnemonic</code> buffer, it appears that the <code>recovery_cipher_finalize</code> actually tries to overwrite device secrets in the flash!</p>
+
+<p><code>storage_setMnemonic(new_mnemonic);</code> replaces the RAM copy of the existing private key in <code>shadow_config.storage.sec.mnemonic</code> with <code>0x00</code> data bytes:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="kt">void</span> <span class="nf">storage_setMnemonic</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">m</span><span class="p">)</span>
+<span class="p">{</span>
+  <span class="n">memset</span><span class="p">(</span><span class="n">shadow_config</span><span class="p">.</span><span class="n">storage</span><span class="p">.</span><span class="n">sec</span><span class="p">.</span><span class="n">mnemonic</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span>
+       <span class="k">sizeof</span><span class="p">(</span><span class="n">shadow_config</span><span class="p">.</span><span class="n">storage</span><span class="p">.</span><span class="n">sec</span><span class="p">.</span><span class="n">mnemonic</span><span class="p">));</span>
+  <span class="n">strlcpy</span><span class="p">(</span><span class="n">shadow_config</span><span class="p">.</span><span class="n">storage</span><span class="p">.</span><span class="n">sec</span><span class="p">.</span><span class="n">mnemonic</span><span class="p">,</span> <span class="n">m</span><span class="p">,</span>
+       <span class="k">sizeof</span><span class="p">(</span><span class="n">shadow_config</span><span class="p">.</span><span class="n">storage</span><span class="p">.</span><span class="n">sec</span><span class="p">.</span><span class="n">mnemonic</span><span class="p">));</span></code></pre></figure>
+
+<p><a href="https://github.com/keepkey/keepkey-firmware/blob/c65b1b73ee37ca3dfaf49c5837f3da90625ab905/lib/firmware/storage.c#L1414-L1419" class="highlightref">storage.c</a></p>
+
+<p>The second half of <code>storage_setMnemonic()</code> derives the secret key of the U2F second factor authentication mechanism directly from the private key and stores it in a separate variable. <em>This is a deliberate design decision since the U2F key is needed in different security contexts than the main private key. In particular, the secret U2F key needs to be available directly after device startup before the secure section of the storage can be decrypted with the correct PIN as entered by the user.</em></p>
+
+<p>During the problematic call, the U2F private key will be derived directly from the null mnemonic that was just set and so a static U2F key that is <strong>completely known to the attacker</strong> will be written to flash:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c">  <span class="n">storage_compute_u2froot</span><span class="p">(</span><span class="o">&amp;</span><span class="n">session</span><span class="p">,</span> <span class="n">shadow_config</span><span class="p">.</span><span class="n">storage</span><span class="p">.</span><span class="n">sec</span><span class="p">.</span><span class="n">mnemonic</span><span class="p">,</span>
+                        <span class="o">&amp;</span><span class="n">shadow_config</span><span class="p">.</span><span class="n">storage</span><span class="p">.</span><span class="n">pub</span><span class="p">.</span><span class="n">u2froot</span><span class="p">);</span>
+  <span class="n">shadow_config</span><span class="p">.</span><span class="n">storage</span><span class="p">.</span><span class="n">pub</span><span class="p">.</span><span class="n">has_u2froot</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+<span class="err">}</span></code></pre></figure>
+
+<p><a href="https://github.com/keepkey/keepkey-firmware/blob/c65b1b73ee37ca3dfaf49c5837f3da90625ab905/lib/firmware/storage.c#L1427-L1430" class="highlightref">storage.c</a></p>
+
+<p>As a final step, <code>storage_commit();</code> is called.</p>
+
+<p>Unfortunately for the attacker, it appears that the changes to <code>storage.sec</code> are not actually applied or persisted to flash by <code>storage_commit()</code> although no exception is thrown and some other changes are persisted. So far, <strong>no</strong> changes to the wallet private key could be observed in practice under the device conditions that were tested.</p>
+
+<p>The U2F secret key is stored in the <code>storage.pub</code> area (<em>which is “easier” to write to</em>) and <strong>is</strong> persisted to flash according to my observations.</p>
+
+<h3 id="related-issue">Related issue</h3>
+
+<p>It is possible to call <code>recovery_delete_character()</code> on initialized devices without authentication. As far as I can see, this misses any actual security impact since <code>storage_reset()</code> is not reachable.</p>
+
+<h3 id="the-fix">The fix</h3>
+
+<p>The main <a href="https://github.com/keepkey/keepkey-firmware/commit/769714fcb569e7a4faff9530a2d9ac1f9d6e5680">patch</a> changes the finite state machine logic to reject the problematic messages if the recovery had not been started properly. This is done by introducing a <code>recovery_started</code> state flag which enforces that the necessary protections and checks are performed through <code>recovery_cipher_init()</code>.</p>
+
+<h3 id="attack-scenario-and-security-implications">Attack scenario and security implications</h3>
+
+<p>It’s clear there should be no way for USB packets from local programs to overwrite important device secrets in this way, regardless of the exact failure scenario. To make things worse, This issue can be triggered <strong>remotely via WebUSB</strong> by malicious javascript after the user agrees to an unspecific permission dialog. There is either no visual indication or only a brief animation on the OLED display and the device appears to work as before, which makes this attack very hard to detect.</p>
+
+<p>Due to the particular behavior described in the analysis section, this issue is mainly interesting for attacks on U2F.</p>
+
+<p>After the vulnerability has been exploited, the U2F secret key is set to a new, static and well-known value, which is used for future registration and authentication operations:</p>
+<ul>
+  <li>U2F-secured logins configured <strong>before</strong> the attack no longer work (<em>SW_COND_NOT_SAT</em>)</li>
+  <li>U2F-secured logins configured <strong>after</strong> the attack “work”, but are based on a very insecure key</li>
+</ul>
+
+<p><strong>Scenario I:</strong></p>
+
+<p>Remotely exploit the vulnerability from a malicious webpage with the goal of invalidating existing U2F login configurations and cause the user inconvenience (persistent denial of service). <em>Fallback methods such as site-specific recovery codes have to be used to regain access to the login in question. The U2F key can be recovered by re-importing the BIP39 seed, but this is not obvious to the user.</em></p>
+
+<p><strong>Scenario II:</strong></p>
+
+<p>Malware on the host computer could perform this attack to effectively remove the U2F protections of important high-value logins secured with a vulnerable KeepKey (<em>such as a cryptocurrency exchange service</em>). This allows an attacker to access the account in question with just the regular password credentials (<em>obtained for example by a keylogger</em>) and knowledge of the new static U2F secret key.
+This would only work with U2F-secured logins registered after the attack, but I think it is plausible that at least some users will re-register the U2F key for existing logins or can be tricked into doing so.</p>
+
+<h4 id="proof-of-concept">Proof of concept</h4>
+
+<p>As described in the analysis, only one USB packet is required to trigger the vulnerability:</p>
+<pre>
+# 1x CharacterAck message with flags set
+?##\x00Q\x00\x00\x00\x02\x18\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
+</pre>
+
+<p>If successful, the answer will look like this:</p>
+<pre>
+0040   3f 23 23 00 02 00 00 00 12 0a 10 44 65 76 69 63   ?##........Devic
+0050   65 20 72 65 63 6f 76 65 72 65 64 00 00 00 00 00   e recovered.....
+0060   00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00   ................
+0070   00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00   ................
+</pre>
+
+<h4 id="existing-countermeasures-and-mitigating-factors">Existing countermeasures and mitigating factors</h4>
+
+<p>None of the regular security mechanisms prevents this issue:</p>
+<ul>
+  <li>PIN check and physical button confirmation for dangerous operations are circumvented</li>
+  <li>the device flash is normally locked against accidental writes, but the problematic code unlocks it explicitly</li>
+  <li>the incidental out of bounds write is not detected by the stack protection or memory protection unit</li>
+</ul>
+
+<h4 id="affected-versions">Affected versions</h4>
+
+<p>The issue was discovered with firmware v6.2.0. The problematic state machine behavior was confirmed for previous firmware versions v6.0.0 and v4.0.0 as well. Looking at the <a href="https://github.com/keepkey/keepkey-firmware/commits/769714fcb569e7a4faff9530a2d9ac1f9d6e5680/lib/firmware/recovery_cipher.c">patch history</a> of the recovery logic, I think it is plausible that most or all recent firmware versions are similarly affected in terms of the general logic bug.</p>
+
+<p>Note: not all firmware versions in question have U2F capabilities enabled and WebUSB is unavailable for older firmware versions.</p>
+
+<h2 id="coordinated-disclosure">Coordinated disclosure</h2>
+
+<p>The disclosure process is described in the “Coordinated disclosure” section of the <a href="/posts/keepkey-CVE-2019-18671/">CVE-2019-18671</a> article, which covers all relevant aspects of this disclosure as well.</p>
+
+<p>It’s noteworthy that this issue was fixed by ShapeShift with a firmware update after <strong>just 9 days</strong>.</p>
+
+<h3 id="relevant-product">Relevant product</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>product</th>
+      <th>source</th>
+      <th>fixed version</th>
+      <th>vendor references</th>
+      <th>CVE</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>ShapeShift KeepKey</td>
+      <td><a href="https://github.com/keepkey/keepkey-firmware/">Github</a></td>
+      <td><strong>v6.2.2</strong> via <a href="https://github.com/keepkey/keepkey-firmware/commit/769714fcb569e7a4faff9530a2d9ac1f9d6e5680">patch</a></td>
+      <td><a href="https://medium.com/shapeshift-stories/shapeshift-security-update-8ec89bb1b4e3">disclosure post</a>, <a href="https://medium.com/shapeshift-stories/keepkey-release-notes-v-6f7d2ec78065">release notes</a> , VULN-1971</td>
+      <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-18672">CVE-2019-18672</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="detailed-timeline">Detailed timeline</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>info</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2019-09-11</td>
+      <td>Confidential disclosure to ShapeShift</td>
+    </tr>
+    <tr>
+      <td>2019-09-12</td>
+      <td>ShapeShift assigns VULN-1971</td>
+    </tr>
+    <tr>
+      <td>2019-09-15</td>
+      <td>ShapeShift proposes a patch</td>
+    </tr>
+    <tr>
+      <td>2019-09-19</td>
+      <td>ShapeShift releases firmware v6.2.2</td>
+    </tr>
+    <tr>
+      <td>2019-09-19</td>
+      <td>ShapeShift publishes v6.2.2 release announcement</td>
+    </tr>
+    <tr>
+      <td>2019-11-02</td>
+      <td>CVE requested from MITRE</td>
+    </tr>
+    <tr>
+      <td>2019-11-02</td>
+      <td>MITRE assigns CVE-2019-18672</td>
+    </tr>
+    <tr>
+      <td>2019-12-04</td>
+      <td>ShapeShift publishes disclosure post for v6.2.2</td>
+    </tr>
+    <tr>
+      <td>2019-12-04</td>
+      <td>The CVE-2019-18672 details are published</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><em>Note: previous versions of this timeline included the wrong year.</em></p>
+
+<h3 id="bug-bounty">Bug bounty</h3>
+<p>ShapeShift provided a bug bounty for this issue.</p>
+
+  </div>
+
+
+  <a class="u-url" href="/posts/keepkey-CVE-2019-18672/" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col one-half"><ul class="contact-list">
+          <li class="p-name">
+            <b>Christian Reitter</b>
+          </li></ul></div>
+
+      <div class="footer-col one-half">
+        <p>Information security and other interests.</p>
+      </div>
+    </div>
+
+    <div class="social-ref"><ul class="social-ref-list"><li><a rel="me" href="https://github.com/invd" title="invd"><svg class="svg-icon grey"><use xlink:href="/assets/minima-icons.svg#github"></use></svg></a></li><li><a href="/feed.xml" title="rss"><svg class="svg-icon grey"><use xlink:href="/assets/minima-icons.svg#rss"></use></svg></a></li></ul>
+</div>
+
+  </div>
+</footer>
+</body>
+
+</html>

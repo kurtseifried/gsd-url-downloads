@@ -1,0 +1,63 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Diff - 6dc6c38^! - platform/frameworks/av - Git at Google</title><link rel="stylesheet" type="text/css" href="/+static/base.css"><!-- default customHeadTagPart --></head><body class="Site"><header class="Site-header"><div class="Header"><a class="Header-image" href="/"><img src="//www.gstatic.com/images/branding/lockups/2x/lockup_git_color_108x24dp.png" width="108" height="24" alt="Google Git"></a><div class="Header-menu"> <a class="Header-menuItem" href="https://accounts.google.com/AccountChooser?service=gerritcodereview&amp;continue=https://android.googlesource.com/login/platform/frameworks/av/%2B/6dc6c38%255E%2521/">Sign in</a> </div></div></header><div class="Site-content"><div class="Container "><div class="Breadcrumbs"><a class="Breadcrumbs-crumb" href="/?format=HTML">android</a> / <a class="Breadcrumbs-crumb" href="/platform/">platform</a> / <a class="Breadcrumbs-crumb" href="/platform/frameworks/">frameworks</a> / <a class="Breadcrumbs-crumb" href="/platform/frameworks/av/">av</a> / <a class="Breadcrumbs-crumb" href="/platform/frameworks/av/+/6dc6c38%5E%21/">6dc6c38^!</a> / <span class="Breadcrumbs-crumb">.</span></div><div class="u-monospace Metadata"><table><tr><th class="Metadata-title">commit</th><td>6dc6c38b63b0ec5a72bd956c4821b9d00d3ab123</td><td><span>[<a href="/platform/frameworks/av/+log/6dc6c38/">log</a>]</span> <span>[<a href="/platform/frameworks/av/+archive/6dc6c38/.tar.gz">tgz</a>]</span></td></tr><tr><th class="Metadata-title">author</th><td>Eric Laurent &lt;elaurent@google.com&gt;</td><td>Fri Feb 06 10:44:24 2015 -0800</td></tr><tr><th class="Metadata-title">committer</th><td>The Android Automerger &lt;android-build@google.com&gt;</td><td>Wed Mar 25 18:49:25 2015 -0700</td></tr><tr><th class="Metadata-title">tree</th><td><a href="/platform/frameworks/av/+/6dc6c38/">055d8f09c85491920c54dced2498f2dc1c4103cf</a></td></tr><tr><th class="Metadata-title">parent</th><td><a href="/platform/frameworks/av/+/6dc6c38%5E">e2c8023444bf96739ff0e4cbaebc086bb73d3bf0</a> <span>[<a href="/platform/frameworks/av/+/6dc6c38%5E%21/">diff</a>]</span></td></tr></table></div><pre class="u-pre u-monospace MetadataMessage">DO NOT MERGE - audio policy service: fix possible memory overflow
+
+Add limit on number of audio ports and patches requested by
+listaudioPorts() and listAudioPatches().
+
+Bug: 19261727.
+Change-Id: <a href="https://android-review.googlesource.com/#/q/I21dfdf11cf805734cc3b7b2a85762c5598f60580">I21dfdf11cf805734cc3b7b2a85762c5598f60580</a>
+(cherry picked from commit 1d670b11313250442455a22f1056ad649d607fb2)
+</pre><pre class="u-pre u-monospace Diff"><a name="F0" class="Diff-fileIndex"></a>diff --git <a href="/platform/frameworks/av/+/e2c8023444bf96739ff0e4cbaebc086bb73d3bf0/media/libmedia/IAudioPolicyService.cpp">a/media/libmedia/IAudioPolicyService.cpp</a> <a href="/platform/frameworks/av/+/6dc6c38b63b0ec5a72bd956c4821b9d00d3ab123/media/libmedia/IAudioPolicyService.cpp">b/media/libmedia/IAudioPolicyService.cpp</a>
+index 70551c4..12efa8a 100644
+--- a/media/libmedia/IAudioPolicyService.cpp
++++ b/media/libmedia/IAudioPolicyService.cpp
+</pre><pre class="u-pre u-monospace Diff-unified"><span class="Diff-hunk">@@ -73,6 +73,8 @@
+</span><span class="Diff-change">     REGISTER_POLICY_MIXES,</span>
+<span class="Diff-change"> };</span>
+<span class="Diff-change"> </span>
+<span class="Diff-insert">+#define MAX_ITEMS_PER_LIST 1024</span>
+<span class="Diff-insert">+</span>
+<span class="Diff-change"> class BpAudioPolicyService : public BpInterface&lt;IAudioPolicyService&gt;</span>
+<span class="Diff-change"> {</span>
+<span class="Diff-change"> public:</span>
+<span class="Diff-hunk">@@ -1054,10 +1056,18 @@
+</span><span class="Diff-change">             audio_port_role_t role = (audio_port_role_t)data.readInt32();</span>
+<span class="Diff-change">             audio_port_type_t type = (audio_port_type_t)data.readInt32();</span>
+<span class="Diff-change">             unsigned int numPortsReq = data.readInt32();</span>
+<span class="Diff-insert">+            if (numPortsReq &gt; MAX_ITEMS_PER_LIST) {</span>
+<span class="Diff-insert">+                numPortsReq = MAX_ITEMS_PER_LIST;</span>
+<span class="Diff-insert">+            }</span>
+<span class="Diff-change">             unsigned int numPorts = numPortsReq;</span>
+<span class="Diff-delete">-            unsigned int generation;</span>
+<span class="Diff-change">             struct audio_port *ports =</span>
+<span class="Diff-change">                     (struct audio_port *)calloc(numPortsReq, sizeof(struct audio_port));</span>
+<span class="Diff-insert">+            if (ports == NULL) {</span>
+<span class="Diff-insert">+                reply-&gt;writeInt32(NO_MEMORY);</span>
+<span class="Diff-insert">+                reply-&gt;writeInt32(0);</span>
+<span class="Diff-insert">+                return NO_ERROR;</span>
+<span class="Diff-insert">+            }</span>
+<span class="Diff-insert">+            unsigned int generation;</span>
+<span class="Diff-change">             status_t status = listAudioPorts(role, type, &amp;numPorts, ports, &amp;generation);</span>
+<span class="Diff-change">             reply-&gt;writeInt32(status);</span>
+<span class="Diff-change">             reply-&gt;writeInt32(numPorts);</span>
+<span class="Diff-hunk">@@ -1111,11 +1121,19 @@
+</span><span class="Diff-change">         case LIST_AUDIO_PATCHES: {</span>
+<span class="Diff-change">             CHECK_INTERFACE(IAudioPolicyService, data, reply);</span>
+<span class="Diff-change">             unsigned int numPatchesReq = data.readInt32();</span>
+<span class="Diff-insert">+            if (numPatchesReq &gt; MAX_ITEMS_PER_LIST) {</span>
+<span class="Diff-insert">+                numPatchesReq = MAX_ITEMS_PER_LIST;</span>
+<span class="Diff-insert">+            }</span>
+<span class="Diff-change">             unsigned int numPatches = numPatchesReq;</span>
+<span class="Diff-delete">-            unsigned int generation;</span>
+<span class="Diff-change">             struct audio_patch *patches =</span>
+<span class="Diff-change">                     (struct audio_patch *)calloc(numPatchesReq,</span>
+<span class="Diff-change">                                                  sizeof(struct audio_patch));</span>
+<span class="Diff-insert">+            if (patches == NULL) {</span>
+<span class="Diff-insert">+                reply-&gt;writeInt32(NO_MEMORY);</span>
+<span class="Diff-insert">+                reply-&gt;writeInt32(0);</span>
+<span class="Diff-insert">+                return NO_ERROR;</span>
+<span class="Diff-insert">+            }</span>
+<span class="Diff-insert">+            unsigned int generation;</span>
+<span class="Diff-change">             status_t status = listAudioPatches(&amp;numPatches, patches, &amp;generation);</span>
+<span class="Diff-change">             reply-&gt;writeInt32(status);</span>
+<span class="Diff-change">             reply-&gt;writeInt32(numPatches);</span>
+</pre></div> <!-- Container --></div> <!-- Site-content --><footer class="Site-footer"><div class="Footer"><span class="Footer-poweredBy">Powered by <a href="https://gerrit.googlesource.com/gitiles/">Gitiles</a>| <a href="https://policies.google.com/privacy">Privacy</a></span><span class="Footer-formats"><a class="u-monospace Footer-formatsItem" href="?format=TEXT">txt</a> <a class="u-monospace Footer-formatsItem" href="?format=JSON">json</a></span></div></footer></body></html>

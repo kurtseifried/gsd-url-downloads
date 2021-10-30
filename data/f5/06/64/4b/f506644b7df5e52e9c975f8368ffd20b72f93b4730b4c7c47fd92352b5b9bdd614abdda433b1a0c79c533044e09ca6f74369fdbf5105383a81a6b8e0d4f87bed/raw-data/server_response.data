@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <title>Finding Ticketbleed</title>
+
+    <meta name="HandheldFriendly" content="True" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="shortcut icon" href="/favicon.ico">
+
+    <link rel="stylesheet" type="text/css" href="/assets/css/screen.css?v=7f0b6d17f9" />
+    <link rel="stylesheet" type="text/css" href="/assets/fonts/fonts.css?v=7f0b6d17f9" />
+
+    <link rel="canonical" href="https://blog.filippo.io/finding-ticketbleed/" />
+    <meta name="referrer" content="no-referrer-when-downgrade" />
+    
+    <meta property="og:site_name" content="Filippo.io" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Finding Ticketbleed" />
+    <meta property="og:description" content="Ticketbleed (CVE-2016-9244) is a software vulnerability in the TLS stack of certain F5 products that allows a remote attacker to extract up to 31 bytes of uninitialized memory at a time, which can contain any kind of random sensitive information, like in Heartbleed.  If you suspect you might be affected" />
+    <meta property="og:url" content="https://blog.filippo.io/finding-ticketbleed/" />
+    <meta property="article:published_time" content="2017-02-09T02:14:44.000Z" />
+    <meta property="article:modified_time" content="2017-02-09T02:14:44.000Z" />
+    <meta property="article:tag" content="Mainline" />
+    <meta property="article:tag" content="TLS" />
+    
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Finding Ticketbleed" />
+    <meta name="twitter:description" content="Ticketbleed (CVE-2016-9244) is a software vulnerability in the TLS stack of certain F5 products that allows a remote attacker to extract up to 31 bytes of uninitialized memory at a time, which can contain any kind of random sensitive information, like in Heartbleed.  If you suspect you might be affected" />
+    <meta name="twitter:url" content="https://blog.filippo.io/finding-ticketbleed/" />
+    <meta name="twitter:label1" content="Written by" />
+    <meta name="twitter:data1" content="Filippo Valsorda" />
+    <meta name="twitter:label2" content="Filed under" />
+    <meta name="twitter:data2" content="Mainline, TLS" />
+    
+    <script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "publisher": {
+        "@type": "Organization",
+        "name": "Filippo.io",
+        "url": "https://blog.filippo.io/",
+        "logo": {
+            "@type": "ImageObject",
+            "url": "https://blog.filippo.io/favicon.ico",
+            "width": 48,
+            "height": 48
+        }
+    },
+    "author": {
+        "@type": "Person",
+        "name": "Filippo Valsorda",
+        "url": "https://blog.filippo.io/author/filippo/",
+        "sameAs": []
+    },
+    "headline": "Finding Ticketbleed",
+    "url": "https://blog.filippo.io/finding-ticketbleed/",
+    "datePublished": "2017-02-09T02:14:44.000Z",
+    "dateModified": "2017-02-09T02:14:44.000Z",
+    "keywords": "Mainline, TLS",
+    "description": "Ticketbleed (CVE-2016-9244) is a software vulnerability in the TLS stack of\ncertain F5 products that allows a remote attacker to extract up to 31 bytes of\nuninitialized memory at a time, which can contain any kind of random sensitive\ninformation, like in Heartbleed.\n\nIf you suspect you might be affected by this vulnerability, you can find details\nand mitigation instructions at ticketbleed.com [https://ticketbleed.com] \n(including an online test) or in the F5 K05121675 article\n[https://support.f5",
+    "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "https://blog.filippo.io/"
+    }
+}
+    </script>
+
+    <meta name="generator" content="Ghost 3.42" />
+    <link rel="alternate" type="application/rss+xml" title="Filippo.io" href="https://blog.filippo.io/rss/" />
+</head>
+
+<body class="post-template tag-mainline tag-tls">
+
+    
+
+<main class="content" role="main">
+
+    <article class="post tag-mainline tag-tls no-image">
+
+        <header class="post-header">
+            <a class="blog-logo" href="/">
+                <span class="blog-title">Filippo.io</span>
+            </a>
+        </header>
+
+
+        <span class="post-meta"><a href="/author/filippo/">Filippo Valsorda</a>, <time
+                datetime="2017-02-08">08 Feb 2017</time>
+            on <a href="/tag/mainline/">Mainline</a> | <a href="/tag/tls/">TLS</a></span>
+
+        <h1 class="post-title">Finding Ticketbleed</h1>
+
+        <section class="post-content">
+            <!--kg-card-begin: markdown--><p>Ticketbleed (CVE-2016-9244) is a software vulnerability in the TLS stack of certain F5 products that allows a remote attacker to extract up to 31 bytes of uninitialized memory at a time, which can contain any kind of random sensitive information, like in Heartbleed.</p>
+<p>If you suspect you might be affected by this vulnerability, you can find details and mitigation instructions at <a href="https://ticketbleed.com">ticketbleed.com</a> (including an online test) or in the <a href="https://support.f5.com/csp/article/K05121675">F5 K05121675 article</a>.</p>
+<p><img src="https://blog.filippo.io/content/images/2017/02/ticketbleed--1-.png" alt="ticketbleed"></p>
+<p>In this post we'll talk about how Ticketbleed was found, verified and reported.</p>
+<h2 id="jirargxxx">JIRA RG-XXX</h2>
+<p>It all started with a bug report from a customer using Cloudflare <a href="https://www.cloudflare.com/website-optimization/railgun/">Railgun</a>.</p>
+<blockquote>
+<p><strong>rg-listener &lt;&gt; origin requests fail with &quot;local error: unexpected message&quot;</strong></p>
+<p>A PCAP of the rg-listener &lt;&gt; origin traffic is attached and shows a TLS alert being triggered during the handshake.</p>
+<p>Worth noting the customer is using an F5 Load Balancer in front of the Railgun and the Origin Web Server:<br>
+<code>visitor &gt; edge &gt; cache &gt; rg-sender &gt; F5 &gt; rg-listener &gt; F5 &gt; origin web server</code></p>
+<p>Matthew was unable to replicate by using a basic TLS.Dial in Go so this seems tricky so far.</p>
+</blockquote>
+<p>A bit of context on Railgun: Railgun speeds up requests between the Cloudflare edge and the origin web site by establishing a permanent optimized connection and performing delta compression on HTTP responses.</p>
+<p><img src="https://blog.filippo.io/content/images/2017/02/railgun-diagram-how-it-works-with.svg" alt="railgun"></p>
+<p>The Railgun connection uses a custom binary protocol over TLS, and the two endpoints are Go programs: one on the Cloudflare edge and one installed on the customer servers. This means that the whole connection goes through the Go TLS stack, crypto/tls.</p>
+<p>That connection failing with <code>local error: unexpected message</code> means that the customer’s side of the connection sent something that confused the Go TLS stack of the Railgun running on our side. Since the customer is running an F5 load balancer between their Railgun and ours, this points towards an <strong>incompatibility between the Go TLS stack and the F5 one</strong>.</p>
+<p>However, when my colleague Matthew tried to reproduce the issue by connecting to the load balancer with a simple Go <code>crypto/tls.Dial</code>, it succeeded.</p>
+<h2 id="pcapdiving">PCAP diving</h2>
+<p>Since Matthew sits at a desk opposite of mine in the Cloudflare London office, he knew I've been working with the Go TLS stack for our TLS 1.3 implementation. We quickly ended up in a joint debugging session.</p>
+<p>Here's the PCAP we were staring at.</p>
+<p><img src="https://blog.filippo.io/content/images/2017/02/pcap.png" alt="pcap.png"></p>
+<p>So, there's the ClientHello, right. The ServerHello, so far so good. And then immediately a ChangeCipherSpec. Oh. Ok.</p>
+<p>A ChangeCipherSpec is how TLS 1.2 says &quot;let's switch to encrypted&quot;. The only way a ChangeCipherSpec can come this early in a 1.2 handshake, is if session resumption happened.</p>
+<p>And indeed, by focusing on the ClientHello we can see that the Railgun client sent a Session Ticket.</p>
+<p><img src="https://blog.filippo.io/content/images/2017/02/ticket.png" alt="ticket.png"></p>
+<p>A Session Ticket carries some encrypted key material from a previous session to allow the server to resume that previous session immediately instead of negotiating a new one.</p>
+<p><img src="https://blog.filippo.io/content/images/2017/02/TLS-1.3.010.png" alt="resumption"></p>
+<p><em>To learn more about session resumption in TLS 1.2, watch the first part of <a href="https://blog.cloudflare.com/tls-1-3-explained-by-the-cloudflare-crypto-team-at-33c3/">the Cloudflare Crypto Team TLS 1.3 talk</a>, <a href="https://blog.cloudflare.com/tls-1-3-overview-and-q-and-a/">read the transcript</a>, or the <a href="https://blog.cloudflare.com/tls-session-resumption-full-speed-and-secure/">&quot;TLS Session Resumption&quot; post</a> on the Cloudflare blog.</em></p>
+<p>After that ChangeCipherSpec both Railgun and Wireshark get pretty confused (HelloVerifyRequest? Umh?). So we have reason to believe the issue is related to Session Tickets.</p>
+<p>In Go you have to explicitly enable Session Tickets on the client side by setting a <code>ClientSessionCache</code>. We verified that indeed Railgun uses this functionality and wrote this small test:</p>
+<pre><code class="language-go">package main
+
+import (
+    &quot;crypto/tls&quot;
+)
+
+func main() {
+    conf := &amp;tls.Config{
+        InsecureSkipVerify: true,
+        ClientSessionCache: tls.NewLRUClientSessionCache(32),
+    }
+
+    conn, err := tls.Dial(&quot;tcp&quot;, &quot;redacted:443&quot;, conf)
+    if err != nil {
+        panic(&quot;failed to connect: &quot; + err.Error())
+    }
+    conn.Close()
+
+    conn, err = tls.Dial(&quot;tcp&quot;, &quot;redacted:443&quot;, conf)
+    if err != nil {
+        panic(&quot;failed to resume: &quot; + err.Error())
+    }
+    conn.Close()
+}
+</code></pre>
+<p>And sure enough, <code>local error: unexpected message</code>.</p>
+<h2 id="cryptotlsdiving">crypto/tls diving</h2>
+<p>Once I had it reproduced in a local <code>crypto/tls</code> it became a home game. <code>crypto/tls</code> error messages tend to be short of details, but a quick tweak allows us to pinpoint where they are generated.</p>
+<p>Every time a fatal error occurs, <code>setErrorLocked</code> is called to record the error and make sure that all following operations fail. That function is usually called from the site of the error.</p>
+<p>A well placed <code>panic(err)</code> will drop a stack trace that should show us <em>what</em> message is unexpected.</p>
+<pre><code class="language-diff">diff --git a/src/crypto/tls/conn.go b/src/crypto/tls/conn.go
+index 77fd6d3254..017350976a 100644
+--- a/src/crypto/tls/conn.go
++++ b/src/crypto/tls/conn.go
+@@ -150,8 +150,7 @@ type halfConn struct {
+ }
+
+ func (hc *halfConn) setErrorLocked(err error) error {
+-       hc.err = err
+-       return err
++       panic(err)
+ }
+
+ // prepareCipherSpec sets the encryption and MAC states
+</code></pre>
+<pre><code class="language-no-highlight">panic: local error: tls: unexpected message
+
+goroutine 1 [running]:
+panic(0x185340, 0xc42006fae0)
+	/Users/filippo/code/go/src/runtime/panic.go:500 +0x1a1
+crypto/tls.(*halfConn).setErrorLocked(0xc42007da38, 0x25e6e0, 0xc42006fae0, 0x25eee0, 0xc4200c0af0)
+	/Users/filippo/code/go/src/crypto/tls/conn.go:153 +0x4d
+crypto/tls.(*Conn).sendAlertLocked(0xc42007d880, 0x1c390a, 0xc42007da38, 0x2d)
+	/Users/filippo/code/go/src/crypto/tls/conn.go:719 +0x147
+crypto/tls.(*Conn).sendAlert(0xc42007d880, 0xc42007990a, 0x0, 0x0)
+	/Users/filippo/code/go/src/crypto/tls/conn.go:727 +0x8c
+crypto/tls.(*Conn).readRecord(0xc42007d880, 0xc400000016, 0x0, 0x0)
+	/Users/filippo/code/go/src/crypto/tls/conn.go:672 +0x719
+crypto/tls.(*Conn).readHandshake(0xc42007d880, 0xe7a37, 0xc42006c3f0, 0x1030e, 0x0)
+	/Users/filippo/code/go/src/crypto/tls/conn.go:928 +0x8f
+crypto/tls.(*clientHandshakeState).doFullHandshake(0xc4200b7c10, 0xc420070480, 0x55)
+	/Users/filippo/code/go/src/crypto/tls/handshake_client.go:262 +0x8c
+crypto/tls.(*Conn).clientHandshake(0xc42007d880, 0x1c3928, 0xc42007d988)
+	/Users/filippo/code/go/src/crypto/tls/handshake_client.go:228 +0xfd1
+crypto/tls.(*Conn).Handshake(0xc42007d880, 0x0, 0x0)
+	/Users/filippo/code/go/src/crypto/tls/conn.go:1259 +0x1b8
+crypto/tls.DialWithDialer(0xc4200b7e40, 0x1ad310, 0x3, 0x1af02b, 0xf, 0xc420092580, 0x4ff80, 0xc420072000, 0xc42007d118)
+	/Users/filippo/code/go/src/crypto/tls/tls.go:146 +0x1f8
+crypto/tls.Dial(0x1ad310, 0x3, 0x1af02b, 0xf, 0xc420092580, 0xc42007ce00, 0x0, 0x0)
+	/Users/filippo/code/go/src/crypto/tls/tls.go:170 +0x9d
+</code></pre>
+<p>Sweet, let's see where the unexpected message alert is sent, at <code>conn.go:672</code>.</p>
+<pre><code> 670     case recordTypeChangeCipherSpec:
+ 671         if typ != want || len(data) != 1 || data[0] != 1 {
+ 672             c.in.setErrorLocked(c.sendAlert(alertUnexpectedMessage))
+ 673             break
+ 674         }
+ 675         err := c.in.changeCipherSpec()
+ 676         if err != nil {
+ 677             c.in.setErrorLocked(c.sendAlert(err.(alert)))
+ 678         }
+</code></pre>
+<p>So the message we didn't expect is the ChangeCipherSpec. Let's see if the higher stack frames give us an indication as to what we expected instead. Let's chase <code>handshake_client.go:262</code>.</p>
+<pre><code> 259 func (hs *clientHandshakeState) doFullHandshake() error {
+ 260     c := hs.c
+ 261
+ 262     msg, err := c.readHandshake()
+ 263     if err != nil {
+ 264         return err
+ 265     }
+</code></pre>
+<p>Ah, <code>doFullHandshake</code>. Wait. The server here is clearly doing a resumption (sending a Change Cipher Spec immediately after the Server Hello), while the client... tries to do a full handshake?</p>
+<p>It looks like the client offers a Session Ticket, the server <em>accepts it</em>, but the client <em>doesn't realize and carries on</em>.</p>
+<h2 id="rfcdiving">RFC diving</h2>
+<p>At this point I had to fill a gap in my TLS 1.2 knowledge. How does a server signal acceptance of a Session Ticket?</p>
+<p><a href="https://tools.ietf.org/html/rfc5077">RFC 5077</a>, which obsoletes RFC 4507, says:</p>
+<blockquote>
+<p>When presenting a ticket, the client MAY generate and include a<br>
+Session ID in the TLS ClientHello.  If the server accepts the ticket<br>
+and the Session ID is not empty, then it MUST respond with the same<br>
+Session ID present in the ClientHello.</p>
+</blockquote>
+<p>So a client that doesn't want to guess whether a Session Ticket is accepted or not will send a Session ID and look for it to be echoed back by the server.</p>
+<p>The code in <code>crypto/tls</code>, clear as always, does exactly that.</p>
+<pre><code class="language-go">func (hs *clientHandshakeState) serverResumedSession() bool {
+    // If the server responded with the same sessionId then it means the
+    // sessionTicket is being used to resume a TLS session.
+    return hs.session != nil &amp;&amp; hs.hello.sessionId != nil &amp;&amp;
+        bytes.Equal(hs.serverHello.sessionId, hs.hello.sessionId)
+}
+</code></pre>
+<h2 id="sessionidsdiving">Session IDs diving</h2>
+<p>Something must be going wrong there. Let's practice some healthy print-based debugging.</p>
+<pre><code class="language-diff">diff --git a/src/crypto/tls/handshake_client.go b/src/crypto/tls/handshake_client.go
+index f789e6f888..2868802d82 100644
+--- a/src/crypto/tls/handshake_client.go
++++ b/src/crypto/tls/handshake_client.go
+@@ -552,6 +552,8 @@ func (hs *clientHandshakeState) establishKeys() error {
+ func (hs *clientHandshakeState) serverResumedSession() bool {
+        // If the server responded with the same sessionId then it means the
+        // sessionTicket is being used to resume a TLS session.
++       println(hex.Dump(hs.hello.sessionId))
++       println(hex.Dump(hs.serverHello.sessionId))
+        return hs.session != nil &amp;&amp; hs.hello.sessionId != nil &amp;&amp;
+                bytes.Equal(hs.serverHello.sessionId, hs.hello.sessionId)
+ }
+</code></pre>
+<pre><code class="language-no-highlight">00000000  a8 73 2f c4 c9 80 e2 ef  b8 e0 b7 da cf 0d 71 e5  |.s/...........q.|
+
+00000000  a8 73 2f c4 c9 80 e2 ef  b8 e0 b7 da cf 0d 71 e5  |.s/...........q.|
+00000010  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+</code></pre>
+<p>Ah. The F5 server is padding the Session ID to its maximum length of 32 bytes, instead of returning it as the client sent it. crypto/tls in Go uses 16 byte Session IDs.</p>
+<p>From there the failure mode is clear: the server thinks it told the client to use the ticket, the client thinks the server started a new session, and things get unexpected.</p>
+<p>In the TLS space we have seen quite some incompatibilities like this. Notoriously, ClientHellos have to be either shorter than 256 bytes or longer than 512 <a href="https://bugs.chromium.org/p/chromium/issues/detail?id=315828">not to clash with some server implementations</a>.</p>
+<p>I was about to write this up as just another real world TLS quirk when...</p>
+<pre><code class="language-no-highlight">00000000  79 bd e5 a8 77 55 8b 92  41 e9 89 45 e1 50 31 25  |y...wU..A..E.P1%|
+
+00000000  79 bd e5 a8 77 55 8b 92  41 e9 89 45 e1 50 31 25  |y...wU..A..E.P1%|
+00000010  04 27 a8 4f 63 22 de 8b  ef f9 a3 13 dd 66 5c ee  |.'.Oc&quot;.......f\.|
+</code></pre>
+<p>Uh oh. Wait. Those are not zeroes. That's not padding. That's... memory?</p>
+<p>At this point the impression of dealing with a Heartbleed-like vulnerability got pretty clear. The server is allocating a buffer as big as the client's Session ID, and then sending back always 32 bytes, bringing along whatever unallocated memory was in the extra bytes.</p>
+<h2 id="browserdiving">Browser diving</h2>
+<p>I had one last source of skepticism: how could this not have been noticed before?</p>
+<p>The answer is banal: all browsers use 32-byte Session IDs to negotiate Session Tickets. Together with Nick Sullivan I checked NSS, OpenSSL and BoringSSL to confirm. <a href="https://github.com/google/boringssl/blob/33fe4a0d1406f423e7424ea7367e1d1a51c2edc1/ssl/handshake_client.c#L1901-L1908">Here's BoringSSL for example</a>.</p>
+<pre><code class="language-c">  /* Generate a session ID for this session based on the session ticket. We use
+   * the session ID mechanism for detecting ticket resumption. This also fits in
+   * with assumptions elsewhere in OpenSSL.*/
+  if (!EVP_Digest(CBS_data(&amp;ticket), CBS_len(&amp;ticket),
+                  session-&gt;session_id, &amp;session-&gt;session_id_length,
+                  EVP_sha256(), NULL)) {
+    goto err;
+  }
+</code></pre>
+<p>BoringSSL uses a SHA256 hash of the Session Ticket, which is exactly 32 bytes.</p>
+<p>(Interestingly, from speaking to people in the TLS field, there was an idle intention to switch to 1-byte Session IDs but no one had tested it widely yet.)</p>
+<p>As for Go, it’s probably the case that client-side Session Tickets are not enabled that often.</p>
+<h2 id="disclosurediving">Disclosure diving</h2>
+<p>After realizing the security implications of this issue we compartmentalized it inside the company, made sure our Support team would advise our customer to simply disable Session Tickets, and sought to contact F5.</p>
+<p>After a couple misdirected emails that were met by requests for Serial Numbers, we got in contact with the F5 SIRT, exchanged PGP keys, and provided a report and a PoC.</p>
+<p>The report was escalated to the development team, and confirmed to be an uninitialized memory disclosure limited to the Session Ticket functionality.</p>
+<p>It's unclear what data might be exfiltrated via this vulnerability, but Heartbleed and the <a href="https://blog.cloudflare.com/the-results-of-the-cloudflare-challenge/">Cloudflare Heartbleed Challenge</a> taught us not to make assumptions of safety with uninitialized memory.</p>
+<p>In planning a timeline, the F5 team was faced with a rigid release schedule. Considering multiple factors, including the availability of an effective mitigation (disabling Session Tickets) and the apparent triviality of the vulnerability, I decided to adhere to the <a href="https://googleprojectzero.blogspot.co.uk/2015/02/feedback-and-data-driven-updates-to.html">industry-standard disclosure policy adopted by Google's Project Zero</a>: 90 days with 15 days of grace period if a fix is due to be released.</p>
+<p>By coincidence today coincides with both the expiration of those terms and the scheduled release of the first hotfix for one of the affected versions.</p>
+<p>I'd like to thank the F5 SIRT for their professionalism, transparency and collaboration, which were in pleasant contrast with the stories of adversarial behavior we hear too often in the industry.</p>
+<p>The issue was assigned CVE-2016-9244.</p>
+<h2 id="internetdiving">Internet diving</h2>
+<p>When we reported the issue to F5 I had tested the vulnerability against a single host, which quickly became unavailable after disabling Session Tickets. That meant having both low confidence in the extent of the vulnerability, and no way to reproduce it.</p>
+<p>This was the perfect occasion to perform an Internet scan. I picked the toolkit that powers Censys.io by the University of Michigan: zmap and zgrab.</p>
+<p>zmap is an IPv4-space scanning tool that detects open ports, while zgrab is a Go tool that follows up by connecting to those ports and collecting a number of protocol details.</p>
+<p>I added support for Session Ticket resumption to zgrab, and then wrote a simple Ticketbleed detector by having zgrab send a 31-byte Session ID, and comparing it with the one returned by the server.</p>
+<pre><code class="language-diff">diff --git a/ztools/ztls/handshake_client.go b/ztools/ztls/handshake_client.go
+index e6c506b..af098d3 100644
+--- a/ztools/ztls/handshake_client.go
++++ b/ztools/ztls/handshake_client.go
+@@ -161,7 +161,7 @@ func (c *Conn) clientHandshake() error {
+                session, sessionCache = nil, nil
+                hello.ticketSupported = true
+                hello.sessionTicket = []byte(c.config.FixedSessionTicket)
+-               hello.sessionId = make([]byte, 32)
++               hello.sessionId = make([]byte, 32-1)
+                if _, err := io.ReadFull(c.config.rand(), hello.sessionId); err != nil {
+                        c.sendAlert(alertInternalError)
+                        return errors.New(&quot;tls: short read from Rand: &quot; + err.Error())
+@@ -658,8 +658,11 @@ func (hs *clientHandshakeState) processServerHello() (bool, error) {
+
+        if c.config.FixedSessionTicket != nil {
+                c.resumption = &amp;Resumption{
+-                       Accepted:  hs.hello.sessionId != nil &amp;&amp; bytes.Equal(hs.serverHello.sessionId, hs.hello.sessionId),
+-                       SessionID: hs.serverHello.sessionId,
++                       Accepted: hs.hello.sessionId != nil &amp;&amp; bytes.Equal(hs.serverHello.sessionId, hs.hello.sessionId),
++                       TicketBleed: len(hs.serverHello.sessionId) &gt; len(hs.hello.sessionId) &amp;&amp;
++                               bytes.Equal(hs.serverHello.sessionId[:len(hs.hello.sessionId)], hs.hello.sessionId),
++                       ServerSessionID: hs.serverHello.sessionId,
++                       ClientSessionID: hs.hello.sessionId,
+                }
+                return false, FixedSessionTicketError
+        }
+</code></pre>
+<p>By picking 31 bytes I ensured the sensitive information leakage would be negligible.</p>
+<p>I then downloaded the latest zgrab results from the Censys website, which thankfully included information on what hosts supported Session Tickets, and completed the pipeline with abundant doses of <code>pv</code> and <code>jq</code>.</p>
+<p>After getting two hits in the first 1,000 hosts from the Alexa top 1m list in November, I interrupted the scan to avoid leaking the vulnerability and postponed to a date closer to the disclosure.</p>
+<p>While producing this writeup I completed the scan, and found between 0.1% and 0.2% of all hosts to be vulnerable, or 0.4% of the websites supporting Session Tickets.</p>
+<h2 id="readmore">Read more</h2>
+<p>For more details visit the <a href="https://support.f5.com/csp/article/K05121675">F5 K05121675 article</a> or <a href="https://ticketbleed.com">ticketbleed.com</a>, where you'll find a technical summary, affected versions, mitigation instructions, a complete timeline, scan results, IPs of the scanning machines, and an online test.</p>
+<p>Otherwise, you might want to <a href="https://twitter.com/FiloSottile">follow me on Twitter</a>.</p>
+<!--kg-card-end: markdown-->
+        </section>
+
+        <footer class="post-footer">
+
+            <section class="author">
+                <h4><a href="/author/filippo/">Filippo Valsorda</a></h4>
+                <p>Cryptogopher on the Go team at Google. RC F&#x27;13, F2&#x27;17. You might know me as @FiloSottile.</p>
+                <div class="author-meta">
+                    
+                    
+                </div>
+                <div class="rc-scout"></div>
+                <script async defer
+                    src="https://www.recurse-scout.com/loader.js?t=e2e278036cc95428674cb2f247dfbc01"></script>
+                <p>Sign up to my newsletter—<a
+                        href="https://buttondown.email/cryptography-dispatches?tag=blog">Cryptography
+                        Dispatches</a>—for more frequent, lightly edited writings on cryptography.</p>
+                <iframe scrolling="no"
+                    style="width:100%!important;height:220px;border:1px #ccc solid !important;margin:0"
+                    src="https://buttondown.email/cryptography-dispatches?tag=blog&as_embed=true"></iframe>
+            </section>
+
+        </footer>
+
+
+    </article>
+
+</main>
+
+
+    <footer class="site-footer">
+        <a class="subscribe icon-feed" href="https://blog.filippo.io/rss/"><span class="tooltip">Subscribe!</span></a>
+        <div class="inner">
+            <section class="copyright">All content copyright <a href="https://blog.filippo.io/">Filippo.io</a> &copy;
+                2021 &bull; All rights reserved.</section>
+            <section class="poweredby">Proudly published with <a class="icon-ghost" href="https://ghost.org">Ghost</a>
+            </section>
+        </div>
+    </footer>
+
+    <!-- Piwik -->
+<script type="text/javascript">
+  var _paq = _paq || [];
+  _paq.push(['trackPageView']);
+  _paq.push(['enableLinkTracking']);
+  _paq.push(['enableHeartBeatTimer', 10]);
+  (function() {
+    _paq.push(['setTrackerUrl',  'https://api-05bc671b63643e3999ba178bd0e968a3.filippo.sandcats.io:6080']);
+    _paq.push(['setSiteId', 1]);
+    _paq.push(['setApiToken', '1BcN9mly-Ur1UhNBek6k0a1qW-Y12e9X-XlwyVfVeRl']);
+    var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+    g.type='text/javascript'; g.async=true; g.defer=true; g.src='https://ls4an735rucvfa6ps6bb.filippo.sandcats.io:6080/embed.js'; s.parentNode.insertBefore(g,s);
+  })();
+</script>
+<!-- End Piwik Code -->
+
+</body>
+
+</html>

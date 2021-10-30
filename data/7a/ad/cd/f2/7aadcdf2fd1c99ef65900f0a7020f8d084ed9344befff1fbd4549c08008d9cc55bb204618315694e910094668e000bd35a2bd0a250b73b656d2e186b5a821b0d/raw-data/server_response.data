@@ -1,0 +1,244 @@
+<!doctype html>
+<!--[if lt IE 7 ]> <html class="no-js lt-ie9 lt-ie8 lt-ie7" lang="en"> <![endif]-->
+<!--[if IE 7 ]>    <html class="no-js lt-ie9 lt-ie8" lang="en"> <![endif]-->
+<!--[if IE 8 ]>    <html class="no-js lt-ie9" lang="en"> <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en"> <!--<![endif]-->
+<head>
+    <meta charset="UTF-8">
+    <title>Fun with Bignums: Crashing MatrixSSL and more | The Fuzzing Project</title>
+    <meta name="generator" content="Serendipity v.2.3.5">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="index,follow">
+    <link rel="canonical" href="https://blog.fuzzing-project.org/51-Fun-with-Bignums-Crashing-MatrixSSL-and-more.html">
+    <link rel="stylesheet" href="https://blog.fuzzing-project.org/serendipity.css?v=">
+    <script src="/templates/2k11/js/modernizr-2.7.1.min.js"></script>
+    <link rel="alternate" type="application/rss+xml" title="The Fuzzing Project RSS feed" href="https://blog.fuzzing-project.org/feeds/index.rss2">
+    <link rel="alternate" type="application/x.atom+xml"  title="The Fuzzing Project Atom feed"  href="https://blog.fuzzing-project.org/feeds/atom.xml">
+    <link rel="trackback" type="application/x-www-form-urlencoded" href="https://blog.fuzzing-project.org/comment.php?type=trackback&amp;entry_id=51">
+    <link rel="pingback" href="https://blog.fuzzing-project.org/comment.php?type=pingback&amp;entry_id=51">
+    <script src="/templates/jquery.js"></script>
+    <script>jQuery.noConflict();</script>
+
+    <script src="https://blog.fuzzing-project.org/serendipity.js?v="></script>
+</head>
+<body>
+<a class="visuallyhidden" href="#content"><span lang="en">Skip to content</span></a>
+<div id="page" class="clearfix">
+    <header id="banner" class="clearfix col2r">
+        <div id="identity">
+            <a href="https://blog.fuzzing-project.org/">
+                <h1>The Fuzzing Project</h1>
+                <p>Blog and Advisories</p>            </a>
+        </div>
+
+        <form id="searchform" action="/index.php" method="get">
+        <div>
+            <input type="hidden" name="serendipity[action]" value="search">
+            <label for="serendipityQuickSearchTermField">Quicksearch</label>
+            <input id="serendipityQuickSearchTermField" name="serendipity[searchTerm]" type="search" placeholder="Search term(s)" value="">
+            <input id="searchsend" name="serendipity[searchButton]" type="submit" value="Go!">
+        </div>
+        </form>
+        
+            </header>
+        <nav id="primary-nav">
+        <h2 class="visuallyhidden">Navigation</h2>
+
+        <ul class="clearfix"><li><a href="https://fuzzing-project.org/">Back to main page</a></li><li><a href="https://fuzzing-project.org/software.html">Software list</a></li></ul>
+    </nav>
+        <div class="clearfix col2r">
+        <main id="content"  class="plain-images">
+        
+            <article id="post_51" class="clearfix serendipity_entry">
+        <header class="clearfix">
+            <h2><a href="/51-Fun-with-Bignums-Crashing-MatrixSSL-and-more.html">Fun with Bignums: Crashing MatrixSSL and more</a></h2>
+
+            <span class="serendipity_byline block_level"><span class="single_user">Posted by <a href="https://blog.fuzzing-project.org/authors/1-Hanno-Boeck">Hanno Böck</a> on </span><time datetime="2016-07-31T04:02:00+02:00">Sunday, July 31. 2016</time></span>
+        </header>
+
+        <div class="clearfix content serendipity_entry_body">
+                If you've been following my fuzzing work you will be aware that I've fuzzed various bignum libraries and found several bugs by comparing implementations against each other.<br />
+<br />
+I recently had a look at the MatrixSSL's modular exponentiation function, for reasons I'll explain later. I wrote <a href="https://github.com/hannob/bignum-fuzz/blob/master/openssl-vs-matrixssl-modexp.c">a wrapper, similar to previous experiments, comparing its result to OpenSSL</a>.<br />
+<br />
+I immediately noted that the pstm_exptmod() function of MatrixSSL has certain limitations that weren't documented. If one tries to calculate a modular exponentiation with the base equal to the modulus (a^b mod a, <a href="https://github.com/hannob/bignum-fuzz/blob/master/matrixssl-base-equals-modulus.c">code</a>) it would return an error. If one tries to calculate a modular exponentiation with the base zero (0^b mod a, <a href="https://github.com/hannob/bignum-fuzz/blob/master/matrixssl-base-zero.c">code</a>, <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-6885">CVE-2016-6885</a>) it would crash with an invalid free operation, potentially leading to memory corruption.<br />
+<br />
+In normal cryptographic operations these values should never appear. But these values are in many situations attacker controlled. One situation is during an RSA key exchange. What happens here is that a client encrypts a random secret with the server's key. However a malicious client could simply send a zero or the key's modulus here. I created a <a href="https://github.com/hannob/bignum-fuzz/blob/master/openssl-break-rsa-values.diff">patch against openssl that allows to test this</a>. Both values crash the MatrixSSL server. However the crash seems not to happen in pstm_exptmod(), it hits another bug earlier (<a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-6886">CVE-2016-6886</a>). In both cases the crash happens due to an invalid memory read in the function pstm_reverse(), which is not prepared for zero-sized inputs and will underflow the len variable.<br />
+<br />
+The crashes <a href="http://www.matrixssl.org/blog/releases/matrixssl_3_8_4">have been fixed in 3.8.4</a>, but the pstm_exptmod() function still doesn't accept these inputs. However it no longer crashes with a zero base. It may be possible that these issues can be triggered through other code paths. I haven't tested Diffie Hellman key exchanges, which also allows putting attacker-controlled values into a modular exponentiation.<br />
+<br />
+This is an interesting class of bugs. Bignum functions often aren't designed to handle all inputs and only consider values that make sense in the context of the cryptographic operations. However if they are attacker-controlled this may lead to problems. I just discovered a <a href="https://lists.lysator.liu.se/pipermail/nettle-bugs/2016/003104.html">somewhat similar issue in Nettle</a>. They switched their RSA implementation from GMP's mpz_powm() function to mpz_powm_sec(), which is supposed to be sidechannel resistant. However mpz_powm_sec() is no drop-in replacement. Unlike mpz_pown() it doesn't accept even moduli and crashes with a floating point error. Therefore when trying to use a specifically crafted RSA key with an even modulus this will crash. Fortunately this was discovered before the change made it into a release.<br />
+<br />
+But back to MatrixSSL: Independent of these corner case values that lead to failures I was able to identify an input value that caused a wrong calculation result (<a href="https://github.com/hannob/bignum-fuzz/blob/master/matrixssl-exptmod-bug.c">code</a>,<a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-6887">CVE-2016-6887</a>.<br />
+<br />
+There's a particularly severe risk with calculation errors in the modulo exponentiation when it comes to the RSA algorithm. A common way to speed up the calculation of RSA signatures is an algorithm based on the chinese remainder theorem (CRT) that splits it up into two smaller calculations. However if one of these calculations goes wrong an attacker can learn the private key. Last year <a href="https://access.redhat.com/blogs/766093/posts/1976703">Florian Weimer observed that various devices had this error</a> and he could extract their keys. He recently mentioned on the <a href="http://www.openwall.com/lists/oss-security/2016/06/27/1">oss-security mailing list that he also observed this in devices using MatrixSSL</a>.<br />
+<br />
+The way the MatrixSSL team "fixed" the miscalculation issue is not really satisfying: They now restrict the input to the pstm_exptmod() function to a set of bit sizes (512, 1024, 1536, 2048, 3072, 4096). My test input had a different bit size, therefore I cannot reproduce the miscalculation any more, but the underlying bug is most likely still there. I've tried to find inputs matching these restrictions and still causing wrong results, but without success yet. Independent of that the restriction means that connections to sites with unusual key sizes or Diffie Hellman moduli will no longer work. While they are not common, there is no rule that RSA keys or Diffie Hellman moduli need to have certain sizes.<br />
+<br />
+Despite the fact that the bug may be still there the CRT attack will probably no longer work. A protection mechanism against that was implemented in version 3.8.3.<br />
+<br />
+I got told by the MatrixSSL developers that their bignum code is based on libtommath. Therefore I also checked if the same bugs appeared there. That wasn't the case. The test input causing wrong results in MatrixSSL were correctly calculated by libtommath and it was also capable of correctly using a zero base or a base equal to the modulus.
+                </div>
+                
+        <footer class="clearfix">
+                                            <a href="/51-Fun-with-Bignums-Crashing-MatrixSSL-and-more.html#comments" title="0 Comments, 1 Trackback">0 Comments</a>
+                                                    
+        </footer>
+
+        <!--
+        <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                 xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/"
+                 xmlns:dc="http://purl.org/dc/elements/1.1/">
+        <rdf:Description
+                 rdf:about="https://blog.fuzzing-project.org/feeds/ei_51.rdf"
+                 trackback:ping="https://blog.fuzzing-project.org/comment.php?type=trackback&amp;entry_id=51"
+                 dc:title="Fun with Bignums: Crashing MatrixSSL and more"
+                 dc:identifier="https://blog.fuzzing-project.org/51-Fun-with-Bignums-Crashing-MatrixSSL-and-more.html" />
+        </rdf:RDF>
+        -->
+
+                                            
+        <section id="trackbacks" class="serendipity_comments serendipity_section_trackbacks">
+            <h3>Trackbacks</h3>
+
+            <div id="trackback_url" class="block_level"><a rel="nofollow" href="https://blog.fuzzing-project.org/comment.php?type=trackback&amp;entry_id=51" title="This link is not meant to be clicked. It contains the trackback URI for this entry. You can use this URI to send ping- &amp; trackbacks from your own blog to this entry. To copy the link, right click and select &quot;Copy Shortcut&quot; in Internet Explorer or &quot;Copy Link Location&quot; in Mozilla.">Trackback specific URI for this entry</a></div>
+
+            <article id="c731" class="clearfix serendipity_comment odd">
+    <h4><cite>The Fuzzing Project</cite> on <time datetime="2016-10-15T17:33:20+02:00">Saturday, October 15. 2016</time>: <a href="http://blog.fuzzing-project.org/54-Update-on-MatrixSSL-miscalculation-incomplete-fix-for-CVE-2016-6887.html">Update on MatrixSSL miscalculation (incomplete fix for CVE-2016-6887)</a></h4>
+    <details>
+        <summary>Show preview</summary>
+        <div class="content serendipity_commentBody">I recently reported how I found various bugs in the bignum implementation of MatrixSSL, some of them leading to remotely exploitable vulnerabilities. One of the bugs was that the modular exponentiation function - pstm_exptmod() - produced wrong results</div>
+    </details>
+</article>
+
+        </section>
+
+        <section id="comments" class="serendipity_comments serendipity_section_comments">
+            <h3>Comments</h3>
+
+            <p class="manage_comments">Display comments as
+                           <a rel="nofollow" href="/index.php?url=51-Fun-with-Bignums-Crashing-MatrixSSL-and-more.html&amp;serendipity[cview]=linear#comments">Linear</a> | Threaded
+                        </p>
+
+            <p class="nocomments">No comments</p>
+
+                </section>
+            <a id="feedback"></a>
+                        <section id="respond" class="serendipity_section_commentform">
+            <h3>Add Comment</h3>
+            <div id="serendipityCommentFormC" class="serendipityCommentForm">
+    <div id="serendipity_replyform_0"></div>
+    <a id="serendipity_CommentForm"></a>
+    <form id="serendipity_comment" action="/index.php?url=51-Fun-with-Bignums-Crashing-MatrixSSL-and-more.html#feedback" method="post">
+    <div><input type="hidden" name="serendipity[entry_id]" value="51"></div>
+    <div class="form_field">
+        <label for="serendipity_commentform_name">Name*</label>
+        <input id="serendipity_commentform_name" name="serendipity[name]" type="text" value="" placeholder="e.g. John Doe" required>
+    </div>
+    <div class="form_field">
+        <label for="serendipity_commentform_email">Email</label>
+        <input id="serendipity_commentform_email" name="serendipity[email]" type="email" value="" placeholder="e.g. mail@example.org">
+    </div>
+    <div class="form_field">
+        <label for="serendipity_commentform_url">Homepage</label>
+        <input id="serendipity_commentform_url" name="serendipity[url]" type="url" value="" placeholder="e.g. http://example.org">
+    </div>
+    <div class="form_tarea">
+        <label for="serendipity_commentform_comment">Comment*</label>
+        <textarea id="serendipity_commentform_comment" name="serendipity[comment]" rows="10" placeholder="What do you want to say?" required></textarea>
+    </div>
+    <div class="form_field">
+        <label id="reply-to-hint" for="serendipity_replyTo">In reply to</label>
+        <select id="serendipity_replyTo" onchange="" name="serendipity[replyTo]"><option value="0">[ Top level ]</option></select>
+    </div>
+    <div id="serendipity_comment_phone" class="serendipity_commentDirection comment_phone_input">
+    <label for="serendipity_commentform_phone">Phone*</label>
+    <input id="serendipity_commentform_phone" class="comment_phone_input" type="text" name="serendipity[phone]" value="" size="50" maxlength="60" placeholder="You don't want to give me your number, do you? ;)"/>
+</div>
+<div id="serendipity_comment_beecaptcha" class="form_field">
+    <label for="bee_captcha">What is one plus eight?</label>
+    <input class="" type="text" id="bee_captcha" name="serendipity[beecaptcha]" size="10" value="" placeholder=""/>
+</div>
+<div class="serendipity_commentDirection serendipity_comment_s9ymarkup">Enclosing asterisks marks text as bold (*word*), underscore are made via _word_.</div><div class="serendipity_commentDirection serendipity_comment_emoticate">Standard emoticons like :-) and ;-) are converted to images.</div><div class="serendipity_commentDirection serendipity_comment_spamblock">E-Mail addresses will not be displayed and will only be used for E-Mail notifications.</div><input type="hidden" name="serendipity[token]" value="620c3c22416c80af89ad59168aef38d5" />
+<div class="serendipity_commentDirection serendipity_comment_captcha"><br />To prevent automated Bots from commentspamming, please enter the string you see in the image below in the appropriate input box. Your comment will only be submitted if the strings match. Please ensure that your browser supports and accepts cookies, or your comment cannot be verified correctly.<br /><img src="https://blog.fuzzing-project.org/plugin/captcha_ac935e5765bc32fe6896cf161396290c" onclick="this.src=this.src + '1'" title="Enter the string you see here in the input box!" alt="CAPTCHA" class="captcha" /><br /><label for="captcha">Enter the string from the spam-prevention image above: </label><br /><input class="input_textbox" type="text" size="5" name="serendipity[captcha]" value="" id="captcha" /></div>
+    <fieldset class="form_toolbar">
+        <legend class="visuallyhidden">Form options</legend>
+        <div class="form_box">
+            <input id="checkbox_remember" name="serendipity[remember]" type="checkbox" ><label for="checkbox_remember">Remember Information? </label>
+        </div>
+          <div class="form_box">
+            <input id="checkbox_subscribe" name="serendipity[subscribe]" type="checkbox"  ><label for="checkbox_subscribe">Subscribe to this entry</label>
+        </div>
+      </fieldset>
+    <div class="form_button">
+        <input id="serendipity_preview" name="serendipity[preview]" type="submit" value="Preview">
+        <input id="serendipity_submit" name="serendipity[submit]" type="submit" value="Submit Comment">
+    </div>
+</form>
+</div>
+
+        </section>
+
+        
+    </article>
+        
+
+
+
+        </main>
+                <aside id="sidebar_right">
+            <h2 class="visuallyhidden">Sidebar</h2>
+                <section class="sidebar_plugin clearfix even serendipity_plugin_html_nugget">
+                <h3>The Fuzzing Project</h3>
+                <div class="sidebar_content clearfix">You  may want to go <a href="https://fuzzing-project.org/">back to the Fuzzing Project's main page</a> or <a href="https://fuzzing-project.org/software/">software list</a>.</div>
+    </section>
+    <section class="sidebar_plugin clearfix odd serendipity_plugin_archives">
+                <h3>Archives</h3>
+                <div class="sidebar_content clearfix"><ul class="plainList">
+    <li><a href="/archives/2021/10.html" title="October 2021">October 2021</a></li>
+    <li><a href="/archives/2021/09.html" title="September 2021">September 2021</a></li>
+    <li><a href="/archives/2021/08.html" title="August 2021">August 2021</a></li>
+    <li><a href="/index.php?frontpage">Recent...</a></li>
+    <li><a href="https://blog.fuzzing-project.org/archive">Older...</a></li>
+</ul>
+</div>
+    </section>
+    <section class="sidebar_plugin clearfix even serendipity_plugin_categories">
+                <h3>Categories</h3>
+                <div class="sidebar_content clearfix"><form action="https://blog.fuzzing-project.org/index.php?frontpage" method="post">
+              <div id="serendipity_category_form_content">
+<ul id="serendipity_categories_list" style="list-style: none; margin: 0px; padding: 0px">
+<li class="category_depth0 category_1" style="display: block;"><input style="width: 15px" type="checkbox" name="serendipity[multiCat][]" value="1" /><a class="serendipity_xml_icon" href="/feeds/categories/1-advisories.rss"><img src="/templates/2k11/img/xml.gif" alt="XML" style="border: 0px" /></a> <a href="/categories/1-advisories" title="" style="padding-left: 0px">advisories</a></li>
+</ul>
+<div class="category_submit"><input type="submit" name="serendipity[isMultiCat]" value="Go!" /></div>
+</div>
+</form>
+</div>
+    </section>
+    <section class="sidebar_plugin clearfix odd serendipity_plugin_syndication">
+                <h3>Syndicate This Blog</h3>
+                <div class="sidebar_content clearfix">
+<ul id="serendipity_syndication_list" class="plainList"><li><a class="subtome" href="https://blog.fuzzing-project.org/feeds/index.rss2" onclick="document.subtomeBtn=this;document.subtomeBtn.dataset['subtomeFeeds']='https%3A%2F%2Fblog.fuzzing-project.org%2Ffeeds%2Findex.rss2';var s=document.createElement('script');s.src='https://www.subtome.com/load.js';document.body.appendChild(s);return false;"><img src="/templates/2k11/img/subtome.png" alt="XML" style="border: 0px" /></a>
+</li>
+<li><a class="subtome" href="https://blog.fuzzing-project.org/feeds/comments.rss2" onclick="document.subtomeBtn=this;document.subtomeBtn.dataset['subtomeFeeds']='https%3A%2F%2Fblog.fuzzing-project.org%2Ffeeds%2Fcomments.rss2';var s=document.createElement('script');s.src='https://www.subtome.com/load.js';document.body.appendChild(s);return false;"><img src="/templates/2k11/img/xml.gif" alt="XML" style="border: 0px" /></a>
+ <a href="https://blog.fuzzing-project.org/feeds/comments.rss2" onclick="document.subtomeBtn=this;document.subtomeBtn.dataset['subtomeFeeds']='https%3A%2F%2Fblog.fuzzing-project.org%2Ffeeds%2Fcomments.rss2';var s=document.createElement('script');s.src='https://www.subtome.com/load.js';document.body.appendChild(s);return false;">Comments</a>
+</li>
+</ul>
+</div>
+    </section>
+
+        </aside>
+        </div>
+
+    <footer id="colophon">
+        <p><span lang="en">Powered by <a href="http://s9y.org">Serendipity</a> &amp; the <i>2k11</i> theme.</span></p>
+    </footer>
+</div>
+
+<script src="/templates/2k11/js/2k11.min.js"></script>
+
+<script>var spamBeeData = function() { var bOTxu = {};var cfv_D = unescape('%31%32%34%36%38%39%30%30%34%31');var UbVwa = unescape('%64%65%66%61%75%6c%74');var hALfp = unescape('%25%45%30%25%41%30%25%38%30');bOTxu['scrambleKey'] = cfv_D;bOTxu['method'] = UbVwa;bOTxu['answer'] = hALfp;return bOTxu; }();</script>
+<script src="/plugins/serendipity_event_spamblock_bee/serendipity_event_spamblock_bee.js"></script>
+
+</body>
+</html>

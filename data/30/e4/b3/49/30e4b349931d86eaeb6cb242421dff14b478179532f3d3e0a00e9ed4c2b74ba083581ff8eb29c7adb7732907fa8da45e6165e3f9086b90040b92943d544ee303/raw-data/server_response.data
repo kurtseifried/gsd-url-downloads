@@ -1,0 +1,316 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+	  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <title>When a vulnerability is not a vulnerability - Magnus Hagander's blog</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"></meta>
+    <link href="/style/bootstrap.min.css" rel="stylesheet" media="screen"></link>
+    <link href="/style/font-awesome.min.css" rel="stylesheet" media="screen"></link>
+    <link href="/style/blog.css" rel="stylesheet" media="screen"></link>
+    <link rel="stylesheet" href="/style/highlight/default.css">
+    <script src="/js/jquery-1.8.2.min.js"></script>
+    
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-1217836-3', 'auto');
+  ga('send', 'pageview');
+
+</script>
+  <script src="/js/highlight/highlight.pack.js"></script>
+  <script src="/js/highlight_custom.js"></script>
+<script>
+$(document).ready(function() {
+  highlight_custom_setup();
+  $('code[class]').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});
+</script>
+  </head>
+
+  <body>
+    <nav class="navbar navbar-blog navbar-fixed-top">
+      <div class="container-fluid">
+	<div class="navbar-header">
+	  <ul class="nav navbar-nav">
+	    <li><a class="navbar-brand" href="https://blog.hagander.net/">Magnus Hagander's blog</a></li>
+	  </ul>
+	</div>
+      </div>
+    </nav>
+
+    <div class="container">
+      <div class="row">
+	<div class="col-sm-9 blog-main">
+	  
+
+<div class="blog-post">
+  <h2 class="blog-post-title"><a href="https://blog.hagander.net/when-a-vulnerability-is-not-a-vulnerability-244/">When a vulnerability is not a vulnerability</a></h2>
+  <div class="blog-post-meta">
+    Posted on Apr 2, 2019 at 21:39. Tags: <a href="https://blog.hagander.net/tags/postgresql/">postgresql</a>, <a href="https://blog.hagander.net/tags/security/">security</a>.
+  </div>
+  <p>Recently, references to a "new PostgreSQL vulnerability" has been circling on social media (and maybe elsewhere). It's even got it's own <a href="https://nvd.nist.gov/vuln/detail/CVE-2019-9193">CVE entry</a> (CVE-2019-9193). The origin appears to be a <a href="https://www.trustwave.com/en-us/resources/blogs/spiderlabs-blog/cve-2019-9193-authenticated-arbitrary-command-execution-on-postgresql-9-3/">blogpost</a> from Trustwave.</p>
+<p>So is this actually a vulnerability? (Hint: it's not) Let's see:</p>
+  
+  <p>To quote the post:</p>
+<pre><code>Since version 9.3, new functionality for ‘COPY TO/FROM PROGRAM’ was implemented. This allows
+the database superuser, and any user in the ‘pg_read_server_files’ group to run arbitrary
+operating system commands. This effectively means there is no separation of privilege
+between a database superuser user and the user running the database on the operating system.
+</code></pre>
+<p>And then to quote the <a href="https://www.postgresql.org/docs/current/sql-copy.html">PostgreSQL documentation</a>:</p>
+<pre><code>COPY with a file name instructs the PostgreSQL server to directly read from or write
+to a file. The file must be accessible by the PostgreSQL user (the user ID the server
+runs as) and the name must be specified from the viewpoint of the server. When PROGRAM
+is specified, the server executes the given command and reads from the standard output
+of the program, or writes to the standard input of the program. The command must be
+specified from the viewpoint of the server, and be executable by the PostgreSQL user. 
+</code></pre>
+<pre><code>COPY naming a file or command is only allowed to database superusers or users who are
+granted one of the default roles pg_read_server_files, pg_write_server_files, or
+pg_execute_server_program, since it allows reading or writing any file or running
+a program that the server has privileges to access.
+</code></pre>
+<p>and</p>
+<pre><code>Executing a command with PROGRAM might be restricted by the operating system's access
+control mechanisms, such as SELinux.
+</code></pre>
+<p>So what we have here is simply PostgreSQL acting exactly as intended, and as <em>documented</em>. The "vulnerability" is the same as the fact that if you log in as <em>root</em> on your typical Unix system, you can edit and create file and run commands as... <em>root</em>.</p>
+<p>While <code>COPY FROM PROGRAM</code> has made it a bit easier, it is by no means the only way to execute commands as the server user, if superuser permissions have been granted. Given that the superuser can read and write arbitrary files on the server (as the postgres user), it can fairly easily be escalated into running commands even without <code>COPY FROM PROGRAM</code>.</p>
+<p>(The post is also factually incorrect in that members of <code>pg_read_server_files</code> can run commands. That is incorrect: it requires either the <code>pg_execute_server_program</code> role or superuser)</p>
+<p>While this is not a vulnerability <em>in PostgreSQL</em>, it is certainly a vulnerability present in a non-trivial number of installations of PostgreSQL <em>deployments</em>. The solution to that vulnerability is to not grant superuser permissions to user, and a common setup is to only allow the <em>postgres</em> OS user itself to act as superuser, in which case there is no escalation at all. Unfortunately, the "vulnerability" blog post doesn't mention anything at all about this.</p>
+<p>It seems PostgreSQL needs some better documentation about this for new users, possibly along the <code>CREATE ROLE</code> page which does not explicitly mention this. But if superuser is granted to a user, that remains the equivalent of granting the OS user permissions. </p>
+<p>We can certainly discuss if it's user friendly to allow such functionality, but the system is operating exactly as intended, and it's not a vulnerability.</p>
+<p>If you have <em>any</em> application that uses superuser, you should fix that right away. And if you care about your security at all, you should definitely make sure to use <code>pg_hba.conf</code> to ensure that no superuser can log in to the system remotely.</p>
+<p>As a footnote, the PostgreSQL Security Team was contacted by Trustwave, warning us about the upcoming blogpost. We explained in our response that this is not considered a vulnerability, since it's the product working as intended. We do not know why they proceeded to register a CVE entry regardless of that.</p>
+  <hr />
+
+  
+  <h3>Comments</h3>
+  
+  <div class="blog-comment">
+    <p><p>"And if you care about your security at all, you should definitely make sure to use pg_hba.conf to ensure that no superuser can log in to the system remotely."</p>
+<p>Unfortunately pg_rewind requires (AIUI) remote SUPERUSER access in order to work and is being used (optionally) by HA solutions like Patroni. Getting it to lower its privileges and be used by a non-SUPERUSER would be good thing in my opinion.</p></p>
+    <div class="blog-comment-meta">
+      Posted on Apr 2, 2019 at 23:08 by Michael Banck.
+    </div>
+  </div>
+  
+  <div class="blog-comment">
+    <p><p>I actually think pg_rewind should work fine without superuser, as long as you grant the specific functions. I haven't tested that though.</p>
+<p>However, clearly master and standby servers are part of the same security domain, if they are part of a HA group (a reporting standby might be something else of course). So as long as they are properly restricted in pg_hba.conf (as they should always be!) I don't think it's really that much of a problem.</p></p>
+    <div class="blog-comment-meta">
+      Posted on Apr 3, 2019 at 11:25 by Magnus.
+    </div>
+  </div>
+  
+  <div class="blog-comment">
+    <p><p>This vulnerability they are concerned about is laughable..   I see little to no difference compared to untrusted language such a plpython...<br />
+One can be far more destructive with python  than trying to construct shell commands that postgres will have pass to the shell to execute.</p>
+<p>To use this loop hole 
+1: have to access to an account with permissions to utilize the command.
+2: postgresql OS account has to have high level of authority to do anything destructive.
+This train of thought should also apply to MSSQL as they added sp_execute_external_script() a few years ago...  Which only has one protection to my understanding  EXECUTE ANY EXTERNAL SCRIPT.  In most installs MSSQL operates in a very high level of authority  </p>
+<p>This is the general problem with any application that allows execution of arbitrary code.</p>
+<p>There is one improvement that could be made that is when a command is executed the Postgres could run the command as a different user</p></p>
+    <div class="blog-comment-meta">
+      Posted on Apr 3, 2019 at 16:45 by Justin G.
+    </div>
+  </div>
+  
+  <div class="blog-comment">
+    <p><p>You can't let postgres run external commands as a different user - it requires root privileges. And the DB normally doesn't have them or need them.
+We have too many pseudo-cyber-security experts around fighting for 2min of fame.</p></p>
+    <div class="blog-comment-meta">
+      Posted on Apr 3, 2019 at 23:57 by robert.
+    </div>
+  </div>
+  
+  <div class="blog-comment">
+    <p><p>I'm not a Linux/Unix expert  but on windows you can start a process as different user with the
+CreateProcessAsUserA  function </p>
+<p>kinda surprised to hear that Linux/Unix does not have a similar function </p>
+<p>The reason i think running shell commands like this as different users is it would limit possible destruction that could be done intentionally or accidentally.      </p></p>
+    <div class="blog-comment-meta">
+      Posted on Apr 4, 2019 at 15:19 by Justin G.
+    </div>
+  </div>
+  
+  <div class="blog-comment">
+    <p><p>CreateProcessAsUserA() requires several extra privileges on Windows that a normal user wouldn't have. in the Unix world, that means it has to be root to begin with.</p>
+<p>There are ways around it. There are even things like pl/container (https://github.com/greenplum-db/plcontainer) which can be used to execute functions in external docker containers...</p></p>
+    <div class="blog-comment-meta">
+      Posted on Apr 4, 2019 at 16:49 by Magnus.
+    </div>
+  </div>
+  
+  <div class="blog-comment">
+    <p><p>I hope someone is able to appeal this obviously mistaken assignment of a CVE, and I wonder which CVE authority granted the number without sufficiently reviewing the content.</p>
+<p>Copying part of the comment I left over on the original greenwolf blog: "Oracle has this same feature as SQL Server and PostgreSQL; the DBMS_SCHEDULER plsql package and the in-database JAVA both provide functionality to run programs on the server. The OS_COMMAND package (from the plsqlexecoscomm website) even provides a very convenient wrapper around it.  ...  I’m curious even on Oracle whether it’s truly possible to prevent a SYSDBA connection from using DBMS_SCHEDULER; I don’t think it’s possible there. I’m not as familiar with SQL Server; even if xp_cmdshell is disabled, can an administrative user with a network connection execute sp_configure to enable it?"</p></p>
+    <div class="blog-comment-meta">
+      Posted on Apr 4, 2019 at 20:44 by Jeremy Schneider.
+    </div>
+  </div>
+  
+  <div class="blog-comment">
+    <p><p>Looks just like they needed yet another "critical vulnerability disclosure[s]"... Actually reading manuals seems to have become extraordinarily unfashionable :-)</p></p>
+    <div class="blog-comment-meta">
+      Posted on Apr 4, 2019 at 21:25 by Eric.
+    </div>
+  </div>
+  
+  <div class="blog-comment">
+    <p><p>The WMF vulnerability was documented and working as designed. It was still patched, fixed, and removed.</p>
+<p>A security hole is a security hole, even if you put a lampshade on it in the documentation and say, “this is an intentional security hole.”</p></p>
+    <div class="blog-comment-meta">
+      Posted on Apr 5, 2019 at 12:29 by Cassondra Foesch.
+    </div>
+  </div>
+  
+  <div class="blog-comment">
+    <p><p>It absolutely is. But this is not a security hole.</p>
+<p>You don't see "root" removed from Linux distributions either, do you? And yet it's documented that you can do bad things with it.</p></p>
+    <div class="blog-comment-meta">
+      Posted on Apr 5, 2019 at 12:32 by Magnus.
+    </div>
+  </div>
+  
+  <div class="blog-comment">
+    <p><p>+1 on your last comment.</p></p>
+    <div class="blog-comment-meta">
+      Posted on Apr 8, 2019 at 01:07 by Prince Pathria.
+    </div>
+  </div>
+  
+  <div class="blog-comment">
+    <p><p>I would add something important here as well.  The entire PostgreSQL security model assumes that superusers can access the operating system underneath.  This is true not only with COPY (including just from files), and it is true with untrusted languages.</p>
+<p>If I am superuser I can add pl/perlu as a language, for example, and proceed to access the entire Perl installation of the server, or pl/python which is always untrusted and do the same with python.  The limit of course is that this is only as the Postgres user, which must not be root.
+So there is defence in depth.  But it is impossible to see how things could be sandboxed while ensuring the extensibility of the database.  PL/PerlU cannot be guaranteed safe, but it can be extremely useful but it has the same "problem" and if we "solve" that "problem" the cost is turning PostgreSQL into something other than an extensible development platform.</p></p>
+    <div class="blog-comment-meta">
+      Posted on Apr 10, 2019 at 09:31 by Chris Travers.
+    </div>
+  </div>
+  
+  
+
+  <h3>Add comment</h3>
+  <p>
+  
+    New comments can no longer be posted on this entry.
+  
+  </p>
+
+  
+</div>
+
+
+	</div>
+	<div class="col-sm-3 blog-sidebar">
+	  <div class="blog-sidebar-box blog-sidebar-feed">
+	    <h3>Feed</h3>
+	    <p><a href="https://blog.hagander.net/rss/"><i class="fa fa-rss"></i> blog feed</a></p>
+	    
+	  </div>
+	  
+	  <div class="blog-sidebar-box blog-sidebar-conferences">
+	    <h3>Conferences</h3>
+	    <p>
+	      I speak at and organize conferences around Open Source in general and PostgreSQL
+	      in particular.
+	    </p>
+	    <h4>Upcoming</h4>
+	    <dl class="list-unstyled">
+	      
+	    </dl>
+	    <h4>Past</h4>
+	    <dl class="list-unstyled!">
+	      
+	      <dt><a href="https://pgday.at/en/">PGDay Austria 2021</a> <i class="fa fa-microphone" title="Speaking"></i> <i class="fa fa-group" title="Attending meetings"></i></dt>
+	      <dd><div class="confdate">Sep 17, 2021</div><div class="confloc">Vienna, Austria</div></dd>
+	      
+	      <dt><a href="">Postgres London 2021</a> <i class="fa fa-gears" title="Organizing"></i></dt>
+	      <dd><div class="confdate">May 12, 2021</div><div class="confloc">Online, Online</div></dd>
+	      
+	      <dt><a href="">FOSDEM 2021</a> <i class="fa fa-gears" title="Organizing"></i></dt>
+	      <dd><div class="confdate">Feb 6-7, 2021</div><div class="confloc">Online, Online</div></dd>
+	      
+	      <dt><a href="">Stockholm PUG Oct 2020</a> <i class="fa fa-microphone" title="Speaking"></i> <i class="fa fa-gears" title="Organizing"></i></dt>
+	      <dd><div class="confdate">Oct 27, 2020</div><div class="confloc">Stockholm/Online, Sweden</div></dd>
+	      
+	      <dt><a href="https://www.percona.com/live/percona-live-online-2020">Percona Live</a> <i class="fa fa-microphone" title="Speaking"></i></dt>
+	      <dd><div class="confdate">Oct 21, 2020</div><div class="confloc">Online, Online</div></dd>
+	      
+	      <a class="btn btn-primary" href="https://www.hagander.net/conferences/">More past conferences</a>
+	  </div>
+	  
+	  
+	  <div class="blog-sidebar-box blog-sidebar-tags">
+	    <h3>Tags</h3>
+	    <ul class="list-unstyled">
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/backup/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/backup/">backup</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/conferences/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/conferences/">conferences</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/encryption/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/encryption/">encryption</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/extensions/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/extensions/">extensions</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/fosdem/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/fosdem/">fosdem</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/git/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/git/">git</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/intrastructure/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/intrastructure/">intrastructure</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/logging/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/logging/">logging</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/mysql/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/mysql/">mysql</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/pgcon/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/pgcon/">pgcon</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/pgconfeu/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/pgconfeu/">pgconfeu</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/pgcrypto/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/pgcrypto/">pgcrypto</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/pgday/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/pgday/">pgday</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/pgeu/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/pgeu/">pgeu</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/planet/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/planet/">planet</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/postgresql/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/postgresql/">postgresql</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/python/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/python/">python</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/release/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/release/">release</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/schedule/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/schedule/">schedule</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/security/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/security/">security</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/sql/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/sql/">sql</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/ssl/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/ssl/">ssl</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/stockholm/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/stockholm/">stockholm</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/sweden/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/sweden/">sweden</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/talk/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/talk/">talk</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/window aggregates/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/window aggregates/">window aggregates</a></li>
+	      
+	      <li><a href="https://blog.hagander.net/rss/tags/windows/"><i class="fa fa-rss"></i></a> <a href="https://blog.hagander.net/tags/windows/">windows</a></li>
+	      
+	    </ul>
+	  </div>
+	  
+	</div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html class="no-js">
+	<head>
+	<meta charset="utf-8">
+
+	
+
+	<title>CVE-2017-13868: A fun XNU infoleak | bazad.github.io</title>
+	
+	<meta name="description" content="The discovery and exploitation of CVE-2017-13868, a race condition in XNU leading to the disclosure of uninitialized kernel heap data.">
+	
+
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+
+	<!-- CSS -->
+	<link rel="stylesheet" href="/css/main.css">
+
+	<!--Favicon-->
+	<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+
+	<!-- Canonical -->
+	<link rel="canonical" href="https://bazad.github.io/2018/03/a-fun-xnu-infoleak/">
+
+	<!-- RSS -->
+	<link rel="alternate" type="application/atom+xml" title="bazad.github.io" href="https://bazad.github.io/feed.xml">
+
+	<!-- Font Awesome -->
+	<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+
+	
+
+	
+</head>
+
+	<body>
+		<header class="site-header">
+	
+	<a class="site-logo" href="/">
+		<img class="site-logo" src="/img/bazad.svg" alt=""/>
+	</a>
+	<div class="padding"></div>
+	
+	<h1 class="site-title">
+		<a href="/">bazad.github.io</a>
+	</h1>
+	<div class="space padding"></div>
+	<nav class="site-navigation">
+		<ul>
+			
+			
+			
+			
+			
+			
+			<li>
+				<a class="page-link" href="/about/">
+					About
+				</a>
+			</li>
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+			
+
+<li>
+	<a href="/feed.xml" title="RSS feed">
+			<i class="fa fa-fw fa-rss"></i>
+	</a>
+</li>
+
+
+
+<li>
+	<a href="https://twitter.com/_bazad" title="Twitter">
+			<i class="fa fa-fw fa-twitter"></i>
+	</a>
+</li>
+
+
+
+<li>
+	<a href="https://github.com/bazad" title="Github">
+			<i class="fa fa-fw fa-github"></i>
+	</a>
+</li>
+
+
+
+<li>
+	<a href="mailto:bazad@cs.stanford.edu" title="Email">
+			<i class="fa fa-fw fa-envelope"></i>
+	</a>
+</li>
+
+
+
+		</ul>
+	</nav>
+</header>
+
+		<div class="content">
+			<article class="post">
+	<header>
+		<h1 class="title">CVE-2017-13868: A fun XNU infoleak</h1>
+		<p class="byline-dateline">
+	
+	<span class="byline">by <span class="byline-author">Brandon Azad</span></span>
+	
+	<span class="dateline">March 3, 2018</span>
+</p>
+
+
+	</header>
+	<section class="post-content"><p>Way back in October of 2017, I discovered CVE-2017-13868, a kernel information leak in XNU that was
+quite fun to analyze and exploit. While browsing the XNU source code, I noticed that the function
+<code class="language-plaintext highlighter-rouge">ctl_ctloutput</code> didn’t check the return value of a call to <code class="language-plaintext highlighter-rouge">sooptcopyin</code>. This immediately caught
+my attention because error checking in the kernel is very important: poor error checking is a
+frequent source of security bugs. In this case, failing to check the return value opened a race
+window that could allow a privileged process to read an arbitrary amount of uninitialized kernel
+heap data.</p>
+
+<!--more-->
+
+<h2 id="finding-the-vulnerability">Finding the vulnerability</h2>
+
+<p>One of the most effective ways I have for finding vulnerabilities is simply reading through the
+source code of areas of the kernel that seem relevant to security. I’ve found more bugs by source
+code auditing and reverse engineering than by any other technique, including fuzzing and, my
+favorite, stumbling onto a security flaw by accident (it happens surprisingly often).</p>
+
+<p>I started looking for iOS bugs again around mid September of last year. Around that time I noticed
+that there seemed to be an uptick in the number of race conditions reported in Apple’s security
+notes for macOS and iOS. Because of that, I figured it would be good to keep parallelism in mind
+while auditing.</p>
+
+<p>I had decided to look at indirect calls to <code class="language-plaintext highlighter-rouge">copyout</code> to see if I could discover any obvious
+information leaks. Information leaks are a category of vulnerability where the kernel discloses
+information that it shouldn’t. For example, disclosing kernel pointers to userspace may allow a
+local attacker to defeat the kernel’s address space randomization (kASLR) exploit mitigation.
+Exploit techniques like ROP depend on knowing the location of the kernel’s executable code in
+memory, which means kernel pointer disclosures have become a key component of modern macOS and iOS
+kernel exploitation.</p>
+
+<p>The <code class="language-plaintext highlighter-rouge">copyout</code> function is responsible for copying data from the kernel’s address space into the
+address space of usermode processes. Most kernel infoleaks will pass the leaked data through
+<code class="language-plaintext highlighter-rouge">copyout</code>, which makes call sites to this function promising areas to look for bugs. However, it’s
+not just this one function: there are many wrappers around <code class="language-plaintext highlighter-rouge">copyout</code> that are also worth
+investigating. For example, one such wrapper is <code class="language-plaintext highlighter-rouge">sooptcopyout</code>, which is used to copy out socket
+options data for the <code class="language-plaintext highlighter-rouge">getsockopt</code> system call.</p>
+
+<p>It was while looking through calls to this function that the following code, from the
+<code class="language-plaintext highlighter-rouge">ctl_ctloutput</code> function in the file <a href="https://opensource.apple.com/source/xnu/xnu-4570.1.46/bsd/kern/kern_control.c.auto.html"><code class="language-plaintext highlighter-rouge">bsd/kern/kern_control.c</code></a>, caught my eye:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="k">if</span> <span class="p">(</span><span class="n">sopt</span><span class="o">-&gt;</span><span class="n">sopt_valsize</span> <span class="o">&amp;&amp;</span> <span class="n">sopt</span><span class="o">-&gt;</span><span class="n">sopt_val</span><span class="p">)</span> <span class="p">{</span>
+	<span class="n">MALLOC</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="p">,</span> <span class="n">sopt</span><span class="o">-&gt;</span><span class="n">sopt_valsize</span><span class="p">,</span> <span class="n">M_TEMP</span><span class="p">,</span>	<span class="c1">// (a) data is allocated</span>
+		<span class="n">M_WAITOK</span><span class="p">);</span>					<span class="c1">//     without M_ZERO.</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">data</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+		<span class="k">return</span> <span class="p">(</span><span class="n">ENOMEM</span><span class="p">);</span>
+	<span class="cm">/*
+	 * 4108337 - copy user data in case the
+	 * kernel control needs it
+	 */</span>
+	<span class="n">error</span> <span class="o">=</span> <span class="n">sooptcopyin</span><span class="p">(</span><span class="n">sopt</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span>				<span class="c1">// (b) sooptcopyin() is</span>
+		<span class="n">sopt</span><span class="o">-&gt;</span><span class="n">sopt_valsize</span><span class="p">,</span> <span class="n">sopt</span><span class="o">-&gt;</span><span class="n">sopt_valsize</span><span class="p">);</span>	<span class="c1">//     called to fill the</span>
+<span class="p">}</span>								<span class="c1">//     buffer; the return</span>
+<span class="n">len</span> <span class="o">=</span> <span class="n">sopt</span><span class="o">-&gt;</span><span class="n">sopt_valsize</span><span class="p">;</span>					<span class="c1">//     value is ignored.</span>
+<span class="n">socket_unlock</span><span class="p">(</span><span class="n">so</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+<span class="n">error</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">kctl</span><span class="o">-&gt;</span><span class="n">getopt</span><span class="p">)(</span><span class="n">kctl</span><span class="o">-&gt;</span><span class="n">kctlref</span><span class="p">,</span> <span class="n">kcb</span><span class="o">-&gt;</span><span class="n">unit</span><span class="p">,</span>		<span class="c1">// (c) The getsockopt()</span>
+		<span class="n">kcb</span><span class="o">-&gt;</span><span class="n">userdata</span><span class="p">,</span> <span class="n">sopt</span><span class="o">-&gt;</span><span class="n">sopt_name</span><span class="p">,</span>			<span class="c1">//     implementation is</span>
+			<span class="n">data</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">len</span><span class="p">);</span>				<span class="c1">//     called to process</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">data</span> <span class="o">!=</span> <span class="nb">NULL</span> <span class="o">&amp;&amp;</span> <span class="n">len</span> <span class="o">&gt;</span> <span class="n">sopt</span><span class="o">-&gt;</span><span class="n">sopt_valsize</span><span class="p">)</span>			<span class="c1">//     the buffer.</span>
+	<span class="n">panic_plain</span><span class="p">(</span><span class="s">"ctl_ctloutput: ctl %s returned "</span>
+		<span class="s">"len (%lu) &gt; sopt_valsize (%lu)</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span>
+			<span class="n">kcb</span><span class="o">-&gt;</span><span class="n">kctl</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">,</span> <span class="n">len</span><span class="p">,</span>
+			<span class="n">sopt</span><span class="o">-&gt;</span><span class="n">sopt_valsize</span><span class="p">);</span>
+<span class="n">socket_lock</span><span class="p">(</span><span class="n">so</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+<span class="k">if</span> <span class="p">(</span><span class="n">error</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">data</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span>
+		<span class="n">error</span> <span class="o">=</span> <span class="n">sooptcopyout</span><span class="p">(</span><span class="n">sopt</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">len</span><span class="p">);</span>		<span class="c1">// (d) If (c) succeeded,</span>
+	<span class="k">else</span>							<span class="c1">//     then the data buffer</span>
+		<span class="n">sopt</span><span class="o">-&gt;</span><span class="n">sopt_valsize</span> <span class="o">=</span> <span class="n">len</span><span class="p">;</span>			<span class="c1">//     is copied out to</span>
+<span class="p">}</span>								<span class="c1">//     userspace.</span></code></pre></figure>
+
+<p>The <code class="language-plaintext highlighter-rouge">ctl_ctloutput</code> function is responsible for handling the <code class="language-plaintext highlighter-rouge">getsockopt</code> system call on kernel
+control sockets (that is, sockets created with domain <code class="language-plaintext highlighter-rouge">PF_SYSTEM</code> and protocol <code class="language-plaintext highlighter-rouge">SYSPROTO_CONTROL</code>).
+The code does the following:</p>
+
+<ol>
+  <li>It allocates a kernel heap buffer for the data parameter to <code class="language-plaintext highlighter-rouge">getsockopt</code>. Because the <code class="language-plaintext highlighter-rouge">M_ZERO</code>
+flag is not specified, the allocation is not zeroed out.</li>
+  <li>It copies in the <code class="language-plaintext highlighter-rouge">getsockopt</code> data from userspace using <code class="language-plaintext highlighter-rouge">sooptcopyin</code>, filling the data buffer
+just allocated. This copyin should completely overwrite the allocated data, which is why the
+<code class="language-plaintext highlighter-rouge">M_ZERO</code> flag was not needed. The return value is not checked.</li>
+  <li>It then calls <code class="language-plaintext highlighter-rouge">kctl-&gt;getopt</code>, the real <code class="language-plaintext highlighter-rouge">getsockopt</code> implementation for this kernel control
+socket. This implementation will process the input buffer, possibly modifying it and shortening
+it, and return a result code.</li>
+  <li>Finally, if the real <code class="language-plaintext highlighter-rouge">getsockopt</code> implementation doesn’t return an error, <code class="language-plaintext highlighter-rouge">ctl_ctloutput</code> calls
+<code class="language-plaintext highlighter-rouge">sooptcopyout</code> to copy the data buffer back to user space.</li>
+</ol>
+
+<p>The issue is that the return value from <code class="language-plaintext highlighter-rouge">sooptcopyin</code> is not checked. This begs the question:
+what could happen if <code class="language-plaintext highlighter-rouge">sooptcopyin</code> fails that wouldn’t be possible if the return value were
+checked?</p>
+
+<h2 id="analyzing-exploitability">Analyzing exploitability</h2>
+
+<p>The function <code class="language-plaintext highlighter-rouge">sooptcopyin</code> is responsible for copying in the <code class="language-plaintext highlighter-rouge">getsockopt</code> options data from
+userspace into the allocated buffer. If <code class="language-plaintext highlighter-rouge">sooptcopyin</code> fails, perhaps because the socket options
+data address is invalid, then the kernel data buffer which should have contained the options data
+will be uninitialized. And because the data buffer was allocated without the <code class="language-plaintext highlighter-rouge">M_ZERO</code> flag, that
+means that it will contain uninitialized kernel heap data, possibly rife with useful kernel
+pointers.</p>
+
+<p>So, the lack of error checking means that the data buffer passed to <code class="language-plaintext highlighter-rouge">kctl-&gt;getopt</code> could actually
+contain uninitialized kernel heap data, even though the code as written seems to expect the
+contents of the data buffer to always be initialized before the call to <code class="language-plaintext highlighter-rouge">kctl-&gt;getopt</code>. Is there a
+way to get that uninitialized memory to flow to a call to <code class="language-plaintext highlighter-rouge">copyout</code>?</p>
+
+<p>The obvious candidate for <code class="language-plaintext highlighter-rouge">copyout</code> is the call to <code class="language-plaintext highlighter-rouge">sooptcopyout</code> just after <code class="language-plaintext highlighter-rouge">kctl-&gt;getopt</code>. But
+there’s a problem: <code class="language-plaintext highlighter-rouge">sooptcopyout</code> is passed the same <code class="language-plaintext highlighter-rouge">sopt</code> structure that was supplied to
+<code class="language-plaintext highlighter-rouge">sooptcopyin</code>, which means it will try to write the uninitialized data to the same address from
+which <code class="language-plaintext highlighter-rouge">sooptcopyin</code> tried to read the socket options earlier. And in order to force <code class="language-plaintext highlighter-rouge">sooptcopyin</code>
+to fail we supplied it with an invalid address. So how do we make <code class="language-plaintext highlighter-rouge">sooptcopyout</code> succeed where
+<code class="language-plaintext highlighter-rouge">sooptcopyin</code> failed?</p>
+
+<p>At this point I remembered to consider parallelism. Would it be possible to make the memory address
+valid in between the calls to <code class="language-plaintext highlighter-rouge">sooptcopyin</code> and <code class="language-plaintext highlighter-rouge">sooptcopyout</code>? To do that, we’d need to call
+<code class="language-plaintext highlighter-rouge">getsockopt</code> with an unmapped address, and while <code class="language-plaintext highlighter-rouge">getsockopt</code> is running in the kernel, call
+<code class="language-plaintext highlighter-rouge">mach_vm_allocate</code> on another thread to map that address. That way, the address would be unmapped
+when <code class="language-plaintext highlighter-rouge">sooptcopyin</code> is called, causing it to fail, but mapped when <code class="language-plaintext highlighter-rouge">sooptcopyout</code> is called,
+allowing the copyout of uninitialized kernel heap data to succeed.</p>
+
+<p>However, there’s one more thing we need to check: does the uninitialized heap data actually make it
+all the way to the call to <code class="language-plaintext highlighter-rouge">sooptcopyout</code>? There’s an intervening call to <code class="language-plaintext highlighter-rouge">kctl-&gt;getopt</code> which
+could overwrite the uninitialized data or change the length of the data to copy out to userspace.
+The actual implementation of <code class="language-plaintext highlighter-rouge">kctl-&gt;getopt</code> is determined by what type of control socket we’re
+operating on. Thus, in order to reach <code class="language-plaintext highlighter-rouge">sooptcopyout</code> with the uninitialized data intact, we need to
+find a kernel control socket with a <code class="language-plaintext highlighter-rouge">getopt</code> implementation that:</p>
+
+<ol>
+  <li>does not overwrite the whole data buffer;</li>
+  <li>does not shorten the data buffer; and</li>
+  <li>returns success (that is, 0).</li>
+</ol>
+
+<p>Fortunately, it didn’t take much searching to find a candidate: the function <code class="language-plaintext highlighter-rouge">necp_ctl_getopt</code>,
+which is the <code class="language-plaintext highlighter-rouge">getopt</code> implementation for NECP kernel control sockets, simply returns 0 without
+processing the data buffer at all.</p>
+
+<p>The primary limitation of this approach is our ability to reallocate the memory address between the
+calls to <code class="language-plaintext highlighter-rouge">sooptcopyin</code> and <code class="language-plaintext highlighter-rouge">sooptcopyout</code>. Not a lot of work happens between those calls, meaning
+the race window could be pretty tight. If the race window is too tight, it might take a large
+number of tries to actually win the race.</p>
+
+<h2 id="an-alternative-approach-that-did-not-work">An alternative approach (that did not work)</h2>
+
+<p>While reviewing this bug later, it seemed like it should have been possible to trigger it without
+any race at all by marking the memory write-only. That way, <code class="language-plaintext highlighter-rouge">sooptcopyin</code> would fail with <code class="language-plaintext highlighter-rouge">EFAULT</code>
+(because the memory is not readable) but <code class="language-plaintext highlighter-rouge">sooptcopyout</code> would succeed. However, in my testing, this
+simpler exploit strategy didn’t work: <code class="language-plaintext highlighter-rouge">getsockopt</code> would fail with <code class="language-plaintext highlighter-rouge">EFAULT</code>. I’m not sure why this
+happened.</p>
+
+<h2 id="the-final-exploit">The final exploit</h2>
+
+<p>After figuring out a strategy to trigger the information leak, I implemented the exploit. The
+high-level strategy is to open an NECP kernel control socket, launch a thread that will repeatedly
+map and unmap the target memory address, and then repeatedly call <code class="language-plaintext highlighter-rouge">getsockopt</code> on the control
+socket to try and trigger the leak. The complete exploit is available on my
+<a href="https://github.com/bazad/ctl_ctloutput-leak">GitHub</a>.</p>
+
+<p>Amazingly, it turned out that this was a pretty easy race to win. I performed tests on a 2015
+Macbook Pro and an iPhone 7, and found that the median number of attempts to win the race on these
+platforms was 5 and 2, respectively. (The distribution was rather uneven, with the mean number of
+attempts on the Macbook sometimes rising as high as 600. However, this was primarily due to a few
+very large outliers, where it would take tens of thousands of attempts to win the race.)</p>
+
+<p>What’s great about this infoleak is that it does not depend on a fixed leak size: you can use it to
+leak data from arbitrary kernel heap zones by specifying different sizes to <code class="language-plaintext highlighter-rouge">getsockopt</code>. This
+makes for a very useful exploit primitive when performing complex attacks on the kernel.</p>
+
+<h2 id="the-fix">The fix</h2>
+
+<p>I reported this issue to Apple on October 7, 2017, and it was assigned CVE-2017-13868. Apple fixed
+the bug in <a href="https://support.apple.com/en-us/HT208331">macOS 10.13.2</a> and <a href="https://support.apple.com/en-us/HT208334">iOS 11.2</a>.</p>
+
+<p>Looking at the new <a href="https://opensource.apple.com/source/xnu/xnu-4570.31.3/bsd/kern/kern_control.c.auto.html">kern_control.c</a>, Apple decided to fix the bug by
+wrapping the code after the call to <code class="language-plaintext highlighter-rouge">sooptcopyin</code> in an if statement that checks whether there has
+been an error. I believe that this is the correct fix for this issue.</p>
+
+</section>
+</article>
+
+<div class="left-right-navigation">
+	
+	<a class="left" href="/2018/03/ida-kernelcache-class-reconstruction/">
+		<i class="fa fa-chevron-left"></i>
+		<div>Reconstructing C++ classes in the iOS kernelcache using IDA Pro</div>
+	</a>
+	
+	
+	<a class="right" href="/2017/09/live-kernel-introspection-ios/">
+		<div>Live kernel introspection on iOS</div>
+		<i class="fa fa-chevron-right"></i>
+	</a>
+	
+</div>
+
+
+		</div>
+		<footer class="site-footer">
+	<div>
+		&copy; 2020 Brandon Azad
+		<span>&middot;</span>
+		Code licensed under <a rel="license" href="https://github.com/bazad/bazad.github.io/blob/master/LICENSE">MIT</a>
+		<span>&middot;</span>
+		Content licensed under <a rel="license" href="https://creativecommons.org/licenses/by/4.0/" target="_blank">CC BY 4.0</a>
+		<span>&middot;</span>
+		<a href="/about-this-site">About this site</a>
+	</div>
+</footer>
+
+		
+	</body>
+</html>

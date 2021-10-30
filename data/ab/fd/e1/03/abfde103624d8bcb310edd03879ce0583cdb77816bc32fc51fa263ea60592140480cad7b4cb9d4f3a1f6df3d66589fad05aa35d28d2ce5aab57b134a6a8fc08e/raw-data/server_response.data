@@ -1,0 +1,787 @@
+<!doctype html>
+<!--
+  Minimal Mistakes Jekyll Theme 4.24.0 by Michael Rose
+  Copyright 2013-2020 Michael Rose - mademistakes.com | @mmistakes
+  Free for personal and commercial use under the MIT license
+  https://github.com/mmistakes/minimal-mistakes/blob/master/LICENSE
+-->
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8">
+
+<!-- begin _includes/seo.html --><title>Technical write-up on CVE-2021-24313 • Bastijn Ouwendijk</title>
+<meta name="description" content="Write-up about finding an Authenticated Stored Cross-Site Scripting (XSS) vulnerability in WP Prayer version 1.6.1 and earlier.">
+
+
+  <meta name="author" content="Bastijn Ouwendijk">
+  
+  <meta property="article:author" content="Bastijn Ouwendijk">
+  
+
+
+<meta property="og:type" content="article">
+<meta property="og:locale" content="en_US">
+<meta property="og:site_name" content="Bastijn Ouwendijk">
+<meta property="og:title" content="Technical write-up on CVE-2021-24313">
+<meta property="og:url" content="https://bastijnouwendijk.com/cve-2021-24313/">
+
+
+  <meta property="og:description" content="Write-up about finding an Authenticated Stored Cross-Site Scripting (XSS) vulnerability in WP Prayer version 1.6.1 and earlier.">
+
+
+
+  <meta property="og:image" content="https://bastijnouwendijk.com/assets/images/posts/04/CVE-header.png">
+
+
+
+
+
+  <meta property="article:published_time" content="2021-05-31T07:00:00+00:00">
+
+
+
+
+
+
+<link rel="canonical" href="https://bastijnouwendijk.com/cve-2021-24313/">
+
+
+
+
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    
+      "@type": "Person",
+      "name": null,
+      "url": "https://bastijnouwendijk.com/"
+    
+  }
+</script>
+
+
+
+
+
+
+
+<!-- end _includes/seo.html -->
+
+
+
+<link href="/feed.xml"
+  type="application/atom+xml" rel="alternate" title="Bastijn Ouwendijk Feed">
+
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- Cloudflare Web Analytics -->
+<script defer src='https://static.cloudflareinsights.com/beacon.min.js'
+  data-cf-beacon='{"token": "41aa859b83de4030bd421379182756d2"}'></script>
+<!-- End Cloudflare Web Analytics -->
+
+<script>
+  document.documentElement.className = document.documentElement.className.replace(/\bno-js\b/g, '') + ' js ';
+</script>
+
+<!-- For all browsers -->
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="preload" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5/css/all.min.css" as="style"
+  onload="this.onload=null;this.rel='stylesheet'">
+<noscript>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@5/css/all.min.css"></noscript>
+
+
+    <!-- start custom head snippets -->
+
+<!-- insert favicons. use https://realfavicongenerator.net/ -->
+
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/images/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/images/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/assets/images/favicon-16x16.png">
+
+<!-- end custom head snippets -->
+
+  </head>
+
+  <body class="layout--single">
+    <nav class="skip-links">
+  <ul>
+    <li><a href="#site-nav" class="screen-reader-shortcut">Skip to primary navigation</a></li>
+    <li><a href="#main" class="screen-reader-shortcut">Skip to content</a></li>
+    <li><a href="#footer" class="screen-reader-shortcut">Skip to footer</a></li>
+  </ul>
+</nav>
+
+    <!--[if lt IE 9]>
+<div class="notice--danger align-center" style="margin: 0;">You are using an <strong>outdated</strong> browser. Please <a href="https://browsehappy.com/">upgrade your browser</a> to improve your experience.</div>
+<![endif]-->
+
+    
+
+<div class="masthead">
+  <div class="masthead__inner-wrap">
+    <div class="masthead__menu">
+      <nav id="site-nav" class="greedy-nav">
+        
+        <a class="site-logo" href="/"><img src="/assets/images/logo.svg"
+            alt="Bastijn Ouwendijk"></a>
+        
+        <!--<a class="site-title" href="/">
+          Bastijn Ouwendijk
+          
+        </a>-->
+        <ul class="visible-links"><li class="masthead__menu-item">
+            <a href="/about/" >About</a>
+          </li><li class="masthead__menu-item">
+            <a href="/" >Posts</a>
+          </li><li class="masthead__menu-item">
+            <a href="/archive/" >Archive</a>
+          </li></ul>
+        
+        <button class="greedy-nav__toggle hidden" type="button">
+          <span class="visually-hidden">Toggle menu</span>
+          <div class="navicon"></div>
+        </button>
+        <ul class="hidden-links hidden"></ul>
+      </nav>
+    </div>
+  </div>
+</div>
+
+    <div class="initial-content">
+      
+  
+
+
+
+
+
+
+
+<div class="page__hero"
+  style=" background-image: url('');"
+>
+  
+    <img src="/assets/images/posts/04/CVE-header.png" alt="Technical write-up on CVE-2021-24313" class="page__hero-image">
+  
+  
+</div>
+
+
+
+
+
+<div id="main" role="main">
+  
+  <div class="sidebar sticky">
+  
+
+
+<div itemscope itemtype="https://schema.org/Person" class="h-card">
+
+  
+
+  <div class="author__content">
+    <h3 class="author__name p-name" itemprop="name">
+      <a class="u-url" rel="me" href="https://bastijnouwendijk.com/" itemprop="url">Bastijn Ouwendijk</a>
+    </h3>
+    
+      <div class="author__bio p-note" itemprop="description">
+        <p>Research and thoughts about cybersecurity.</p>
+
+      </div>
+    
+  </div>
+
+  <div class="author__urls-wrapper">
+    <button class="btn btn--inverse">Follow</button>
+    <ul class="author__urls social-icons">
+      
+
+      
+        
+          
+            <li><a href="https://bastijnouwendijk.com" rel="nofollow noopener noreferrer me"><i class="fas fa-fw fa-globe-europe" aria-hidden="true"></i><span class="label">Website</span></a></li>
+          
+        
+          
+            <li><a href="https://www.linkedin.com/in/bastijnouwendijk/" rel="nofollow noopener noreferrer me"><i class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span class="label">LinkedIn</span></a></li>
+          
+        
+          
+            <li><a href="https://packetstormsecurity.com/files/author/15697/" rel="nofollow noopener noreferrer me"><i class="fas fa-fw fa-cloud-showers-heavy" aria-hidden="true"></i><span class="label">Packet Storm</span></a></li>
+          
+        
+          
+            <li><a href="https://www.exploit-db.com/?author=11142" rel="nofollow noopener noreferrer me"><i class="fas fa-fw fa-database" aria-hidden="true"></i><span class="label">Exploit Database</span></a></li>
+          
+        
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      
+
+      <!--
+  <li>
+    <a href="http://link-to-whatever-social-network.com/user/" itemprop="sameAs" rel="nofollow noopener noreferrer me">
+      <i class="fas fa-fw" aria-hidden="true"></i> Custom Social Profile Link
+    </a>
+  </li>
+-->
+    </ul>
+  </div>
+</div>
+  
+  </div>
+
+
+
+  <article class="page h-entry" itemscope itemtype="https://schema.org/CreativeWork">
+    <meta itemprop="headline" content="Technical write-up on CVE-2021-24313">
+    <meta itemprop="description" content="Write-up about finding an Authenticated Stored Cross-Site Scripting (XSS) vulnerability in WP Prayer version 1.6.1 and earlier.">
+    <meta itemprop="datePublished" content="2021-05-31T07:00:00+00:00">
+    
+
+    <div class="page__inner-wrap">
+      
+        <header>
+          <h1 id="page-title" class="page__title p-name" itemprop="headline">
+            <a href="https://bastijnouwendijk.com/cve-2021-24313/" class="u-url" itemprop="url">Technical write-up on CVE-2021-24313
+</a>
+          </h1>
+          
+
+  <p class="page__meta">
+    
+      
+      <span class="page__meta-date">
+        <i class="far fa-calendar-alt" aria-hidden="true"></i>
+        
+        <time datetime="2021-05-31T07:00:00+00:00">May 31, 2021</time>
+      </span>
+    
+
+    <span class="page__meta-sep"></span>
+
+    
+      
+      
+
+      <span class="page__meta-readtime">
+        <i class="far fa-clock" aria-hidden="true"></i>
+        
+          5 minute read
+        
+      </span>
+    
+  </p>
+
+
+        </header>
+      
+
+      <section class="page__content e-content" itemprop="text">
+        
+          <aside class="sidebar__right sticky">
+            <nav class="toc">
+              <header><h4 class="nav__title"><i class="fas fa-file-alt"></i>  In this post</h4></header>
+              <ul class="toc__menu"><li><a href="#how-the-vulnerability-works">How the vulnerability works</a></li><li><a href="#impact">Impact</a></li><li><a href="#proof-of-concept">Proof of Concept</a></li><li><a href="#conclusion">Conclusion</a></li><li><a href="#timeline">Timeline</a></li><li><a href="#references">References</a></li></ul>
+
+            </nav>
+          </aside>
+        
+        <p>While surfing through the sea of WordPress plugins, I stumbled upon a divine plugin. A plugin where users can request prayers, providing users the opportunity to ask for salvation. However, this plugin carried a sin of its own. In the following write-up, I’ll explain a vulnerability that I found in the WP Prayer WordPress plugin <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-24313">CVE-2021-24313</a>. This vulnerability allows an authenticated attacker to store malicious JavaScript code into the ‘requested prayers’ list where requester prayers of users are shown.</p>
+
+<p><a href="https://wordpress.org/plugins/wp-prayer/">WP Prayer</a> is a WordPress plugin where authenticated users can submit prayer requests through a prayer form. The plugin can list all the requested prayers by users on a post or page. <strong>WP Prayer version 1.6.1 and earlier</strong> contains an <strong>Authenticated Stored Cross-Site Scripting (XSS) vulnerability</strong>.</p>
+
+<h1 id="how-the-vulnerability-works">How the vulnerability works</h1>
+
+<p>Let’s dive into the details how this authenticated stored XSS works! To submit a prayer request a user has to be authenticated. I created a WordPress user account on the website with the role Subscriber, which is the role with the least privileges within WordPress. When logged into the website with the subscriber role, the prayer request form looks like this.</p>
+
+<figure>
+    <img src="/assets/images/posts/04/01.png" alt="Figure 01. The prayer request form" />
+    <figcaption>Figure 01. The prayer request form</figcaption>
+</figure>
+
+<p>The form field where a prayer request can be made contains the following PHP code:</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="nv">$form</span><span class="o">-&gt;</span><span class="nf">add_element</span><span class="p">(</span> <span class="s1">'textarea'</span><span class="p">,</span> <span class="s1">'prayer_messages'</span><span class="p">,</span> <span class="k">array</span><span class="p">(</span>
+ <span class="s1">'label'</span> <span class="o">=&gt;</span> <span class="p">(</span> <span class="s1">'Prayer Request'</span><span class="p">,</span> <span class="no">WPE_TEXT_DOMAIN</span> <span class="p">),</span>
+ <span class="s1">'value'</span> <span class="o">=&gt;</span> <span class="p">(</span><span class="k">isset</span><span class="p">(</span> <span class="nv">$data</span><span class="p">[</span><span class="s1">'prayer_messages'</span><span class="p">]</span> <span class="p">)</span> <span class="k">and</span> <span class="o">!</span> <span class="nb">empty</span><span class="p">(</span> <span class="nv">$data</span><span class="p">[</span><span class="s1">'prayer_messages'</span><span class="p">]</span> <span class="p">))</span> <span class="o">?</span>  <span class="nv">$data</span><span class="p">[</span><span class="s1">'prayer_messages'</span><span class="p">]</span>  <span class="o">:</span> <span class="s1">''</span><span class="p">,</span> <span class="s1">'desc'</span> <span class="o">=&gt;</span> <span class="p">(</span> <span class="s1">'Enter here your message.'</span><span class="p">,</span> <span class="no">WPE_TEXT_DOMAIN</span> <span class="p">),</span>
+ <span class="s1">'textarea_rows'</span> <span class="o">=&gt;</span> <span class="mi">10</span><span class="p">,</span>
+ <span class="s1">'required'</span> <span class="o">=&gt;</span> <span class="kc">true</span><span class="p">,</span>
+ <span class="s1">'textarea_name'</span> <span class="o">=&gt;</span> <span class="s1">'prayer_messages'</span><span class="p">,</span>
+ <span class="s1">'class'</span> <span class="o">=&gt;</span> <span class="s1">'form-control'</span><span class="p">,</span>
+ <span class="p">));</span></code></pre></figure>
+
+<p>The code in line 3 checks whether data is present in the textarea of the ‘Prayer Request’ field. If the textarea field is not empty, it sets the string in the textarea to the variable <code class="language-plaintext highlighter-rouge">$data['prayer_messages']</code> and when the form is submitted, does a POST request to the website.</p>
+
+<p>Next, the received POST data from the prayer request forms flows to the data model, which has a function to save the user’s prayer request to the database. If the received <code class="language-plaintext highlighter-rouge">prayer_messages</code> is declared and different from null, the slashes of the string are removed, as can be seen in the in line 22-23 in the code below. When completed, the prayer request is successfully stored in the database.</p>
+
+<p>What’s interesting is that the <code class="language-plaintext highlighter-rouge">nonce</code>, <code class="language-plaintext highlighter-rouge">prayer_title</code> and <code class="language-plaintext highlighter-rouge">request_type</code> variables are sanitized by the function <code class="language-plaintext highlighter-rouge">sanitize_text_field</code>, while the <code class="language-plaintext highlighter-rouge">prayer_messages</code> variable is not.</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="k">public</span> <span class="k">function</span> <span class="n">save</span><span class="p">()</span>
+<span class="p">{</span>
+    <span class="nv">$entityID</span> <span class="o">=</span> <span class="s1">''</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="k">isset</span><span class="p">(</span><span class="nv">$_REQUEST</span><span class="p">[</span><span class="s1">'_wpnonce'</span><span class="p">]))</span> <span class="p">{</span>
+        <span class="nv">$nonce</span> <span class="o">=</span> <span class="nf">sanitize_text_field</span><span class="p">(</span><span class="nf">wp_unslash</span><span class="p">(</span><span class="nv">$_REQUEST</span><span class="p">[</span><span class="s1">'_wpnonce'</span><span class="p">]));</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="p">(</span><span class="k">isset</span><span class="p">(</span><span class="nv">$nonce</span><span class="p">)</span> <span class="k">and</span> <span class="o">!</span> <span class="nf">wp_verify_nonce</span><span class="p">(</span><span class="nv">$nonce</span><span class="p">,</span> <span class="s1">'wpgmp-nonce'</span><span class="p">))</span> <span class="p">{</span>
+        <span class="k">die</span><span class="p">(</span><span class="s1">'Cheating...'</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="k">isset</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'request_type'</span><span class="p">])</span> <span class="o">&amp;&amp;</span> <span class="nv">$_POST</span><span class="p">[</span><span class="s1">'request_type'</span><span class="p">]</span> <span class="o">==</span> <span class="s1">'prayer_request'</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nv">$this</span><span class="o">-&gt;</span><span class="n">validations</span><span class="p">[</span><span class="s1">'prayer_title'</span><span class="p">]</span> <span class="o">=</span> <span class="k">array</span><span class="p">(</span><span class="s1">'req'</span> <span class="o">=&gt;</span> <span class="nf">__</span><span class="p">(</span><span class="s1">'Please enter title.'</span><span class="p">,</span><span class="no">WPE_TEXT_DOMAIN</span><span class="p">));</span>
+    <span class="p">}</span>
+    <span class="nv">$this</span><span class="o">-&gt;</span><span class="n">validations</span><span class="p">[</span><span class="s1">'prayer_messages'</span><span class="p">]</span> <span class="o">=</span> <span class="k">array</span><span class="p">(</span><span class="s1">'req'</span> <span class="o">=&gt;</span> <span class="nf">__</span><span class="p">(</span><span class="s1">'Prayer Request'</span><span class="p">,</span><span class="no">WPE_TEXT_DOMAIN</span><span class="p">));</span>
+    <span class="nv">$this</span><span class="o">-&gt;</span><span class="nf">verify</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nb">is_array</span><span class="p">(</span><span class="nv">$this</span><span class="o">-&gt;</span><span class="n">errors</span><span class="p">)</span> <span class="k">and</span> <span class="o">!</span> <span class="nb">empty</span><span class="p">(</span><span class="nv">$this</span><span class="o">-&gt;</span><span class="n">errors</span><span class="p">))</span> <span class="p">{</span>
+        <span class="nv">$this</span><span class="o">-&gt;</span><span class="nf">throw_errors</span><span class="p">();</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="p">(</span><span class="k">isset</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'entityID'</span><span class="p">]))</span> <span class="p">{</span>
+        <span class="nv">$entityID</span> <span class="o">=</span> <span class="nb">intval</span><span class="p">(</span><span class="nf">wp_unslash</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'entityID'</span><span class="p">]));</span>
+    <span class="p">}</span>
+    <span class="k">if</span> <span class="p">(</span><span class="k">isset</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'prayer_messages'</span><span class="p">]))</span> <span class="p">{</span>
+        <span class="nv">$data</span><span class="p">[</span><span class="s1">'prayer_messages'</span><span class="p">]</span> <span class="o">=</span> <span class="nf">wp_unslash</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'prayer_messages'</span><span class="p">]);</span>
+    <span class="p">}</span>
+    <span class="nv">$data</span><span class="p">[</span><span class="s1">'prayer_title'</span><span class="p">]</span> <span class="o">=</span> <span class="nf">sanitize_text_field</span><span class="p">(</span><span class="nf">wp_unslash</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'prayer_title'</span><span class="p">]));</span>
+    <span class="nv">$data</span><span class="p">[</span><span class="s1">'prayer_author'</span><span class="p">]</span> <span class="o">=</span> <span class="nf">get_current_user_id</span><span class="p">();</span>
+
+    <span class="nv">$data</span><span class="p">[</span><span class="s1">'prayer_status'</span><span class="p">]</span> <span class="o">=</span> <span class="s1">'approved'</span><span class="p">;</span>
+    <span class="nv">$data</span><span class="p">[</span><span class="s1">'prayer_time'</span><span class="p">]</span> <span class="o">=</span> <span class="nb">date</span><span class="p">(</span><span class="s1">'Y-m-d H:i:s'</span><span class="p">);</span>
+    <span class="nv">$lxt_options</span> <span class="o">=</span> <span class="nf">get_option</span><span class="p">(</span><span class="s1">'_wpe_prayer_engine_settings'</span><span class="p">);</span>
+    <span class="nv">$lxt_options</span> <span class="o">=</span> <span class="nb">unserialize</span><span class="p">(</span><span class="nv">$lxt_options</span><span class="p">);</span>
+
+    <span class="k">if</span> <span class="p">(</span> <span class="o">!</span> <span class="nb">empty</span><span class="p">(</span><span class="nv">$lxt_options</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="nb">array_key_exists</span><span class="p">(</span><span class="s1">'wpe_disapprove_prayer_default'</span><span class="p">,</span> <span class="nv">$lxt_options</span><span class="p">))</span> <span class="p">{</span>
+
+        <span class="nv">$data</span><span class="p">[</span><span class="s1">'prayer_status'</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="nb">filter_var</span><span class="p">(</span><span class="nv">$lxt_options</span><span class="p">[</span><span class="s1">'wpe_disapprove_prayer_default'</span><span class="p">],</span>
+            <span class="no">FILTER_VALIDATE_BOOLEAN</span><span class="p">))</span> <span class="o">?</span> <span class="s1">'pending'</span> <span class="o">:</span> <span class="s1">'approved'</span><span class="p">;</span>
+    <span class="p">}</span>
+
+
+    <span class="nv">$data</span><span class="p">[</span><span class="s1">'request_type'</span><span class="p">]</span> <span class="o">=</span> <span class="nf">sanitize_text_field</span><span class="p">(</span><span class="nf">wp_unslash</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'request_type'</span><span class="p">]));</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="nv">$entityID</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nv">$where</span><span class="p">[</span><span class="nv">$this</span><span class="o">-&gt;</span><span class="n">unique</span><span class="p">]</span> <span class="o">=</span> <span class="nv">$entityID</span><span class="p">;</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="nv">$where</span> <span class="o">=</span> <span class="s1">''</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="nv">$result</span> <span class="o">=</span> <span class="n">FlipperCode_Database</span><span class="o">::</span><span class="nf">insert_or_update</span><span class="p">(</span><span class="nv">$this</span><span class="o">-&gt;</span><span class="n">table</span><span class="p">,</span> <span class="nv">$data</span><span class="p">,</span> <span class="nv">$where</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="kc">false</span> <span class="o">===</span> <span class="nv">$result</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nv">$response</span><span class="p">[</span><span class="s1">'error'</span><span class="p">]</span> <span class="o">=</span> <span class="nf">__</span><span class="p">(</span><span class="s1">'Something went wrong. Please try again.'</span><span class="p">,</span> <span class="no">WPE_TEXT_DOMAIN</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">elseif</span> <span class="p">(</span><span class="nv">$entityID</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nv">$response</span><span class="p">[</span><span class="s1">'success'</span><span class="p">]</span> <span class="o">=</span> <span class="nf">__</span><span class="p">(</span><span class="s1">'Prayer updated successfully'</span><span class="p">,</span> <span class="no">WPE_TEXT_DOMAIN</span><span class="p">);</span>
+    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+        <span class="nv">$response</span><span class="p">[</span><span class="s1">'success'</span><span class="p">]</span> <span class="o">=</span> <span class="nf">__</span><span class="p">(</span><span class="s1">'Prayer added successfully.'</span><span class="p">,</span> <span class="no">WPE_TEXT_DOMAIN</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="k">return</span> <span class="nv">$response</span><span class="p">;</span>
+<span class="p">}</span></code></pre></figure>
+
+<p>The string stored in the ‘prayer_messages’ variable is not sanitized or validated for special characters besides slashes; a security sin. This makes it possible to store JavaScript payloads in the database. Let’s submit the following prayer request.</p>
+
+<figure>
+    <img src="/assets/images/posts/04/02.png" alt="Figure 02. The prayer request form – Step 1: Submit the form including a JavaScript payload" />
+    <figcaption>Figure 02. The prayer request form – Step 1: Submit the form including a JavaScript payload</figcaption>
+</figure>
+
+<p>This is the JavaScript payload:</p>
+
+<figure class="highlight"><pre><code class="language-html" data-lang="html"><span class="nt">&lt;script&gt;</span><span class="nx">alert</span><span class="p">(</span><span class="dl">"</span><span class="s2">XSS</span><span class="dl">"</span><span class="p">)</span><span class="nt">&lt;/script&gt;</span></code></pre></figure>
+
+<p>This payload, when executed, will create an alert in the browser containing the text ‘XSS’. However, between the script tags, you can put other JavaScript code.</p>
+
+<p>Let’s submit the prayer request including our payload, we get a message saying the form was received. Our prayer request is now saved in the database.</p>
+
+<figure>
+    <img src="/assets/images/posts/04/03.png" alt="Figure 03. The prayer request form – Step 2: We successfully submitted the form including our payload" />
+    <figcaption>Figure 03. The prayer request form – Step 2: We successfully submitted the form including our payload</figcaption>
+</figure>
+
+<p>Let’s look how the stored prayer requests are loaded into the webpage. In the shortcode of the WP Prayer Engine, the following PHP code loads the stored prayer request information from the database into the HTML of the webpage. However, there is no validation of the data that is being loaded into the webpage.</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="k">echo</span> <span class="s1">' &lt;h5&gt;'</span><span class="mf">.</span><span class="nv">$pray</span><span class="o">-&gt;</span><span class="n">prayer_title</span><span class="mf">.</span><span class="s1">'&lt;/h5&gt;'</span><span class="mf">.</span><span class="nb">nl2br</span><span class="p">(</span><span class="nv">$pray</span><span class="o">-&gt;</span><span class="n">prayer_messages</span><span class="p">)</span><span class="mf">.</span><span class="s1">'&lt;div class="postmeta"&gt;'</span><span class="p">;</span></code></pre></figure>
+
+<p>Let’s see how the HTML of the webpage looks when the PHP code is executed and our prayer request is loaded from the database into the HTML:</p>
+
+<figure class="highlight"><pre><code class="language-html" data-lang="html"><span class="nt">&lt;h5&gt;</span>prayer<span class="nt">&lt;/h5&gt;&lt;script&gt;</span><span class="nx">alert</span><span class="p">(</span><span class="dl">"</span><span class="s2">XSS</span><span class="dl">"</span><span class="p">)</span><span class="nt">&lt;/script&gt;&lt;div</span> <span class="na">class=</span><span class="s">"postmeta"</span><span class="nt">&gt;</span></code></pre></figure>
+
+<p>This means we successfully inserted a JavaScript payload into the webpage. When the webpage loads it will execute the JavaScript code and an alert with the text ‘XSS’ is shown in the browser.</p>
+
+<figure>
+    <img src="/assets/images/posts/04/04.png" alt="Figure 04. The prayer request engine – Step 3: Execute the payload by loading the prayer request engine which lists all the stored requested prayers" />
+    <figcaption>Figure 04. The prayer request engine – Step 3: Execute the payload by loading the prayer request engine which lists all the stored requested prayers</figcaption>
+</figure>
+
+<h1 id="impact">Impact</h1>
+<p>The authenticated stored XSS in WP Prayer 1.6.1 and earlier poses a risk for visitors of the webpage where prayer requests are listed. For example, stored XSS can be used by a malicious actor to potentially steal cookies or sensitive data from visitors.</p>
+
+<h1 id="proof-of-concept">Proof of Concept</h1>
+<video width="100%" height="100%" controls="controls">
+    <source src="/assets/images/posts/04/WP-Prayer-1.5.5.mp4" type="video/mp4" />
+</video>
+<figcaption>Video 01. Proof of Concept video of authenticated stored XSS in WP Prayer version 1.5.5</figcaption>
+
+<h1 id="conclusion">Conclusion</h1>
+<p>WP Prayer 1.6.1 and earlier versions contains an authenticated stored XSS vulnerability. This makes it possible store malicious JavaScript code into webpages where prayer request are listed.</p>
+
+<p>The vulnerability exists because the prayer message field of the prayer request form does not sanitize and validate user input, therefore code can be saved to the database. In addition, the prayer message field string that is saved in the database is loaded into the webpage without special characters (such as &lt;, &gt;, &amp;, “, and ‘) being converted to HTML entities, which leads to the code being loaded into the webpage. Therefore, the code will be loaded and executed into the webpage when prayer requests are listed.</p>
+
+<p>With this responsible disclosure, I hope I provided salvation by saving this plugin from a security sin.</p>
+
+<h1 id="timeline">Timeline</h1>
+<p>15 April, 2021: WPScan – Vendor contacted<br />
+21 April, 2021: WPScan – Escalated to WordPress<br />
+14 May, 2021: Vulnerability fixed by vendor<br />
+17 May, 2021: Disclosure on <a href="https://wpscan.com/vulnerability/c7ab736d-27c4-4ec5-9681-a3f0dda86586">WPScan</a> and <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-2431">CVE-2021-24313</a> assigned<br />
+31 May, 2021: Proof of Concept disclosure</p>
+
+<h1 id="references">References</h1>
+<p><a href="https://wpscan.com/vulnerability/c7ab736d-27c4-4ec5-9681-a3f0dda86586">https://wpscan.com/vulnerability/c7ab736d-27c4-4ec5-9681-a3f0dda86586</a><br />
+<a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-24313">https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-24313</a><br />
+<a href="https://wordpress.org/plugins/wp-prayer/">https://wordpress.org/plugins/wp-prayer/</a><br />
+<a href="https://www.exploit-db.com/exploits/49921">https://www.exploit-db.com/exploits/49921</a></p>
+
+        
+      </section>
+
+      <footer class="page__meta">
+        
+        
+
+
+        
+
+  <p class="page__date"><strong><i class="fas fa-fw fa-calendar-alt" aria-hidden="true"></i> Updated:</strong> <time class="dt-published" datetime="2021-05-31T07:00:00+00:00">May 31, 2021</time></p>
+
+      </footer>
+
+      <section class="page__share">
+  
+
+  <a href="https://twitter.com/intent/tweet?text=Technical+write-up+on+CVE-2021-24313%20https%3A%2F%2Fbastijnouwendijk.com%2Fcve-2021-24313%2F"
+    class="btn btn--twitter"
+    onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;"
+    title="Share on Twitter"><i
+      class="fab fa-fw fa-twitter" aria-hidden="true"></i><span> Twitter</span></a>
+
+  <a href="https://www.linkedin.com/shareArticle?mini=true&url=https%3A%2F%2Fbastijnouwendijk.com%2Fcve-2021-24313%2F"
+    class="btn btn--linkedin"
+    onclick="window.open(this.href, 'window', 'left=20,top=20,width=500,height=500,toolbar=1,resizable=0'); return false;"
+    title="Share on LinkedIn"><i
+      class="fab fa-fw fa-linkedin" aria-hidden="true"></i><span> LinkedIn</span></a>
+</section>
+
+      
+  <nav class="pagination">
+    
+      <a href="/cve-2021-24299/" class="pagination--pager" title="Technical write-up on CVE-2021-24299
+">Previous</a>
+    
+    
+      <a href="/my-journey-to-becoming-an-ewpt/" class="pagination--pager" title="My journey to becoming an eWPT
+">Next</a>
+    
+  </nav>
+
+    </div>
+
+    
+  </article>
+
+  
+  
+    <div class="page__related">
+      <h2 class="page__related-title">You May Also Enjoy</h2>
+      <div class="grid__wrapper">
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src="/assets/images/posts/05/eWPT-teaser.png" alt="">
+      </div>
+    
+    <h2 class="archive__item-title no_toc" itemprop="headline">
+      
+        <a href="/my-journey-to-becoming-an-ewpt/" rel="permalink">My journey to becoming an eWPT
+</a>
+      
+    </h2>
+    
+
+  <p class="page__meta">
+    
+      
+      <span class="page__meta-date">
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i>
+        
+        <time datetime="2021-08-11T07:00:00+00:00">August 11, 2021</time>
+      </span>
+    
+
+    <span class="page__meta-sep"></span>
+
+    
+      
+      
+
+      <span class="page__meta-readtime">
+        <i class="far fa-fw fa-clock" aria-hidden="true"></i>
+        
+          8 minute read
+        
+      </span>
+    
+  </p>
+
+
+    <p class="archive__item-excerpt" itemprop="description">In this blog I’ll provide information about my eWPT preparations, my experience with taking the exam and concluding thoughts about this certificate.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src="/assets/images/posts/03/05.png" alt="">
+      </div>
+    
+    <h2 class="archive__item-title no_toc" itemprop="headline">
+      
+        <a href="/cve-2021-24299/" rel="permalink">Technical write-up on CVE-2021-24299
+</a>
+      
+    </h2>
+    
+
+  <p class="page__meta">
+    
+      
+      <span class="page__meta-date">
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i>
+        
+        <time datetime="2021-05-23T07:00:00+00:00">May 23, 2021</time>
+      </span>
+    
+
+    <span class="page__meta-sep"></span>
+
+    
+      
+      
+
+      <span class="page__meta-readtime">
+        <i class="far fa-fw fa-clock" aria-hidden="true"></i>
+        
+          6 minute read
+        
+      </span>
+    
+  </p>
+
+
+    <p class="archive__item-excerpt" itemprop="description">Write-up about finding an Unauthenticated Stored Cross-Site Scripting (XSS) vulnerability in ReDi Restaurant Reservation version 21.0307 and earlier.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src="/assets/images/posts/02/CEH-teaser.png" alt="">
+      </div>
+    
+    <h2 class="archive__item-title no_toc" itemprop="headline">
+      
+        <a href="/my-road-to-becoming-a-certified-ethical-hacker/" rel="permalink">My road to becoming a Certified Ethical Hacker (CEH v11)
+</a>
+      
+    </h2>
+    
+
+  <p class="page__meta">
+    
+      
+      <span class="page__meta-date">
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i>
+        
+        <time datetime="2021-05-11T07:00:00+00:00">May 11, 2021</time>
+      </span>
+    
+
+    <span class="page__meta-sep"></span>
+
+    
+      
+      
+
+      <span class="page__meta-readtime">
+        <i class="far fa-fw fa-clock" aria-hidden="true"></i>
+        
+          4 minute read
+        
+      </span>
+    
+  </p>
+
+
+    <p class="archive__item-excerpt" itemprop="description">In this blog I’ll provide information about my CEH preparations, my experience with taking the exam and concluding thoughts about this certificate.
+</p>
+  </article>
+</div>
+
+        
+          
+
+
+
+<div class="grid__item">
+  <article class="archive__item" itemscope itemtype="https://schema.org/CreativeWork">
+    
+      <div class="archive__item-teaser">
+        <img src="/assets/images/posts/01/Phishing-teaser.png" alt="">
+      </div>
+    
+    <h2 class="archive__item-title no_toc" itemprop="headline">
+      
+        <a href="/how-does-a-phishing-website-work/" rel="permalink">How does a phishing website work?
+</a>
+      
+    </h2>
+    
+
+  <p class="page__meta">
+    
+      
+      <span class="page__meta-date">
+        <i class="far fa-fw fa-calendar-alt" aria-hidden="true"></i>
+        
+        <time datetime="2020-04-28T07:00:00+00:00">April 28, 2020</time>
+      </span>
+    
+
+    <span class="page__meta-sep"></span>
+
+    
+      
+      
+
+      <span class="page__meta-readtime">
+        <i class="far fa-fw fa-clock" aria-hidden="true"></i>
+        
+          6 minute read
+        
+      </span>
+    
+  </p>
+
+
+    <p class="archive__item-excerpt" itemprop="description">Phishing mails, we all know them. In this blog, I’ll show how such a phishing site works and what tricks they use to deceive you.
+</p>
+  </article>
+</div>
+
+        
+      </div>
+    </div>
+  
+  
+</div>
+    </div>
+
+    
+
+    <div id="footer" class="page__footer">
+      <footer>
+        <!-- start custom footer snippets -->
+
+<!-- end custom footer snippets -->
+        <div class="page__footer-follow">
+  <ul class="social-icons">
+    
+
+    
+  </ul>
+</div>
+
+<div class="page__footer-copyright">&copy; 2021 Bastijn Ouwendijk</div>
+      </footer>
+    </div>
+
+    
+  <script src="/assets/js/main.min.js"></script>
+
+
+
+
+
+
+
+
+
+
+  </body>
+</html>

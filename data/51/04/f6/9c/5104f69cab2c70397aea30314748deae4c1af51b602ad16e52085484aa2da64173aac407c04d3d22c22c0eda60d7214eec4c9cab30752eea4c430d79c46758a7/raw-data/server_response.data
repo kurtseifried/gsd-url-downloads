@@ -1,0 +1,669 @@
+<!doctype html>
+<!--[if lt IE 7 ]> <html class="no-js lt-ie9 lt-ie8 lt-ie7" lang="en"> <![endif]-->
+<!--[if IE 7 ]>    <html class="no-js lt-ie9 lt-ie8" lang="en"> <![endif]-->
+<!--[if IE 8 ]>    <html class="no-js lt-ie9" lang="en"> <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en"> <!--<![endif]-->
+<head>
+    <meta charset="UTF-8">
+    <title>Optionsbleed - HTTP OPTIONS method can leak Apache's server memory | The Fuzzing Project</title>
+    <meta name="generator" content="Serendipity v.2.3.5">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="index,follow">
+    <link rel="canonical" href="https://blog.fuzzing-project.org/60-Optionsbleed-HTTP-OPTIONS-method-can-leak-Apaches-server-memory.html">
+    <link rel="stylesheet" href="https://blog.fuzzing-project.org/serendipity.css?v=">
+    <script src="/templates/2k11/js/modernizr-2.7.1.min.js"></script>
+    <link rel="alternate" type="application/rss+xml" title="The Fuzzing Project RSS feed" href="https://blog.fuzzing-project.org/feeds/index.rss2">
+    <link rel="alternate" type="application/x.atom+xml"  title="The Fuzzing Project Atom feed"  href="https://blog.fuzzing-project.org/feeds/atom.xml">
+    <link rel="trackback" type="application/x-www-form-urlencoded" href="https://blog.fuzzing-project.org/comment.php?type=trackback&amp;entry_id=60">
+    <link rel="pingback" href="https://blog.fuzzing-project.org/comment.php?type=pingback&amp;entry_id=60">
+    <script src="/templates/jquery.js"></script>
+    <script>jQuery.noConflict();</script>
+
+    <script src="https://blog.fuzzing-project.org/serendipity.js?v="></script>
+</head>
+<body>
+<a class="visuallyhidden" href="#content"><span lang="en">Skip to content</span></a>
+<div id="page" class="clearfix">
+    <header id="banner" class="clearfix col2r">
+        <div id="identity">
+            <a href="https://blog.fuzzing-project.org/">
+                <h1>The Fuzzing Project</h1>
+                <p>Blog and Advisories</p>            </a>
+        </div>
+
+        <form id="searchform" action="/index.php" method="get">
+        <div>
+            <input type="hidden" name="serendipity[action]" value="search">
+            <label for="serendipityQuickSearchTermField">Quicksearch</label>
+            <input id="serendipityQuickSearchTermField" name="serendipity[searchTerm]" type="search" placeholder="Search term(s)" value="">
+            <input id="searchsend" name="serendipity[searchButton]" type="submit" value="Go!">
+        </div>
+        </form>
+        
+            </header>
+        <nav id="primary-nav">
+        <h2 class="visuallyhidden">Navigation</h2>
+
+        <ul class="clearfix"><li><a href="https://fuzzing-project.org/">Back to main page</a></li><li><a href="https://fuzzing-project.org/software.html">Software list</a></li></ul>
+    </nav>
+        <div class="clearfix col2r">
+        <main id="content"  class="plain-images">
+        
+            <article id="post_60" class="clearfix serendipity_entry">
+        <header class="clearfix">
+            <h2><a href="/60-Optionsbleed-HTTP-OPTIONS-method-can-leak-Apaches-server-memory.html">Optionsbleed - HTTP OPTIONS method can leak Apache's server memory</a></h2>
+
+            <span class="serendipity_byline block_level"><span class="single_user">Posted by <a href="https://blog.fuzzing-project.org/authors/1-Hanno-Boeck">Hanno Böck</a> on </span><time datetime="2017-09-18T15:01:00+02:00">Monday, September 18. 2017</time></span>
+        </header>
+
+        <div class="clearfix content serendipity_entry_body">
+                <a class="serendipity_image_link"  href='/uploads/optionsbleed.png'><!-- s9ymdb:10 --><img class="serendipity_image_right" width="300" height="201"  src="/uploads/optionsbleed.serendipityThumb.png"  alt="optionsbleed"></a>If you're using the HTTP protocol in everday Internet use you are usually only using two of its methods: GET and POST. However HTTP has a number of other methods, so I wondered what you can do with them and if there are any vulnerabilities.<img src="https://ssl-vg03.met.vgwort.de/na/cebfb3b02359461ab9ecf10beb28e327" width="1" height="1" alt=""/><br />
+<br />
+One HTTP method is called OPTIONS. It simply allows asking a server which other HTTP methods it supports. The server answers with the "Allow" header and gives us a comma separated list of supported methods.<br />
+<br />
+A scan of the Alexa Top 1 Million revealed something strange: Plenty of servers sent out an "Allow" header with what looked like corrupted data. Some examples:<br />
+Allow: ,GET,,,POST,OPTIONS,HEAD,,<br />
+Allow: POST,OPTIONS,,HEAD,:09:44 GMT<br />
+Allow: GET,HEAD,OPTIONS,,HEAD,,HEAD,,HEAD,, HEAD,,HEAD,,HEAD,,HEAD,POST,,HEAD,, HEAD,!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"<br />
+Allow: GET,HEAD,OPTIONS,=write HTTP/1.0,HEAD,,HEAD,POST,,HEAD,TRACE<br />
+<br />
+That clearly looked interesting - and dangerous. It suspiciously looked like a "bleed"-style bug, which has become a name for bugs where arbitrary pieces of memory are leaked to a potential attacker. However these were random servers on the Internet, so at first I didn't know what software was causing this.<br />
+<br />
+Sometimes HTTP servers send a "Server" header telling the software. However one needs to be aware that the "Server" header can lie. It's quite common to have one HTTP server proxying another. I got all kinds of different "Server" headers back, but I very much suspected that these were all from the same bug.<br />
+<br />
+I tried to contact the affected server operators, but only one of them answered, and he was extremely reluctant to tell me anything about his setup, so that wasn't very helpful either.<br />
+<br />
+However I got one clue: Some of the corrupted headers contained strings that were clearly configuration options from Apache. It seemed quite unlikely that those would show up in the memory of other server software. But I was unable to reproduce anything alike on my own Apache servers. I also tried reading the code that put together the Allow header to see if I can find any clues, but with no success. So without knowing any details I contacted the Apache security team.<br />
+<br />
+Fortunately Apache developer Jacob Champion digged into it and figured out what was going on: Apache supports a configuration directive <a href="https://httpd.apache.org/docs/2.4/mod/core.html#limit">Limit</a> that allows restricting access to certain HTTP methods to a specific user. And if one sets the Limit directive in an .htaccess file for an HTTP method that's not globally registered in the server then the corruption happens. After that I was able to reproduce it myself. Setting a Limit directive for any invalid HTTP method in an .htaccess file caused a use after free error in the construction of the Allow header which was also <a href="/uploads/optionsbleed-asan.txt">detectable with Address Sanitizer</a>. (However ASAN doesn't work reliably due to the memory allocation abstraction done by APR.)<br />
+<br />
+<strong>FAQ</strong><br />
+<br />
+<strong>What's Optionsbleed?</strong><br />
+<br />
+Optionsbleed is a use after free error in Apache HTTP that causes a corrupted Allow header to be constructed in response to HTTP OPTIONS requests. This can leak pieces of arbitrary memory from the server process that may contain secrets. The memory pieces change after multiple requests, so for a vulnerable host an arbitrary number of memory chunks can be leaked.<br />
+<br />
+The bug appears if a webmaster tries to use the "Limit" directive with an invalid HTTP method.<br />
+<br />
+Example .htaccess:<br />
+<br />
+&lt;Limit abcxyz&gt;<br />
+&lt;/Limit&gt;<br />
+<br />
+<strong>How prevalent is it?</strong><br />
+<br />
+Scanning the Alexa Top 1 Million revealed 466 hosts with corrupted Allow headers. In theory it's possible that other server software has similar bugs. On the other hand this bug is nondeterministic, so not all vulnerable hosts may have been caught.<br />
+<br />
+<strong>So it only happens if you set a quite unusual configuration option?</strong><br />
+<br />
+There's an additional risk in shared hosting environments. The corruption is not limited to a single virtual host. One customer of a shared hosting provider could deliberately create an .htaccess file causing this corruption hoping to be able to extract secret data from other hosts on the same system.<br />
+<br />
+<strong>I can't reproduce it!</strong><br />
+<br />
+Due to its nature the bug doesn't appear deterministically. It only seems to appear on busy servers. Sometimes it only appears after multiple requests.<br />
+<br />
+<strong>Does it have a CVE?</strong><br />
+<br />
+<a href="https://nvd.nist.gov/vuln/detail/CVE-2017-9798">CVE-2017-9798</a>.<br />
+<br />
+<strong>I'm seeing Allow headers containing HEAD multiple times!</strong><br />
+<br />
+This is actually a different Apache bug (<a href="https://bz.apache.org/bugzilla/show_bug.cgi?id=61207">#61207</a>) that I found during this investigation. It causes HEAD to appear three times instead of once. However it's harmless and not a security bug.<br />
+<br />
+Launchpad also has <a href="https://bugs.launchpad.net/launchpad/+bug/1717682">a harmless bug that produces a malformed Allow header</a>, using a space-separated list instead of a comma-separated one.<br />
+<br />
+<strong>How can I test it?</strong><br />
+<br />
+A simple way is to use Curl in a loop and send OPTIONS requests:<br />
+<br />
+<code>for i in {1..100}; do curl -sI -X OPTIONS https://www.google.com/|grep -i "allow:"; done</code><br />
+<br />
+Depending on the server configuration it may not answer to OPTIONS requests on some URLs. Try different paths, HTTP versus HTTPS hosts, non-www versus www etc. may lead to different results.<br />
+<br />
+Please note that this bug does not show up with the "*" OPTIONS target, you need a specific path.<br />
+<br />
+Here's a <a href="https://github.com/hannob/optionsbleed">python proof of concept script</a>.<br />
+<br />
+<strong>What shall I do?</strong><br />
+<br />
+If you run an Apache web server you should update. Most distributions should have updated packages by now or very soon. A patch can <a href="https://svn.apache.org/viewvc/httpd/httpd/branches/2.4.x/server/core.c?r1=1805223&amp;r2=1807754&amp;pathrev=1807754&amp;view=patch">be found here</a>. A patch for Apache 2.2 <a href="/uploads/apache-2.2-optionsbleed-backport.patch">is available here</a> (thanks to Thomas Deutschmann for backporting it).<br />
+<br />
+Unfortunately the communication with the Apache security team wasn't ideal. They were unable to provide a timeline for a coordinated release with a fix, so I decided to define a disclosure date on my own without an upstream fix.<br />
+<br />
+If you run an Apache web server in a shared hosting environment that allows users to create .htaccess files you should drop everything you are doing right now, update immediately and make sure you restart the server afterwards.<br />
+<br />
+<strong>Is this as bad as Heartbleed?</strong><br />
+<br />
+No. Although similar in nature, this bug leaks only small chunks of memory and more importantly only affects a small number of hosts by default.<br />
+<br />
+It's still a pretty bad bug, particularly for shared hosting environments.<br />
+<br />
+<strong>Updates:</strong><br />
+<br />
+<a href="https://mail-archives.apache.org/mod_mbox/httpd-dev//201709.mbox/%3CCACsi253RfX7OT5NhZCKRru2JpOKoscux%3DjzDzJOnbcF31XHmMw%40mail.gmail.com%3E">Analysis by Apache developer William A. Rowe Jr.</a><br />
+<br />
+Distribution updates:<br />
+Gentoo: <a href="https://gitweb.gentoo.org/repo/gentoo.git/commit/?id=9c25916f8a7c6f6e22320bb100028496ed980e28">Commit (2.2.34 / 2.4.27-r1 fixed)</a>, <a href="//bugs.gentoo.org/631308">Bug</a><br />
+NetBSD/pkgsrc: <a href="http://pkgsrc.se/files.php?messageId=20170918132405.F1150FA9A@cvs.NetBSD.org">Commit</a><br />
+Guix: <a href="https://lists.gnu.org/archive/html/guix-commits/2017-09/msg00644.html">Commit</a><br />
+Arch Linux: <a href="//www.mail-archive.com/arch-commits@archlinux.org/msg357403.html">Commit (2.4.27-2 fixed)</a><br />
+Slackware: <a href="http://www.slackware.com/security/viewer.php?l=slackware-security&y=2017&m=slackware-security.551634">Advisory</a><br />
+NixOS: <a href="https://github.com/NixOS/nixpkgs/commit/c9d11b8a1d8d1f3bff230027496e90d0fb963d8b">Commit</a><br />
+Debian: <a href="//security-tracker.debian.org/tracker/CVE-2017-9798">Security Tracker</a>, <a href="https://security-tracker.debian.org/tracker/DSA-3980-1">Advisory (2.4.10-10+deb8u11, 2.4.25-3+deb9u3)</a><br />
+Ubuntu: <a href="https://usn.ubuntu.com/usn/usn-3425-1/">Advisory (2.4.25-3ubuntu2.3, 2.4.18-2ubuntu3.5, 2.4.7-1ubuntu4.18)</a><br />
+<br />
+Media:<br />
+<a href="//www.golem.de/news/optionsbleed-apache-webserver-blutet-1709-130105.html">Apache-Webserver blutet (Golem.de)</a><br />
+<a href="https://www.heise.de/security/meldung/Apache-Webserver-Optionsbleed-Bug-legt-Speicherinhalte-offen-3835313.html">Apache Webserver: "Optionsbleed"-Bug legt Speicherinhalte offen (heise online)</a><br />
+<a href="https://threatpost.com/risks-limited-with-latest-apache-bug-optionsbleed/128014/">Risks Limited With Latest Apache Bug, Optionsbleed (Threatpost)</a><br />
+<a href="https://nakedsecurity.sophos.com/2017/09/19/apache-optionsbleed-vulnerability-what-you-need-to-know/">Apache “Optionsbleed” vulnerability – what you need to know (Naked Security)</a><br />
+<a href="https://arstechnica.com/information-technology/2017/09/apache-bug-leaks-contents-of-server-memory-for-all-to-see-patch-now/">Apache bug leaks contents of server memory for all to see—Patch now (Ars Technica)</a>
+                </div>
+                
+        <footer class="clearfix">
+                    <span class="visuallyhidden">Categories: </span><a href="https://blog.fuzzing-project.org/categories/1-advisories">advisories</a>                 |                             <a href="/60-Optionsbleed-HTTP-OPTIONS-method-can-leak-Apaches-server-memory.html#comments" title="16 Comments, 2 Trackbacks">16 Comments</a>
+                                                    
+        </footer>
+
+        <!--
+        <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                 xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/"
+                 xmlns:dc="http://purl.org/dc/elements/1.1/">
+        <rdf:Description
+                 rdf:about="https://blog.fuzzing-project.org/feeds/ei_60.rdf"
+                 trackback:ping="https://blog.fuzzing-project.org/comment.php?type=trackback&amp;entry_id=60"
+                 dc:title="Optionsbleed - HTTP OPTIONS method can leak Apache's server memory"
+                 dc:identifier="https://blog.fuzzing-project.org/60-Optionsbleed-HTTP-OPTIONS-method-can-leak-Apaches-server-memory.html" />
+        </rdf:RDF>
+        -->
+
+                                            
+        <section id="trackbacks" class="serendipity_comments serendipity_section_trackbacks">
+            <h3>Trackbacks</h3>
+
+            <div id="trackback_url" class="block_level"><a rel="nofollow" href="https://blog.fuzzing-project.org/comment.php?type=trackback&amp;entry_id=60" title="This link is not meant to be clicked. It contains the trackback URI for this entry. You can use this URI to send ping- &amp; trackbacks from your own blog to this entry. To copy the link, right click and select &quot;Copy Shortcut&quot; in Internet Explorer or &quot;Copy Link Location&quot; in Mozilla.">Trackback specific URI for this entry</a></div>
+
+            <article id="c1002" class="clearfix serendipity_comment odd">
+    <h4><cite>The Fuzzing Project</cite> on <time datetime="2017-09-20T16:55:59+02:00">Wednesday, September 20. 2017</time>: <a href="http://blog.fuzzing-project.org/61-How-Optionsbleed-wasnt-found-in-2014.html">How Optionsbleed wasn't found in 2014</a></h4>
+    <details>
+        <summary>Show preview</summary>
+        <div class="content serendipity_commentBody">Shortly after I published details about the Optionsbleed bug I learned about something quite surprising: Others had already discovered this bug before, but have neither pinned it down to Apache nor recognized that it is a security vulnerability. A pape</div>
+    </details>
+</article>
+<article id="c1053" class="clearfix serendipity_comment even">
+    <h4><cite>Hanno's blog</cite> on <time datetime="2018-04-11T13:42:00+02:00">Wednesday, April 11. 2018</time>: <a href="http://blog.hboeck.de/archives/892-Introducing-Snallygaster-a-tool-to-scan-for-secrets-on-web-servers.html">Introducing Snallygaster - a tool to scan for secrets on web servers</a></h4>
+    <details>
+        <summary>Show preview</summary>
+        <div class="content serendipity_commentBody">A few days ago I figured out that several blogs operated by T-Mobile Austria had a Git repository exposed which included their wordpress configuration file. Due to the fact that a phpMyAdmin installation was also accessible this would have allowed me to c</div>
+    </details>
+</article>
+
+        </section>
+
+        <section id="comments" class="serendipity_comments serendipity_section_comments">
+            <h3>Comments</h3>
+
+            <p class="manage_comments">Display comments as
+                           <a rel="nofollow" href="/index.php?url=60-Optionsbleed-HTTP-OPTIONS-method-can-leak-Apaches-server-memory.html&amp;serendipity[cview]=linear#comments">Linear</a> | Threaded
+                        </p>
+
+            <article id="c984" class="serendipity_comment odd commentlevel-0">
+    <header class="clearfix">
+        <h4>lbiegaj on <time datetime="2017-09-18T17:33:05+02:00">Monday, September 18. 2017</time>:</h4>
+        </header>
+
+    <div class="serendipity_commentBody clearfix content">
+                I was able to reproduce this issue on Apache 2.2.22 with a legitimate method:<br />
+<br />
+(angle bracket open)Limit GET(angle bracket close)<br />
+    Allow from x.y.z.v<br />
+    Deny from all<br />
+(angle bracket open)/Limit(angle bracket close)<br />
+<br />
+for I in `seq 1 100`; do curl -sI -X OPTIONS http://myhost/ | grep ^Allow; done | uniq<br />
+Allow: ,GET,HEAD,POST,OPTIONS<br />
+Allow: GET,HEAD,POST,OPTIONS<br />
+Allow: ,GET,HEAD,POST,OPTIONS<br />
+Allow: GET,HEAD,POST,OPTIONS
+        </div>
+
+    <footer>
+        <time>17:33</time>
+        | <a class="comment_source_trace" href="#c984" title="Permanent link for this comment">Link</a>
+            | <a class="comment_reply" href="#serendipity_CommentForm" id="serendipity_reply_984">Reply</a>
+        <div id="serendipity_replyform_984"></div>
+    </footer>
+</article>
+<article id="c985" class="serendipity_comment even commentlevel-1">
+    <header class="clearfix">
+        <h4>lbiegaj on <time datetime="2017-09-18T17:33:44+02:00">Monday, September 18. 2017</time>:</h4>
+        </header>
+
+    <div class="serendipity_commentBody clearfix content">
+                Seems that this blog filtered out &quot;LIMIT GET&quot; tags from my comment.
+        </div>
+
+    <footer>
+        <time>17:33</time>
+        | <a class="comment_source_trace" href="#c985" title="Permanent link for this comment">Link</a>
+            | <a class="comment_reply" href="#serendipity_CommentForm" id="serendipity_reply_985">Reply</a>
+        <div id="serendipity_replyform_985"></div>
+    </footer>
+</article>
+<article id="c986" class="serendipity_comment odd commentlevel-0">
+    <header class="clearfix">
+        <h4>easteregg on <time datetime="2017-09-18T18:00:52+02:00">Monday, September 18. 2017</time>:</h4>
+        </header>
+
+    <div class="serendipity_commentBody clearfix content">
+                same with 2.4.25-3+deb9u2
+        </div>
+
+    <footer>
+        <time>18:00</time>
+        | <a class="comment_source_trace" href="#c986" title="Permanent link for this comment">Link</a>
+            | <a class="comment_reply" href="#serendipity_CommentForm" id="serendipity_reply_986">Reply</a>
+        <div id="serendipity_replyform_986"></div>
+    </footer>
+</article>
+<article id="c987" class="serendipity_comment even commentlevel-0">
+    <header class="clearfix">
+        <h4>parseword on <time datetime="2017-09-19T03:26:32+02:00">Tuesday, September 19. 2017</time>:</h4>
+        </header>
+
+    <div class="serendipity_commentBody clearfix content">
+                For those who can reproduce, if you don't mind testing, I'm curious whether blocking the OPTIONS verb via mod_allowmethods works as a temporary mitigation.<br />
+<br />
+In httpd.conf:<br />
+    LoadModule allowmethods_module modules/mod_allowmethods.so<br />
+<br />
+Inside your Directory stanzas:<br />
+    #Disable unwanted methods (OPTIONS, PUT, PROPFIND, etc.)<br />
+    AllowMethods GET POST HEAD<br />
+<br />
+This should cause any OPTIONS request to return a status of &quot;HTTP/1.1 405 Method Not Allowed&quot; and emit an empty &quot;Allow:&quot; header. I can't reproduce the bug on any of my instances to ensure this properly scrubs the &quot;Allow:&quot; header, though.
+        </div>
+
+    <footer>
+        <time>03:26</time>
+        | <a class="comment_source_trace" href="#c987" title="Permanent link for this comment">Link</a>
+            | <a class="comment_reply" href="#serendipity_CommentForm" id="serendipity_reply_987">Reply</a>
+        <div id="serendipity_replyform_987"></div>
+    </footer>
+</article>
+<article id="c1006" class="serendipity_comment odd commentlevel-1">
+    <header class="clearfix">
+        <h4>Noel Whitemore on <time datetime="2017-09-21T11:25:24+02:00">Thursday, September 21. 2017</time>:</h4>
+        </header>
+
+    <div class="serendipity_commentBody clearfix content">
+                That particular module is still termed &quot;experimental&quot; and there's no mention in the official documentation of what the expected output should be, so you'd probably have to look at the source code to see what's going on behind the scenes. On a separate issue,  deliberately limiting the OPTIONS method in the normal way (as Google appears to be doing) doesn't work because when you send a request to Google's servers you get the &quot;HTTP/1.1 405 Method Not Allowed&quot; message but the accepted methods are still listed on the next line of the header.
+        </div>
+
+    <footer>
+        <time>11:25</time>
+        | <a class="comment_source_trace" href="#c1006" title="Permanent link for this comment">Link</a>
+            | <a class="comment_reply" href="#serendipity_CommentForm" id="serendipity_reply_1006">Reply</a>
+        <div id="serendipity_replyform_1006"></div>
+    </footer>
+</article>
+<article id="c1007" class="serendipity_comment even commentlevel-1">
+    <header class="clearfix">
+        <h4>William A Rowe Jr on <time datetime="2017-09-22T17:30:37+02:00">Friday, September 22. 2017</time>:</h4>
+        </header>
+
+    <div class="serendipity_commentBody clearfix content">
+                Noel is correct with respect to blocking OPTIONS.<br />
+<br />
+The other reason that blocking OPTIONS is no solution is that the corruption itself in the shared startup configuration list of supported methods still occurs on any request which parses the suspect .htaccess file (where an unrecognized method is given by accident or deliberately.) Corrupting that shared configuration data will still lead to unpredictable behavior.
+        </div>
+
+    <footer>
+        <time>17:30</time>
+        | <a class="comment_source_trace" href="#c1007" title="Permanent link for this comment">Link</a>
+            | <a class="comment_reply" href="#serendipity_CommentForm" id="serendipity_reply_1007">Reply</a>
+        <div id="serendipity_replyform_1007"></div>
+    </footer>
+</article>
+<article id="c988" class="serendipity_comment odd commentlevel-0">
+    <header class="clearfix">
+        <h4><a href="http://example.org">Lee</a> on <time datetime="2017-09-19T04:36:15+02:00">Tuesday, September 19. 2017</time>:</h4>
+        </header>
+
+    <div class="serendipity_commentBody clearfix content">
+                Good article. Thanks! You may want to fix a few mistakes I found while reading it.<br />
+<br />
+However, ASAN doesn't work &quot;reliable&quot;... &gt; reliably<br />
+...so not all vulnerable hosts may have been &quot;catched&quot;... &gt; caught<br />
+... you should drop everything &quot;you do now&quot;... &gt; you are doing now
+        </div>
+
+    <footer>
+        <time>04:36</time>
+        | <a class="comment_source_trace" href="#c988" title="Permanent link for this comment">Link</a>
+            | <a class="comment_reply" href="#serendipity_CommentForm" id="serendipity_reply_988">Reply</a>
+        <div id="serendipity_replyform_988"></div>
+    </footer>
+</article>
+<article id="c989" class="serendipity_comment even commentlevel-0">
+    <header class="clearfix">
+        <h4><a href="http://www.cs.odu.edu/~salam/">Sawood Alam</a> on <time datetime="2017-09-19T06:14:06+02:00">Tuesday, September 19. 2017</time>:</h4>
+        </header>
+
+    <div class="serendipity_commentBody clearfix content">
+                I have noted this issue in 2014 while I was working on my paper, &quot;Support for Various HTTP Methods on the Web&quot; (https://arxiv.org/pdf/1405.2330.pdf). My observations about this issue as well as some other problems are described in the section  5.3 of the paper. However, I didn't look into it from the security perspective at that time.
+        </div>
+
+    <footer>
+        <time>06:14</time>
+        | <a class="comment_source_trace" href="#c989" title="Permanent link for this comment">Link</a>
+            | <a class="comment_reply" href="#serendipity_CommentForm" id="serendipity_reply_989">Reply</a>
+        <div id="serendipity_replyform_989"></div>
+    </footer>
+</article>
+<article id="c990" class="serendipity_comment odd commentlevel-0">
+    <header class="clearfix">
+        <h4>Jordan on <time datetime="2017-09-19T10:21:54+02:00">Tuesday, September 19. 2017</time>:</h4>
+        </header>
+
+    <div class="serendipity_commentBody clearfix content">
+                So, if I don't use the Limit directive in an htaccess file, then I'm safe from this? Is it really that commonly used? What about if it's in the global configuration?
+        </div>
+
+    <footer>
+        <time>10:21</time>
+        | <a class="comment_source_trace" href="#c990" title="Permanent link for this comment">Link</a>
+            | <a class="comment_reply" href="#serendipity_CommentForm" id="serendipity_reply_990">Reply</a>
+        <div id="serendipity_replyform_990"></div>
+    </footer>
+</article>
+<article id="c991" class="serendipity_comment even commentlevel-0">
+    <header class="clearfix">
+        <h4>JoeRandomHacker on <time datetime="2017-09-19T18:05:53+02:00">Tuesday, September 19. 2017</time>:</h4>
+        </header>
+
+    <div class="serendipity_commentBody clearfix content">
+                RewriteEngine On<br />
+RewriteCond %{REQUEST_METHOD} !(GET|POST)<br />
+RewriteRule .* - [F]
+        </div>
+
+    <footer>
+        <time>18:05</time>
+        | <a class="comment_source_trace" href="#c991" title="Permanent link for this comment">Link</a>
+            | <a class="comment_reply" href="#serendipity_CommentForm" id="serendipity_reply_991">Reply</a>
+        <div id="serendipity_replyform_991"></div>
+    </footer>
+</article>
+<article id="c994" class="serendipity_comment odd commentlevel-0">
+    <header class="clearfix">
+        <h4>Manju on <time datetime="2017-09-20T04:57:28+02:00">Wednesday, September 20. 2017</time>:</h4>
+        </header>
+
+    <div class="serendipity_commentBody clearfix content">
+                Does this vulnerability affects Apache Tomcat 8.5 versions?
+        </div>
+
+    <footer>
+        <time>04:57</time>
+        | <a class="comment_source_trace" href="#c994" title="Permanent link for this comment">Link</a>
+            | <a class="comment_reply" href="#serendipity_CommentForm" id="serendipity_reply_994">Reply</a>
+        <div id="serendipity_replyform_994"></div>
+    </footer>
+</article>
+<article id="c998" class="serendipity_comment even commentlevel-1">
+    <header class="clearfix">
+        <h4>JoeRandomHacker on <time datetime="2017-09-20T13:11:47+02:00">Wednesday, September 20. 2017</time>:</h4>
+        </header>
+
+    <div class="serendipity_commentBody clearfix content">
+                No, this is only about apache httpd, not about other projects of the apache foundation like tomcat.
+        </div>
+
+    <footer>
+        <time>13:11</time>
+        | <a class="comment_source_trace" href="#c998" title="Permanent link for this comment">Link</a>
+            | <a class="comment_reply" href="#serendipity_CommentForm" id="serendipity_reply_998">Reply</a>
+        <div id="serendipity_replyform_998"></div>
+    </footer>
+</article>
+<article id="c999" class="serendipity_comment odd commentlevel-0">
+    <header class="clearfix">
+        <h4>Colin Watson on <time datetime="2017-09-20T14:45:26+02:00">Wednesday, September 20. 2017</time>:</h4>
+        </header>
+
+    <div class="serendipity_commentBody clearfix content">
+                I've just deployed the fix for the minor launchpad.net bug identified as part of this.<br />
+<br />
+(I wonder if I'm the only one who thinks &quot;hmm, bug report from Hanno; I wonder what interesting widespread problem they're researching&quot;?)
+        </div>
+
+    <footer>
+        <time>14:45</time>
+        | <a class="comment_source_trace" href="#c999" title="Permanent link for this comment">Link</a>
+            | <a class="comment_reply" href="#serendipity_CommentForm" id="serendipity_reply_999">Reply</a>
+        <div id="serendipity_replyform_999"></div>
+    </footer>
+</article>
+<article id="c1000" class="serendipity_comment even commentlevel-0">
+    <header class="clearfix">
+        <h4>William A Rowe Jr on <time datetime="2017-09-20T16:35:09+02:00">Wednesday, September 20. 2017</time>:</h4>
+        </header>
+
+    <div class="serendipity_commentBody clearfix content">
+                Note that the new Apache directive RegisterHttpMethod lets you pre-define unusual method strings to avoid this defect.<br />
+<br />
+in the httpd.conf global/startup config;<br />
+RegisterHttpMethod ONE TWO THREE<br />
+<br />
+in the .htaccess files;<br />
+<br />
+<br />
+or similar. If you grant untrusted users .htaccess editing permission, you are always opening up the possibility of malicious configuration.
+        </div>
+
+    <footer>
+        <time>16:35</time>
+        | <a class="comment_source_trace" href="#c1000" title="Permanent link for this comment">Link</a>
+            | <a class="comment_reply" href="#serendipity_CommentForm" id="serendipity_reply_1000">Reply</a>
+        <div id="serendipity_replyform_1000"></div>
+    </footer>
+</article>
+<article id="c1001" class="serendipity_comment odd commentlevel-0">
+    <header class="clearfix">
+        <h4>William A Rowe Jr on <time datetime="2017-09-20T16:36:53+02:00">Wednesday, September 20. 2017</time>:</h4>
+        </header>
+
+    <div class="serendipity_commentBody clearfix content">
+                (The eaten .htaccess example I offered was...)<br />
+-LT- Limit POST DELETE TWO -GT-
+        </div>
+
+    <footer>
+        <time>16:36</time>
+        | <a class="comment_source_trace" href="#c1001" title="Permanent link for this comment">Link</a>
+            | <a class="comment_reply" href="#serendipity_CommentForm" id="serendipity_reply_1001">Reply</a>
+        <div id="serendipity_replyform_1001"></div>
+    </footer>
+</article>
+<article id="c1004" class="serendipity_comment even commentlevel-0">
+    <header class="clearfix">
+        <h4><a href="https://haydenjames.io">Hayden James</a> on <time datetime="2017-09-20T19:36:04+02:00">Wednesday, September 20. 2017</time>:</h4>
+        </header>
+
+    <div class="serendipity_commentBody clearfix content">
+                cPanel has released update for this via easyapache. Esp for shared hosting using cPanel/WHM you should update asap.<br />
+<br />
+--------------<br />
+<br />
+SUMMARY<br />
+cPanel, Inc. has released updated RPMs for EasyApache 4 and EasyApache 3.34.17 on September 20, 2017, with a patched versions of Apache 2.2 and 2.4 to address the optionsbleed vulnerability related to CVE-2017-9798. We strongly encourage all Apache 2.2 and 2.4 users to upgrade their system and obtain the patch.<br />
+<br />
+<br />
+AFFECTED VERSIONS<br />
+All versions of Apache 2.4 through 2.4.27<br />
+All versions of Apache 2.2 through 2.2.34<br />
+<br />
+<br />
+SECURITY RATING<br />
+The National Vulnerability Database (NIST) has given the following severity ratings to these CVEs:<br />
+<br />
+<br />
+CVE-2017-9798 - HIGH<br />
+<br />
+Apache 2.4.27-8<br />
+Patched optionsbleed vulnerability related to CVE-2017-9798<br />
+<br />
+Apache 2.2.34<br />
+Patched optionsbleed vulnerability related to CVE-2017-9798<br />
+<br />
+SOLUTION<br />
+cPanel, Inc. has released EasyApache 3.34.17 with updated versions of Apache 2.2 and Apache 2.4. Unless you have disabled EasyApache updates, the EasyApache application updates to the latest version when launched. Run EasyApache to rebuild your profile with the latest version of Apache.<br />
+<br />
+cPanel, Inc. has released updated RPMs for EasyApache 4 on September 20, 2017, with an updated versions of Apache 2.4. Unless you have enabled automatic RPM updates in your cron, update your system with either yum update or WHM's Run System Update interface.
+        </div>
+
+    <footer>
+        <time>19:36</time>
+        | <a class="comment_source_trace" href="#c1004" title="Permanent link for this comment">Link</a>
+            | <a class="comment_reply" href="#serendipity_CommentForm" id="serendipity_reply_1004">Reply</a>
+        <div id="serendipity_replyform_1004"></div>
+    </footer>
+</article>
+
+                </section>
+            <a id="feedback"></a>
+                        <section id="respond" class="serendipity_section_commentform">
+            <h3>Add Comment</h3>
+            <div id="serendipityCommentFormC" class="serendipityCommentForm">
+    <div id="serendipity_replyform_0"></div>
+    <a id="serendipity_CommentForm"></a>
+    <form id="serendipity_comment" action="/index.php?url=60-Optionsbleed-HTTP-OPTIONS-method-can-leak-Apaches-server-memory.html#feedback" method="post">
+    <div><input type="hidden" name="serendipity[entry_id]" value="60"></div>
+    <div class="form_field">
+        <label for="serendipity_commentform_name">Name*</label>
+        <input id="serendipity_commentform_name" name="serendipity[name]" type="text" value="" placeholder="e.g. John Doe" required>
+    </div>
+    <div class="form_field">
+        <label for="serendipity_commentform_email">Email</label>
+        <input id="serendipity_commentform_email" name="serendipity[email]" type="email" value="" placeholder="e.g. mail@example.org">
+    </div>
+    <div class="form_field">
+        <label for="serendipity_commentform_url">Homepage</label>
+        <input id="serendipity_commentform_url" name="serendipity[url]" type="url" value="" placeholder="e.g. http://example.org">
+    </div>
+    <div class="form_tarea">
+        <label for="serendipity_commentform_comment">Comment*</label>
+        <textarea id="serendipity_commentform_comment" name="serendipity[comment]" rows="10" placeholder="What do you want to say?" required></textarea>
+    </div>
+    <div class="form_field">
+        <label id="reply-to-hint" for="serendipity_replyTo">In reply to</label>
+        <select id="serendipity_replyTo" onchange="" name="serendipity[replyTo]"><option value="0">[ Top level ]</option><option value="984">#1: lbiegaj on 2017-09-18 17:33</option>
+<option value="985">&#160;&#160;#1.1: lbiegaj on 2017-09-18 17:33</option>
+<option value="986">#2: easteregg on 2017-09-18 18:00</option>
+<option value="987">#3: parseword on 2017-09-19 03:26</option>
+<option value="1006">&#160;&#160;#3.1: Noel Whitemore on 2017-09-21 11:25</option>
+<option value="1007">&#160;&#160;#3.2: William A Rowe Jr on 2017-09-22 17:30</option>
+<option value="988">#4: Lee on 2017-09-19 04:36</option>
+<option value="989">#5: Sawood Alam on 2017-09-19 06:14</option>
+<option value="990">#6: Jordan on 2017-09-19 10:21</option>
+<option value="991">#7: JoeRandomHacker on 2017-09-19 18:05</option>
+<option value="994">#8: Manju on 2017-09-20 04:57</option>
+<option value="998">&#160;&#160;#8.1: JoeRandomHacker on 2017-09-20 13:11</option>
+<option value="999">#9: Colin Watson on 2017-09-20 14:45</option>
+<option value="1000">#10: William A Rowe Jr on 2017-09-20 16:35</option>
+<option value="1001">#11: William A Rowe Jr on 2017-09-20 16:36</option>
+<option value="1004">#12: Hayden James on 2017-09-20 19:36</option>
+</select>
+    </div>
+    <div id="serendipity_comment_phone" class="serendipity_commentDirection comment_phone_input">
+    <label for="serendipity_commentform_phone">Phone*</label>
+    <input id="serendipity_commentform_phone" class="comment_phone_input" type="text" name="serendipity[phone]" value="" size="50" maxlength="60" placeholder="You don't want to give me your number, do you? ;)"/>
+</div>
+<div id="serendipity_comment_beecaptcha" class="form_field">
+    <label for="bee_captcha">What is one plus five?</label>
+    <input class="" type="text" id="bee_captcha" name="serendipity[beecaptcha]" size="10" value="" placeholder=""/>
+</div>
+<div class="serendipity_commentDirection serendipity_comment_s9ymarkup">Enclosing asterisks marks text as bold (*word*), underscore are made via _word_.</div><div class="serendipity_commentDirection serendipity_comment_emoticate">Standard emoticons like :-) and ;-) are converted to images.</div><div class="serendipity_commentDirection serendipity_comment_spamblock">E-Mail addresses will not be displayed and will only be used for E-Mail notifications.</div><input type="hidden" name="serendipity[token]" value="228bc68f2296b5795e8342c5ef90aa50" />
+<div class="serendipity_commentDirection serendipity_comment_captcha"><br />To prevent automated Bots from commentspamming, please enter the string you see in the image below in the appropriate input box. Your comment will only be submitted if the strings match. Please ensure that your browser supports and accepts cookies, or your comment cannot be verified correctly.<br /><img src="https://blog.fuzzing-project.org/plugin/captcha_2c3afecddb22c075a845c6b9ffcdf198" onclick="this.src=this.src + '1'" title="Enter the string you see here in the input box!" alt="CAPTCHA" class="captcha" /><br /><label for="captcha">Enter the string from the spam-prevention image above: </label><br /><input class="input_textbox" type="text" size="5" name="serendipity[captcha]" value="" id="captcha" /></div>
+    <fieldset class="form_toolbar">
+        <legend class="visuallyhidden">Form options</legend>
+        <div class="form_box">
+            <input id="checkbox_remember" name="serendipity[remember]" type="checkbox" ><label for="checkbox_remember">Remember Information? </label>
+        </div>
+          <div class="form_box">
+            <input id="checkbox_subscribe" name="serendipity[subscribe]" type="checkbox"  ><label for="checkbox_subscribe">Subscribe to this entry</label>
+        </div>
+      </fieldset>
+    <div class="form_button">
+        <input id="serendipity_preview" name="serendipity[preview]" type="submit" value="Preview">
+        <input id="serendipity_submit" name="serendipity[submit]" type="submit" value="Submit Comment">
+    </div>
+</form>
+</div>
+
+        </section>
+
+        
+    </article>
+        
+
+
+
+        </main>
+                <aside id="sidebar_right">
+            <h2 class="visuallyhidden">Sidebar</h2>
+                <section class="sidebar_plugin clearfix odd serendipity_plugin_html_nugget">
+                <h3>The Fuzzing Project</h3>
+                <div class="sidebar_content clearfix">You  may want to go <a href="https://fuzzing-project.org/">back to the Fuzzing Project's main page</a> or <a href="https://fuzzing-project.org/software/">software list</a>.</div>
+    </section>
+    <section class="sidebar_plugin clearfix even serendipity_plugin_archives">
+                <h3>Archives</h3>
+                <div class="sidebar_content clearfix"><ul class="plainList">
+    <li><a href="/archives/2021/10.html" title="October 2021">October 2021</a></li>
+    <li><a href="/archives/2021/09.html" title="September 2021">September 2021</a></li>
+    <li><a href="/archives/2021/08.html" title="August 2021">August 2021</a></li>
+    <li><a href="/index.php?frontpage">Recent...</a></li>
+    <li><a href="https://blog.fuzzing-project.org/archive">Older...</a></li>
+</ul>
+</div>
+    </section>
+    <section class="sidebar_plugin clearfix odd serendipity_plugin_categories">
+                <h3>Categories</h3>
+                <div class="sidebar_content clearfix"><form action="https://blog.fuzzing-project.org/index.php?frontpage" method="post">
+              <div id="serendipity_category_form_content">
+<ul id="serendipity_categories_list" style="list-style: none; margin: 0px; padding: 0px">
+<li class="category_depth0 category_1" style="display: block;"><input style="width: 15px" type="checkbox" name="serendipity[multiCat][]" value="1" /><a class="serendipity_xml_icon" href="/feeds/categories/1-advisories.rss"><img src="/templates/2k11/img/xml.gif" alt="XML" style="border: 0px" /></a> <a href="/categories/1-advisories" title="" style="padding-left: 0px">advisories</a></li>
+</ul>
+<div class="category_submit"><input type="submit" name="serendipity[isMultiCat]" value="Go!" /></div>
+</div>
+</form>
+</div>
+    </section>
+    <section class="sidebar_plugin clearfix even serendipity_plugin_syndication">
+                <h3>Syndicate This Blog</h3>
+                <div class="sidebar_content clearfix">
+<ul id="serendipity_syndication_list" class="plainList"><li><a class="subtome" href="https://blog.fuzzing-project.org/feeds/index.rss2" onclick="document.subtomeBtn=this;document.subtomeBtn.dataset['subtomeFeeds']='https%3A%2F%2Fblog.fuzzing-project.org%2Ffeeds%2Findex.rss2';var s=document.createElement('script');s.src='https://www.subtome.com/load.js';document.body.appendChild(s);return false;"><img src="/templates/2k11/img/subtome.png" alt="XML" style="border: 0px" /></a>
+</li>
+<li><a class="subtome" href="https://blog.fuzzing-project.org/feeds/comments.rss2" onclick="document.subtomeBtn=this;document.subtomeBtn.dataset['subtomeFeeds']='https%3A%2F%2Fblog.fuzzing-project.org%2Ffeeds%2Fcomments.rss2';var s=document.createElement('script');s.src='https://www.subtome.com/load.js';document.body.appendChild(s);return false;"><img src="/templates/2k11/img/xml.gif" alt="XML" style="border: 0px" /></a>
+ <a href="https://blog.fuzzing-project.org/feeds/comments.rss2" onclick="document.subtomeBtn=this;document.subtomeBtn.dataset['subtomeFeeds']='https%3A%2F%2Fblog.fuzzing-project.org%2Ffeeds%2Fcomments.rss2';var s=document.createElement('script');s.src='https://www.subtome.com/load.js';document.body.appendChild(s);return false;">Comments</a>
+</li>
+</ul>
+</div>
+    </section>
+
+        </aside>
+        </div>
+
+    <footer id="colophon">
+        <p><span lang="en">Powered by <a href="http://s9y.org">Serendipity</a> &amp; the <i>2k11</i> theme.</span></p>
+    </footer>
+</div>
+
+<script src="/templates/2k11/js/2k11.min.js"></script>
+
+<script>var spamBeeData = function() { var SzFMp = {};var jpmvh = unescape('%64%65%66%61%75%6c%74');var krzEw = unescape('%33%39%34%38%37%36%32');var ZjygW = unescape('%25%45%34%25%38%33%25%41%43');SzFMp['method'] = jpmvh;SzFMp['scrambleKey'] = krzEw;SzFMp['answer'] = ZjygW;return SzFMp; }();</script>
+<script src="/plugins/serendipity_event_spamblock_bee/serendipity_event_spamblock_bee.js"></script>
+
+</body>
+</html>

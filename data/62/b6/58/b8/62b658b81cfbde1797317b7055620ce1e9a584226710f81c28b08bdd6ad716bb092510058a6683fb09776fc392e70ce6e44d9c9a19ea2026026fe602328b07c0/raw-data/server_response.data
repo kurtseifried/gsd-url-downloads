@@ -1,0 +1,52 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>Diff - c82e31a7039a03dca7b37c65b7890ba5c1e18ced^! - platform/frameworks/av - Git at Google</title><link rel="stylesheet" type="text/css" href="/+static/base.css"><!-- default customHeadTagPart --></head><body class="Site"><header class="Site-header"><div class="Header"><a class="Header-image" href="/"><img src="//www.gstatic.com/images/branding/lockups/2x/lockup_git_color_108x24dp.png" width="108" height="24" alt="Google Git"></a><div class="Header-menu"> <a class="Header-menuItem" href="https://accounts.google.com/AccountChooser?service=gerritcodereview&amp;continue=https://android.googlesource.com/login/platform/frameworks/av/%2B/c82e31a7039a03dca7b37c65b7890ba5c1e18ced%255E%2521/">Sign in</a> </div></div></header><div class="Site-content"><div class="Container "><div class="Breadcrumbs"><a class="Breadcrumbs-crumb" href="/?format=HTML">android</a> / <a class="Breadcrumbs-crumb" href="/platform/">platform</a> / <a class="Breadcrumbs-crumb" href="/platform/frameworks/">frameworks</a> / <a class="Breadcrumbs-crumb" href="/platform/frameworks/av/">av</a> / <a class="Breadcrumbs-crumb" href="/platform/frameworks/av/+/c82e31a7039a03dca7b37c65b7890ba5c1e18ced%5E%21/">c82e31a7039a03dca7b37c65b7890ba5c1e18ced^!</a> / <span class="Breadcrumbs-crumb">.</span></div><div class="u-monospace Metadata"><table><tr><th class="Metadata-title">commit</th><td>c82e31a7039a03dca7b37c65b7890ba5c1e18ced</td><td><span>[<a href="/platform/frameworks/av/+log/c82e31a7039a03dca7b37c65b7890ba5c1e18ced/">log</a>]</span> <span>[<a href="/platform/frameworks/av/+archive/c82e31a7039a03dca7b37c65b7890ba5c1e18ced/.tar.gz">tgz</a>]</span></td></tr><tr><th class="Metadata-title">author</th><td>Chong Zhang &lt;chz@google.com&gt;</td><td>Mon Apr 27 18:38:17 2015 -0700</td></tr><tr><th class="Metadata-title">committer</th><td>The Android Automerger &lt;android-build@google.com&gt;</td><td>Thu Jul 09 14:03:00 2015 -0700</td></tr><tr><th class="Metadata-title">tree</th><td><a href="/platform/frameworks/av/+/c82e31a7039a03dca7b37c65b7890ba5c1e18ced/">6238c3bcad634928c91a7b89c8d25cb5b78ea34c</a></td></tr><tr><th class="Metadata-title">parent</th><td><a href="/platform/frameworks/av/+/c82e31a7039a03dca7b37c65b7890ba5c1e18ced%5E">d48f0f145f8f0f4472bc0af668ac9a8bce44ba9b</a> <span>[<a href="/platform/frameworks/av/+/c82e31a7039a03dca7b37c65b7890ba5c1e18ced%5E%21/">diff</a>]</span></td></tr></table></div><pre class="u-pre u-monospace MetadataMessage">HDCP: buffer over flow check -- DO NOT MERGE
+
+bug: 20222489
+Change-Id: <a href="https://android-review.googlesource.com/#/q/I3a64a5999d68ea243d187f12ec7717b7f26d93a3">I3a64a5999d68ea243d187f12ec7717b7f26d93a3</a>
+(cherry picked from commit 532cd7b86a5fdc7b9a30a45d8ae2d16ef7660a72)
+</pre><pre class="u-pre u-monospace Diff"><a name="F0" class="Diff-fileIndex"></a>diff --git <a href="/platform/frameworks/av/+/d48f0f145f8f0f4472bc0af668ac9a8bce44ba9b/media/libmedia/IHDCP.cpp">a/media/libmedia/IHDCP.cpp</a> <a href="/platform/frameworks/av/+/c82e31a7039a03dca7b37c65b7890ba5c1e18ced/media/libmedia/IHDCP.cpp">b/media/libmedia/IHDCP.cpp</a>
+index 1cf987a..9d93320 100644
+--- a/media/libmedia/IHDCP.cpp
++++ b/media/libmedia/IHDCP.cpp
+</pre><pre class="u-pre u-monospace Diff-unified"><span class="Diff-hunk">@@ -241,8 +241,19 @@
+</span><span class="Diff-change">         case HDCP_ENCRYPT:</span>
+<span class="Diff-change">         {</span>
+<span class="Diff-change">             size_t size = data.readInt32();</span>
+<span class="Diff-insert">+            size_t bufSize = 2 * size;</span>
+<span class="Diff-change"> </span>
+<span class="Diff-delete">-            void *inData = malloc(2 * size);</span>
+<span class="Diff-insert">+            // watch out for overflow</span>
+<span class="Diff-insert">+            void *inData = NULL;</span>
+<span class="Diff-insert">+            if (bufSize &gt; size) {</span>
+<span class="Diff-insert">+                inData = malloc(bufSize);</span>
+<span class="Diff-insert">+            }</span>
+<span class="Diff-insert">+</span>
+<span class="Diff-insert">+            if (inData == NULL) {</span>
+<span class="Diff-insert">+                reply-&gt;writeInt32(ERROR_OUT_OF_RANGE);</span>
+<span class="Diff-insert">+                return OK;</span>
+<span class="Diff-insert">+            }</span>
+<span class="Diff-insert">+</span>
+<span class="Diff-change">             void *outData = (uint8_t *)inData + size;</span>
+<span class="Diff-change"> </span>
+<span class="Diff-change">             data.read(inData, size);</span>
+<span class="Diff-hunk">@@ -295,8 +306,19 @@
+</span><span class="Diff-change">         case HDCP_DECRYPT:</span>
+<span class="Diff-change">         {</span>
+<span class="Diff-change">             size_t size = data.readInt32();</span>
+<span class="Diff-insert">+            size_t bufSize = 2 * size;</span>
+<span class="Diff-change"> </span>
+<span class="Diff-delete">-            void *inData = malloc(2 * size);</span>
+<span class="Diff-insert">+            // watch out for overflow</span>
+<span class="Diff-insert">+            void *inData = NULL;</span>
+<span class="Diff-insert">+            if (bufSize &gt; size) {</span>
+<span class="Diff-insert">+                inData = malloc(bufSize);</span>
+<span class="Diff-insert">+            }</span>
+<span class="Diff-insert">+</span>
+<span class="Diff-insert">+            if (inData == NULL) {</span>
+<span class="Diff-insert">+                reply-&gt;writeInt32(ERROR_OUT_OF_RANGE);</span>
+<span class="Diff-insert">+                return OK;</span>
+<span class="Diff-insert">+            }</span>
+<span class="Diff-insert">+</span>
+<span class="Diff-change">             void *outData = (uint8_t *)inData + size;</span>
+<span class="Diff-change"> </span>
+<span class="Diff-change">             data.read(inData, size);</span>
+</pre></div> <!-- Container --></div> <!-- Site-content --><footer class="Site-footer"><div class="Footer"><span class="Footer-poweredBy">Powered by <a href="https://gerrit.googlesource.com/gitiles/">Gitiles</a>| <a href="https://policies.google.com/privacy">Privacy</a></span><span class="Footer-formats"><a class="u-monospace Footer-formatsItem" href="?format=TEXT">txt</a> <a class="u-monospace Footer-formatsItem" href="?format=JSON">json</a></span></div></footer></body></html>

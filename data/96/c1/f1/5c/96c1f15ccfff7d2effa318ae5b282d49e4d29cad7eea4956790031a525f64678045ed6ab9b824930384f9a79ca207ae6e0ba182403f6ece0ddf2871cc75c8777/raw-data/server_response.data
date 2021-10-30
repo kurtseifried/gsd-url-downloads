@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag -->
+<title>Yubico libu2f-host vulnerability - part one | invd blog</title>
+<meta name="generator" content="Jekyll" />
+<meta property="og:title" content="Yubico libu2f-host vulnerability - part one" />
+<meta name="author" content="Christian Reitter" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="As part of the background research on the U2F HID handshake information leak, I discovered through manual code analysis that the Yubico libu2f-host host-side C library contained an out of bounds write vulnerability which could be triggered by a malicious U2F client device." />
+<meta property="og:description" content="As part of the background research on the U2F HID handshake information leak, I discovered through manual code analysis that the Yubico libu2f-host host-side C library contained an out of bounds write vulnerability which could be triggered by a malicious U2F client device." />
+<link rel="canonical" href="https://blog.inhq.net/posts/yubico-libu2f-host-vuln-part1/" />
+<meta property="og:url" content="https://blog.inhq.net/posts/yubico-libu2f-host-vuln-part1/" />
+<meta property="og:site_name" content="invd blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2019-11-29T22:00:00+01:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Yubico libu2f-host vulnerability - part one" />
+<script type="application/ld+json">
+{"description":"As part of the background research on the U2F HID handshake information leak, I discovered through manual code analysis that the Yubico libu2f-host host-side C library contained an out of bounds write vulnerability which could be triggered by a malicious U2F client device.","@type":"BlogPosting","datePublished":"2019-11-29T22:00:00+01:00","url":"https://blog.inhq.net/posts/yubico-libu2f-host-vuln-part1/","mainEntityOfPage":{"@type":"WebPage","@id":"https://blog.inhq.net/posts/yubico-libu2f-host-vuln-part1/"},"author":{"@type":"Person","name":"Christian Reitter"},"headline":"Yubico libu2f-host vulnerability - part one","dateModified":"2019-11-29T22:00:00+01:00","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/css/style.css"><link type="application/atom+xml" rel="alternate" href="https://blog.inhq.net/feed.xml" title="invd blog" /><script type="text/javascript">
+  var _paq = window._paq || [];
+  _paq.push(['trackPageView']);
+  _paq.push(['enableLinkTracking']);
+  _paq.push(['setSecureCookie', true]);
+  _paq.push(['setVisitorCookieTimeout', 60 * 60 * 24 * 90]);
+  _paq.push(['setReferralCookieTimeout', 60 * 60 * 24 * 90]);
+  _paq.push(['appendToTrackingUrl', 'bots=1']);
+  (function() {
+    var u="https://mato.inhq.net/";
+    _paq.push(['setTrackerUrl', u+'m']);
+    _paq.push(['setSiteId', '1']);
+    var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+    g.type='text/javascript'; g.async=true; g.defer=true; g.src=u+'mat.js'; s.parentNode.insertBefore(g,s);
+  })();
+  </script></head>
+<body><header class="site-header"><noscript><img src="https://mato.inhq.net/m?rec=1&bots=1&idsite=1" alt="" style="position:absolute; visibility:hidden" /></noscript><div class="wrapper"><a class="site-title" rel="author" href="/">invd blog</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger">
+        <a class="page-link" href="/archive/">Archive</a><a class="page-link" href="/cve/">CVEs</a><a class="page-link" href="/consulting/">Consulting</a><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Yubico libu2f-host vulnerability - part one</h1>
+    <p class="post-meta"><time class="dt-published" datetime="2019-11-29T22:00:00+01:00" itemprop="datePublished">
+        Nov 29, 2019
+      </time>• <span itemprop="author" itemscope itemtype="http://schema.org/Person">
+            <span class="p-author h-card" itemprop="name">Christian Reitter</span></span><br/>ID:
+        
+          
+          <span>CVE-2018-20340</span>
+        <br/>
+      Related articles:
+      <a href="/posts/yubico-libyubihsm-vuln2/">Yubico libyubihsm Vulnerabilities (CVE-2021-27217, CVE-2021-32489)</a>
+          • <a href="/posts/yubico-libyubihsm-vuln/">Yubico libyubihsm Vulnerabilities</a>
+          • <a href="/posts/yubico-libykpiv-vuln/">Yubico libykpiv Vulnerabilities</a>
+          </p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>As part of the background research on the <a href="/posts/u2fhid_init_resp-information-leak/">U2F HID handshake</a> information leak, I discovered through manual code analysis that the Yubico <a href="https://developers.yubico.com/libu2f-host/">libu2f-host</a> host-side C library contained an <strong>out of bounds write vulnerability</strong> which could be triggered by a malicious U2F client device.</p>
+
+<p>Since the libu2f-host library is the basis for <a href="https://developers.yubico.com/pam-u2f/">PAM over U2F</a> login functionality that can be added to Unix-like operating systems such as Linux, BSD and macOS, this issue had the potential to affect a number of specially protected systems. MITRE assigned <strong>CVE-2018-20340</strong> for this issue.</p>
+
+<p><em>Note: <a href="/posts/yubico-libu2f-host-vuln-part2/">part two</a> describes CVE-2019-9578, a closely related second vulnerability.</em></p>
+
+<div id="toc-container">
+  <h2 class="no_toc">Contents</h2>
+<ul id="markdown-toc">
+  <li><a href="#consulting" id="markdown-toc-consulting">Consulting</a></li>
+  <li><a href="#the-vulnerability" id="markdown-toc-the-vulnerability">The vulnerability</a>    <ul>
+      <li><a href="#attack-scenario-and-security-implications" id="markdown-toc-attack-scenario-and-security-implications">Attack scenario and security implications</a></li>
+      <li><a href="#poc" id="markdown-toc-poc">POC</a></li>
+    </ul>
+  </li>
+  <li><a href="#responsible-disclosure" id="markdown-toc-responsible-disclosure">Responsible disclosure</a>    <ul>
+      <li><a href="#relevant-libu2f-host-sources" id="markdown-toc-relevant-libu2f-host-sources">Relevant libu2f-host sources</a></li>
+      <li><a href="#detailed-timeline" id="markdown-toc-detailed-timeline">Detailed timeline</a></li>
+      <li><a href="#bug-bounty" id="markdown-toc-bug-bounty">Bug bounty</a></li>
+    </ul>
+  </li>
+</ul>
+
+</div>
+
+<h2 id="consulting">Consulting</h2>
+
+<p><i>I’m a freelance Security Consultant and currently available for new projects.
+  If you are looking for assistance to secure your projects or organization, <a href="/consulting">get in touch</a>.</i></p>
+
+<h2 id="the-vulnerability">The vulnerability</h2>
+
+<p>As described in depth in the <a href="/posts/u2fhid_init_resp-information-leak/">U2F HID issue</a> article, the U2F HID communication with an U2F client device is always initiated by the host side. The U2F client - usually a physical token connected via USB - then responds with a specific reply message to the initial request and the main U2F communication including the cryptographic challenges can be done over the arranged channel id.</p>
+
+<p>The vulnerability is present due to faulty handling of the first reply message in the libu2f-host library.</p>
+
+<p>The U2F handshake is initiated via the <code>U2FHID_INIT</code> message in the <code>init_device</code> function:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="kt">unsigned</span> <span class="kt">char</span> <span class="n">resp</span><span class="p">[</span><span class="mi">1024</span><span class="p">];</span>
+<span class="c1">// [...]</span>
+<span class="kt">size_t</span> <span class="n">resplen</span> <span class="o">=</span> <span class="k">sizeof</span> <span class="p">(</span><span class="n">resp</span><span class="p">);</span>
+<span class="n">dev</span><span class="o">-&gt;</span><span class="n">cid</span> <span class="o">=</span> <span class="n">CID_BROADCAST</span><span class="p">;</span>
+
+<span class="k">if</span> <span class="p">(</span><span class="n">u2fh_sendrecv</span>
+    <span class="p">(</span><span class="n">devs</span><span class="p">,</span> <span class="n">dev</span><span class="o">-&gt;</span><span class="n">id</span><span class="p">,</span> <span class="n">U2FHID_INIT</span><span class="p">,</span> <span class="n">nonce</span><span class="p">,</span> <span class="k">sizeof</span> <span class="p">(</span><span class="n">nonce</span><span class="p">),</span> <span class="n">resp</span><span class="p">,</span>
+     <span class="o">&amp;</span><span class="n">resplen</span><span class="p">)</span> <span class="o">==</span> <span class="n">U2FH_OK</span><span class="p">)</span>
+  <span class="p">{</span>
+    <span class="c1">// note: client response is handled here </span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/libu2f-host/blob/375cfc47705febcb2b56d1e9da7cf253c7a050f2/u2f-host/devs.c#L237" class="highlightref">devs.c</a>
+The actual communication happens in the <code>u2fh_sendrecv</code> function which is built to <strong>generically</strong> handle the send- and receive logic. Note that <code>u2fh_sendrecv</code> conveniently collects and returns the relevant bytes of the reply message(s) to the calling function. <em>The generic nature of this utility function is part of the general problem, as I will show later.</em></p>
+
+<p>In the beginning of <code>init_device</code>, the response buffer <code>resp</code> with the size 1024 bytes is allocated and <code>resplen</code> is set to value <code>1024</code>, as shown in the previous code snippet.<br />
+<code>resplen</code> is then handed to <code>u2fh_sendrecv</code> where it is used under the <code>recvlen</code> name as an upper limit on the number of U2F “payload” bytes that may be accepted during the receive stage:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">maxlen</span> <span class="o">=</span> <span class="o">*</span><span class="n">recvlen</span><span class="p">;</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/libu2f-host/blob/4d490bb2c528c351e32837fcdaebd998eb5d3f27/u2f-host/u2fmisc.c#L219" class="highlightref">u2fmisc.c</a></p>
+
+<p>However, <code>resplen</code> is also used as a return parameter to specify how many U2F message payload bytes were actually written to the <code>resp</code> buffer:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="o">*</span><span class="n">recvlen</span> <span class="o">=</span> <span class="n">datalen</span><span class="p">;</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/libu2f-host/blob/4d490bb2c528c351e32837fcdaebd998eb5d3f27/u2f-host/u2fmisc.c#L322" class="highlightref">u2fmisc.c</a>
+Since <code>u2fh_sendrecv</code> is a generic send/receive function, it is not designed to limit the type and length of the received message.<br />
+For the relevant U2F client response, the <a href="https://fidoalliance.org/specs/fido-u2f-v1.2-ps-20170411/fido-u2f-hid-protocol-v1.2-ps-20170411.html#u2fhid_init">U2F specification</a> defines a particular response message with a fixed number of <strong>17 bytes</strong> of U2F payload. This data is normally contained in a single HID response packet.</p>
+
+<p>The FIDO U2F standard mandates compatibility with larger responses:</p>
+<blockquote>
+An U2FHID host shall accept a response size that is longer than the anticipated size to allow for future extensions of the protocol, yet maintaining backwards compatibility.
+</blockquote>
+<p>However, <code>u2fh_sendrecv</code> imposes no meaningful checks at all and happily assembles multi-packet messages (<em>via so-called continuation packets</em>) which allows attackers to provide up to <strong>1024 bytes</strong> of U2F payload data instead of the regular <strong>17 bytes</strong> while still returning <code>U2FH_OK</code> and continuing in the program flow.</p>
+
+<p>The actual vulnerability is triggered in <code>init_device</code> once the <code>resp</code> buffer of <strong>attacker-controlled size</strong> and with <strong>attacker-controlled contents</strong> is <strong>memcpy</strong>‘ed to the <code>initresp</code> struct that is at most <strong>20 bytes</strong> in size, which leads to the out of bounds write:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="k">if</span> <span class="p">(</span><span class="n">u2fh_sendrecv</span>
+    <span class="p">(</span><span class="n">devs</span><span class="p">,</span> <span class="n">dev</span><span class="o">-&gt;</span><span class="n">id</span><span class="p">,</span> <span class="n">U2FHID_INIT</span><span class="p">,</span> <span class="n">nonce</span><span class="p">,</span> <span class="k">sizeof</span> <span class="p">(</span><span class="n">nonce</span><span class="p">),</span> <span class="n">resp</span><span class="p">,</span>
+     <span class="o">&amp;</span><span class="n">resplen</span><span class="p">)</span> <span class="o">==</span> <span class="n">U2FH_OK</span><span class="p">)</span>
+  <span class="p">{</span>
+    <span class="n">U2FHID_INIT_RESP</span> <span class="n">initresp</span><span class="p">;</span>
+    <span class="n">memcpy</span> <span class="p">(</span><span class="o">&amp;</span><span class="n">initresp</span><span class="p">,</span> <span class="n">resp</span><span class="p">,</span> <span class="n">resplen</span><span class="p">);</span>
+    <span class="n">dev</span><span class="o">-&gt;</span><span class="n">cid</span> <span class="o">=</span> <span class="n">initresp</span><span class="p">.</span><span class="n">cid</span><span class="p">;</span>
+    <span class="n">dev</span><span class="o">-&gt;</span><span class="n">versionInterface</span> <span class="o">=</span> <span class="n">initresp</span><span class="p">.</span><span class="n">versionInterface</span><span class="p">;</span>
+    <span class="n">dev</span><span class="o">-&gt;</span><span class="n">versionMajor</span> <span class="o">=</span> <span class="n">initresp</span><span class="p">.</span><span class="n">versionMajor</span><span class="p">;</span>
+    <span class="n">dev</span><span class="o">-&gt;</span><span class="n">versionMinor</span> <span class="o">=</span> <span class="n">initresp</span><span class="p">.</span><span class="n">versionMinor</span><span class="p">;</span>
+    <span class="n">dev</span><span class="o">-&gt;</span><span class="n">capFlags</span> <span class="o">=</span> <span class="n">initresp</span><span class="p">.</span><span class="n">capFlags</span><span class="p">;</span>
+  <span class="p">}</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/libu2f-host/blob/375cfc47705febcb2b56d1e9da7cf253c7a050f2/u2f-host/devs.c#L245-L256" class="highlightref">devs.c</a></p>
+
+<p>Up to 1004 bytes of attacker-controlled data are written to the stack.</p>
+
+<h3 id="attack-scenario-and-security-implications">Attack scenario and security implications</h3>
+<p>The attack applies to host systems which use of libu2f-host through</p>
+<ul>
+  <li>an authentication module like <strong>pam_u2f.so</strong> (<em>privileged execution</em>)</li>
+  <li>other userspace applications that depend on libu2f-host such as <strong>yubikey-manager</strong></li>
+  <li>the <strong>command-line tool</strong> bundled with libu2f-host</li>
+</ul>
+
+<p>Once the library initiates a handshake with an U2F token, e.g. during an authentication attempt, the token can trigger the buffer overflow on the stack and potentially execute code with the relevant privileges or potentially skip the login authentication. Any malicious USB device which enumerates as a recognized U2F token class can perform this attack.</p>
+
+<h4 id="cvss-score">CVSS score</h4>
+<p>Yubico has assessed this with a <a href="https://nvd.nist.gov/vuln-metrics/cvss/v3-calculator?vector=AV:P/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:H">CVSSv3 score of 6.3</a> via <em>AV:P/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:H</em>.</p>
+
+<p>In my opinion, the CVSS <strong>Scope (S)</strong> metric should be <strong>Changed</strong> if the attack allows to move past authentication barriers and therefore past the vulnerable component, but I find their overall classification reasonable.</p>
+
+<h4 id="relation-to-other-attacks">Relation to other attacks</h4>
+<p>This vulnerability shares a number of similarities with the <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2018-14779">CVE-2018-14779</a> buffer overflow in <a href="https://www.yubico.com/support/security-advisories/ysa-2018-03/">Yubico host-side code related to smart cards</a> which was discovered mid-2018 by Eric Sesterhenn of <a href="https://www.x41-dsec.de/">X41 D-Sec</a>. Eric’s talk <em>“In Soviet Russia Smart Card Hacks You”</em> at 35C3 describes both the general <a href="https://media.ccc.de/v/35c3-9346-in_soviet_russia_smart_card_hacks_you#t=241">patterns</a> which are relevant for this attack vector as well as the <a href="https://media.ccc.de/v/35c3-9346-in_soviet_russia_smart_card_hacks_you#t=1126">specific impact</a> that buffer overflows in privileged authentication code can have.</p>
+
+<p>I find it plausible that drivers and low-level code for local, “safe” systems such as smartcards have less thoroughly analyzed or hardened interfaces since the involved developers are mainly focused on other development aspects or different attack scenarios. This is clearly an interesting area for further research.</p>
+
+<h4 id="mitigations">Mitigations</h4>
+<p>I was surprised to find that the libu2f-host build system did not enable <code>-fstack-protector-all</code> or other protections such as <code>-D_FORTIFY_SOURCE=2</code> when compiled from source:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>RELRO</th>
+      <th>STACK CANARY</th>
+      <th>NX</th>
+      <th>PIE</th>
+      <th>RPATH</th>
+      <th>RUNPATH</th>
+      <th>Symbols</th>
+      <th>FORTIFY</th>
+      <th>Fortified</th>
+      <th>Fortifiable</th>
+      <th>FILE</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Partial RELRO</td>
+      <td><strong>No canary found</strong></td>
+      <td>NX enabled</td>
+      <td>PIE enabled</td>
+      <td>No RPATH</td>
+      <td>No RUNPATH</td>
+      <td>136 Symbols</td>
+      <td>No</td>
+      <td>0</td>
+      <td>8</td>
+      <td>u2f-host</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>Particularly the missing stack canary is a <strong>serious problem</strong> in the context of this vulnerability as it reliably detects the attack and limits the impact to denial of service.</p>
+
+<p>During discussion with Yubico, it turned out that most of the hardening flags are usually provided by the build environment.
+This meant that most binary packages were in fact shipped <strong>with mitigations in place</strong> by major distributions like Debian, Ubuntu and others since their build environment includes the hardening flags:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>RELRO</th>
+      <th>STACK CANARY</th>
+      <th>NX</th>
+      <th>PIE</th>
+      <th>RPATH</th>
+      <th>RUNPATH</th>
+      <th>Symbols</th>
+      <th>FORTIFY</th>
+      <th>Fortified</th>
+      <th>Fortifiable</th>
+      <th>FILE</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Full RELRO</td>
+      <td><strong>Canary found</strong></td>
+      <td>NX enabled</td>
+      <td>PIE enabled</td>
+      <td>No RPATH</td>
+      <td>No RUNPATH</td>
+      <td>No Symbols</td>
+      <td>Yes</td>
+      <td>2</td>
+      <td>4</td>
+      <td>u2f-host</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>However, it is possible that the library is used productively in other places and systems without these mitigations, e.g. as a self-compiled binary or as a code dependency.
+In my opinion, these hardening flags should be included and active by default.</p>
+
+<h4 id="fingerprinting">Fingerprinting</h4>
+<p>During research, I found that the host library always uses the <strong>identical “nonce”</strong>  when initiating contact with the U2F client:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="cm">/* FIXME: use something slightly more random as nonce */</span>
+<span class="kt">unsigned</span> <span class="kt">char</span> <span class="n">nonce</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span> <span class="mh">0x8</span><span class="p">,</span> <span class="mh">0x7</span><span class="p">,</span> <span class="mh">0x6</span><span class="p">,</span> <span class="mh">0x5</span><span class="p">,</span> <span class="mh">0x4</span><span class="p">,</span> <span class="mh">0x3</span><span class="p">,</span> <span class="mh">0x2</span><span class="p">,</span> <span class="mh">0x1</span> <span class="p">};</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/libu2f-host/blob/375cfc47705febcb2b56d1e9da7cf253c7a050f2/u2f-host/devs.c#L241" class="highlightref">devs.c</a></p>
+
+<p>For the malicious client, this provides a simple and accurate way to detect that libu2f-host is used on the host side.
+Through this detection, a malicious U2F token can behave functionally correct when used against unaffected host-side U2F code (<em>e.g. browsers</em>) and only trigger the exploit once used with the vulnerable library.</p>
+
+<h3 id="poc">POC</h3>
+<p>I’ve built a simple “malicious” U2F token on the basis of the Trezor One. The device detects the characteristic nonce value of the library (<em>see above</em>) and “attacks” with one packet full of <code>AAAAA</code> to demonstrate the issue.
+For hardened libu2f-host binaries with stack canary, this leads to a crash, as expected:</p>
+
+<figure class="highlight"><pre><code class="language-bash" data-lang="bash"><span class="nb">echo</span> <span class="s2">"dummy"</span> | u2f-host <span class="nt">-aauthenticate</span> <span class="nt">-o</span> https://demo.yubico.com <span class="nt">-d</span>
+USB send:
+00ffffffff8600080807060504030201000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+USB recv:
+ffffffff860039414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141
+<span class="k">***</span> buffer overflow detected <span class="k">***</span>: u2f-host terminated</code></pre></figure>
+
+<h2 id="responsible-disclosure">Responsible disclosure</h2>
+<p>I responsibly disclosed the vulnerability to Yubico in December 2018 and received quick and competent feedback during the holiday season.
+They applied for <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2018-20340">CVE-2018-20340</a> and originally asked me for 90 days of disclosure embargo but managed to ship the release after about ~52 days.<br />
+A number of Linux distributions were given early warning to prepare security releases.</p>
+
+<p>Overall, I am fairly satisfied with the disclosure process.</p>
+
+<h3 id="relevant-libu2f-host-sources">Relevant libu2f-host sources</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>variant</th>
+      <th>source</th>
+      <th>fix</th>
+      <th>references</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Yubico upstream</td>
+      <td><a href="https://github.com/Yubico/libu2f-host">Github</a></td>
+      <td>1.1.7 via <a href="https://github.com/Yubico/libu2f-host/commit/e77a109f8cf60d9eafdf005ab5c851d5f576c01e">1</a>, <a href="https://github.com/Yubico/libu2f-host/commit/f526546bb29f2ef704ae9850f0f4b41fea7b62a4">2</a></td>
+      <td><a href="https://www.yubico.com/support/security-advisories/ysa-2019-01/">YSA-2019-01</a>, <a href="https://developers.yubico.com/libu2f-host/Release_Notes.html">changelog</a></td>
+    </tr>
+    <tr>
+      <td>Debian package</td>
+      <td><a href="https://packages.debian.org/source/stretch/libu2f-host">Debian</a></td>
+      <td>1.1.2-2+deb9u1</td>
+      <td><a href="https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=921725">#921725</a>, <a href="https://www.debian.org/security/2019/dsa-4389">DSA-4389</a>, <a href="https://seclists.org/bugtraq/2019/Feb/23">bugtraq</a></td>
+    </tr>
+    <tr>
+      <td>Ubuntu package</td>
+      <td><a href="https://launchpad.net/ubuntu/+source/libu2f-host">Ubuntu</a></td>
+      <td>1.1.4-1ubuntu0.1, 1.1.6-1ubuntu0.1</td>
+      <td><a href="https://bugs.launchpad.net/ubuntu/+source/libu2f-host/+bug/1814153">#1814153</a>, <a href="https://people.canonical.com/~ubuntu-security/cve/2018/CVE-2018-20340.html">CVE tracker</a></td>
+    </tr>
+    <tr>
+      <td>Arch package</td>
+      <td><a href="https://www.archlinux.org/packages/community/x86_64/libu2f-host/">Arch</a></td>
+      <td>1.1.7-1</td>
+      <td><a href="https://security.archlinux.org/ASA-201902-7">ASA-201902-7</a></td>
+    </tr>
+    <tr>
+      <td>SUSE / openSUSE</td>
+      <td> </td>
+      <td>see references</td>
+      <td><a href="https://www.suse.com/de-de/security/cve/CVE-2018-20340/">CVE tracker</a>, <a href="https://bugzilla.suse.com/show_bug.cgi?id=1124781">#1124781</a>, <a href="http://lists.suse.com/pipermail/sle-security-updates/2019-May/005500.html">SUSE-SU-2019:1340-1</a></td>
+    </tr>
+    <tr>
+      <td>Gentoo</td>
+      <td><a href="https://packages.gentoo.org/packages/app-crypt/libu2f-host">Gentoo</a></td>
+      <td>1.1.10</td>
+      <td><a href="https://bugs.gentoo.org/678580">678580</a></td>
+    </tr>
+    <tr>
+      <td>Fedora</td>
+      <td><a href="https://apps.fedoraproject.org/packages/libu2f-host">Fedora</a></td>
+      <td>1.1.8-1</td>
+      <td><a href="https://bugzilla.redhat.com/show_bug.cgi?id=1685955">1685955</a></td>
+    </tr>
+    <tr>
+      <td>Mac homebrew</td>
+      <td><a href="https://formulae.brew.sh/formula/libu2f-host">Homebrew</a></td>
+      <td>see source</td>
+      <td>-</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="detailed-timeline">Detailed timeline</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>info</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2018-12-17</td>
+      <td>First email to Yubico, PGP key requested</td>
+    </tr>
+    <tr>
+      <td>2018-12-19</td>
+      <td>Technical disclosure to Yubico</td>
+    </tr>
+    <tr>
+      <td>2018-12-20</td>
+      <td>Yubico confirms the issue</td>
+    </tr>
+    <tr>
+      <td>2018-12-21</td>
+      <td>Yubico requests a CVE from MITRE</td>
+    </tr>
+    <tr>
+      <td>2019-02-08 12:00 CET</td>
+      <td>Public disclosure</td>
+    </tr>
+    <tr>
+      <td>2019-02-11</td>
+      <td>Linux distributions such as Debian and Arch publish security advisories</td>
+    </tr>
+    <tr>
+      <td>2019-02-18</td>
+      <td>OpenSuse publishes security advisory</td>
+    </tr>
+    <tr>
+      <td>2019-04-09</td>
+      <td>Fedora releases a patch for Fedora30</td>
+    </tr>
+    <tr>
+      <td>2019-05-19</td>
+      <td>Fedora releases a patch for Fedora29</td>
+    </tr>
+    <tr>
+      <td>2019-05-24</td>
+      <td>SUSE publishes a security advisory</td>
+    </tr>
+    <tr>
+      <td>2019-06-05</td>
+      <td>Gentoo switches to a patched version</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="bug-bounty">Bug bounty</h3>
+<p>Yubico provided a number of their hardware products as a bug bounty for this issue.</p>
+
+  </div>
+
+
+  <a class="u-url" href="/posts/yubico-libu2f-host-vuln-part1/" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col one-half"><ul class="contact-list">
+          <li class="p-name">
+            <b>Christian Reitter</b>
+          </li></ul></div>
+
+      <div class="footer-col one-half">
+        <p>Information security and other interests.</p>
+      </div>
+    </div>
+
+    <div class="social-ref"><ul class="social-ref-list"><li><a rel="me" href="https://github.com/invd" title="invd"><svg class="svg-icon grey"><use xlink:href="/assets/minima-icons.svg#github"></use></svg></a></li><li><a href="/feed.xml" title="rss"><svg class="svg-icon grey"><use xlink:href="/assets/minima-icons.svg#rss"></use></svg></a></li></ul>
+</div>
+
+  </div>
+</footer>
+</body>
+
+</html>

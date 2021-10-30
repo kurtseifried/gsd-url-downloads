@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <title>What’s in a name: RCE Hunting in CMSs via Unrestricted File Upload</title>
+    <meta name="HandheldFriendly" content="True" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="stylesheet" type="text/css" href="/assets/built/screen.css?v=d44c73ced9" />
+
+    <meta name="description" content="This article combines write-ups for three vulnerabilities in two CMS apps. Two of these issues allowed us to achieve RCE via unrestricted file upload." />
+    <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+    <link rel="canonical" href="https://blog.vonahi.io/whats-in-a-re-name/" />
+    <meta name="referrer" content="no-referrer-when-downgrade" />
+    <link rel="amphtml" href="https://blog.vonahi.io/whats-in-a-re-name/amp/" />
+    
+    <meta property="og:site_name" content="Vonahi Security&#x27;s Blog" />
+    <meta property="og:type" content="article" />
+    <meta property="og:title" content="What’s in a (re)name: RCE Hunting in CMSs via Unrestricted File Upload" />
+    <meta property="og:description" content="Earlier this year, our threat researcher found three easily exploitable vulnerabilities in CMS apps, including two that could result in remote code execution (RCE). This article combines write-ups for these vulnerabilities." />
+    <meta property="og:url" content="https://blog.vonahi.io/whats-in-a-re-name/" />
+    <meta property="og:image" content="https://blog.vonahi.io/content/images/2020/11/social-blog-post-nov11-1.jpg" />
+    <meta property="article:published_time" content="2020-11-11T15:36:36.000Z" />
+    <meta property="article:modified_time" content="2020-11-11T16:09:41.000Z" />
+    <meta property="article:tag" content="research" />
+    <meta property="article:tag" content="vulnerabilities" />
+    <meta property="article:tag" content="penetration testing" />
+    
+    <meta property="article:publisher" content="https://www.facebook.com/vonahisec" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="What’s in a (re)name: RCE Hunting in CMSs via Unrestricted File Upload" />
+    <meta name="twitter:description" content="Earlier this year, our threat researcher found three easily exploitable vulnerabilities in CMS apps, including two that could result in remote code execution (RCE). This article combines write-ups for these vulnerabilities." />
+    <meta name="twitter:url" content="https://blog.vonahi.io/whats-in-a-re-name/" />
+    <meta name="twitter:image" content="https://blog.vonahi.io/content/images/2020/11/social-blog-post-nov11.jpg" />
+    <meta name="twitter:label1" content="Written by" />
+    <meta name="twitter:data1" content="Erik Wynter" />
+    <meta name="twitter:label2" content="Filed under" />
+    <meta name="twitter:data2" content="research, vulnerabilities, penetration testing" />
+    <meta name="twitter:site" content="@vonahisec" />
+    <meta name="twitter:creator" content="@wyntererik" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="628" />
+    
+    <script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "publisher": {
+        "@type": "Organization",
+        "name": "Vonahi Security&#x27;s Blog",
+        "url": "https://blog.vonahi.io/",
+        "logo": {
+            "@type": "ImageObject",
+            "url": "https://blog.vonahi.io/content/images/2019/02/VonahiSec_VERT_RGB.png"
+        }
+    },
+    "author": {
+        "@type": "Person",
+        "name": "Erik Wynter",
+        "image": {
+            "@type": "ImageObject",
+            "url": "https://blog.vonahi.io/content/images/2020/08/cat_laptop.jpg",
+            "width": 2000,
+            "height": 1333
+        },
+        "url": "https://blog.vonahi.io/author/wynter/",
+        "sameAs": [
+            "https://twitter.com/wyntererik"
+        ]
+    },
+    "headline": "What’s in a name: RCE Hunting in CMSs via Unrestricted File Upload",
+    "url": "https://blog.vonahi.io/whats-in-a-re-name/",
+    "datePublished": "2020-11-11T15:36:36.000Z",
+    "dateModified": "2020-11-11T16:09:41.000Z",
+    "image": {
+        "@type": "ImageObject",
+        "url": "https://blog.vonahi.io/content/images/2020/11/blog-image-nov9.jpg",
+        "width": 2000,
+        "height": 1153
+    },
+    "keywords": "research, vulnerabilities, penetration testing",
+    "description": "Earlier this year, our threat researcher found three easily exploitable vulnerabilities in CMS apps, including two that could result in remote code execution (RCE). This article combines write-ups for these vulnerabilities.",
+    "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "https://blog.vonahi.io/"
+    }
+}
+    </script>
+
+    <script defer src="https://unpkg.com/@tryghost/portal@~0.16.0/umd/portal.min.js" data-ghost="https://blog.vonahi.io/"></script><style> .gh-post-upgrade-cta-content,
+.gh-post-upgrade-cta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    text-align: center;
+    width: 100%;
+    color: #ffffff;
+    font-size: 16px;
+}
+
+.gh-post-upgrade-cta-content {
+    border-radius: 8px;
+    padding: 40px 4vw;
+}
+
+.gh-post-upgrade-cta h2 {
+    color: #ffffff;
+    font-size: 28px;
+    letter-spacing: -0.2px;
+    margin: 0;
+    padding: 0;
+}
+
+.gh-post-upgrade-cta p {
+    margin: 20px 0 0;
+    padding: 0;
+}
+
+.gh-post-upgrade-cta small {
+    font-size: 16px;
+    letter-spacing: -0.2px;
+}
+
+.gh-post-upgrade-cta a {
+    color: #ffffff;
+    cursor: pointer;
+    font-weight: 500;
+    box-shadow: none;
+    text-decoration: underline;
+}
+
+.gh-post-upgrade-cta a:hover {
+    color: #ffffff;
+    opacity: 0.8;
+    box-shadow: none;
+    text-decoration: underline;
+}
+
+.gh-post-upgrade-cta a.gh-btn {
+    display: block;
+    background: #ffffff;
+    text-decoration: none;
+    margin: 28px 0 0;
+    padding: 8px 18px;
+    border-radius: 4px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.gh-post-upgrade-cta a.gh-btn:hover {
+    opacity: 0.92;
+}</style>
+    <meta name="generator" content="Ghost 3.42" />
+    <link rel="alternate" type="application/rss+xml" title="Vonahi Security&#x27;s Blog" href="https://blog.vonahi.io/rss/" />
+    <!-- Fix first paragraph font size -->
+<style type="text/css">
+.post-template .post-content > p:first-child {
+    font-size: 1em;
+}
+</style>
+<!-- Global site tag (gtag.js) - Google Analytics -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-111637682-3"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-111637682-3');
+</script>
+
+<script type="text/javascript" src="//downloads.mailchimp.com/js/signup-forms/popup/unique-methods/embed.js" data-dojo-config="usePlainJson: true, isDebug: false"></script><script type="text/javascript">window.dojoRequire(["mojo/signup-forms/Loader"], function(L) { L.start({"baseUrl":"mc.us16.list-manage.com","uuid":"c6322029200b81393894c8a4f","lid":"ad91ba8be2","uniqueMethods":true}) })</script>
+
+</head>
+<body class="post-template tag-research tag-vulnerabilities tag-penetration-testing">
+
+    <div class="site-wrapper">
+
+        
+
+<header class="site-header outer">
+    <div class="inner">
+        <nav class="site-nav">
+    <div class="site-nav-left">
+                <a class="site-nav-logo" href="https://blog.vonahi.io"><img src="/content/images/2019/02/VonahiSec_VERT_RGB.png" alt="Vonahi Security&#x27;s Blog" /></a>
+            <ul class="nav">
+    <li class="nav-vonahi-security-home"><a href="https://www.vonahi.io/">Vonahi Security Home</a></li>
+    <li class="nav-blog"><a href="https://blog.vonahi.io/">Blog</a></li>
+    <li class="nav-weekly-threat-reports"><a href="https://blog.vonahi.io/weekly-threat-reports/">Weekly Threat Reports</a></li>
+</ul>
+
+    </div>
+    <div class="site-nav-right">
+        <div class="social-links">
+                <a class="social-link social-link-fb" href="https://www.facebook.com/vonahisec" title="Facebook" target="_blank" rel="noopener"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M19 6h5V0h-5c-3.86 0-7 3.14-7 7v3H8v6h4v16h6V16h5l1-6h-6V7c0-.542.458-1 1-1z"/></svg>
+</a>
+                <a class="social-link social-link-tw" href="https://twitter.com/vonahisec" title="Twitter" target="_blank" rel="noopener"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M30.063 7.313c-.813 1.125-1.75 2.125-2.875 2.938v.75c0 1.563-.188 3.125-.688 4.625a15.088 15.088 0 0 1-2.063 4.438c-.875 1.438-2 2.688-3.25 3.813a15.015 15.015 0 0 1-4.625 2.563c-1.813.688-3.75 1-5.75 1-3.25 0-6.188-.875-8.875-2.625.438.063.875.125 1.375.125 2.688 0 5.063-.875 7.188-2.5-1.25 0-2.375-.375-3.375-1.125s-1.688-1.688-2.063-2.875c.438.063.813.125 1.125.125.5 0 1-.063 1.5-.25-1.313-.25-2.438-.938-3.313-1.938a5.673 5.673 0 0 1-1.313-3.688v-.063c.813.438 1.688.688 2.625.688a5.228 5.228 0 0 1-1.875-2c-.5-.875-.688-1.813-.688-2.75 0-1.063.25-2.063.75-2.938 1.438 1.75 3.188 3.188 5.25 4.25s4.313 1.688 6.688 1.813a5.579 5.579 0 0 1 1.5-5.438c1.125-1.125 2.5-1.688 4.125-1.688s3.063.625 4.188 1.813a11.48 11.48 0 0 0 3.688-1.375c-.438 1.375-1.313 2.438-2.563 3.188 1.125-.125 2.188-.438 3.313-.875z"/></svg>
+</a>
+            <a class="social-link social-link-tw" href="https://www.linkedin.com/company/vonahisec" title="LinkedIn" target="_blank" rel="noopener"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg></a>
+            <a class="social-link social-link-tw" href="https://www.github.com/vonahisec" title="GitHub" target="_blank" rel="noopener"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg></a>
+        </div>
+            <a class="rss-button" href="https://feedly.com/i/subscription/feed/https://blog.vonahi.io/rss/" title="RSS" target="_blank" rel="noopener"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="6.18" cy="17.82" r="2.18"/><path d="M4 4.44v2.83c7.03 0 12.73 5.7 12.73 12.73h2.83c0-8.59-6.97-15.56-15.56-15.56zm0 5.66v2.83c3.9 0 7.07 3.17 7.07 7.07h2.83c0-5.47-4.43-9.9-9.9-9.9z"/></svg>
+</a>
+    </div>
+</nav>
+    </div>
+</header>
+
+
+<main id="site-main" class="site-main outer">
+    <div class="inner">
+
+        <article class="post-full post tag-research tag-vulnerabilities tag-penetration-testing ">
+
+            <header class="post-full-header">
+                <section class="post-full-meta">
+                    <time class="post-full-meta-date" datetime="2020-11-11">11 November 2020</time>
+                        <span class="date-divider">/</span> <a href="/tag/research/">research</a>
+                </section>
+                <h1 class="post-full-title">What’s in a (re)name: RCE Hunting in CMSs via Unrestricted File Upload</h1>
+            </header>
+
+            <figure class="post-full-image">
+                <img
+                    srcset="/content/images/size/w300/2020/11/blog-image-nov9.jpg 300w,
+                            /content/images/size/w600/2020/11/blog-image-nov9.jpg 600w,
+                            /content/images/size/w1000/2020/11/blog-image-nov9.jpg 1000w,
+                            /content/images/size/w2000/2020/11/blog-image-nov9.jpg 2000w"
+                    sizes="(max-width: 800px) 400px,
+                            (max-width: 1170px) 700px,
+                            1400px"
+                    src="/content/images/size/w2000/2020/11/blog-image-nov9.jpg"
+                    alt="What’s in a (re)name: RCE Hunting in CMSs via Unrestricted File Upload"
+                />
+            </figure>
+
+            <section class="post-full-content">
+                <div class="post-content">
+                    <blockquote><em>What's in a name? That which we call a rose</em><br><em>By any other name would smell as sweet</em></blockquote><p><em>- </em>William Shakespeare</p><h2 id="introduction">Introduction</h2><p>During a recent bug hunting binge I discovered my first two vulnerabilities that could be exploited to achieve remote code execution (RCE). No bragging rights were earned though, because finding and exploiting these issues was incredibly straightforward. I’m not humble bragging here (I wish). In fact, the issue underlying both vulnerabilities, which each affect a different content management system (CMS), is very basic and was literally the second thing I checked for. This article combines my write-ups for the two RCE vulnerabilities as well as a third issue I found in one of the apps:</p><ul><li>Unrestricted file upload in FlexDotnetCMS v1.5.8 and prior (<a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-27386">CVE-2020-27386</a>)</li><li>Unrestricted file upload in HorizontCMS 1.0.0-beta and prior (<a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-27387">CVE-2020-27387</a>)</li><li>Incorrect access control in FlexDotnetCMS v1.5.10 and prior (<a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-27385">CVE-2020-27385</a>)</li></ul><!--kg-card-begin: markdown--><p>P.S. While working on this here blog thingy, my old fiction instincts kicked in and I ended up penning a little story meant to serve as a metaphor for the two RCE flaws. This creation makes up the final section, so in case infosec-oriented allegories aren’t your thing, feel free to skip it, <s>you uncultured swine</s>.</p>
+<!--kg-card-end: markdown--><p>P.P.S. All of these issues also affected Internet-facing demo apps. =O</p><h2 id="unrestricted-file-upload-you-were-always-on-my-mind-">Unrestricted File Upload: You were always on my mind...</h2><p><a href="https://github.com/MacdonaldRobinson/FlexDotnetCMS">FlexDotnetCMS</a> and <a href="https://github.com/ttimot24/HorizontCMS">HorizontCMS</a> are both open source projects with several dozen stars on GitHub, which is how I found out about them. When I started testing these apps, I had just contributed a <a href="https://github.com/rapid7/metasploit-framework/blob/master//modules/exploits/multi/http/maracms_upload_exec.rb">Metasploit exploit module</a> that took advantage of a very basic arbitrary file upload vulnerability in a PHP web app. Because this attack was still fresh in my mind, it was the first thing I checked for in both applications, as you will see below.</p><h2 id="unrestricted-file-upload-in-flexdotnetcms-cve-2020-27386-">Unrestricted file upload in FlexDotnetCMS (CVE-2020-27386)</h2><p>The first app I tested was FlexDotnetCMS. The functionality of the app is reserved for authenticated users, so I started by logging in as the admin user. Once the user dashboard loaded, the <em>FileManager</em> immediately caught my eye, so I opened it.</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/main_screen.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/11/main_screen.png 600w, https://blog.vonahi.io/content/images/size/w1000/2020/11/main_screen.png 1000w, https://blog.vonahi.io/content/images/2020/11/main_screen.png 1020w" sizes="(min-width: 720px) 720px"></figure><p>As you would expect, the <em>FileManager</em> allows users to upload, edit, view and delete files. So it seemed like a great place to start my investigation.</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/file_manager.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/11/file_manager.png 600w, https://blog.vonahi.io/content/images/2020/11/file_manager.png 896w" sizes="(min-width: 720px) 720px"></figure><p>FlexDotnetCMS is an ASP .NET application, so I wanted to see if it would be possible upload a rogue ASP file. On GitHub I found a <a href="https://github.com/tennc/webshell/blob/master/asp/webshell.asp">simple ASP web shell</a> that would allow me to execute code on the server if I could find a way to upload and access the file. I grabbed the file from GitHub, removed a bunch of unnecessary code from it, and saved it as <em>webshell.asp</em>. I tried uploading this file, but FlexDotnetCMS didn’t let me because the ASP file extension was blacklisted.</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/image1.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/11/image1.png 600w, https://blog.vonahi.io/content/images/2020/11/image1.png 889w" sizes="(min-width: 720px) 720px"></figure><p>Alright, so the app had at least the most basic protection against arbitrary upload of files with dangerous extensions. But what about files with seemingly innocent extensions? In order to test this, I renamed my payload to <em>webshell.txt</em> and tried to upload it.</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/image2-1.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/11/image2-1.png 600w, https://blog.vonahi.io/content/images/2020/11/image2-1.png 885w" sizes="(min-width: 720px) 720px"></figure><p>It worked! My file appeared in the uploads folder and I was able to access the contents via a direct URL to the file. However, the server currently treated my payload as a text file, while I needed it to regard it as an ASP file so it would execute my web shell instead of merely displaying the code. The most straightforward way of doing this would be to rename the file. I noticed that FlexDotnetCMS had a simple rename function that would let me test this.</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/image3.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/11/image3.png 600w, https://blog.vonahi.io/content/images/2020/11/image3.png 893w" sizes="(min-width: 720px) 720px"></figure><p>I clicked the rename function, changed the file name back to <em>webshell.asp</em>, hit enter, and…</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/image5.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/11/image5.png 600w, https://blog.vonahi.io/content/images/2020/11/image5.png 886w" sizes="(min-width: 720px) 720px"></figure><p>Success! Apparently, FlexDotnetCMS only blacklisted dangerous file types during upload, but not when users renamed files, which is like locking your car but leaving the window wide open. In order to verify that I was actually able to access the web shell now that it was on the server, I clicked on the button redirecting to the file URL at /media/uploads/webshell.asp. The result?</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/flexdotnet_web_shell-1.png" class="kg-image" alt></figure><p>Behold, our web shell! Now let’s see if we can get actually use it to run some code. I tried running the <em>whoami</em> command, which should display the username of the active user on the server...</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/flexdotnet_web_shell_whoami.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/11/flexdotnet_web_shell_whoami.png 600w, https://blog.vonahi.io/content/images/2020/11/flexdotnet_web_shell_whoami.png 656w"></figure><p>BOOYAH! Remote code execution achieved!</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/dance-5.gif" class="kg-image" alt></figure><p>Well, that was easier than I thought. And the best part was that the attack resulted in remote code execution with <em>elevated privileges</em>. FlexDotnetCMS was designed to run on a Microsoft Internet Information Services (IIS) server. If IIS or IIS Express is configured to allow remote connections, the IIS/IIS Express process must run with elevated privileges, and an attacker exploiting this vulnerability will inherit these privileges from the server process.</p><p>But there was more. I went back to the <em>FileManager</em>, and opened my webshell in the <em>FileEditor</em> (<em>/Admin/Views/FileEditor/Default.aspx?LoadFile=/media/uploads/webshell.asp</em>).</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/file_manager_edit-2.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/11/file_manager_edit-2.png 600w, https://blog.vonahi.io/content/images/2020/11/file_manager_edit-2.png 963w" sizes="(min-width: 720px) 720px"></figure><p>I discovered that in addition to letting users edit files, the <em>FileEditor</em> offered a second method for renaming files. Testing with the <em>webshell.txt</em> file confirmed that the attack was also possible by using the <em>FileEditor</em> instead of the rename function to rename the payload.</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/file_editor_saved.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/11/file_editor_saved.png 600w, https://blog.vonahi.io/content/images/2020/11/file_editor_saved.png 950w" sizes="(min-width: 720px) 720px"></figure><h3 id="demo-video">Demo video</h3><p>The demo video below shows the full attack via the rename function:</p><figure class="kg-card kg-embed-card"><iframe width="612" height="344" src="https://www.youtube.com/embed/x8unGPpo81k?feature=oembed" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></figure><h3 id="metasploit-module">Metasploit module</h3><p>Instead of throwing together a proof-of-concept (PoC) exploit with limited functionality, I decided to write a full-fledged <a href="https://github.com/rapid7/metasploit-framework/pull/14339">Metasploit module</a> for this attack.</p><h3 id="patches">Patches</h3><ul><li><a href="https://github.com/MacdonaldRobinson/FlexDotnetCMS/releases/tag/v1.5.8">FlexDotnetCMS v.1.5.8</a> fixes the attack via the rename function, but is still vulnerable to renaming via the <em>FileEditor.</em></li><li><a href="https://github.com/MacdonaldRobinson/FlexDotnetCMS/releases/tag/v1.5.9">FlexDotnetCMS v.1.5.9</a> fixes the attack via the <em>FileEditor</em> as well.</li></ul><h2 id="incorrect-access-control-in-flexdotnetcms-cve-2020-27385-">Incorrect access control in FlexDotnetCMS (CVE-2020-27385)</h2><p>While scrutinizing the <em>FileEditor</em>, I discovered a second vulnerability, which was an access control issue. As it turns out, the <em>FileEditor</em> allowed users to read and modify files from anywhere on the host system. There were two ways to achieve this. The first method was by entering the full path to an existing file into the <em>FileEditor</em>’s  “Select File” input field and then loading the file.</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/image7.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/11/image7.png 600w, https://blog.vonahi.io/content/images/2020/11/image7.png 958w" sizes="(min-width: 720px) 720px"></figure><p>The second method was via directory traversal, i.e. by entering a .. (dot dot) path such as <em>../../&lt;file&gt;</em> or <em>..\..\..\&lt;file&gt;</em> in the input field.</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/file_editor_traversal.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/11/file_editor_traversal.png 600w, https://blog.vonahi.io/content/images/2020/11/file_editor_traversal.png 996w" sizes="(min-width: 720px) 720px"></figure><p>While both of these attacks require the attacker to guess the correct full path or traversal path to an existing file, they could both be used to enumerate the host system in search of sensitive files to access and even modify. And because these actions were performed with elevated privileges (inherited from the IIS/IIS Express process as mentioned above), an attacker would even have access to files in protected directories like <em>Program Files</em>, <em>Program Files (x86)</em>, <em>Windows\System32</em> and <em>Windows\SysWOW64</em>.</p><h3 id="demo-video-1">Demo video</h3><p>The demo video below shows how this attack works via directory traversal:</p><figure class="kg-card kg-embed-card"><iframe width="612" height="344" src="https://www.youtube.com/embed/gaxF69CTvKI?feature=oembed" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></figure><h3 id="patches-1">Patches</h3><ul><li>FlexDotnetCMS v.1.5.8 fixes the attack when users specify the full path in the <em>FileEditor</em>, but is still vulnerable to directory traversal.</li><li>FlexDotnetCMS v.1.5.11 fixes the attack via directory traversal as well.</li></ul><h2 id="unrestricted-file-upload-in-horizontcms-cve-2020-27387-">Unrestricted file upload in HorizontCMS (CVE-2020-27387)</h2><p>After wrapping up my research on FlexDotnetCMS, I continued my hunt for RCE vulnerabilities, and soon came across HorizontCMS. Much like with the former app, all core functionality is only available to authenticated users. After logging in to the user dashboard, I soon found that HorizontCMS also has its own <em>File Manager</em>, so I started my research there.</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/file_manager-1.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/11/file_manager-1.png 600w, https://blog.vonahi.io/content/images/2020/11/file_manager-1.png 871w" sizes="(min-width: 720px) 720px"></figure><p>Since HorizontCMS is a PHP app, I wanted to see if the <em>File Manager</em> would allow me to upload and execute a PHP payload. In order to test this, I created a PHP file with the following contents:</p><blockquote>&lt;?php system($_GET["cmd"]); ?&gt;</blockquote><p>When I attempted to upload this mini PHP web shell as <em>test.php</em>, I was surprised to see that it seemed to work straight off the bat.</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/image1-1.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/11/image1-1.png 600w, https://blog.vonahi.io/content/images/2020/11/image1-1.png 938w" sizes="(min-width: 720px) 720px"></figure><p>However, when I used the <em>File Manager</em> to look for my payload, I noticed that the file had been renamed to a .TXT file with a long, randomly generated name.</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/file_manager_upload_random_name.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/11/file_manager_upload_random_name.png 600w, https://blog.vonahi.io/content/images/2020/11/file_manager_upload_random_name.png 726w" sizes="(min-width: 720px) 720px"></figure><p>I obtained the full URL to the file by hovering over the download button. While I was able to access the file at <em>/storage/&lt;file_name&gt;</em>, I could only view the contents, since HorizontCMS was simply treating it as a text file. Much like the person in the below images, I attempted in vain to overcome this insurmountable obstacle, and eventually threw in the towel. </p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/tiny_fence_meme.png" class="kg-image" alt></figure><p>Just kidding. I simply located the <em>File Manager</em>’s rename function and tried changing the name back to the original.</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/file_manager_rename.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/11/file_manager_rename.png 600w, https://blog.vonahi.io/content/images/2020/11/file_manager_rename.png 651w"></figure><p>As you’ve probably guessed by now...</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/image4.png" class="kg-image" alt srcset="https://blog.vonahi.io/content/images/size/w600/2020/11/image4.png 600w, https://blog.vonahi.io/content/images/2020/11/image4.png 728w" sizes="(min-width: 720px) 720px"></figure><p>It worked like a charm! A visit to <em>/storage/test.php</em> now displayed a blank page, as expected. Finally, I attempted to run the Unix <em>id</em> command (since I had installed HorizontCMS on an Ubuntu VM). The result...</p><figure class="kg-card kg-image-card"><img src="https://blog.vonahi.io/content/images/2020/11/image5-2.png" class="kg-image" alt></figure><p>Yay! RCE again!</p><!--kg-card-begin: markdown--><p><img src="https://blog.vonahi.io/content/images/2020/11/tenor-1.gif" alt="tenor-1"></p>
+<!--kg-card-end: markdown--><h3 id="demo-video-2">Demo video</h3><p>The demo video below shows the full attack:</p><figure class="kg-card kg-embed-card"><iframe width="612" height="344" src="https://www.youtube.com/embed/j7E_wiru5VQ?feature=oembed" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></figure><h3 id="metasploit-module-1">Metasploit module</h3><p>Once again, my PoC for the attack is a <a href="https://github.com/rapid7/metasploit-framework/pull/14340">Metasploit module</a>.</p><h3 id="patch">Patch</h3><p>Commit <em><a href="https://github.com/ttimot24/HorizontCMS/commit/436b5ab679fd27afa3d99c023dbe103113da4fee">436b5ab</a></em> fixes the vulnerability.</p><h2 id="implications-a-sea-of-vulnerabilities">Implications: A sea of vulnerabilities</h2><p>Precisely because the vulnerabilities discussed here are far from impressive attacks, they point to a much larger problem that continues to plague software development: negligence of basic security practices. Unfortunately many developers still don't pay sufficient attention to security. As a result, GitHub, SourceForge and other open source platforms are sprawling with apps vulnerable to severe, low-complexity zero-day attacks like those covered here. I’m not going to pretend this is a solvable problem at this point, though I do think significant progress can be made in the coming years as the result of growing security awareness and the availability of an increasing number of automated code analysis solutions, such as GitHub’s new <a href="https://github.blog/2020-09-30-code-scanning-is-now-available/">Code Scanning</a> feature.</p><p>On the off chance that anyone reading this is interested in a few pointers on secure coding, here are my two cents:</p><ul><li><strong>Adopt a secure coding mindset</strong>: Assume that people are going to try and find vulnerabilities in your software, no matter how insignificant the project may seem.</li><li><strong>Follow best practices</strong>: Follow secure coding best practices such as those outlined in the <a href="https://owasp.org/www-project-secure-coding-practices-quick-reference-guide/migrated_content">OWASP Secure Coding Practices-Quick Reference Guide</a>.</li><li><strong>Familiarize yourself with common attacks</strong>: Getting familiar with the <a href="https://owasp.org/www-project-top-ten/">OWASP Top 10 Web Application Security Risks</a> and other common attacks will help you avoid writing vulnerable code.</li><li><strong>Scan your code:</strong> If possible, use automated code scanning solutions to help catch at least the most basic vulnerabilities in your code.</li></ul><p>Alright folks, it’s finally time for the highlight of this article: my little metaphor-story-thingy. Enjoy!</p><h2 id="a-tale-of-two-chainsaws">A Tale of Two Chainsaws</h2><p><strong>(or one, but like, in different stages of assembly)</strong></p><h3 id="dawn">Dawn</h3><p>“Hold it! I cannot let you enter with that,” the security guard outside the hardware store says sternly as he moves his hand toward the banana-yellow taser in his duty holster.</p><p>“Why?” W. wonders with feigned surprise, seemingly unimpressed by the guard’s aggressive body language.</p><p>“Because you are holding a running chainsaw, and this ain’t Texas,” the guard retorts in a low, threatening voice, while placing his right hand firmly over the taser’s handle.</p><p>“Fair enough,” W. replies, casually shrugging their shoulders before flicking the switch to kill the engine. “May I enter now?”</p><p>“You most certainly may not!” The guard bellows. “We don’t sell chainsaws, so I don’t know what the hell you’re planning to do with it, but it ain’t gonna happen on my watch. Beat it, freak, before I tase the life out of you.”</p><p>“If you say so,” W. replies, curling their lips into a sly grin. “Have a nice day.”</p><h3 id="dusk">Dusk</h3><p>“Good evening, may I inspect the contents of your bag?” The guard demands rather than asks as W. walks up to the store.</p><p>“Of course,” W. nods, handing over the duffel bag.</p><p>“Is this... Is this a chainsaw?” The guard inquires with a suspicious frown.</p><p>“It was, before I dissembled it,” W. responds calmly. “It broke down, so I took it apart in an attempt to fix it, but that didn’t work, and now I don’t know how to put it back together again. I brought it here because I’m hoping to get some advice on how to fix it. Plus I’m pretty sure I lost a few nuts and washers in the process that I’ll need to replace.”</p><p>“Sounds like me whenever I’m asked to fix something,” the guard chuckles. “Have a good one.”</p><p>“Thanks! Same to you.”</p><p>Once inside, W. grabs a shopping cart and puts the duffel bag in it. Leisurely strolling through the aisles, they fill their cart with a variety of items. A screwdriver, a few combination wrenches, a chainsaw sharpener, a bottle of bar &amp; chain oil, a pair of safety gloves and finally a pair of safety glasses. To a casual observer, W. would appear like a regular customer. Nothing out of the ordinary. However, that casual observer would soon be proven wrong.</p><p>W. heads over to the garden section and parks the cart next to a large picnic table. No one seems to take notice of W. as they take the items out of the shopping cart and place them neatly on the wooden tabletop. W. sits down at the table, zips open the duffel bag, and begins to assemble the chainsaw with the speed and precision of a skilled mechanic. A few passing shoppers and employees raise their eyebrows at the rather impressive spectacle, but no one says a word until W. picks up the chainsaw and pulls the starter rope, bringing the engine to life with a loud sputter.</p><p>“Hey!  What are you doing? Are you crazy?!” A voice yells from behind. W. turns around to see the security guard running toward them from across the store, two employees in bright orange uniforms at his heels. “You can’t use that thing in here!” The guard shrieks with rage.</p><p>“Well, it seems like I fixed it,” W. responds coldly. They flick the safety switch and press the trigger for half a second, letting the chain race around the blade with a deafening roar. “See? It runs” W. adds, as the noise dies down. Holding the chainsaw at the handle with one hand, W. uses the other to put the safety glasses on, never breaking eye contact with the guard, who’s bloated face is slowly turning pale. “It runs,” W. repeats in a dark, ominous voice, moving their hand back toward the trigger. “And perhaps so should you...”</p><hr><p><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong>About Vonahi Security</strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong><br>Vonahi Security is building the future of offensive cybersecurity consulting services through automation. We provide the world's first and only automated network penetration test platform that replicates full attack simulations with zero configuration. With over 30 years of combined industry experience in both offensive and defensive security operations, our team of certified consultants have experience working with a significant number of organizations, industries, networks, and technologies. Our service expertise includes Penetration Testing and Adversary Simulations. Vonahi Security is headquartered in Atlanta, GA. To learn more, visit <a href="https://www.vonahi.io/">www.vonahi.io</a></p><p><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong><strong>Stay Informed</strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></strong></p><ul><li>Connect with us on <a href="https://www.linkedin.com/company/vonahisec/">Linkedin</a> for Professional Security Tips</li><li>Like us on <a href="https://www.facebook.com/vonahisec/">Facebook</a> for Personal Security Tips</li><li>Follow us on <a href="https://twitter.com/vonahisec">Twitter</a> for News &amp; Threat Updates</li></ul>
+                </div>
+            </section>
+
+
+            <footer class="post-full-footer">
+
+
+                    
+<section class="author-card">
+        <img class="author-profile-image" src="/content/images/size/w100/2020/08/cat_laptop.jpg" alt="Erik Wynter" />
+    <section class="author-card-content">
+        <h4 class="author-card-name"><a href="/author/wynter/">Erik Wynter</a></h4>
+            <p>Erik Wynter is a junior pentester, Metasploit contributor and script kitty.</p>
+    </section>
+</section>
+<div class="post-full-footer-right">
+    <a class="author-card-button" href="/author/wynter/">Read More</a>
+</div>
+
+
+            </footer>
+
+
+        </article>
+
+    </div>
+</main>
+
+<aside class="read-next outer">
+    <div class="inner">
+        <div class="read-next-feed">
+                <article class="read-next-card"
+                            style="background-image: url(/content/images/size/w600/2019/02/vonahi_blog_banner-1.png)"
+                >
+                    <header class="read-next-card-header">
+                        <small class="read-next-card-header-sitetitle">&mdash; Vonahi Security&#x27;s Blog &mdash;</small>
+                        <h3 class="read-next-card-header-title"><a href="/tag/research/">research</a></h3>
+                    </header>
+                    <div class="read-next-divider"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 14.5s2 3 5 3 5.5-2.463 5.5-5.5S21 6.5 18 6.5c-5 0-7 11-12 11C2.962 17.5.5 15.037.5 12S3 6.5 6 6.5s4.5 3.5 4.5 3.5"/></svg>
+</div>
+                    <div class="read-next-card-content">
+                        <ul>
+                            <li><a href="/when-the-path-to-system-is-wide-open/">When the PATH to SYSTEM is wide open: Philips SmartControl DLL hijacking (CVE-2020-7360)</a></li>
+                            <li><a href="/2019-year-in-review/">2019/2020: A Few Cybersecurity Reflections and Predictions</a></li>
+                            <li><a href="/13-freaky-infosec-facts/">13 Freaky Infosec Facts</a></li>
+                        </ul>
+                    </div>
+                    <footer class="read-next-card-footer">
+                        <a href="/tag/research/">See all 8 posts →</a>
+                    </footer>
+                </article>
+
+                <article class="post-card post tag-privilege-escalation tag-vulnerabilities tag-penetration-testing tag-dll-hijacking tag-post-exploitation ">
+
+    <a class="post-card-image-link" href="/srclient-dll-hijacking/">
+        <img class="post-card-image"
+            srcset="/content/images/size/w300/2021/02/blog-post-dll.jpg 300w,
+                    /content/images/size/w600/2021/02/blog-post-dll.jpg 600w,
+                    /content/images/size/w1000/2021/02/blog-post-dll.jpg 1000w,
+                    /content/images/size/w2000/2021/02/blog-post-dll.jpg 2000w"
+            sizes="(max-width: 1000px) 400px, 700px"
+            src="/content/images/size/w600/2021/02/blog-post-dll.jpg"
+            alt="SrClient DLL Hijacking: a Windows Server 2012 0-day that won&#x27;t be patched"
+        />
+    </a>
+
+    <div class="post-card-content">
+
+        <a class="post-card-content-link" href="/srclient-dll-hijacking/">
+
+            <header class="post-card-header">
+                    <span class="post-card-tags">privilege escalation</span>
+                <h2 class="post-card-title">SrClient DLL Hijacking: a Windows Server 2012 0-day that won&#x27;t be patched</h2>
+            </header>
+
+            <section class="post-card-excerpt">
+                <p>This blog discusses a DLL hijacking vulnerability affecting all versions of Windows Server 2012 (but not Server 2012 R2). This 0-day vulnerability can be exploited for privilege escalation by any regular user and does not require a system reboot, yet it will not be patched by Microsoft.</p>
+            </section>
+
+        </a>
+
+        <footer class="post-card-meta">
+
+            <ul class="author-list">
+                <li class="author-list-item">
+
+                    <div class="author-name-tooltip">
+                        Erik Wynter
+                    </div>
+
+                        <a href="/author/wynter/" class="static-avatar">
+                            <img class="author-profile-image" src="/content/images/size/w100/2020/08/cat_laptop.jpg" alt="Erik Wynter" />
+                        </a>
+                </li>
+            </ul>
+
+            <span class="reading-time">11 min read</span>
+
+        </footer>
+
+    </div>
+
+</article>
+
+                <article class="post-card post tag-research tag-penetration-testing tag-post-exploitation tag-privilege-escalation ">
+
+    <a class="post-card-image-link" href="/when-the-path-to-system-is-wide-open/">
+        <img class="post-card-image"
+            srcset="/content/images/size/w300/2020/08/philips-vulnerability-1.jpg 300w,
+                    /content/images/size/w600/2020/08/philips-vulnerability-1.jpg 600w,
+                    /content/images/size/w1000/2020/08/philips-vulnerability-1.jpg 1000w,
+                    /content/images/size/w2000/2020/08/philips-vulnerability-1.jpg 2000w"
+            sizes="(max-width: 1000px) 400px, 700px"
+            src="/content/images/size/w600/2020/08/philips-vulnerability-1.jpg"
+            alt="When the PATH to SYSTEM is wide open: Philips SmartControl DLL hijacking (CVE-2020-7360)"
+        />
+    </a>
+
+    <div class="post-card-content">
+
+        <a class="post-card-content-link" href="/when-the-path-to-system-is-wide-open/">
+
+            <header class="post-card-header">
+                    <span class="post-card-tags">research</span>
+                <h2 class="post-card-title">When the PATH to SYSTEM is wide open: Philips SmartControl DLL hijacking (CVE-2020-7360)</h2>
+            </header>
+
+            <section class="post-card-excerpt">
+                <p>Earlier this year our threat researcher found a DLL hijacking flaw affecting Philips SmartControl (CVE-2020-7360). Our latest blog post combines a write-up of this vulnerability with a general introduction to DLL hijacking for infosec students.</p>
+            </section>
+
+        </a>
+
+        <footer class="post-card-meta">
+
+            <ul class="author-list">
+                <li class="author-list-item">
+
+                    <div class="author-name-tooltip">
+                        Erik Wynter
+                    </div>
+
+                        <a href="/author/wynter/" class="static-avatar">
+                            <img class="author-profile-image" src="/content/images/size/w100/2020/08/cat_laptop.jpg" alt="Erik Wynter" />
+                        </a>
+                </li>
+            </ul>
+
+            <span class="reading-time">14 min read</span>
+
+        </footer>
+
+    </div>
+
+</article>
+
+        </div>
+    </div>
+</aside>
+
+<div class="floating-header">
+    <div class="floating-header-logo">
+        <a href="https://blog.vonahi.io">
+                <img src="/content/images/size/w30/2019/02/VONAHI.ico" alt="Vonahi Security&#x27;s Blog icon" />
+            <span>Vonahi Security&#x27;s Blog</span>
+        </a>
+    </div>
+    <span class="floating-header-divider">&mdash;</span>
+    <div class="floating-header-title">What’s in a (re)name: RCE Hunting in CMSs via Unrestricted File Upload</div>
+    <div class="floating-header-share">
+        <div class="floating-header-share-label">Share this <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+    <path d="M7.5 15.5V4a1.5 1.5 0 1 1 3 0v4.5h2a1 1 0 0 1 1 1h2a1 1 0 0 1 1 1H18a1.5 1.5 0 0 1 1.5 1.5v3.099c0 .929-.13 1.854-.385 2.748L17.5 23.5h-9c-1.5-2-5.417-8.673-5.417-8.673a1.2 1.2 0 0 1 1.76-1.605L7.5 15.5zm6-6v2m-3-3.5v3.5m6-1v2"/>
+</svg>
+</div>
+        <a class="floating-header-share-tw" href="https://twitter.com/share?text=What%E2%80%99s%20in%20a%20(re)name%3A%20RCE%20Hunting%20in%20CMSs%20via%20Unrestricted%20File%20Upload&amp;url=https://blog.vonahi.io/whats-in-a-re-name/"
+            onclick="window.open(this.href, 'share-twitter', 'width=550,height=235');return false;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M30.063 7.313c-.813 1.125-1.75 2.125-2.875 2.938v.75c0 1.563-.188 3.125-.688 4.625a15.088 15.088 0 0 1-2.063 4.438c-.875 1.438-2 2.688-3.25 3.813a15.015 15.015 0 0 1-4.625 2.563c-1.813.688-3.75 1-5.75 1-3.25 0-6.188-.875-8.875-2.625.438.063.875.125 1.375.125 2.688 0 5.063-.875 7.188-2.5-1.25 0-2.375-.375-3.375-1.125s-1.688-1.688-2.063-2.875c.438.063.813.125 1.125.125.5 0 1-.063 1.5-.25-1.313-.25-2.438-.938-3.313-1.938a5.673 5.673 0 0 1-1.313-3.688v-.063c.813.438 1.688.688 2.625.688a5.228 5.228 0 0 1-1.875-2c-.5-.875-.688-1.813-.688-2.75 0-1.063.25-2.063.75-2.938 1.438 1.75 3.188 3.188 5.25 4.25s4.313 1.688 6.688 1.813a5.579 5.579 0 0 1 1.5-5.438c1.125-1.125 2.5-1.688 4.125-1.688s3.063.625 4.188 1.813a11.48 11.48 0 0 0 3.688-1.375c-.438 1.375-1.313 2.438-2.563 3.188 1.125-.125 2.188-.438 3.313-.875z"/></svg>
+        </a>
+        <a class="floating-header-share-fb" href="https://www.facebook.com/sharer/sharer.php?u=https://blog.vonahi.io/whats-in-a-re-name/"
+            onclick="window.open(this.href, 'share-facebook','width=580,height=296');return false;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path d="M19 6h5V0h-5c-3.86 0-7 3.14-7 7v3H8v6h4v16h6V16h5l1-6h-6V7c0-.542.458-1 1-1z"/></svg>
+        </a>
+    </div>
+    <progress id="reading-progress" class="progress" value="0">
+        <div class="progress-container">
+            <span class="progress-bar"></span>
+        </div>
+    </progress>
+</div>
+
+
+
+
+        <footer class="site-footer outer">
+            <div class="site-footer-content inner">
+                <section class="copyright"><a href="https://blog.vonahi.io">Vonahi Security&#x27;s Blog</a> &copy; 2021</section>
+                <nav class="site-footer-nav">
+                    <a href="https://blog.vonahi.io">Latest Posts</a>
+                    <a href="https://www.facebook.com/vonahisec" target="_blank" rel="noopener">Facebook</a>
+                    <a href="https://twitter.com/vonahisec" target="_blank" rel="noopener">Twitter</a>
+                    <a href="https://www.linkedin.com/company/vonahisec" target="_blank" rel="noopener">LinkedIn</a>
+                    <a href="https://www.github.com/vonahisec" target="_blank" rel="noopener">GitHub</a>
+                </nav>
+            </div>
+        </footer>
+
+    </div>
+
+
+    <script>
+        var images = document.querySelectorAll('.kg-gallery-image img');
+        images.forEach(function (image) {
+            var container = image.closest('.kg-gallery-image');
+            var width = image.attributes.width.value;
+            var height = image.attributes.height.value;
+            var ratio = width / height;
+            container.style.flex = ratio + ' 1 0%';
+        })
+    </script>
+
+
+    <script
+        src="https://code.jquery.com/jquery-3.2.1.min.js"
+        integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4="
+        crossorigin="anonymous">
+    </script>
+    <script type="text/javascript" src="/assets/built/jquery.fitvids.js?v=d44c73ced9"></script>
+
+
+    <script>
+
+// NOTE: Scroll performance is poor in Safari
+// - this appears to be due to the events firing much more slowly in Safari.
+//   Dropping the scroll event and using only a raf loop results in smoother
+//   scrolling but continuous processing even when not scrolling
+$(document).ready(function () {
+    // Start fitVids
+    var $postContent = $(".post-full-content");
+    $postContent.fitVids();
+    // End fitVids
+
+    var progressBar = document.querySelector('#reading-progress');
+    var header = document.querySelector('.floating-header');
+    var title = document.querySelector('.post-full-title');
+
+    var lastScrollY = window.scrollY;
+    var lastWindowHeight = window.innerHeight;
+    var lastDocumentHeight = $(document).height();
+    var ticking = false;
+
+    function onScroll() {
+        lastScrollY = window.scrollY;
+        requestTick();
+    }
+
+    function onResize() {
+        lastWindowHeight = window.innerHeight;
+        lastDocumentHeight = $(document).height();
+        requestTick();
+    }
+
+    function requestTick() {
+        if (!ticking) {
+            requestAnimationFrame(update);
+        }
+        ticking = true;
+    }
+
+    function update() {
+        var trigger = title.getBoundingClientRect().top + window.scrollY;
+        var triggerOffset = title.offsetHeight + 35;
+        var progressMax = lastDocumentHeight - lastWindowHeight;
+
+        // show/hide floating header
+        if (lastScrollY >= trigger + triggerOffset) {
+            header.classList.add('floating-active');
+        } else {
+            header.classList.remove('floating-active');
+        }
+
+        progressBar.setAttribute('max', progressMax);
+        progressBar.setAttribute('value', lastScrollY);
+
+        ticking = false;
+    }
+
+    window.addEventListener('scroll', onScroll, {passive: true});
+    window.addEventListener('resize', onResize, false);
+
+    update();
+
+});
+</script>
+
+
+    
+
+</body>
+</html>

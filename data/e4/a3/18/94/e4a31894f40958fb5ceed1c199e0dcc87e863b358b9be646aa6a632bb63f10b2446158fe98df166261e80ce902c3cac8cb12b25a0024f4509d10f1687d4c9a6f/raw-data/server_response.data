@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag -->
+<title>GoPro GPMF-parser Vulnerabilities | invd blog</title>
+<meta name="generator" content="Jekyll" />
+<meta property="og:title" content="GoPro GPMF-parser Vulnerabilities" />
+<meta name="author" content="Christian Reitter" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="As part of my fuzzing research into C parsers, I took a look at the open source GoPro GPMF-parser project. The GPMF-parser software decodes custom telemetry metadata from GoPro camera video recordings. Multimedia file parsers are notoriously difficult to write safely in C, so I expected some memory security issues and saw this as a good exercise for fuzzing." />
+<meta property="og:description" content="As part of my fuzzing research into C parsers, I took a look at the open source GoPro GPMF-parser project. The GPMF-parser software decodes custom telemetry metadata from GoPro camera video recordings. Multimedia file parsers are notoriously difficult to write safely in C, so I expected some memory security issues and saw this as a good exercise for fuzzing." />
+<link rel="canonical" href="https://blog.inhq.net/posts/gopro-gpmf-parser-vuln-1/" />
+<meta property="og:url" content="https://blog.inhq.net/posts/gopro-gpmf-parser-vuln-1/" />
+<meta property="og:site_name" content="invd blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-10-17T17:00:00+02:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="GoPro GPMF-parser Vulnerabilities" />
+<script type="application/ld+json">
+{"description":"As part of my fuzzing research into C parsers, I took a look at the open source GoPro GPMF-parser project. The GPMF-parser software decodes custom telemetry metadata from GoPro camera video recordings. Multimedia file parsers are notoriously difficult to write safely in C, so I expected some memory security issues and saw this as a good exercise for fuzzing.","@type":"BlogPosting","datePublished":"2020-10-17T17:00:00+02:00","url":"https://blog.inhq.net/posts/gopro-gpmf-parser-vuln-1/","mainEntityOfPage":{"@type":"WebPage","@id":"https://blog.inhq.net/posts/gopro-gpmf-parser-vuln-1/"},"author":{"@type":"Person","name":"Christian Reitter"},"headline":"GoPro GPMF-parser Vulnerabilities","dateModified":"2020-10-17T17:00:00+02:00","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/css/style.css"><link type="application/atom+xml" rel="alternate" href="https://blog.inhq.net/feed.xml" title="invd blog" /><script type="text/javascript">
+  var _paq = window._paq || [];
+  _paq.push(['trackPageView']);
+  _paq.push(['enableLinkTracking']);
+  _paq.push(['setSecureCookie', true]);
+  _paq.push(['setVisitorCookieTimeout', 60 * 60 * 24 * 90]);
+  _paq.push(['setReferralCookieTimeout', 60 * 60 * 24 * 90]);
+  _paq.push(['appendToTrackingUrl', 'bots=1']);
+  (function() {
+    var u="https://mato.inhq.net/";
+    _paq.push(['setTrackerUrl', u+'m']);
+    _paq.push(['setSiteId', '1']);
+    var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+    g.type='text/javascript'; g.async=true; g.defer=true; g.src=u+'mat.js'; s.parentNode.insertBefore(g,s);
+  })();
+  </script></head>
+<body><header class="site-header"><noscript><img src="https://mato.inhq.net/m?rec=1&bots=1&idsite=1" alt="" style="position:absolute; visibility:hidden" /></noscript><div class="wrapper"><a class="site-title" rel="author" href="/">invd blog</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger">
+        <a class="page-link" href="/archive/">Archive</a><a class="page-link" href="/cve/">CVEs</a><a class="page-link" href="/consulting/">Consulting</a><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">GoPro GPMF-parser Vulnerabilities</h1>
+    <p class="post-meta"><time class="dt-published" datetime="2020-10-17T17:00:00+02:00" itemprop="datePublished">
+        Oct 17, 2020
+      </time>• <span itemprop="author" itemscope itemtype="http://schema.org/Person">
+            <span class="p-author h-card" itemprop="name">Christian Reitter</span></span><br/>ID:
+        
+          
+          <span>CVE-2020-16158</span>,
+          
+          <span>CVE-2020-16160</span>,
+          
+          <span>CVE-2020-16161</span>,
+          
+          <span>CVE-2020-16159</span>
+        <br/>
+      </p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>As part of my fuzzing research <a href="/posts/base64-parser-issues/">into C parsers</a>, I took a look at the open source GoPro <a href="https://github.com/gopro/gpmf-parser">GPMF-parser</a> project.
+The GPMF-parser software decodes custom telemetry metadata from GoPro camera video recordings.
+Multimedia file parsers are notoriously difficult to write safely in C, so I expected some memory security issues and saw this as a good exercise for fuzzing.</p>
+
+<p>Ultimately, this analysis led to ~25 bug reports, most of them communicated confidentially to the vendor over the course
+of a long disclosure process due to security implications. After coordination with the vendor, I requested four CVEs in July to track several issues with a direct impact.</p>
+
+<div id="toc-container">
+  <h2 class="no_toc">Contents</h2>
+<ul id="markdown-toc">
+  <li><a href="#consulting" id="markdown-toc-consulting">Consulting</a></li>
+  <li><a href="#technical-background" id="markdown-toc-technical-background">Technical Background</a></li>
+  <li><a href="#summary" id="markdown-toc-summary">Summary</a>    <ul>
+      <li><a href="#product-overview" id="markdown-toc-product-overview">Product Overview</a></li>
+      <li><a href="#main-security-issues" id="markdown-toc-main-security-issues">Main Security Issues</a></li>
+      <li><a href="#potential-or-out-of-scope-security-issues" id="markdown-toc-potential-or-out-of-scope-security-issues">Potential or Out-Of-Scope Security Issues</a></li>
+      <li><a href="#mainly-functional-issues" id="markdown-toc-mainly-functional-issues">Mainly Functional Issues:</a></li>
+    </ul>
+  </li>
+  <li><a href="#selection-of-discovered-issues" id="markdown-toc-selection-of-discovered-issues">Selection of Discovered Issues</a>    <ul>
+      <li><a href="#cve-2020-16158" id="markdown-toc-cve-2020-16158">CVE-2020-16158</a></li>
+      <li><a href="#cve-2020-16160" id="markdown-toc-cve-2020-16160">CVE-2020-16160</a></li>
+      <li><a href="#cve-2020-16161" id="markdown-toc-cve-2020-16161">CVE-2020-16161</a></li>
+      <li><a href="#cve-2020-16159" id="markdown-toc-cve-2020-16159">CVE-2020-16159</a></li>
+      <li><a href="#poc" id="markdown-toc-poc">POC</a></li>
+    </ul>
+  </li>
+  <li><a href="#disclosure" id="markdown-toc-disclosure">Disclosure</a>    <ul>
+      <li><a href="#partial-timeline" id="markdown-toc-partial-timeline">Partial Timeline</a></li>
+    </ul>
+  </li>
+</ul>
+
+</div>
+
+<h2 id="consulting">Consulting</h2>
+
+<p><i>I’m a freelance Security Consultant and currently available for new projects.
+  If you are looking for assistance to secure your projects or organization, <a href="/consulting">get in touch</a>.</i></p>
+
+<h2 id="technical-background">Technical Background</h2>
+<p>The <a href="https://github.com/gopro/gpmf-parser#gpmf-introduction">GPMF-parser documentation</a> gives some insight into the design of the GPMF format.
+Action cameras store multiple telemetry datasets within the main video container alongside the compressed video and audio, apparently for performance reasons.
+On the technical side, this is done via the GPMF key-length-value structure and custom extensible markers such as FourCC.</p>
+
+<p>In practice, the decoding of GPMF data from existing video files involves</p>
+<ol>
+  <li>GPMF data extraction from the video container (<em>not core functionality, but implemented for MP4</em>)</li>
+  <li>GPMF data parsing via the GPMF-parser library (<em>core functionality</em>)</li>
+</ol>
+
+<p>The library ships with a standalone demo program to do this processing on MP4 file inputs.</p>
+
+<h2 id="summary">Summary</h2>
+
+<p>The discovered issues are presented in a condensed format due to the raw number of bugs.</p>
+
+<p>Please note that the security issues are treated differently depending on their code origin.
+Although there are existing CVEs from 2018 and 2019 for memory issues in the MP4 parsing section (<em>that were discovered by other researchers, see <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2018-18699">CVE-2018-18699</a>, <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-15148">CVE-2019-15148</a></em>),
+GoPro indicated during the disclosure process that the MP4 parsing code is not actually in-scope.</p>
+
+<p>I would probably not have researched/reported the related issues in depth if this fact would have been documented more explicitly.</p>
+
+<p>Issues within the example program (marked “demo”) were also treated as out-of-scope and are listed here for completeness.</p>
+
+<h3 id="product-overview">Product Overview</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Project</th>
+      <th>Source</th>
+      <th>Fix</th>
+      <th>References</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>GPMF-parser</td>
+      <td><a href="https://github.com/gopro/gpmf-parser">Github</a></td>
+      <td><a href="https://github.com/gopro/gpmf-parser/releases/tag/v2.0">release 2.0</a>, <a href="https://github.com/gopro/gpmf-parser/releases/tag/v2.0.2">release 2.0.2</a></td>
+      <td>?</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>It is not documented which other internal or external projects use the GPMF-parser library.</p>
+
+<h3 id="main-security-issues">Main Security Issues</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>CVE</th>
+      <th>Description</th>
+      <th>Potential Impact</th>
+      <th>Location</th>
+      <th>CWE</th>
+      <th>POC</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-16158">CVE-2020-16158</a></td>
+      <td>Stack-buffer-overflow out of bounds write</td>
+      <td>Crash (with stack protection)<br /> potentially arbitrary code execution</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/GPMF_parser.c#L952">core</a></td>
+      <td>CWE-787</td>
+      <td><a href="/assets/artifacts/gopro-gpmf-parser-vuln-1/poc_issue1.mp4">file</a></td>
+    </tr>
+    <tr>
+      <td>17</td>
+      <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-16160">CVE-2020-16160</a></td>
+      <td>Division by zero</td>
+      <td>DOS via crash  (confirmed)</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/GPMF_parser.c#L1744">core</a></td>
+      <td>CWE-369</td>
+      <td><a href="/assets/artifacts/gopro-gpmf-parser-vuln-1/poc_issue17.mp4">file</a></td>
+    </tr>
+    <tr>
+      <td>18</td>
+      <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-16161">CVE-2020-16161</a></td>
+      <td>Division by zero</td>
+      <td>DOS via crash (confirmed)</td>
+      <td>core (<a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/GPMF_parser.c#L1634">1</a>, <a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/GPMF_parser.c#L1653">2</a>)</td>
+      <td>CWE-369</td>
+      <td><a href="/assets/artifacts/gopro-gpmf-parser-vuln-1/poc_issue18.mp4">file</a></td>
+    </tr>
+    <tr>
+      <td>21</td>
+      <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-16159">CVE-2020-16159</a></td>
+      <td>Heap out of bounds read</td>
+      <td>crash (confirmed) or information disclosure</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/GPMF_parser.c#L1657">core</a></td>
+      <td>CWE-125</td>
+      <td><a href="/assets/artifacts/gopro-gpmf-parser-vuln-1/poc_issue21.mp4">file</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="potential-or-out-of-scope-security-issues">Potential or Out-Of-Scope Security Issues</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Description</th>
+      <th>Potential Impact</th>
+      <th>Location</th>
+      <th>POC</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2</td>
+      <td>Stack-use-after-scope</td>
+      <td>unclear, not well defined</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/GPMF_parser.c#L1007">core</a></td>
+      <td><a href="/assets/artifacts/gopro-gpmf-parser-vuln-1/poc_issue2.mp4">file</a></td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>Heap-buffer-overflow out of bounds read</td>
+      <td>information disclosure</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/demo/GPMF_print.c#L176">demo print</a></td>
+      <td>see #2</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>Large memory allocation</td>
+      <td>DOS via resource exhaustion</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/demo/GPMF_mp4reader.c#L477">MP4 parser</a></td>
+      <td><a href="/assets/artifacts/gopro-gpmf-parser-vuln-1/poc_issue4.mp4">file</a></td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td>Large memory allocation</td>
+      <td>DOS via resource exhaustion</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/demo/GPMF_mp4reader.c#L536-L540">MP4 parser</a></td>
+      <td><a href="/assets/artifacts/gopro-gpmf-parser-vuln-1/poc_issue5.mp4">file</a></td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td>Large memory allocation</td>
+      <td>DOS via resource exhaustion</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/demo/GPMF_mp4reader.c#L425">MP4 parser</a></td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td>Null pointer read → segfault</td>
+      <td>DOS via crash</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/eeef670dfdc51d4761cfe654cfbe212444cc9d19/demo/GPMF_mp4reader.c#L675">MP4 parser</a></td>
+      <td><a href="/assets/artifacts/gopro-gpmf-parser-vuln-1/poc_issue7.mp4">file</a></td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td>Heap out of bounds read</td>
+      <td>information disclosure</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/eeef670dfdc51d4761cfe654cfbe212444cc9d19/demo/GPMF_mp4reader.c#L675">MP4 parser</a></td>
+      <td><a href="/assets/artifacts/gopro-gpmf-parser-vuln-1/poc_issue8.mp4">file</a></td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td>Division by zero</td>
+      <td>DOS via crash</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/eeef670dfdc51d4761cfe654cfbe212444cc9d19/demo/GPMF_mp4reader.c#L668">MP4 parser</a></td>
+      <td><a href="/assets/artifacts/gopro-gpmf-parser-vuln-1/poc_issue9.mp4">file</a></td>
+    </tr>
+    <tr>
+      <td>10</td>
+      <td>Heap out of bounds read</td>
+      <td>information disclosure</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/eeef670dfdc51d4761cfe654cfbe212444cc9d19/demo/GPMF_mp4reader.c#L671">MP4 parser</a></td>
+      <td><a href="/assets/artifacts/gopro-gpmf-parser-vuln-1/poc_issue10.mp4">file</a></td>
+    </tr>
+    <tr>
+      <td>11</td>
+      <td>Heap out of bounds read</td>
+      <td>DOS via crash, information disclosure?</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/demo/GPMF_mp4reader.c#L750">MP4 parser</a></td>
+      <td><a href="/assets/artifacts/gopro-gpmf-parser-vuln-1/poc_issue11.mp4">file</a></td>
+    </tr>
+    <tr>
+      <td>12</td>
+      <td>Division by zero (<em>difficult to reproduce</em>)</td>
+      <td>potential DOS via crash</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/eeef670dfdc51d4761cfe654cfbe212444cc9d19/demo/GPMF_mp4reader.c#L335">MP4 parser</a></td>
+      <td>-</td>
+    </tr>
+    <tr>
+      <td>13</td>
+      <td>Long-running loops</td>
+      <td>Partial DOS via CPU resource exhaustion</td>
+      <td>MP4 parser (<a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/demo/GPMF_mp4reader.c#L814-L830">1</a>, <a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/demo/GPMF_mp4reader.c#L776-L795">2</a>, <a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/demo/GPMF_mp4reader.c#L352">3</a>)</td>
+      <td><a href="/assets/artifacts/gopro-gpmf-parser-vuln-1/poc_issue13.mp4">file</a></td>
+    </tr>
+    <tr>
+      <td>14</td>
+      <td>Heap out of bounds read</td>
+      <td>Potentially information disclosure</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/GPMF_parser.c#L474">core</a></td>
+      <td><a href="/assets/artifacts/gopro-gpmf-parser-vuln-1/poc_issue14.mp4">file</a></td>
+    </tr>
+    <tr>
+      <td>15</td>
+      <td>Heap out of bounds read</td>
+      <td>Potentially information disclosure</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/eeef670dfdc51d4761cfe654cfbe212444cc9d19/GPMF_parser.c#L321">core</a></td>
+      <td><a href="/assets/artifacts/gopro-gpmf-parser-vuln-1/poc_issue15.mp4">file</a></td>
+    </tr>
+    <tr>
+      <td>16</td>
+      <td>Stack out of bounds write</td>
+      <td>DOS via crash or worse</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/demo/GPMF_demo.c#L247">demo</a></td>
+      <td><a href="/assets/artifacts/gopro-gpmf-parser-vuln-1/poc_issue16.mp4">file</a></td>
+    </tr>
+    <tr>
+      <td>19</td>
+      <td>Heap out of bounds read</td>
+      <td>information disclosure</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/GPMF_parser.c#L1777">core</a></td>
+      <td>see #18</td>
+    </tr>
+    <tr>
+      <td>20</td>
+      <td>Heap out of bounds read</td>
+      <td>information disclosure</td>
+      <td>core (<a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/GPMF_parser.c#L1886">1</a>, <a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/GPMF_parser.c#L1941">2</a>, <a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/GPMF_parser.c#L1797-L1798">3</a>)</td>
+      <td><a href="/assets/artifacts/gopro-gpmf-parser-vuln-1/poc_issue20.mp4">file</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="mainly-functional-issues">Mainly Functional Issues:</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Description</th>
+      <th>Potential Impact</th>
+      <th>Location</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><a href="https://github.com/gopro/gpmf-parser/issues/101">GH101</a></td>
+      <td>memory resource leak</td>
+      <td>resource exhaustion</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/98aff124b6b5d01b42da2d0ffada4ea99758929f/demo/GPMF_mp4reader.c#L155">MP4 parser</a></td>
+    </tr>
+    <tr>
+      <td><a href="https://github.com/gopro/gpmf-parser/issues/102">GH102</a></td>
+      <td>undefined behavior</td>
+      <td>unspecified</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/98aff124b6b5d01b42da2d0ffada4ea99758929f/demo/GPMF_mp4reader.c#L350-L352">MP4 parser</a></td>
+    </tr>
+    <tr>
+      <td><a href="https://github.com/gopro/gpmf-parser/issues/103">GH103</a></td>
+      <td>memory resource leak</td>
+      <td>resource exhaustion</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/GPMF_parser.c#L1731">MP4 parser</a></td>
+    </tr>
+    <tr>
+      <td><a href="https://github.com/gopro/gpmf-parser/issues/104">GH104</a></td>
+      <td>memory resource leak</td>
+      <td>resource exhaustion</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/GPMF_parser.c#L1388">core</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="selection-of-discovered-issues">Selection of Discovered Issues</h2>
+
+<h3 id="cve-2020-16158">CVE-2020-16158</h3>
+<p>The <code class="language-plaintext highlighter-rouge">GPMF_ExpandComplexTYPE()</code> function allows multiple 1 byte stack out of bounds writes behind the <code class="language-plaintext highlighter-rouge">dst</code> buffer.
+The outer <code class="language-plaintext highlighter-rouge">while{}</code> loop has some bounds checks but manipulates the relevant counters within the loop without additional checks.</p>
+
+<p>Relevant code (simplified):</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="kt">uint32_t</span> <span class="nf">GPMF_ExpandComplexTYPE</span><span class="p">(</span><span class="kt">char</span> <span class="o">*</span><span class="n">src</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">srcsize</span><span class="p">,</span> <span class="kt">char</span> <span class="o">*</span><span class="n">dst</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="o">*</span><span class="n">dstsize</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="kt">uint32_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">k</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+	<span class="k">while</span> <span class="p">(</span><span class="n">i</span><span class="o">&lt;</span><span class="n">srcsize</span> <span class="o">&amp;&amp;</span> <span class="n">k</span><span class="o">&lt;*</span><span class="n">dstsize</span><span class="p">)</span>
+	<span class="p">{</span>
+<span class="c1">// [...], new count value is calculated here</span>
+				<span class="kt">uint32_t</span> <span class="n">l</span><span class="p">;</span>
+				<span class="k">for</span> <span class="p">(</span><span class="n">l</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span> <span class="n">l</span><span class="o">&lt;</span><span class="n">count</span><span class="p">;</span> <span class="n">l</span><span class="o">++</span><span class="p">)</span>
+				<span class="p">{</span>
+					<span class="n">dst</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">src</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">];</span>
+					<span class="n">k</span><span class="o">++</span><span class="p">;</span>
+				<span class="p">}</span>
+<span class="c1">// [...]</span>
+            <span class="n">i</span><span class="o">++</span><span class="p">;</span>
+            <span class="n">k</span><span class="o">++</span><span class="p">;</span>
+	<span class="p">}</span></code></pre></figure>
+
+<p><a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/GPMF_parser.c#L950-L954" class="highlightref">GPMF_parser.c</a></p>
+
+<p>As you can see, the limits imposed via the <code class="language-plaintext highlighter-rouge">while (i&lt;srcsize &amp;&amp; k&lt;*dstsize)</code> condition are ineffective since <code class="language-plaintext highlighter-rouge">k</code> is increased locally based on other values.
+The assignment <code class="language-plaintext highlighter-rouge">dst[k] = src[i - 1]</code> is therefore reachable with larger than intended <code class="language-plaintext highlighter-rouge">k</code> values.</p>
+
+<p>Consider the following problematic run of <code class="language-plaintext highlighter-rouge">GPMF_ExpandComplexTYPE()</code> on a target buffer <code class="language-plaintext highlighter-rouge">dst</code> with a size of 64 bytes:</p>
+<pre><code class="language-C">(gdb) print *dstsize
+$7 = 64
+</code></pre>
+
+<p>Here is the memory view of the destination buffer plus following 32 bytes of memory, captured at the start of the function: <br />
+(<em>x86_64, no stack canary</em>)</p>
+<pre><code class="language-C">(gdb) x/96xb dst
+0x7fffffffcde0:	0x00	0x00	0x00	0x00	0x00	0x00	0x00	0x00
+0x7fffffffcde8:	0x78	0xd0	0xff	0xff	0xff	0x7f	0x00	0x00
+0x7fffffffcdf0:	0x07	0x00	0x00	0x00	0xff	0x7f	0x00	0x01
+0x7fffffffcdf8:	0x00	0x00	0x00	0x00	0x00	0x00	0x00	0x00
+0x7fffffffce00:	0x01	0x00	0x00	0x00	0x00	0x00	0x00	0x01
+0x7fffffffce08:	0x84	0xd0	0xff	0xff	0xff	0x7f	0x00	0x00
+0x7fffffffce10:	0x00	0x00	0x00	0x00	0x00	0x00	0x00	0x00
+0x7fffffffce18:	0x00	0x00	0x00	0x00	0x00	0x00	0x00	0x01 // &lt;&lt; end of dst
+0x7fffffffce20:	0x18	0x00	0x00	0x00	0x18	0x00	0x00	0x00
+0x7fffffffce28:	0x01	0x00	0x00	0x00	0x00	0x00	0x00	0x00
+0x7fffffffce30:	0xf0	0x55	0x05	0x01	0x00	0x00	0x00	0x00
+0x7fffffffce38:	0x78	0xd0	0xff	0xff	0x18	0x00	0x00	0x00
+</code></pre>
+
+<p>Here is the same memory region after exiting the <code class="language-plaintext highlighter-rouge">while()</code> loop with a problematic input:</p>
+<pre><code class="language-C">(gdb) x/96xb dst
+0x7fffffffcde0:	0xff	0xff	0xff	0xff	0xff	0xff	0xff	0x0f
+0x7fffffffcde8:	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f
+0x7fffffffcdf0:	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f
+0x7fffffffcdf8:	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f
+0x7fffffffce00:	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f
+0x7fffffffce08:	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f
+0x7fffffffce10:	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f
+0x7fffffffce18:	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f // &lt;&lt; end of dst
+0x7fffffffce20:	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f
+0x7fffffffce28:	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f
+0x7fffffffce30:	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f
+0x7fffffffce38:	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f	0x0f
+</code></pre>
+
+<p>In this particular case the memory is clobbered with a single <code class="language-plaintext highlighter-rouge">0x0f</code> value that is taken from <code class="language-plaintext highlighter-rouge">src[i - 1]</code>.</p>
+
+<p>The classification of the security impact depends on the practical use of the GPMF-parser library and related compiler settings.
+On systems with stack canaries, the OOB write will be detected and the program exits, which mitigates this attack to a Denial Of Service.</p>
+
+<p>If the target binary is compiled without stack canaries, the vulnerability may allow an attacker to perform changes to
+the program flow via manipulation of adjacent memory regions behind <code class="language-plaintext highlighter-rouge">dst</code>. 
+The changes are constrained by the nature of the out of bounds write, but a carefully crafted input might still
+leverage this bug to do something interesting on certain systems or architectures.
+In that case, the integrity and confidentiality properties of the target program will be impacted as well, although
+the overall attack complexity might be high or some user interaction might be involved.</p>
+
+<h3 id="cve-2020-16160">CVE-2020-16160</h3>
+<p>The <code class="language-plaintext highlighter-rouge">GPMF_Decompress()</code> function includes a problematic division that can lead to a division by zero issue if <code class="language-plaintext highlighter-rouge">type</code> is not detected.
+This is possible since <code class="language-plaintext highlighter-rouge">GPMF_SizeofType()</code> can return zero.</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="kt">uint32_t</span> <span class="n">sizeoftype</span> <span class="o">=</span> <span class="n">GPMF_SizeofType</span><span class="p">(</span><span class="n">type</span><span class="p">);</span>
+<span class="kt">uint32_t</span> <span class="n">chn</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">channels</span> <span class="o">=</span> <span class="n">sample_size</span> <span class="o">/</span> <span class="n">sizeoftype</span><span class="p">;</span></code></pre></figure>
+
+<p><a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/GPMF_parser.c#L1743-L1744" class="highlightref">GPMF_parser.c</a></p>
+
+<p>The impact is a denial of service through the crash, represented by the following sanitizer warning:</p>
+<pre><code class="language-C">==20022==ERROR: AddressSanitizer: FPE on unknown address
+</code></pre>
+
+<h3 id="cve-2020-16161">CVE-2020-16161</h3>
+<p>The <code class="language-plaintext highlighter-rouge">GPMF_ScaledData()</code> function includes a problematic modulo operation that can lead to division by zero issue if <code class="language-plaintext highlighter-rouge">inputtypeelements</code> is zero:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="k">switch</span> <span class="p">(</span><span class="n">complextype</span><span class="p">[</span><span class="n">i</span> <span class="o">%</span> <span class="n">inputtypeelements</span><span class="p">])</span></code></pre></figure>
+
+<p><a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/GPMF_parser.c#L1634" class="highlightref">GPMF_parser.c</a></p>
+
+<p>The same issue is also present at a <a href="(https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/GPMF_parser.c#L1653)">second location</a> in the code.</p>
+
+<p>The impact is a denial of service through the crash, represented by the following sanitizer warning:</p>
+<pre><code class="language-C">==20022==ERROR: AddressSanitizer: FPE on unknown address
+</code></pre>
+
+<h3 id="cve-2020-16159">CVE-2020-16159</h3>
+<p><code class="language-plaintext highlighter-rouge">GPMF_ScaledData()</code> calls macros to read and convert input data into specific types.</p>
+
+<p>This can lead to a heap out of bounds read and following Segmentation fault in the <a href="https://github.com/gopro/gpmf-parser/blob/2cc0af7ffee6f12934e2d57750bdf292f62b0a97/GPMF_parser.c#L1657">MACRO_BSWAP_CAST_UNSIGNED_SCALE handling</a>
+when operating on the end of <code class="language-plaintext highlighter-rouge">ms-&gt;buffer</code>:</p>
+
+<pre><code class="language-C">==14571==ERROR: AddressSanitizer: heap-buffer-overflow on address
+0x606000000060 at pc 0x0000005750ce bp 0x7fff70e5b6d0 sp 0x7fff70e5b6c8
+READ of size 1 at 0x606000000060 thread T0
+    #0 0x5750cd in GPMF_ScaledData /gpmf-parser/demo/../GPMF_parser.c:1694:37
+    #1 0x4c9a53 in main /gpmf-parser/demo/GPMF_demo.c:253:7
+    #2 0x7f346c0e0bba in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x26bba)
+    #3 0x41e2d9 in _start (/gpmf-parser/demo/gpmfdemo+0x41e2d9)
+
+0x606000000060 is located 0 bytes to the right of 64-byte region
+[0x606000000020,0x606000000060)
+
+==14571==ERROR: AddressSanitizer: SEGV on unknown address 0x606000010000
+(pc 0x0000005750da bp 0x7fff70e75ab0 sp 0x7fff70e5b6e0 T0)
+==14571==The signal is caused by a READ memory access.
+    #0 0x5750da in GPMF_ScaledData /gpmf-parser/demo/../GPMF_parser.c:1694:37
+</code></pre>
+
+<p>The main observed impact of this is a denial of service via the segfault.</p>
+
+<p>Depending on the usage of the GPMF-parser library, it might be possible to avoid the segfault and leverage this for some sort of information disclosure via 
+uninitialized heap memory.</p>
+
+<h3 id="poc">POC</h3>
+<p>Crafted example inputs for the individual issues were provided to the vendor and are linked in the bug summary overview at the beginning of the article.</p>
+
+<p>To reproduce:</p>
+<ul>
+  <li>Compile an older version of the GPMF-parser demo application
+    <ul>
+      <li>Optionally add appropriate sanitizers such as <code class="language-plaintext highlighter-rouge">-fsanitize=address</code> and other compile flags for error detection</li>
+    </ul>
+  </li>
+  <li>Run the example program against the <code class="language-plaintext highlighter-rouge">poc_issue*.mp4</code> file</li>
+  <li>Use special compile-time and run-time flags such as <code class="language-plaintext highlighter-rouge">-fsanitize-recover=adddress</code>, <code class="language-plaintext highlighter-rouge">ASAN_OPTIONS=halt_on_error=0</code> to proceed beyond the initial errors on inputs that trigger multiple issues</li>
+</ul>
+
+<h2 id="disclosure">Disclosure</h2>
+<p>The disclosure process for these bugs was long and exhausting.</p>
+
+<p>One of the reasons for this is my decision to fuzz the GPMF parsing code “all the way” through the MP4 file parsing interface. 
+While this allowed me to present MP4-based POCs that directly worked as input for the unmodified demo application (better reproducibility for the developers), 
+it also doubled the number of bugs that I had to analyze, report and patch away. Additionally, many bugs happened on similar inputs, which
+increased the complexity of preparing useful reports due to overlapping crashes.</p>
+
+<p>Another major factor is the perceived unfamiliarity of the vendor with the requested type of coordinated disclosure for their open source code. 
+For example, there is insufficient public documentation regarding disclosure contacts, guidelines and processes.
+A lot of back and forth via email was required to coordinate the relevant aspects, and this was not always successful.</p>
+
+<p>The main patch release (2.0) was released around a month after the disclosure to the vendor.
+While this is not a bad response time for a likely nonessential vendor project, 9 of the 21 confidentially reported issues were missed during patching.
+The vendor quickly followed up with another release (2.0.2) a few days after I reported this.</p>
+
+<p>To my knowledge, no public credit has been given for the 21 vulnerability reports despite a number of code changes and two security releases, which is disappointing.</p>
+
+<h3 id="partial-timeline">Partial Timeline</h3>
+<p>Note: this timeline excludes confidential data points and related information.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>information</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2020-06-20</td>
+      <td>Initial communication to developer address and request for security contact</td>
+    </tr>
+    <tr>
+      <td>2020-06-23</td>
+      <td>Request to 2nd developer address</td>
+    </tr>
+    <tr>
+      <td>2020-06-25</td>
+      <td><a href="https://github.com/gopro/gpmf-parser/issues/99">Github issue</a> to ask for official security contact</td>
+    </tr>
+    <tr>
+      <td>2020-06-25</td>
+      <td>Initial email communication with GoPro security</td>
+    </tr>
+    <tr>
+      <td>2020-07-10 to 2020-07-14</td>
+      <td>Public Github bug issues GH101 to GH104</td>
+    </tr>
+    <tr>
+      <td>2020-07-11 to 2020-07-15</td>
+      <td>Confidential coordinated disclosure of issues #1 to #21 with POCs</td>
+    </tr>
+    <tr>
+      <td>2020-07-15</td>
+      <td>Shared fuzzing corpus with GoPro for testing</td>
+    </tr>
+    <tr>
+      <td>2020-07-23</td>
+      <td>GoPro agrees to proposed CVE request process</td>
+    </tr>
+    <tr>
+      <td>2020-07-27</td>
+      <td>GoPro acknowledges proposed CVE descriptions</td>
+    </tr>
+    <tr>
+      <td>2020-07-28</td>
+      <td>Request of CVEs from MITRE</td>
+    </tr>
+    <tr>
+      <td>2020-07-30</td>
+      <td>MITRE assigns CVEs</td>
+    </tr>
+    <tr>
+      <td>2020-08-20</td>
+      <td>GPMF-parser <a href="https://github.com/gopro/gpmf-parser/releases/tag/v2.0.2">2.0.0</a> is released with security fixes</td>
+    </tr>
+    <tr>
+      <td>2020-08-22</td>
+      <td>Note to GoPro about incomplete fixes for issues #3, #4, #7, #8, #15, #16, #19, #20 and #21</td>
+    </tr>
+    <tr>
+      <td>2020-08-27</td>
+      <td>GPMF-parser <a href="https://github.com/gopro/gpmf-parser/releases/tag/v2.0.2">2.0.2</a> is released with security fixes</td>
+    </tr>
+    <tr>
+      <td>2020-08-28</td>
+      <td>GoPro requests deadline extension to 6th October (accepted)</td>
+    </tr>
+    <tr>
+      <td>2020-10-06</td>
+      <td>Disclosure deadline</td>
+    </tr>
+    <tr>
+      <td>2020-10-17</td>
+      <td>Publication of this blog article</td>
+    </tr>
+  </tbody>
+</table>
+
+  </div>
+
+
+  <a class="u-url" href="/posts/gopro-gpmf-parser-vuln-1/" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col one-half"><ul class="contact-list">
+          <li class="p-name">
+            <b>Christian Reitter</b>
+          </li></ul></div>
+
+      <div class="footer-col one-half">
+        <p>Information security and other interests.</p>
+      </div>
+    </div>
+
+    <div class="social-ref"><ul class="social-ref-list"><li><a rel="me" href="https://github.com/invd" title="invd"><svg class="svg-icon grey"><use xlink:href="/assets/minima-icons.svg#github"></use></svg></a></li><li><a href="/feed.xml" title="rss"><svg class="svg-icon grey"><use xlink:href="/assets/minima-icons.svg#rss"></use></svg></a></li></ul>
+</div>
+
+  </div>
+</footer>
+</body>
+
+</html>

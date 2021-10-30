@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Leaf-Node weakness in Bitcoin Merkle Tree Design | Bitslog</title>
+<link rel="pingback" href="https://bitslog.com/xmlrpc.php" />
+<link rel="profile" href="http://gmpg.org/xfn/11" />
+
+<!--[if IE]>
+<style type="text/css">
+	#page-wrap1 {
+		background: url(https://s2.wp.com/wp-content/themes/pub/fusion/images/header-bg.png) repeat-x;
+	}
+</style>
+<![endif]-->
+
+<!--[if lte IE 6]>
+<script type="text/javascript">
+/* <![CDATA[ */
+	blankimgpath = 'https://s2.wp.com/wp-content/themes/pub/fusion/images/blank.gif';
+/* ]]> */
+</script>
+<![endif]-->
+
+<meta name='robots' content='max-image-preview:large' />
+
+<!-- Async WordPress.com Remote Login -->
+<script id="wpcom_remote_login_js">
+var wpcom_remote_login_extra_auth = '';
+function wpcom_remote_login_remove_dom_node_id( element_id ) {
+	var dom_node = document.getElementById( element_id );
+	if ( dom_node ) { dom_node.parentNode.removeChild( dom_node ); }
+}
+function wpcom_remote_login_remove_dom_node_classes( class_name ) {
+	var dom_nodes = document.querySelectorAll( '.' + class_name );
+	for ( var i = 0; i < dom_nodes.length; i++ ) {
+		dom_nodes[ i ].parentNode.removeChild( dom_nodes[ i ] );
+	}
+}
+function wpcom_remote_login_final_cleanup() {
+	wpcom_remote_login_remove_dom_node_classes( "wpcom_remote_login_msg" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_key" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_validate" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_js" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_request_access_iframe" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_request_access_styles" );
+}
+
+// Watch for messages back from the remote login
+window.addEventListener( "message", function( e ) {
+	if ( e.origin === "https://r-login.wordpress.com" ) {
+		var data = {};
+		try {
+			data = JSON.parse( e.data );
+		} catch( e ) {
+			wpcom_remote_login_final_cleanup();
+			return;
+		}
+
+		if ( data.msg === 'LOGIN' ) {
+			// Clean up the login check iframe
+			wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_key" );
+
+			var id_regex = new RegExp( /^[0-9]+$/ );
+			var token_regex = new RegExp( /^.*|.*|.*$/ );
+			if (
+				token_regex.test( data.token )
+				&& id_regex.test( data.wpcomid )
+			) {
+				// We have everything we need to ask for a login
+				var script = document.createElement( "script" );
+				script.setAttribute( "id", "wpcom_remote_login_validate" );
+				script.src = '/remote-login.php?wpcom_remote_login=validate'
+					+ '&wpcomid=' + data.wpcomid
+					+ '&token=' + encodeURIComponent( data.token )
+					+ '&host=' + window.location.protocol
+					+ '//' + window.location.hostname
+					+ '&postid=1996'
+					+ '&is_singular=1';
+				document.body.appendChild( script );
+			}
+
+			return;
+		}
+
+		// Safari ITP, not logged in, so redirect
+		if ( data.msg === 'LOGIN-REDIRECT' ) {
+			window.location = 'https://wordpress.com/log-in?redirect_to=' + window.location.href;
+			return;
+		}
+
+		// Safari ITP, storage access failed, remove the request
+		if ( data.msg === 'LOGIN-REMOVE' ) {
+			var css_zap = 'html { -webkit-transition: margin-top 1s; transition: margin-top 1s; } /* 9001 */ html { margin-top: 0 !important; } * html body { margin-top: 0 !important; } @media screen and ( max-width: 782px ) { html { margin-top: 0 !important; } * html body { margin-top: 0 !important; } }';
+			var style_zap = document.createElement( 'style' );
+			style_zap.type = 'text/css';
+			style_zap.appendChild( document.createTextNode( css_zap ) );
+			document.body.appendChild( style_zap );
+
+			var e = document.getElementById( 'wpcom_request_access_iframe' );
+			e.parentNode.removeChild( e );
+
+			document.cookie = 'wordpress_com_login_access=denied; path=/; max-age=31536000';
+
+			return;
+		}
+
+		// Safari ITP
+		if ( data.msg === 'REQUEST_ACCESS' ) {
+			console.log( 'request access: safari' );
+
+			// Check ITP iframe enable/disable knob
+			if ( wpcom_remote_login_extra_auth !== 'safari_itp_iframe' ) {
+				return;
+			}
+
+			// If we are in a "private window" there is no ITP.
+			var private_window = false;
+			try {
+				var opendb = window.openDatabase( null, null, null, null );
+			} catch( e ) {
+				private_window = true;
+			}
+
+			if ( private_window ) {
+				console.log( 'private window' );
+				return;
+			}
+
+			var iframe = document.createElement( 'iframe' );
+			iframe.id = 'wpcom_request_access_iframe';
+			iframe.setAttribute( 'scrolling', 'no' );
+			iframe.setAttribute( 'sandbox', 'allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-top-navigation-by-user-activation' );
+			iframe.src = 'https://r-login.wordpress.com/remote-login.php?wpcom_remote_login=request_access&origin=' + encodeURIComponent( data.origin ) + '&wpcomid=' + encodeURIComponent( data.wpcomid );
+
+			var css = 'html { -webkit-transition: margin-top 1s; transition: margin-top 1s; } /* 9001 */ html { margin-top: 46px !important; } * html body { margin-top: 46px !important; } @media screen and ( max-width: 660px ) { html { margin-top: 71px !important; } * html body { margin-top: 71px !important; } #wpcom_request_access_iframe { display: block; height: 71px !important; } } #wpcom_request_access_iframe { border: 0px; height: 46px; position: fixed; top: 0; left: 0; width: 100%; min-width: 100%; z-index: 99999; background: #23282d; } ';
+
+			var style = document.createElement( 'style' );
+			style.type = 'text/css';
+			style.id = 'wpcom_request_access_styles';
+			style.appendChild( document.createTextNode( css ) );
+			document.body.appendChild( style );
+
+			document.body.appendChild( iframe );
+		}
+
+		if ( data.msg === 'DONE' ) {
+			wpcom_remote_login_final_cleanup();
+		}
+	}
+}, false );
+
+// Inject the remote login iframe after the page has had a chance to load
+// more critical resources
+window.addEventListener( "DOMContentLoaded", function( e ) {
+	var iframe = document.createElement( "iframe" );
+	iframe.style.display = "none";
+	iframe.setAttribute( "scrolling", "no" );
+	iframe.setAttribute( "id", "wpcom_remote_login_key" );
+	iframe.src = "https://r-login.wordpress.com/remote-login.php"
+		+ "?wpcom_remote_login=key"
+		+ "&origin=aHR0cHM6Ly9iaXRzbG9nLmNvbQ%3D%3D"
+		+ "&wpcomid=26028371"
+		+ "&time=1635609109";
+	document.body.appendChild( iframe );
+}, false );
+</script>
+<link rel='dns-prefetch' href='//s2.wp.com' />
+<link rel='dns-prefetch' href='//bitslog.wordpress.com' />
+<link rel='dns-prefetch' href='//s0.wp.com' />
+<link rel="alternate" type="application/rss+xml" title="Bitslog &raquo; Feed" href="https://bitslog.com/feed/" />
+<link rel="alternate" type="application/rss+xml" title="Bitslog &raquo; Comments Feed" href="https://bitslog.com/comments/feed/" />
+<link rel="alternate" type="application/rss+xml" title="Bitslog &raquo; Leaf-Node weakness in Bitcoin Merkle Tree&nbsp;Design Comments Feed" href="https://bitslog.com/2018/06/09/leaf-node-weakness-in-bitcoin-merkle-tree-design/feed/" />
+	<script type="text/javascript">
+		/* <![CDATA[ */
+		function addLoadEvent(func) {
+			var oldonload = window.onload;
+			if (typeof window.onload != 'function') {
+				window.onload = func;
+			} else {
+				window.onload = function () {
+					oldonload();
+					func();
+				}
+			}
+		}
+		/* ]]> */
+	</script>
+			<script type="text/javascript">
+			window._wpemojiSettings = {"baseUrl":"https:\/\/s0.wp.com\/wp-content\/mu-plugins\/wpcom-smileys\/twemoji\/2\/72x72\/","ext":".png","svgUrl":"https:\/\/s0.wp.com\/wp-content\/mu-plugins\/wpcom-smileys\/twemoji\/2\/svg\/","svgExt":".svg","source":{"concatemoji":"https:\/\/s1.wp.com\/wp-includes\/js\/wp-emoji-release.min.js?m=1625065786h&ver=5.8.1"}};
+			!function(e,a,t){var n,r,o,i=a.createElement("canvas"),p=i.getContext&&i.getContext("2d");function s(e,t){var a=String.fromCharCode;p.clearRect(0,0,i.width,i.height),p.fillText(a.apply(this,e),0,0);e=i.toDataURL();return p.clearRect(0,0,i.width,i.height),p.fillText(a.apply(this,t),0,0),e===i.toDataURL()}function c(e){var t=a.createElement("script");t.src=e,t.defer=t.type="text/javascript",a.getElementsByTagName("head")[0].appendChild(t)}for(o=Array("flag","emoji"),t.supports={everything:!0,everythingExceptFlag:!0},r=0;r<o.length;r++)t.supports[o[r]]=function(e){if(!p||!p.fillText)return!1;switch(p.textBaseline="top",p.font="600 32px Arial",e){case"flag":return s([127987,65039,8205,9895,65039],[127987,65039,8203,9895,65039])?!1:!s([55356,56826,55356,56819],[55356,56826,8203,55356,56819])&&!s([55356,57332,56128,56423,56128,56418,56128,56421,56128,56430,56128,56423,56128,56447],[55356,57332,8203,56128,56423,8203,56128,56418,8203,56128,56421,8203,56128,56430,8203,56128,56423,8203,56128,56447]);case"emoji":return!s([10084,65039,8205,55357,56613],[10084,65039,8203,55357,56613])}return!1}(o[r]),t.supports.everything=t.supports.everything&&t.supports[o[r]],"flag"!==o[r]&&(t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&t.supports[o[r]]);t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&!t.supports.flag,t.DOMReady=!1,t.readyCallback=function(){t.DOMReady=!0},t.supports.everything||(n=function(){t.readyCallback()},a.addEventListener?(a.addEventListener("DOMContentLoaded",n,!1),e.addEventListener("load",n,!1)):(e.attachEvent("onload",n),a.attachEvent("onreadystatechange",function(){"complete"===a.readyState&&t.readyCallback()})),(n=t.source||{}).concatemoji?c(n.concatemoji):n.wpemoji&&n.twemoji&&(c(n.twemoji),c(n.wpemoji)))}(window,document,window._wpemojiSettings);
+		</script>
+		<style type="text/css">
+img.wp-smiley,
+img.emoji {
+	display: inline !important;
+	border: none !important;
+	box-shadow: none !important;
+	height: 1em !important;
+	width: 1em !important;
+	margin: 0 .07em !important;
+	vertical-align: -0.1em !important;
+	background: none !important;
+	padding: 0 !important;
+}
+</style>
+	<link rel='stylesheet' id='all-css-0-1' href='https://s1.wp.com/_static/??-eJyNkt1OAyEQhV9IFjdurDfGZ+FngrQzQBhow9tLaWrWra3ekBxmvsNhQJ6SMDEUCEVSFQmr84HlKZlIgskjtI2aDPOT/B3LgKqAFSly2ahHGPoDsNxDScocxFA37ddeV7vUkF2vZJDHeZ520yx19WilxjgMdFa5SS4N4dvIB4PVns9hSWC9AgQaQVYioWqQBYJTpk3kw994r631D+h++JF0dWfVYi3CZW83sf9tkVXxwfEdfDXt89z6PiV1G/4BdvkEWqcMzKKv5CuJ8tnB8Vof9D6/vizzsnte3vZfNIviNA==?cssminify=yes' type='text/css' media='all' />
+<style id='wp-block-library-inline-css'>
+.has-text-align-justify {
+	text-align:justify;
+}
+</style>
+<style id='global-styles-inline-css'>
+body{--wp--preset--color--black: #000000;--wp--preset--color--cyan-bluish-gray: #abb8c3;--wp--preset--color--white: #ffffff;--wp--preset--color--pale-pink: #f78da7;--wp--preset--color--vivid-red: #cf2e2e;--wp--preset--color--luminous-vivid-orange: #ff6900;--wp--preset--color--luminous-vivid-amber: #fcb900;--wp--preset--color--light-green-cyan: #7bdcb5;--wp--preset--color--vivid-green-cyan: #00d084;--wp--preset--color--pale-cyan-blue: #8ed1fc;--wp--preset--color--vivid-cyan-blue: #0693e3;--wp--preset--color--vivid-purple: #9b51e0;--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple: linear-gradient(135deg,rgba(6,147,227,1) 0%,rgb(155,81,224) 100%);--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan: linear-gradient(135deg,rgb(122,220,180) 0%,rgb(0,208,130) 100%);--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange: linear-gradient(135deg,rgba(252,185,0,1) 0%,rgba(255,105,0,1) 100%);--wp--preset--gradient--luminous-vivid-orange-to-vivid-red: linear-gradient(135deg,rgba(255,105,0,1) 0%,rgb(207,46,46) 100%);--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray: linear-gradient(135deg,rgb(238,238,238) 0%,rgb(169,184,195) 100%);--wp--preset--gradient--cool-to-warm-spectrum: linear-gradient(135deg,rgb(74,234,220) 0%,rgb(151,120,209) 20%,rgb(207,42,186) 40%,rgb(238,44,130) 60%,rgb(251,105,98) 80%,rgb(254,248,76) 100%);--wp--preset--gradient--blush-light-purple: linear-gradient(135deg,rgb(255,206,236) 0%,rgb(152,150,240) 100%);--wp--preset--gradient--blush-bordeaux: linear-gradient(135deg,rgb(254,205,165) 0%,rgb(254,45,45) 50%,rgb(107,0,62) 100%);--wp--preset--gradient--luminous-dusk: linear-gradient(135deg,rgb(255,203,112) 0%,rgb(199,81,192) 50%,rgb(65,88,208) 100%);--wp--preset--gradient--pale-ocean: linear-gradient(135deg,rgb(255,245,203) 0%,rgb(182,227,212) 50%,rgb(51,167,181) 100%);--wp--preset--gradient--electric-grass: linear-gradient(135deg,rgb(202,248,128) 0%,rgb(113,206,126) 100%);--wp--preset--gradient--midnight: linear-gradient(135deg,rgb(2,3,129) 0%,rgb(40,116,252) 100%);--wp--preset--duotone--dark-grayscale: url('#wp-duotone-dark-grayscale');--wp--preset--duotone--grayscale: url('#wp-duotone-grayscale');--wp--preset--duotone--purple-yellow: url('#wp-duotone-purple-yellow');--wp--preset--duotone--blue-red: url('#wp-duotone-blue-red');--wp--preset--duotone--midnight: url('#wp-duotone-midnight');--wp--preset--duotone--magenta-yellow: url('#wp-duotone-magenta-yellow');--wp--preset--duotone--purple-green: url('#wp-duotone-purple-green');--wp--preset--duotone--blue-orange: url('#wp-duotone-blue-orange');--wp--preset--font-size--small: 13px;--wp--preset--font-size--normal: 16px;--wp--preset--font-size--medium: 20px;--wp--preset--font-size--large: 36px;--wp--preset--font-size--huge: 42px;}.has-black-color{color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-color{color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-color{color: var(--wp--preset--color--white) !important;}.has-pale-pink-color{color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-color{color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-color{color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-color{color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-color{color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-color{color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-color{color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-color{color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-color{color: var(--wp--preset--color--vivid-purple) !important;}.has-black-background-color{background-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-background-color{background-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-background-color{background-color: var(--wp--preset--color--white) !important;}.has-pale-pink-background-color{background-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-background-color{background-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-background-color{background-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-background-color{background-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-background-color{background-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-background-color{background-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-background-color{background-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-background-color{background-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-background-color{background-color: var(--wp--preset--color--vivid-purple) !important;}.has-black-border-color{border-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-border-color{border-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-border-color{border-color: var(--wp--preset--color--white) !important;}.has-pale-pink-border-color{border-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-border-color{border-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-border-color{border-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-border-color{border-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-border-color{border-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-border-color{border-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-border-color{border-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-border-color{border-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-border-color{border-color: var(--wp--preset--color--vivid-purple) !important;}.has-vivid-cyan-blue-to-vivid-purple-gradient-background{background: var(--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple) !important;}.has-light-green-cyan-to-vivid-green-cyan-gradient-background{background: var(--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan) !important;}.has-luminous-vivid-amber-to-luminous-vivid-orange-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange) !important;}.has-luminous-vivid-orange-to-vivid-red-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-orange-to-vivid-red) !important;}.has-very-light-gray-to-cyan-bluish-gray-gradient-background{background: var(--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray) !important;}.has-cool-to-warm-spectrum-gradient-background{background: var(--wp--preset--gradient--cool-to-warm-spectrum) !important;}.has-blush-light-purple-gradient-background{background: var(--wp--preset--gradient--blush-light-purple) !important;}.has-blush-bordeaux-gradient-background{background: var(--wp--preset--gradient--blush-bordeaux) !important;}.has-luminous-dusk-gradient-background{background: var(--wp--preset--gradient--luminous-dusk) !important;}.has-pale-ocean-gradient-background{background: var(--wp--preset--gradient--pale-ocean) !important;}.has-electric-grass-gradient-background{background: var(--wp--preset--gradient--electric-grass) !important;}.has-midnight-gradient-background{background: var(--wp--preset--gradient--midnight) !important;}.has-small-font-size{font-size: var(--wp--preset--font-size--small) !important;}.has-normal-font-size{font-size: var(--wp--preset--font-size--normal) !important;}.has-medium-font-size{font-size: var(--wp--preset--font-size--medium) !important;}.has-large-font-size{font-size: var(--wp--preset--font-size--large) !important;}.has-huge-font-size{font-size: var(--wp--preset--font-size--huge) !important;}
+</style>
+<link rel='stylesheet' id='all-css-2-1' href='https://s0.wp.com/wp-content/themes/pub/fusion/style.css?m=1440109507h&cssminify=yes' type='text/css' media='all' />
+<!--[if lte IE 6]>
+<link rel='stylesheet' id='fusion-ie6-css'  href='https://s2.wp.com/wp-content/themes/pub/fusion/ie6.css?m=1282587368h&#038;ver=5.8.1' media='all' />
+<![endif]-->
+<link rel='stylesheet' id='all-css-4-1' href='https://s2.wp.com/_static/??-eJx9y0EKwzAMRNELVRUBl6aL0rMkQnEdbMlEMiG3b7Lzqrv5MA/3CqTiLI7+5cKGtc24NEsqmITQ/MgMeyUtdzK7YSdKg5pbTGIYWSErTX65PmDJU9r+0Y3nrPGcEc9Xlxf6lPcQHq8QxucQ1h+7jUCV?cssminify=yes' type='text/css' media='all' />
+<link rel='stylesheet' id='print-css-5-1' href='https://s2.wp.com/wp-content/mu-plugins/global-print/global-print.css?m=1465851035h&cssminify=yes' type='text/css' media='print' />
+<style id='jetpack-global-styles-frontend-style-inline-css'>
+:root { --font-headings: unset; --font-base: unset; --font-headings-default: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif; --font-base-default: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;}
+</style>
+<link rel='stylesheet' id='all-css-8-1' href='https://s1.wp.com/_static/??-eJxti8sKgCAQAH8o297RIfoWE1NjdaVV+v3o0CHqNAzMwBmFopB0SOCziJiNCwyROIkNpTuArTxcMA9LxVzA/8WknESBZOgtnylZ7TWD7cAgrRLvYPFzPbT12PRTX+0XZRA3zg==?cssminify=yes' type='text/css' media='all' />
+<script id='jetpack_related-posts-js-extra'>
+var related_posts_js_options = {"post_heading":"h4"};
+</script>
+<script id='wpcom-actionbar-placeholder-js-extra'>
+var actionbardata = {"siteID":"26028371","siteName":"Bitslog","siteURL":"https:\/\/bitslog.com","siteHost":"bitslog.com","icon":"<img alt='' src='https:\/\/s2.wp.com\/i\/logo\/wpcom-gray-white.png' class='avatar avatar-50' height='50' width='50' \/>","canManageOptions":"","canCustomizeSite":"","isFollowing":"","themeSlug":"pub\/fusion","signupURL":"https:\/\/wordpress.com\/start\/","loginURL":"https:\/\/wordpress.com\/log-in?redirect_to=https%3A%2F%2Fr-login.wordpress.com%2Fremote-login.php%3Faction%3Dlink%26back%3Dhttps%253A%252F%252Fbitslog.com%252F2018%252F06%252F09%252Fleaf-node-weakness-in-bitcoin-merkle-tree-design%252F","themeURL":"","xhrURL":"https:\/\/bitslog.com\/wp-admin\/admin-ajax.php","nonce":"8ec0ac2dfd","isSingular":"1","isFolded":"","isLoggedIn":"","isMobile":"","subscribeNonce":"<input type=\"hidden\" id=\"_wpnonce\" name=\"_wpnonce\" value=\"218056f8e3\" \/>","referer":"https:\/\/bitslog.com\/2018\/06\/09\/leaf-node-weakness-in-bitcoin-merkle-tree-design\/","canFollow":"1","feedID":"94797760","statusMessage":"","subsEmailDefault":"instantly","customizeLink":"https:\/\/bitslog.wordpress.com\/wp-admin\/customize.php?url=https%3A%2F%2Fbitslog.wordpress.com%2F2018%2F06%2F09%2Fleaf-node-weakness-in-bitcoin-merkle-tree-design%2F","postID":"1996","shortlink":"https:\/\/wp.me\/p1Ldar-wc","canEditPost":"","editLink":"https:\/\/wordpress.com\/post\/bitslog.com\/1996","statsLink":"https:\/\/wordpress.com\/stats\/post\/1996\/bitslog.com","i18n":{"view":"View site","follow":"Follow","following":"Following","edit":"Edit","login":"Log in","signup":"Sign up","customize":"Customize","report":"Report this content","themeInfo":"Get theme: Fusion","shortlink":"Copy shortlink","copied":"Copied","followedText":"New posts from this site will now appear in your <a href=\"https:\/\/wordpress.com\/read\">Reader<\/a>","foldBar":"Collapse this bar","unfoldBar":"Expand this bar","editSubs":"Manage subscriptions","viewReader":"View site in Reader","viewReadPost":"View post in Reader","subscribe":"Sign me up","enterEmail":"Enter your email address","followers":"Join 108 other followers","alreadyUser":"Already have a WordPress.com account? <a href=\"https:\/\/wordpress.com\/log-in?redirect_to=https%3A%2F%2Fr-login.wordpress.com%2Fremote-login.php%3Faction%3Dlink%26back%3Dhttps%253A%252F%252Fbitslog.com%252F2018%252F06%252F09%252Fleaf-node-weakness-in-bitcoin-merkle-tree-design%252F\">Log in now.<\/a>","stats":"Stats","notifyNewPosts":"Notify me of new posts","notifyNewPostsDetails":"Receive web and mobile notifications for new posts from this site.","emailNewPosts":"Email me new posts","emailNewPostsDetails":"You can customize your notification settings further <a href=\"https:\/\/wordpress.com\/following\/manage?s=bitslog.com\">here<\/a>.","emailNewComments":"Email me new comments","instantly":"Instantly","daily":"Daily","weekly":"Weekly"}};
+</script>
+<script crossorigin='anonymous' type='text/javascript' src='https://s0.wp.com/_static/??-eJyFjlEKwjAMQC9kVotMv8SzzC2OljatScrc7e1QYQ7BrxDeyyNmytAnUiQ1XkxOohFFuhEbLzvzTWO6uoBQBLkKpODolrZeLJBDGR2JYQyd4gBLdbN9rhz1oQwoS97fC/L8Hk109FeC6Eau0bW8+peDQub0mH+wKfcpvigw1ppotS7xbI8He9q31rb+CSjcafo='></script>
+<script type='text/javascript'>
+	window.addEventListener( 'DOMContentLoaded', function() {
+		rltInitialize( {"token":null,"iframeOrigins":["https:\/\/widgets.wp.com"]} );
+	} );
+</script>
+<link rel='stylesheet' id='all-css-0-2' href='https://s1.wp.com/wp-content/mu-plugins/highlander-comments/style.css?m=1633595895h&cssminify=yes' type='text/css' media='all' />
+<!--[if lt IE 8]>
+<link rel='stylesheet' id='highlander-comments-ie7-css'  href='https://s2.wp.com/wp-content/mu-plugins/highlander-comments/style-ie7.css?m=1351637563h&#038;ver=20110606' media='all' />
+<![endif]-->
+<link rel="EditURI" type="application/rsd+xml" title="RSD" href="https://bitslog.wordpress.com/xmlrpc.php?rsd" />
+<link rel="wlwmanifest" type="application/wlwmanifest+xml" href="https://s1.wp.com/wp-includes/wlwmanifest.xml" /> 
+<meta name="generator" content="WordPress.com" />
+<link rel="canonical" href="https://bitslog.com/2018/06/09/leaf-node-weakness-in-bitcoin-merkle-tree-design/" />
+<link rel='shortlink' href='https://wp.me/p1Ldar-wc' />
+<link rel="alternate" type="application/json+oembed" href="https://public-api.wordpress.com/oembed/?format=json&amp;url=https%3A%2F%2Fbitslog.com%2F2018%2F06%2F09%2Fleaf-node-weakness-in-bitcoin-merkle-tree-design%2F&amp;for=wpcom-auto-discovery" /><link rel="alternate" type="application/xml+oembed" href="https://public-api.wordpress.com/oembed/?format=xml&amp;url=https%3A%2F%2Fbitslog.com%2F2018%2F06%2F09%2Fleaf-node-weakness-in-bitcoin-merkle-tree-design%2F&amp;for=wpcom-auto-discovery" />
+<!-- Jetpack Open Graph Tags -->
+<meta property="og:type" content="article" />
+<meta property="og:title" content="Leaf-Node weakness in Bitcoin Merkle Tree Design" />
+<meta property="og:url" content="https://bitslog.com/2018/06/09/leaf-node-weakness-in-bitcoin-merkle-tree-design/" />
+<meta property="og:description" content="&nbsp; This document describes a weakness in Bitcoin Design that reduces the security of SPV proofs and therefore SPV Wallets.  The weakness was discovered by me on August 2017, but during the resp…" />
+<meta property="article:published_time" content="2018-06-09T20:00:12+00:00" />
+<meta property="article:modified_time" content="2018-06-13T17:17:07+00:00" />
+<meta property="og:site_name" content="Bitslog" />
+<meta property="og:image" content="https://bitslog.files.wordpress.com/2018/06/c2.png" />
+<meta property="og:image:width" content="1184" />
+<meta property="og:image:height" content="832" />
+<meta property="og:locale" content="en_US" />
+<meta name="twitter:site" content="@wordpressdotcom" />
+<meta name="twitter:text:title" content="Leaf-Node weakness in Bitcoin Merkle Tree&nbsp;Design" />
+<meta name="twitter:image" content="https://bitslog.files.wordpress.com/2018/06/c2.png?w=640" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta property="article:publisher" content="https://www.facebook.com/WordPresscom" />
+
+<!-- End Jetpack Open Graph Tags -->
+<link rel="shortcut icon" type="image/x-icon" href="https://s1.wp.com/i/favicon.ico" sizes="16x16 24x24 32x32 48x48" />
+<link rel="icon" type="image/x-icon" href="https://s1.wp.com/i/favicon.ico" sizes="16x16 24x24 32x32 48x48" />
+<link rel="apple-touch-icon" href="https://s2.wp.com/i/webclip.png" />
+<link rel='openid.server' href='https://bitslog.com/?openidserver=1' />
+<link rel='openid.delegate' href='https://bitslog.com/' />
+<link rel="search" type="application/opensearchdescription+xml" href="https://bitslog.com/osd.xml" title="Bitslog" />
+<link rel="search" type="application/opensearchdescription+xml" href="https://s1.wp.com/opensearch.xml" title="WordPress.com" />
+<style type="text/css">.recentcomments a{display:inline !important;padding:0 !important;margin:0 !important;}</style>		<style type="text/css">
+			.recentcomments a {
+				display: inline !important;
+				padding: 0 !important;
+				margin: 0 !important;
+			}
+
+			table.recentcommentsavatartop img.avatar, table.recentcommentsavatarend img.avatar {
+				border: 0px;
+				margin: 0;
+			}
+
+			table.recentcommentsavatartop a, table.recentcommentsavatarend a {
+				border: 0px !important;
+				background-color: transparent !important;
+			}
+
+			td.recentcommentsavatarend, td.recentcommentsavatartop {
+				padding: 0px 0px 1px 0px;
+				margin: 0px;
+			}
+
+			td.recentcommentstextend {
+				border: none !important;
+				padding: 0px 0px 2px 10px;
+			}
+
+			.rtl td.recentcommentstextend {
+				padding: 0px 10px 2px 0px;
+			}
+
+			td.recentcommentstexttop {
+				border: none;
+				padding: 0px 0px 0px 10px;
+			}
+
+			.rtl td.recentcommentstexttop {
+				padding: 0px 10px 0px 0px;
+			}
+		</style>
+		<meta name="application-name" content="Bitslog" /><meta name="msapplication-window" content="width=device-width;height=device-height" /><meta name="msapplication-tooltip" content="Words on Bitcoin Design, Privacy, Security and Crypto, by Sergio Demian Lerner" /><meta name="msapplication-task" content="name=Subscribe;action-uri=https://bitslog.com/feed/;icon-uri=https://s1.wp.com/i/favicon.ico" /><meta name="msapplication-task" content="name=Sign up for a free blog;action-uri=http://wordpress.com/signup/;icon-uri=https://s1.wp.com/i/favicon.ico" /><meta name="msapplication-task" content="name=WordPress.com Support;action-uri=http://support.wordpress.com/;icon-uri=https://s1.wp.com/i/favicon.ico" /><meta name="msapplication-task" content="name=WordPress.com Forums;action-uri=http://forums.wordpress.com/;icon-uri=https://s1.wp.com/i/favicon.ico" /><meta name="description" content="&nbsp; This document describes a weakness in Bitcoin Design that reduces the security of SPV proofs and therefore SPV Wallets.  The weakness was discovered by me on August 2017, but during the responsable disclosure process I learnt it was previously known by some prominent members of the Bitcoin Core team. Using this weakness an attacker&hellip;" />
+	<style type="text/css">
+						#header h1 a {
+					color: #ffffff !important;
+				}
+			</style>
+<link rel="amphtml" href="https://bitslog.com/2018/06/09/leaf-node-weakness-in-bitcoin-merkle-tree-design/amp/"><!-- Your Google Analytics Plugin is missing the tracking ID -->
+</head>
+<body class="post-template-default single single-post postid-1996 single-format-standard customizer-styles-applied two-column content-sidebar fixed highlander-enabled highlander-light">
+
+<div id="page-wrap1">
+
+<div id="page-wrap2">
+
+	<!-- page (actual site content, custom width) -->
+	<div id="page">
+
+	<div id="main-wrap">
+
+		<div id="mid-wrap">
+
+		<div id="side-wrap">
+
+			<!-- mid column -->
+			<div id="mid">
+
+				<div id="header">
+
+				<div id="topnav" class="description"> Words on Bitcoin Design, Privacy, Security and Crypto, by Sergio Demian Lerner</div>
+
+				<h1 id="title"><a href="https://bitslog.com">Bitslog</a></h1>
+
+					<div id="tabs">
+						<div class="menu"><ul>
+<li ><a href="https://bitslog.com/">Home</a></li><li class="page_item page-item-2"><a href="https://bitslog.com/about/">About</a></li>
+<li class="page_item page-item-322"><a href="https://bitslog.com/blog-index/">Blog Index</a></li>
+<li class="page_item page-item-795"><a href="https://bitslog.com/contributions-to-bitcoin-and-the-cryptocurrency-field/">Contributions to Bitcoin and the cryptocurrency&nbsp;field</a></li>
+<li class="page_item page-item-241"><a href="https://bitslog.com/hc-family-of-block-cipher-modes/">HC Family of Block Cipher&nbsp;modes</a></li>
+</ul></div>
+					</div>
+
+				</div>
+	<div id="mid-content">
+
+	
+		<div class="navigation">
+			<div class="alignleft">&laquo; <a href="https://bitslog.com/2018/01/22/storage-rent-revised/" rel="prev">Blockchain State Storage Rent&nbsp;Revised</a></div>
+			<div class="alignright"><a href="https://bitslog.com/2018/08/21/simple-change-to-the-bitcoin-merkleblock-command-to-protect-from-leaf-node-weakness-in-transaction-merkle-tree/" rel="next">Simple change to the Bitcoin MERKLEBLOCK command to protect from Leaf-Node weakness in Transaction Merkle&nbsp;Tree</a> &raquo;</div>
+
+			<div class="clear"></div>
+		</div>
+
+		<div id="post-1996" class="post-1996 post type-post status-publish format-standard hentry category-uncategorized">
+
+			<h2 class="title">Leaf-Node weakness in Bitcoin Merkle Tree&nbsp;Design</h2>
+
+			<div class="entry">
+				<div class="postbody entry clearfix">
+					<p>&nbsp;</p>
+<p>This document describes a weakness in Bitcoin Design that reduces the security of SPV proofs and therefore SPV Wallets.  The weakness was discovered by me on August 2017, but during the responsable disclosure process I learnt it was previously known by some prominent members of the Bitcoin Core team. Using this weakness an attacker can create a valid SPV proof for a fake payment to a victim that is using a SPV wallet, the payment amount being an arbitrary number of bitcoins, and trick the victim into accepting this payment as valid.  Happily, exploiting this bug requires brute-forcing between 69 and 73 bits (depending on initial investment), each operation being a double SHA2, and there are very simple probabilistic protections that SPV wallets can implement easily. For example, an attack can be carried on with an investment of 3M USD (*). It is assumed that most SPV wallets will be vulnerable to this attack. Also vulnerable are automated systems that accept SPV proofs (such as the Blockstream Elements sidechain in non-federated mode and the RSK Bridge contract). A simple patch which it neither a soft nor a hard fork can prevent the attack described. Also, a second attack that forks the Bitcoin blockchain is presented, requiring the brute-forcing of 225 bits, so it’s only of theoretical interest.</p>
+<p><strong>The Problem</strong></p>
+<p>Bitcoin Merkle tree makes no distinction between inner nodes and leaf nodes. The depth of the tree is implicitly given by the number of transactions. Inner nodes have no specific format, and are 64 bytes in length. Therefore, an attacker can submit to the blockchain a transaction that has exactly 64 bytes in length and then force a victim system to re-interpret this transaction as an inner node of the tree. An attacker can therefore provide an SPV proof (a Merkle branch) that adds an additional leaf node extending the dual transaction/node and provide proof of payment of any transaction he wishes.</p>
+<p>It must be noted that a problem reciprocal to this was identified by Andrew Miller [1]. He realized that internal nodes could be re-interpreted as transactions, but it seems he didn’t publish (or didn’t discover) the opposite attack: transactions re-interpreted as nodes. Note that for the coinbase transaction this weakness does not hold: achieveving that a coinbase transaction is interpreted as a hash of two transactions requires brute-forcing at least 216 bits (so it&#8217;s unfeasible, unlike this weakness).</p>
+<p><strong>Crafting a Transaction-node in 2^72 operations</strong></p>
+<p>The following diagram shows a 64-byte Bitcoin transaction, and how this transaction is split into two 32-byte chunks.</p>
+<table>
+<tbody>
+<tr>
+<td width="90"><strong>Absolute Offs</strong></td>
+<td width="69"><strong>32-Byte chunk</strong></td>
+<td width="75"><strong>32-byte offs</strong></td>
+<td width="65"><strong>Size</strong></td>
+<td width="182"><strong>Description</strong></td>
+<td width="144"><strong>Brute force bits (stage)</strong></td>
+</tr>
+<tr>
+<td width="90">0</td>
+<td width="69">1</td>
+<td width="75">0</td>
+<td width="65">4</td>
+<td width="182">Version</td>
+<td width="144">0</td>
+</tr>
+<tr>
+<td width="90">4</td>
+<td width="69">1</td>
+<td width="75">4</td>
+<td width="65">1</td>
+<td width="182">Input count</td>
+<td width="144">0</td>
+</tr>
+<tr>
+<td width="90">5</td>
+<td width="69">1</td>
+<td width="75">5</td>
+<td width="65">27</td>
+<td width="182">Input 0 Tx hash (part 1)</td>
+<td width="144">0</td>
+</tr>
+<tr>
+<td width="90">32</td>
+<td width="69">2</td>
+<td width="75">0</td>
+<td width="65">5</td>
+<td width="182">Input 0 Tx hash (part 2)</td>
+<td width="144">40 (2)</td>
+</tr>
+<tr>
+<td width="90">37</td>
+<td width="69">2</td>
+<td width="75">5</td>
+<td width="65">4</td>
+<td width="182">Input 0 Txout index</td>
+<td width="144">17 of 32 (1)</td>
+</tr>
+<tr>
+<td width="90">41</td>
+<td width="69">2</td>
+<td width="75">9</td>
+<td width="65">1</td>
+<td width="182">Input 0 script length</td>
+<td width="144">8 (1)</td>
+</tr>
+<tr>
+<td width="90">42</td>
+<td width="69">2</td>
+<td width="75">10</td>
+<td width="65">0</td>
+<td width="182">Empty Script</td>
+<td width="144">0</td>
+</tr>
+<tr>
+<td width="90">42</td>
+<td width="69">2</td>
+<td width="75">10</td>
+<td width="65">4</td>
+<td width="182">nSequence</td>
+<td width="144">0 (anything allowed)</td>
+</tr>
+<tr>
+<td width="90">46</td>
+<td width="69">2</td>
+<td width="75">14</td>
+<td width="65">1</td>
+<td width="182">Output count</td>
+<td width="144">8 (1)</td>
+</tr>
+<tr>
+<td width="90">47</td>
+<td width="69">2</td>
+<td width="75">15</td>
+<td width="65">8</td>
+<td width="182">value</td>
+<td width="144">29 of 64 (1)</td>
+</tr>
+<tr>
+<td width="90">55</td>
+<td width="69">2</td>
+<td width="75">23</td>
+<td width="65">1</td>
+<td width="182">Output 0 script length</td>
+<td width="144">8 (1)</td>
+</tr>
+<tr>
+<td width="90">56</td>
+<td width="69">2</td>
+<td width="75">24</td>
+<td width="65">4</td>
+<td width="182">Output 0 scriptPubKey</td>
+<td width="144">0 (anything allowed)</td>
+</tr>
+<tr>
+<td width="90">60</td>
+<td width="69">2</td>
+<td width="75">28</td>
+<td width="65">4</td>
+<td width="182">lock_time</td>
+<td width="144">2 of 32  (1)</td>
+</tr>
+<tr>
+<td width="90"></td>
+<td width="69"></td>
+<td width="75"></td>
+<td width="65"></td>
+<td width="182"></td>
+<td width="144">Total (1) = 72</p>
+<p>Total (2) = 40</td>
+</tr>
+</tbody>
+</table>
+<p>Let the transaction to become an inner node be T.  The brute-forcing is done in two stages. Suppose that the attacker holds 2^36-1 satoshis (= 687 BTC or about 5M USD as of June-2018) in a single UTXO A.</p>
+<p><strong>First Brute-forcing stage</strong></p>
+<p>First the attacker proceeds with a second half of T. In the second half, some fields are fixed, some free and some partially free. The LockTime value is also partially brute-forced: the attacker makes sure the brute-forced uint32 is between 500000000 and 1501843940 (today as a Unix timestamp) or between 0 and 479042 (the current block height). This implies that the LockTime has elapsed. The combined numerical range amplitude is 1002322982, which is close to 2<sup>30</sup>. Therefore, he only needs to bruteforce 2 bits of the LockTime. The higher bits of the Previn tx output index are brute-forced so the index is always less than 32768.</p>
+<p>The value is only partially brute-forced. From the 64 field bits, 35 bits are chosen freely (because the attacker has 2^36-1 satoshis, so 35 free bits can represent any number lower than the amount), while the 29 MSB bits must be zero. If the attacker has more BTC, he can reduce the number of bits to brute-force by consuming more BTC in A. Note that the amount is not lost: as the attacker is a miner, he can collect the transaction fees and consume the transaction output and recover all the funds (however creating the anyone-can-spend output and a high-fee transaction T will put the attacker in the risk that another miner reverts the blockchain to re-mine this block and collect both fee or output in T). The attacker may mine several blocks in-private (selfish-mining) to prevent rollbacks.</p>
+<p>The attacker tries to create a fake transaction F whose transaction ID matches this second half of T. An easy way to do it is to create a fake transaction having one output for the fake payment to the victim, and scan all possible values for the lock_time field; when the space is exhausted, the input script is slightly modified and a new 32-bit space of lock_time values is created. Again, an AsicBoost-like technique can be used to save one message-scheduler of the double-SHA2 operation.</p>
+<p>The total number of bits to brute-force in the first stage is therefore 72 bits.</p>
+<p><strong>Second Brute-forcing stage</strong></p>
+<p>In this second stage, the attacker tries to brute force the first 32-byte half of T. Let Q be the tx output index chosen in the first stage. He creates a huge number of transactions consuming the input A and having Q outputs each. The last output will be consumed by T. The attacker makes small changes to the tail of the transaction and re-hashes to obtain the id, therefore creating new transaction ids requires only two SHA2 compressions (one to finalize the transaction hash and the double-hash). The lock_field can be used to iterate. The attacker tries to find a transaction whose transaction ids end in the 5-bytes tail chosen in the first stage. Let’s call this transaction P. This transaction consumes an output controlled by the attacker having A funds. Approximately 2^40 operations will need to be performed to find P.  An AsicBoost-like technique can be used to save one message-scheduler of the double-SHA2 operation.</p>
+<p>The total number of bits to brute-force in the second stage is therefore 40 bits.</p>
+<p>Interestingly, the brute-forced half of the transaction created in the first stage can be reused as many times if the second stage is re-done. The attacks can be carried out at different times, in different blocks. Therefore, following attacks require only brute-forcing 40 bit each. If the number of outputs in P is 33K, the amortized cost of the attack corresponds approximately to brute-forcing only 65 bits. A final transaction E is added in the same block to consume the output of T and recover the funds at risk.</p>
+<p>&nbsp;</p>
+<p><img loading="lazy" data-attachment-id="1997" data-permalink="https://bitslog.com/2018/06/09/leaf-node-weakness-in-bitcoin-merkle-tree-design/c1/" data-orig-file="https://bitslog.files.wordpress.com/2018/06/c1.png" data-orig-size="1543,633" data-comments-opened="1" data-image-meta="{&quot;aperture&quot;:&quot;0&quot;,&quot;credit&quot;:&quot;&quot;,&quot;camera&quot;:&quot;&quot;,&quot;caption&quot;:&quot;&quot;,&quot;created_timestamp&quot;:&quot;0&quot;,&quot;copyright&quot;:&quot;&quot;,&quot;focal_length&quot;:&quot;0&quot;,&quot;iso&quot;:&quot;0&quot;,&quot;shutter_speed&quot;:&quot;0&quot;,&quot;title&quot;:&quot;&quot;,&quot;orientation&quot;:&quot;0&quot;}" data-image-title="c1" data-image-description="" data-image-caption="" data-medium-file="https://bitslog.files.wordpress.com/2018/06/c1.png?w=300" data-large-file="https://bitslog.files.wordpress.com/2018/06/c1.png?w=620" class="  wp-image-1997 aligncenter" src="https://bitslog.files.wordpress.com/2018/06/c1.png?w=541&#038;h=222" alt="c1.PNG" width="541" height="222" srcset="https://bitslog.files.wordpress.com/2018/06/c1.png?w=541&amp;h=222 541w, https://bitslog.files.wordpress.com/2018/06/c1.png?w=1082&amp;h=444 1082w, https://bitslog.files.wordpress.com/2018/06/c1.png?w=150&amp;h=62 150w, https://bitslog.files.wordpress.com/2018/06/c1.png?w=300&amp;h=123 300w, https://bitslog.files.wordpress.com/2018/06/c1.png?w=768&amp;h=315 768w, https://bitslog.files.wordpress.com/2018/06/c1.png?w=1024&amp;h=420 1024w" sizes="(max-width: 541px) 100vw, 541px" /></p>
+<p style="text-align:center;">Fig 1. Chain of transactions in attacker’s block</p>
+<p><img loading="lazy" data-attachment-id="1998" data-permalink="https://bitslog.com/2018/06/09/leaf-node-weakness-in-bitcoin-merkle-tree-design/c2/" data-orig-file="https://bitslog.files.wordpress.com/2018/06/c2.png" data-orig-size="1184,832" data-comments-opened="1" data-image-meta="{&quot;aperture&quot;:&quot;0&quot;,&quot;credit&quot;:&quot;&quot;,&quot;camera&quot;:&quot;&quot;,&quot;caption&quot;:&quot;&quot;,&quot;created_timestamp&quot;:&quot;0&quot;,&quot;copyright&quot;:&quot;&quot;,&quot;focal_length&quot;:&quot;0&quot;,&quot;iso&quot;:&quot;0&quot;,&quot;shutter_speed&quot;:&quot;0&quot;,&quot;title&quot;:&quot;&quot;,&quot;orientation&quot;:&quot;0&quot;}" data-image-title="C2" data-image-description="" data-image-caption="" data-medium-file="https://bitslog.files.wordpress.com/2018/06/c2.png?w=300" data-large-file="https://bitslog.files.wordpress.com/2018/06/c2.png?w=620" class="  wp-image-1998 aligncenter" src="https://bitslog.files.wordpress.com/2018/06/c2.png?w=508&#038;h=357" alt="C2.PNG" width="508" height="357" srcset="https://bitslog.files.wordpress.com/2018/06/c2.png?w=508&amp;h=357 508w, https://bitslog.files.wordpress.com/2018/06/c2.png?w=1016&amp;h=714 1016w, https://bitslog.files.wordpress.com/2018/06/c2.png?w=150&amp;h=105 150w, https://bitslog.files.wordpress.com/2018/06/c2.png?w=300&amp;h=211 300w, https://bitslog.files.wordpress.com/2018/06/c2.png?w=768&amp;h=540 768w" sizes="(max-width: 508px) 100vw, 508px" /></p>
+<p style="text-align:center;">Fig 2. Merkle Tree of the Block containing the fake transaction R</p>
+<p>&nbsp;</p>
+<p><strong>The Cost of the Attack</strong></p>
+<p>The technology required to build a custom ASIC that performs the brute-forcing of the second stage is very similar to the technology used for Bitcoin miners.</p>
+<p>A state-of-the-art Bitcoin miner reaches 14 TH/s and costs $1300 USD. An attacker that buys 1000 units, investing 1.3M USD in hardware, can scan a 72-bit space in 4 days. An additional 1M-10M USD for ASIC chip design and tape-out may be required, depending on the node density. If a chip that can accomplish a programmed pattern match search (instead of zero prefix search) already exists, the design/tapeout costs are saved.</p>
+<p>Mining several blocks in private to confirm the fake transaction may be needed to prevent the other miners from reorganizing the blockchain in order to steal the fees and output of transaction T. If the attacker is not in collusion with 51% of the miners, then this may cost the attacker millions in rented hashing power, if available. If the attacker is colluding with 51% of the miners there is no additional cost.</p>
+<p>Therefore, under favorable conditions to the attacker, the attack can be profitable if the attacker can cheat one or more users for 1.3M USD or more in total. As any rational actor receiving large amount of BTC will double-check the reception using a full node, only autonomous systems relying on SPV proofs (such as the Elements blockchain and the RSK bridge) may suffer from these attacks.</p>
+<p>The attack presented in this document is not optimal: there are several trade-offs than can be made to reduce the number of bits to brute-force increasing other variables, such as initial investment. Locking twice the money in A allows the attacker to reduce the cost in mining hardware to a half, etc.</p>
+<p><strong>An (expensive) attack to partition Bitcoin</strong></p>
+<p>The same vulnerability allows an attacker to fork the Bitcoin blockchain in two without reconciliation, however this attack costs 2^240 double SHA2 operations, so the attack is impractical. The attack requires the attacker to mine a block A with only one specially crafted coinbase transaction of 64 bytes, and create a competing block B with 2 transactions where the pair of transactions IDs in B hashes to the coinbase transaction in A. Both blocks are broadcast simultaneously to different parts of the Bitcoin network. Therefore approximately 50% of the network receives A and the other 50%, B. The two sets of transactions in A and B are created so that they consume different UTXOs and/or create different UTXOs, and therefore both blockchains are valid, but incompatible.</p>
+<p>The fact that the first transaction is the coinbase transaction, and a coinbase transaction requires 27 zero bytes and 1 fixed byte in the first 32 bytes, makes the attack practically unfeasible, as it requires brute-forcing 225 bits.</p>
+<p><strong>Remedy</strong></p>
+<p>There is no need to hard-fork or soft-fork Bitcoin, although a future programmed soft-fork or hard-fork could fix this vulnerability.  We propose two non-forking solutions and three forking solutions.</p>
+<p>One easy non-forking remedy is that SPV wallets check that every internal 64-bit node of the SPV proof is not a valid transaction. First, there are no 64-byte Bitcoin transaction that pass standard-checks, so the presence of such transaction should rise an alarm. Even if such transactions were normal, the probability of a random 64-byte chunk to become a syntactically valid Bitcoin transaction is close to 2^-6. Therefore, the SPV client can flag the presence of such dual transaction-node as an attack, and refuse to accept the SPV proof.</p>
+<p>Another way to fix SPV wallets is to require, along with a Merkle-proof of the inclusion of a transaction E, a Merkle proof for the coinbase transaction. Because building a dual transaction-node for the coinbase transaction requires brute-forcing 225 bits, showing a valid coinbase and its corresponding Merkle inclusion proof is enough to discover the tree height. Both the E branch and the coinbase branch should have equal tree depths.</p>
+<p>This method has a drawback: the coinbase transaction may be large, so the method requires non-logarithmic space. If the coinbase transaction is larger than 64 bytes, we could show as evidence only the last a SHA2 mid-state of the first SHA2 application to the coinbase transaction and the transaction length in bytes: with these two field the coinbase id can be reconstructed, because SHA2 embeds the bitlength in the last message block. This allows the verified to effectively differentiate between a 64-byte node and the coinbase transaction. The security of this constructions is weaker and relies on the infeasibility to find free-start SHA2 pre-images. To complicate things, it is still possible (for the next 145 years) that a malicious miner includes a coinbase having exactly 64 bytes.  Therefore, the SPV client must also perform a special check in case the coinbase is exactly 64 bytes in length: in this case it must verify that the previn field contains 256 zero bits (of which 216 are stored in the left half). It&#8217;s currently infeasible to obtain a pre-image of a hash digest having 216 zero trailing bits.</p>
+<p>Yet another solution that keeps the logarithmic-space constrain for Merkle-proofs is to present an inclusion proof for the right-most transaction ID. In case the number of transactions is not a power of 2 (a full tree), this id appears duplicated at the last two nodes of the tree, so that the tree height can be inferred. A complete solution would require soft-forking Bitcoin to prevent blocks having a full tree, which is nasty.</p>
+<p>To summarize, the most space-efficient solution without a soft-fork would be hybrid: show inclusion proof of the rightmost tx id branch if the tree is not full, else the coinbase (showing mid-state and length) if length is greater than 64 bytes, or else show the full coinbase transaction.</p>
+<p>A simple soft-forking solution is to invalidate blocks having transactions of size equal to 64.</p>
+<p>Another soft-forking solution is to require that a new field “depth” requiring 4 bits is embedded in the block version field. This new fields should specify the Merkle tree depth minus one. By using 4 bits, a a tree of depth 16, containing up to 65K transactions can be specified. Full nodes much check that the actual tree depth matches the value of “depth” given. SPV nodes can check that the “depth” field matches the Merkle branch length received.</p>
+<p>A hard-forking solution is adding a prefix to internal nodes of the Merkle tree before performing node hashing and adding a different prefix to transaction IDs and then also hash them. Ripple ([2]) uses a such a prefix system.</p>
+<p><strong>Thanks</strong></p>
+<p>Special thanks to Juliano Rizzo and Matias Marquez from RSK Labs R&amp;D for helping me reduce the attack complexity. Also to Gregory Maxwell for discussing the best way to correct this problem.</p>
+<p>(*) The amounts in USD described in this document were computed at when the weakness was discovered and now they may differ significantly.</p>
+<p>[1] <a href="https://cs.umd.edu/~amiller/BTCRelayAudit.pdf">https://cs.umd.edu/~amiller/BTCRelayAudit.pdf</a></p>
+<p>[2] <a href="https://wiki.ripple.com/Hash_Tree">https://wiki.ripple.com/Hash_Tree</a></p>
+<p><strong>History</strong></p>
+<p>Finding Date: August 4<sup>th</sup>, 2017 (identified as CVE-2017-12842).</p>
+<p>Bitcoin Core Report Contact Date:  August 8<sup>th</sup>, 2017 (from the interactions we learnt that is was already known to some Core developers)</p>
+<p>Publication Date: June 9<sup>th</sup>, 2018 (triggered from the exposure of the weakness in the Bitcoin mailing list)</p>
+<p>June 13th, 2018: Luke Dashjr contacted me and told me he already knew about this weakness. I trust Luke&#8217;s word that this is the case, and as I said in the first paragraph, the weakness was already known by some developers. But I still don&#8217;t understand (1) why so many people knew about it  but underestimated it badly, (2) why there was no attempt to fix it.</p>
+<p>Author: Sergio Demian Lerner, RSK Labs</p>
+<p>&nbsp;</p>
+<div id="jp-post-flair" class="sharedaddy sd-like-enabled sd-sharing-enabled"><div class="sharedaddy sd-sharing-enabled"><div class="robots-nocontent sd-block sd-social sd-social-icon-text sd-sharing"><h3 class="sd-title">Share this:</h3><div class="sd-content"><ul><li class="share-twitter"><a rel="nofollow noopener noreferrer" data-shared="sharing-twitter-1996" class="share-twitter sd-button share-icon" href="https://bitslog.com/2018/06/09/leaf-node-weakness-in-bitcoin-merkle-tree-design/?share=twitter" target="_blank" title="Click to share on Twitter"><span>Twitter</span></a></li><li class="share-facebook"><a rel="nofollow noopener noreferrer" data-shared="sharing-facebook-1996" class="share-facebook sd-button share-icon" href="https://bitslog.com/2018/06/09/leaf-node-weakness-in-bitcoin-merkle-tree-design/?share=facebook" target="_blank" title="Click to share on Facebook"><span>Facebook</span></a></li><li class="share-end"></li></ul></div></div></div><div class='sharedaddy sd-block sd-like jetpack-likes-widget-wrapper jetpack-likes-widget-unloaded' id='like-post-wrapper-26028371-1996-617d6a1557319' data-src='//widgets.wp.com/likes/index.html?ver=20210831#blog_id=26028371&amp;post_id=1996&amp;origin=bitslog.wordpress.com&amp;obj_id=26028371-1996-617d6a1557319&amp;domain=bitslog.com' data-name='like-post-frame-26028371-1996-617d6a1557319' data-title='Like or Reblog'><h3 class='sd-title'>Like this:</h3><div class='likes-widget-placeholder post-likes-widget-placeholder' style='height: 55px;'><span class='button'><span>Like</span></span> <span class="loading">Loading...</span></div><span class='sd-text-color'></span><a class='sd-link-color'></a></div>
+<div id='jp-relatedposts' class='jp-relatedposts' >
+	<h3 class="jp-relatedposts-headline"><em>Related</em></h3>
+</div></div>				</div>
+
+					
+					
+				<p class="postmetadata alt">
+
+					<small>
+					This entry was posted on June 9, 2018, 8:00 pm and is filed under <a href="https://bitslog.com/category/uncategorized/" rel="category tag">Uncategorized</a>. You can follow any responses to this entry through <a href="https://bitslog.com/2018/06/09/leaf-node-weakness-in-bitcoin-merkle-tree-design/feed/" title="RSS 2.0">RSS 2.0</a>.
+					
+					You can <a href="#respond">leave a response</a>, or <a href="https://bitslog.com/2018/06/09/leaf-node-weakness-in-bitcoin-merkle-tree-design/trackback/" rel="trackback">trackback</a> from your own site.
+					
+										</small>
+
+				</p>
+
+			</div>
+
+		</div>
+
+	
+<div id="post-extra-content">
+
+	<ul class="secondary-tabs">
+		<li><a href="#comments"><span><span>Comments (0)</span></span></a></li>
+			</ul>
+
+	<div id="commentlist">
+		<ol id="comments">
+
+		
+			
+				<li>Leave a comment</li>
+
+			
+		
+		</ol>
+
+		
+		<div class="commentnavi">
+			<div class="commentpager">
+							</div>
+		</div>
+
+			<div id="respond" class="comment-respond">
+		<h3 id="reply-title" class="comment-reply-title">Leave a Reply <small><a rel="nofollow" id="cancel-comment-reply-link" href="/2018/06/09/leaf-node-weakness-in-bitcoin-merkle-tree-design/#respond" style="display:none;">Cancel reply</a></small></h3><form action="https://bitslog.com/wp-comments-post.php" method="post" id="commentform" class="comment-form"><input type="hidden" id="highlander_comment_nonce" name="highlander_comment_nonce" value="80843b1c61" /><input type="hidden" name="_wp_http_referer" value="/2018/06/09/leaf-node-weakness-in-bitcoin-merkle-tree-design/" />
+<input type="hidden" name="hc_post_as" id="hc_post_as" value="guest" />
+
+<div class="comment-form-field comment-textarea">
+	<label for="comment">Enter your comment here...</label>
+	<div id="comment-form-comment"><textarea id="comment" name="comment" title="Enter your comment here..."></textarea></div>
+</div>
+
+<div id="comment-form-identity">
+	<div id="comment-form-nascar">
+		<p>Fill in your details below or click an icon to log in:</p>
+		<ul>
+			<li class="selected" style="display:none;">
+				<a href="#comment-form-guest" id="postas-guest" class="nascar-signin-link"
+                   title="Login via Guest">
+									</a>
+			</li>
+			<li>
+				<a href="#comment-form-load-service:WordPress.com" id="postas-wordpress" class="nascar-signin-link"
+                   title="Login via WordPress.com">
+					<svg xmlns="http://www.w3.org/2000/svg" role="presentation" viewBox="0 0 24 24" ><rect x="0" fill="none" width="24" height="24"/><g><path fill="#0087be" d="M12.158 12.786l-2.698 7.84c.806.236 1.657.365 2.54.365 1.047 0 2.05-.18 2.986-.51-.024-.037-.046-.078-.065-.123l-2.762-7.57zM3.008 12c0 3.56 2.07 6.634 5.068 8.092L3.788 8.342c-.5 1.117-.78 2.354-.78 3.658zm15.06-.454c0-1.112-.398-1.88-.74-2.48-.456-.74-.883-1.368-.883-2.11 0-.825.627-1.595 1.51-1.595.04 0 .078.006.116.008-1.598-1.464-3.73-2.36-6.07-2.36-3.14 0-5.904 1.613-7.512 4.053.21.008.41.012.58.012.94 0 2.395-.114 2.395-.114.484-.028.54.684.057.74 0 0-.487.058-1.03.086l3.275 9.74 1.968-5.902-1.4-3.838c-.485-.028-.944-.085-.944-.085-.486-.03-.43-.77.056-.742 0 0 1.484.114 2.368.114.94 0 2.397-.114 2.397-.114.486-.028.543.684.058.74 0 0-.488.058-1.03.086l3.25 9.665.897-2.997c.456-1.17.684-2.137.684-2.907zm1.82-3.86c.04.286.06.593.06.924 0 .912-.17 1.938-.683 3.22l-2.746 7.94c2.672-1.558 4.47-4.454 4.47-7.77 0-1.564-.4-3.033-1.1-4.314zM12 22C6.486 22 2 17.514 2 12S6.486 2 12 2s10 4.486 10 10-4.486 10-10 10z"/></g></svg>				</a>
+			</li>
+			<li>
+				<a href="#comment-form-load-service:Twitter" id="postas-twitter" class="nascar-signin-link"
+                   title="Login via Twitter">
+					<svg xmlns="http://www.w3.org/2000/svg" role="presentation" viewBox="0 0 24 24" ><rect x="0" fill="none" width="24" height="24"/><g><path fill="#1DA1F2" d="M22.23 5.924c-.736.326-1.527.547-2.357.646.847-.508 1.498-1.312 1.804-2.27-.793.47-1.67.812-2.606.996C18.325 4.498 17.258 4 16.078 4c-2.266 0-4.103 1.837-4.103 4.103 0 .322.036.635.106.935-3.41-.17-6.433-1.804-8.457-4.287-.353.607-.556 1.312-.556 2.064 0 1.424.724 2.68 1.825 3.415-.673-.022-1.305-.207-1.86-.514v.052c0 1.988 1.415 3.647 3.293 4.023-.344.095-.707.145-1.08.145-.265 0-.522-.026-.773-.074.522 1.63 2.038 2.817 3.833 2.85-1.404 1.1-3.174 1.757-5.096 1.757-.332 0-.66-.02-.98-.057 1.816 1.164 3.973 1.843 6.29 1.843 7.547 0 11.675-6.252 11.675-11.675 0-.178-.004-.355-.012-.53.802-.578 1.497-1.3 2.047-2.124z"/></g></svg>				</a>
+			</li>
+			<li>
+				<a href="#comment-form-load-service:Facebook" id="postas-facebook" class="nascar-signin-link"
+                   title="Login via Facebook">
+					<svg xmlns="http://www.w3.org/2000/svg" role="presentation" viewBox="0 0 24 24" ><rect x="0" fill="none" width="24" height="24"/><g><path fill="#3B5998" d="M20.007 3H3.993C3.445 3 3 3.445 3 3.993v16.013c0 .55.445.994.993.994h8.62v-6.97H10.27V11.31h2.346V9.31c0-2.325 1.42-3.59 3.494-3.59.993 0 1.847.073 2.096.106v2.43h-1.438c-1.128 0-1.346.537-1.346 1.324v1.734h2.69l-.35 2.717h-2.34V21h4.587c.548 0 .993-.445.993-.993V3.993c0-.548-.445-.993-.993-.993z"/></g></svg>				</a>
+			</li>
+		</ul>
+	</div>
+
+	<div id="comment-form-guest" class="comment-form-service selected">
+		<div class="comment-form-padder">
+			<div class="comment-form-avatar">
+<a href="https://gravatar.com/site/signup/" target="_blank">				<img src="https://1.gravatar.com/avatar/ad516503a11cd5ca435acc9bb6523536?s=25&amp;d=identicon&amp;forcedefault=y&amp;r=G" alt="Gravatar" width="25" class="no-grav" />
+</a>			</div>
+
+				<div class="comment-form-fields">
+				<div class="comment-form-field comment-form-email">
+					<label for="email">Email <span class="required">(required)</span> <span class="nopublish">(Address never made public)</span></label>
+					<div class="comment-form-input"><input id="email" name="email" type="email" value="" /></div>
+				</div>
+				<div class="comment-form-field comment-form-author">
+					<label for="author">Name <span class="required">(required)</span></label>
+					<div class="comment-form-input"><input id="author" name="author" type="text" value="" /></div>
+				</div>
+				<div class="comment-form-field comment-form-url">
+					<label for="url">Website</label>
+					<div class="comment-form-input"><input id="url" name="url" type="url" value="" /></div>
+				</div>
+			</div>
+			
+		</div>
+	</div>
+
+	<div id="comment-form-wordpress" class="comment-form-service">
+		<div class="comment-form-padder">
+			<div class="comment-form-avatar">
+				<img src="https://1.gravatar.com/avatar/ad516503a11cd5ca435acc9bb6523536?s=25&amp;d=identicon&amp;forcedefault=y&amp;r=G" alt="WordPress.com Logo" width="25" class="no-grav" />
+			</div>
+
+				<div class="comment-form-fields">
+				<input type="hidden" name="wp_avatar" id="wordpress-avatar" class="comment-meta-wordpress" value="" />
+				<input type="hidden" name="wp_user_id" id="wordpress-user_id" class="comment-meta-wordpress" value="" />
+				<input type="hidden" name="wp_access_token" id="wordpress-access_token" class="comment-meta-wordpress" value="" />
+						<p class="comment-form-posting-as pa-wordpress">
+			<strong></strong>
+			You are commenting using your WordPress.com account.			<span class="comment-form-log-out">
+				(&nbsp;<a href="javascript:HighlanderComments.doExternalLogout( 'wordpress' );">Log&nbsp;Out</a>&nbsp;/&nbsp;
+				<a href="#" onclick="javascript:HighlanderComments.switchAccount();return false;">Change</a>&nbsp;)
+			</span>
+			<span class="pa-icon"><svg xmlns="http://www.w3.org/2000/svg" role="presentation" viewBox="0 0 24 24" ><rect x="0" fill="none" width="24" height="24"/><g><path fill="#0087be" d="M12.158 12.786l-2.698 7.84c.806.236 1.657.365 2.54.365 1.047 0 2.05-.18 2.986-.51-.024-.037-.046-.078-.065-.123l-2.762-7.57zM3.008 12c0 3.56 2.07 6.634 5.068 8.092L3.788 8.342c-.5 1.117-.78 2.354-.78 3.658zm15.06-.454c0-1.112-.398-1.88-.74-2.48-.456-.74-.883-1.368-.883-2.11 0-.825.627-1.595 1.51-1.595.04 0 .078.006.116.008-1.598-1.464-3.73-2.36-6.07-2.36-3.14 0-5.904 1.613-7.512 4.053.21.008.41.012.58.012.94 0 2.395-.114 2.395-.114.484-.028.54.684.057.74 0 0-.487.058-1.03.086l3.275 9.74 1.968-5.902-1.4-3.838c-.485-.028-.944-.085-.944-.085-.486-.03-.43-.77.056-.742 0 0 1.484.114 2.368.114.94 0 2.397-.114 2.397-.114.486-.028.543.684.058.74 0 0-.488.058-1.03.086l3.25 9.665.897-2.997c.456-1.17.684-2.137.684-2.907zm1.82-3.86c.04.286.06.593.06.924 0 .912-.17 1.938-.683 3.22l-2.746 7.94c2.672-1.558 4.47-4.454 4.47-7.77 0-1.564-.4-3.033-1.1-4.314zM12 22C6.486 22 2 17.514 2 12S6.486 2 12 2s10 4.486 10 10-4.486 10-10 10z"/></g></svg></span>
+		</p>
+					</div>
+	
+		</div>
+	</div>
+
+	<div id="comment-form-googleplus" class="comment-form-service">
+		<div class="comment-form-padder">
+			<div class="comment-form-avatar">
+				<img src="https://1.gravatar.com/avatar/ad516503a11cd5ca435acc9bb6523536?s=25&amp;d=identicon&amp;forcedefault=y&amp;r=G" alt="Google photo" width="25" class="no-grav" />
+			</div>
+
+				<div class="comment-form-fields">
+				<input type="hidden" name="googleplus_avatar" id="googleplus-avatar" class="comment-meta-googleplus" value="" />
+				<input type="hidden" name="googleplus_user_id" id="googleplus-user_id" class="comment-meta-googleplus" value="" />
+				<input type="hidden" name="googleplus_access_token" id="googleplus-access_token" class="comment-meta-googleplus" value="" />
+						<p class="comment-form-posting-as pa-googleplus">
+			<strong></strong>
+			You are commenting using your Google account.			<span class="comment-form-log-out">
+				(&nbsp;<a href="javascript:HighlanderComments.doExternalLogout( 'googleplus' );">Log&nbsp;Out</a>&nbsp;/&nbsp;
+				<a href="#" onclick="javascript:HighlanderComments.switchAccount();return false;">Change</a>&nbsp;)
+			</span>
+			<span class="pa-icon"><svg xmlns="http://www.w3.org/2000/svg" role="presentation" x="0px" y="0px" viewBox="0 0 60 60" ><path fill="#519bf7" d="M56.3,30c0,-1.6 -0.2,-3.4 -0.6,-5h-3.1H42.2H30v10.6h14.8C44,39.3 42,42 39.1,43.9l8.8,6.8C53,46 56.3,39 56.3,30z" /><path fill="#3db366" d="M30,57.5c6.7,0 13.1,-2.4 17.9,-6.8l-8.8,-6.8c-2.5,1.6 -5.6,2.4 -9.1,2.4c-7.2,0 -13.3,-4.7 -15.4,-11.2l-9.3,7.1C9.8,51.3 19.1,57.5 30,57.5z" /><path fill="#fdc600" d="M5.3,42.2l9.3,-7.1c-0.5,-1.6 -0.8,-3.3 -0.8,-5.1s0.3,-3.5 0.8,-5.1l-9.3,-7.1C3.5,21.5 2.5,25.6 2.5,30S3.5,38.5 5.3,42.2z" /><path fill="#f15b44" d="M40.1,17.4l8,-8C43.3,5.1 37,2.5 30,2.5C19.1,2.5 9.8,8.7 5.3,17.8l9.3,7.1c2.1,-6.5 8.2,-11.1 15.4,-11.1C33.9,13.7 37.4,15.1 40.1,17.4z" /></svg></span>
+		</p>
+					</div>
+	
+		</div>
+	</div>
+
+	<div id="comment-form-twitter" class="comment-form-service">
+		<div class="comment-form-padder">
+			<div class="comment-form-avatar">
+				<img src="https://1.gravatar.com/avatar/ad516503a11cd5ca435acc9bb6523536?s=25&amp;d=identicon&amp;forcedefault=y&amp;r=G" alt="Twitter picture" width="25" class="no-grav" />
+			</div>
+
+				<div class="comment-form-fields">
+				<input type="hidden" name="twitter_avatar" id="twitter-avatar" class="comment-meta-twitter" value="" />
+				<input type="hidden" name="twitter_user_id" id="twitter-user_id" class="comment-meta-twitter" value="" />
+				<input type="hidden" name="twitter_access_token" id="twitter-access_token" class="comment-meta-twitter" value="" />
+						<p class="comment-form-posting-as pa-twitter">
+			<strong></strong>
+			You are commenting using your Twitter account.			<span class="comment-form-log-out">
+				(&nbsp;<a href="javascript:HighlanderComments.doExternalLogout( 'twitter' );">Log&nbsp;Out</a>&nbsp;/&nbsp;
+				<a href="#" onclick="javascript:HighlanderComments.switchAccount();return false;">Change</a>&nbsp;)
+			</span>
+			<span class="pa-icon"><svg xmlns="http://www.w3.org/2000/svg" role="presentation" viewBox="0 0 24 24" ><rect x="0" fill="none" width="24" height="24"/><g><path fill="#1DA1F2" d="M22.23 5.924c-.736.326-1.527.547-2.357.646.847-.508 1.498-1.312 1.804-2.27-.793.47-1.67.812-2.606.996C18.325 4.498 17.258 4 16.078 4c-2.266 0-4.103 1.837-4.103 4.103 0 .322.036.635.106.935-3.41-.17-6.433-1.804-8.457-4.287-.353.607-.556 1.312-.556 2.064 0 1.424.724 2.68 1.825 3.415-.673-.022-1.305-.207-1.86-.514v.052c0 1.988 1.415 3.647 3.293 4.023-.344.095-.707.145-1.08.145-.265 0-.522-.026-.773-.074.522 1.63 2.038 2.817 3.833 2.85-1.404 1.1-3.174 1.757-5.096 1.757-.332 0-.66-.02-.98-.057 1.816 1.164 3.973 1.843 6.29 1.843 7.547 0 11.675-6.252 11.675-11.675 0-.178-.004-.355-.012-.53.802-.578 1.497-1.3 2.047-2.124z"/></g></svg></span>
+		</p>
+					</div>
+	
+		</div>
+	</div>
+
+	<div id="comment-form-facebook" class="comment-form-service">
+		<div class="comment-form-padder">
+			<div class="comment-form-avatar">
+				<img src="" alt="Facebook photo" width="25" class="no-grav" />
+			</div>
+
+				<div class="comment-form-fields">
+				<input type="hidden" name="fb_avatar" id="facebook-avatar" class="comment-meta-facebook" value="" />
+				<input type="hidden" name="fb_user_id" id="facebook-user_id" class="comment-meta-facebook" value="" />
+				<input type="hidden" name="fb_access_token" id="facebook-access_token" class="comment-meta-facebook" value="" />
+						<p class="comment-form-posting-as pa-facebook">
+			<strong></strong>
+			You are commenting using your Facebook account.			<span class="comment-form-log-out">
+				(&nbsp;<a href="javascript:HighlanderComments.doExternalLogout( 'facebook' );">Log&nbsp;Out</a>&nbsp;/&nbsp;
+				<a href="#" onclick="javascript:HighlanderComments.switchAccount();return false;">Change</a>&nbsp;)
+			</span>
+			<span class="pa-icon"><svg xmlns="http://www.w3.org/2000/svg" role="presentation" viewBox="0 0 24 24" ><rect x="0" fill="none" width="24" height="24"/><g><path fill="#3B5998" d="M20.007 3H3.993C3.445 3 3 3.445 3 3.993v16.013c0 .55.445.994.993.994h8.62v-6.97H10.27V11.31h2.346V9.31c0-2.325 1.42-3.59 3.494-3.59.993 0 1.847.073 2.096.106v2.43h-1.438c-1.128 0-1.346.537-1.346 1.324v1.734h2.69l-.35 2.717h-2.34V21h4.587c.548 0 .993-.445.993-.993V3.993c0-.548-.445-.993-.993-.993z"/></g></svg></span>
+		</p>
+					</div>
+	
+		</div>
+	</div>
+
+
+	<div id="comment-form-load-service" class="comment-form-service">
+		<div class="comment-form-posting-as-cancel"><a href="javascript:HighlanderComments.cancelExternalWindow();">Cancel</a></div>
+		<p>Connecting to %s</p>
+	</div>
+
+</div>
+
+<script type="text/javascript">
+var highlander_expando_javascript = function () {
+
+	function hide( sel ) {
+		var el = document.querySelector( sel );
+		if ( el ) {
+			el.style.setProperty( 'display', 'none' );
+		}
+	}
+
+	function show( sel ) {
+		var el = document.querySelector( sel );
+		if ( el ) {
+			el.style.removeProperty( 'display' );
+		}
+	}
+
+	var input = document.createElement( 'input' );
+	var comment = document.querySelector( '#comment' );
+
+	if ( input && comment && 'placeholder' in input ) {
+		var label = document.querySelector( '.comment-textarea label' );
+		if ( label ) {
+			var text = label.textContent;
+			label.parentNode.removeChild( label );
+			comment.setAttribute( 'placeholder', text );
+		}
+	}
+
+	// Expando Mode: start small, then auto-resize on first click + text length
+	hide( '#comment-form-identity' );
+	hide( '#comment-form-subscribe' );
+	hide( '#commentform .form-submit' );
+
+	if ( comment ) {
+		comment.style.height = '10px';
+
+		var handler = function () {
+			comment.style.height = HighlanderComments.initialHeight + 'px';
+			show( '#comment-form-identity' );
+			show( '#comment-form-subscribe' );
+			show( '#commentform .form-submit' );
+			HighlanderComments.resizeCallback();
+
+			comment.removeEventListener( 'focus', handler );
+		};
+
+		comment.addEventListener( 'focus', handler );
+	}
+}
+
+if ( document.readyState !== 'loading' ) {
+	highlander_expando_javascript();
+} else {
+	if ( typeof window.jQuery === 'function' ) {
+		// Use jQuery's `ready` if available.
+		// This solves some scheduling issues between this script and the main highlander script.
+		jQuery( document ).ready( highlander_expando_javascript );
+	} else {
+		// If not available, add a vanilla event listener.
+		document.addEventListener( 'DOMContentLoaded', highlander_expando_javascript );
+	}
+}
+
+</script>
+
+<div id="comment-form-subscribe">
+	<p class="comment-subscription-form"><input type="checkbox" name="subscribe" id="subscribe" value="subscribe" style="width: auto;"/> <label class="subscribe-label" id="subscribe-label" for="subscribe" style="display: inline;">Notify me of new comments via email.</label></p><p class="post-subscription-form"><input type="checkbox" name="subscribe_blog" id="subscribe_blog" value="subscribe" style="width: auto;"/> <label class="subscribe-label" id="subscribe-blog-label" for="subscribe_blog"  style="display: inline;">Notify me of new posts via email.</label></p></div>
+
+
+
+
+<p class="form-submit wp-block-button"><input name="submit" type="submit" id="comment-submit" class="submit wp-block-button__link" value="Post Comment" /> <input type='hidden' name='comment_post_ID' value='1996' id='comment_post_ID' />
+<input type='hidden' name='comment_parent' id='comment_parent' value='0' />
+</p><p style="display: none;"><input type="hidden" id="akismet_comment_nonce" name="akismet_comment_nonce" value="9fbdf6d8a3" /></p>
+<input type="hidden" name="genseq" value="1635609109" />
+<p style="display: none !important;"><label>&#916;<textarea name="ak_hp_textarea" cols="45" rows="8" maxlength="100"></textarea></label><input type="hidden" id="ak_js_1" name="ak_js" value="203"/><script>document.getElementById( "ak_js_1" ).setAttribute( "value", ( new Date() ).getTime() );</script></p></form>	</div><!-- #respond -->
+	<div style="clear: both"></div>
+	</div>
+
+</div>
+
+	
+	</div>
+	<!-- mid content -->
+
+</div>
+<!-- /mid -->
+
+
+<div id="sidebar">
+
+	<div id="sidebar-wrap1">
+
+	<div id="sidebar-wrap2">
+	
+		<ul id="sidelist">
+			
+				<li><div id="search-2" class="widget widget_search">
+<form method="get" id="searchform" action="https://bitslog.com/">
+	<input type="text" name="s" size="40" id="searchbox" class="searchfield" />
+	<input type="submit" value="Search" class="searchbutton" />
+</form></div></li>
+		<li><div id="recent-posts-2" class="widget widget_recent_entries">
+		<h2 class="title">Recent Posts</h2>
+		<ul>
+											<li>
+					<a href="https://bitslog.com/2021/06/10/the-dark-side-of-ethereum-1-64th-call-gas-reduction/">The Dark Side of Ethereum 1/64th CALL Gas&nbsp;Reduction</a>
+									</li>
+											<li>
+					<a href="https://bitslog.com/2021/06/10/2021/">2021</a>
+									</li>
+											<li>
+					<a href="https://bitslog.com/2020/09/03/re-mining-patoshi-blocks-for-dummies/">Re-mining Patoshi Blocks for&nbsp;Dummies</a>
+									</li>
+											<li>
+					<a href="https://bitslog.com/2020/08/22/the-patoshi-mining-machine/">The Patoshi Mining&nbsp;Machine</a>
+									</li>
+											<li>
+					<a href="https://bitslog.com/2020/06/22/a-new-mystery-in-patoshi-timestamps/">A New Mystery in Patoshi&nbsp;Timestamps</a>
+									</li>
+					</ul>
+
+		</div></li><li><div id="recent-comments-2" class="widget widget_recent_comments"><h2 class="title">Recent Comments</h2>				<table class="recentcommentsavatar" cellspacing="0" cellpadding="0" border="0">
+					<tr><td title="SDLerner" class="recentcommentsavatartop" style="height:48px; width:48px;"><a href="https://bitslog.wordpress.com" rel="nofollow"><img alt='' src='https://1.gravatar.com/avatar/d47269df89fb7e72dbd111e2d20d73f4?s=48&#038;d=identicon&#038;r=G' class='avatar avatar-48' height='48' width='48' /></a></td><td class="recentcommentstexttop" style=""><a href="https://bitslog.wordpress.com" rel="nofollow">SDLerner</a> on <a href="https://bitslog.com/2020/06/22/a-new-mystery-in-patoshi-timestamps/#comment-59299">A New Mystery in Patoshi&nbsp;&hellip;</a></td></tr><tr><td title="TechMiX" class="recentcommentsavatarend" style="height:48px; width:48px;"><img alt='' src='https://2.gravatar.com/avatar/b3acc4eeda2e61d060a4c20a48f370e2?s=48&#038;d=identicon&#038;r=G' class='avatar avatar-48' height='48' width='48' /></td><td class="recentcommentstextend" style="">TechMiX on <a href="https://bitslog.com/2020/08/22/the-patoshi-mining-machine/#comment-59034">The Patoshi Mining&nbsp;Machin&hellip;</a></td></tr><tr><td title="SDLerner" class="recentcommentsavatarend" style="height:48px; width:48px;"><a href="https://bitslog.wordpress.com" rel="nofollow"><img alt='' src='https://1.gravatar.com/avatar/d47269df89fb7e72dbd111e2d20d73f4?s=48&#038;d=identicon&#038;r=G' class='avatar avatar-48' height='48' width='48' /></a></td><td class="recentcommentstextend" style=""><a href="https://bitslog.wordpress.com" rel="nofollow">SDLerner</a> on <a href="https://bitslog.com/2020/06/22/a-new-mystery-in-patoshi-timestamps/#comment-57463">A New Mystery in Patoshi&nbsp;&hellip;</a></td></tr><tr><td title="Jeremy Davis" class="recentcommentsavatarend" style="height:48px; width:48px;"><img alt='' src='https://1.gravatar.com/avatar/d2192cc3c1cb7b5e6d30ea51054c37de?s=48&#038;d=identicon&#038;r=G' class='avatar avatar-48' height='48' width='48' /></td><td class="recentcommentstextend" style="">Jeremy Davis on <a href="https://bitslog.com/2020/06/22/a-new-mystery-in-patoshi-timestamps/#comment-57451">A New Mystery in Patoshi&nbsp;&hellip;</a></td></tr><tr><td title="TechMiX" class="recentcommentsavatarend" style="height:48px; width:48px;"><img alt='' src='https://2.gravatar.com/avatar/b3acc4eeda2e61d060a4c20a48f370e2?s=48&#038;d=identicon&#038;r=G' class='avatar avatar-48' height='48' width='48' /></td><td class="recentcommentstextend" style="">TechMiX on <a href="https://bitslog.com/2020/06/22/a-new-mystery-in-patoshi-timestamps/#comment-57441">A New Mystery in Patoshi&nbsp;&hellip;</a></td></tr>				</table>
+				</div></li><li><div id="archives-2" class="widget widget_archive"><h2 class="title">Archives</h2>
+			<ul>
+					<li><a href='https://bitslog.com/2021/06/'>June 2021</a></li>
+	<li><a href='https://bitslog.com/2020/09/'>September 2020</a></li>
+	<li><a href='https://bitslog.com/2020/08/'>August 2020</a></li>
+	<li><a href='https://bitslog.com/2020/06/'>June 2020</a></li>
+	<li><a href='https://bitslog.com/2019/08/'>August 2019</a></li>
+	<li><a href='https://bitslog.com/2019/04/'>April 2019</a></li>
+	<li><a href='https://bitslog.com/2018/08/'>August 2018</a></li>
+	<li><a href='https://bitslog.com/2018/06/'>June 2018</a></li>
+	<li><a href='https://bitslog.com/2018/01/'>January 2018</a></li>
+	<li><a href='https://bitslog.com/2017/04/'>April 2017</a></li>
+	<li><a href='https://bitslog.com/2017/01/'>January 2017</a></li>
+	<li><a href='https://bitslog.com/2016/10/'>October 2016</a></li>
+	<li><a href='https://bitslog.com/2016/04/'>April 2016</a></li>
+	<li><a href='https://bitslog.com/2016/01/'>January 2016</a></li>
+	<li><a href='https://bitslog.com/2015/09/'>September 2015</a></li>
+	<li><a href='https://bitslog.com/2015/08/'>August 2015</a></li>
+	<li><a href='https://bitslog.com/2015/03/'>March 2015</a></li>
+	<li><a href='https://bitslog.com/2015/02/'>February 2015</a></li>
+	<li><a href='https://bitslog.com/2014/11/'>November 2014</a></li>
+	<li><a href='https://bitslog.com/2014/10/'>October 2014</a></li>
+	<li><a href='https://bitslog.com/2014/07/'>July 2014</a></li>
+	<li><a href='https://bitslog.com/2014/06/'>June 2014</a></li>
+	<li><a href='https://bitslog.com/2014/05/'>May 2014</a></li>
+	<li><a href='https://bitslog.com/2014/04/'>April 2014</a></li>
+	<li><a href='https://bitslog.com/2014/03/'>March 2014</a></li>
+	<li><a href='https://bitslog.com/2014/02/'>February 2014</a></li>
+	<li><a href='https://bitslog.com/2014/01/'>January 2014</a></li>
+	<li><a href='https://bitslog.com/2013/12/'>December 2013</a></li>
+	<li><a href='https://bitslog.com/2013/11/'>November 2013</a></li>
+	<li><a href='https://bitslog.com/2013/10/'>October 2013</a></li>
+	<li><a href='https://bitslog.com/2013/09/'>September 2013</a></li>
+	<li><a href='https://bitslog.com/2013/07/'>July 2013</a></li>
+	<li><a href='https://bitslog.com/2013/06/'>June 2013</a></li>
+	<li><a href='https://bitslog.com/2013/05/'>May 2013</a></li>
+	<li><a href='https://bitslog.com/2013/04/'>April 2013</a></li>
+	<li><a href='https://bitslog.com/2013/03/'>March 2013</a></li>
+	<li><a href='https://bitslog.com/2013/02/'>February 2013</a></li>
+	<li><a href='https://bitslog.com/2013/01/'>January 2013</a></li>
+	<li><a href='https://bitslog.com/2012/11/'>November 2012</a></li>
+	<li><a href='https://bitslog.com/2012/08/'>August 2012</a></li>
+	<li><a href='https://bitslog.com/2012/07/'>July 2012</a></li>
+	<li><a href='https://bitslog.com/2012/04/'>April 2012</a></li>
+	<li><a href='https://bitslog.com/2011/12/'>December 2011</a></li>
+	<li><a href='https://bitslog.com/2011/10/'>October 2011</a></li>
+	<li><a href='https://bitslog.com/2011/09/'>September 2011</a></li>
+	<li><a href='https://bitslog.com/2011/08/'>August 2011</a></li>
+			</ul>
+
+			</div></li><li><div id="categories-2" class="widget widget_categories"><h2 class="title">Categories</h2>
+			<ul>
+					<li class="cat-item cat-item-1"><a href="https://bitslog.com/category/uncategorized/">Uncategorized</a>
+</li>
+			</ul>
+
+			</div></li><li><div id="meta-2" class="widget widget_meta"><h2 class="title">Meta</h2>
+		<ul>
+			<li><a href="https://wordpress.com/start?ref=wplogin">Register</a></li>			<li><a href="https://bitslog.wordpress.com/wp-login.php">Log in</a></li>
+			<li><a href="https://bitslog.com/feed/">Entries feed</a></li>
+			<li><a href="https://bitslog.com/comments/feed/">Comments feed</a></li>
+
+			<li><a href="https://wordpress.com/" title="Powered by WordPress, state-of-the-art semantic personal publishing platform.">WordPress.com</a></li>
+		</ul>
+
+		</div></li>		</ul>
+
+	</div>
+	<!-- /sidebar 2nd container -->
+
+	</div>
+	<!-- /sidebar 1st container -->
+
+</div>
+<!-- /sidebar -->
+
+		
+	</div>
+	<!-- /side wrap -->
+
+	</div>
+	<!-- /mid column wrap -->
+
+</div>
+<!-- /main wrapper -->
+
+<div class="clearcontent"></div>
+
+
+<div id="footer">
+
+	<p>
+		<a href="https://wordpress.com/?ref=footer_blog" rel="nofollow">Blog at WordPress.com.</a>
+			</p>
+</div>
+<!-- /footer -->
+
+</div>
+<!-- /page -->
+
+</div>
+
+</div>
+<!-- /page wrappers -->
+
+<!--  -->
+<script src='//0.gravatar.com/js/gprofiles.js?ver=202143y' id='grofiles-cards-js'></script>
+<script id='wpgroho-js-extra'>
+var WPGroHo = {"my_hash":""};
+</script>
+<script crossorigin='anonymous' type='text/javascript' src='https://s1.wp.com/wp-content/mu-plugins/gravatar-hovercards/wpgroho.js?m=1610363240h'></script>
+
+	<script>
+		// Initialize and attach hovercards to all gravatars
+		( function() {
+			function init() {
+				if ( typeof Gravatar === 'undefined' ) {
+					return;
+				}
+
+				if ( typeof Gravatar.init !== 'function' ) {
+					return;
+				}
+
+				Gravatar.profile_cb = function ( hash, id ) {
+					WPGroHo.syncProfileData( hash, id );
+				};
+
+				Gravatar.my_hash = WPGroHo.my_hash;
+				Gravatar.init( 'body', '#wp-admin-bar-my-account' );
+			}
+
+			if ( document.readyState !== 'loading' ) {
+				init();
+			} else {
+				document.addEventListener( 'DOMContentLoaded', init );
+			}
+		} )();
+	</script>
+
+		<div style="display:none">
+	<div class="grofile-hash-map-d47269df89fb7e72dbd111e2d20d73f4">
+	</div>
+	<div class="grofile-hash-map-b3acc4eeda2e61d060a4c20a48f370e2">
+	</div>
+	<div class="grofile-hash-map-d2192cc3c1cb7b5e6d30ea51054c37de">
+	</div>
+	</div>
+<script id='highlander-comments-js-extra'>
+var HighlanderComments = {"loggingInText":"Logging In\u2026","submittingText":"Posting Comment\u2026","postCommentText":"Post Comment","connectingToText":"Connecting to %s","commentingAsText":"%1$s: You are commenting using your %2$s account.","logoutText":"Log Out","loginText":"Log In","connectURL":"https:\/\/bitslog.wordpress.com\/public.api\/connect\/?action=request&domain=bitslog.com","logoutURL":"https:\/\/bitslog.wordpress.com\/wp-login.php?action=logout&_wpnonce=59d10fafa1","homeURL":"https:\/\/bitslog.com\/","postID":"1996","gravDefault":"identicon","enterACommentError":"Please enter a comment","enterEmailError":"Please enter your email address here","invalidEmailError":"Invalid email address","enterAuthorError":"Please enter your name here","gravatarFromEmail":"This picture will show whenever you leave a comment. Click to customize it.","logInToExternalAccount":"Log in to use details from one of these accounts.","change":"Change","changeAccount":"Change Account","comment_registration":"0","userIsLoggedIn":"","isJetpack":"","text_direction":"ltr"};
+</script>
+<script crossorigin='anonymous' type='text/javascript' src='https://s1.wp.com/_static/??/wp-content/js/jquery/jquery.autoresize.js,/wp-content/mu-plugins/highlander-comments/script.js?m=1626677336j'></script>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-dark-grayscale"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0 0.49803921568627" /><feFuncG type="table" tableValues="0 0.49803921568627" /><feFuncB type="table" tableValues="0 0.49803921568627" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-grayscale"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0 1" /><feFuncG type="table" tableValues="0 1" /><feFuncB type="table" tableValues="0 1" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-purple-yellow"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0.54901960784314 0.98823529411765" /><feFuncG type="table" tableValues="0 1" /><feFuncB type="table" tableValues="0.71764705882353 0.25490196078431" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-blue-red"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0 1" /><feFuncG type="table" tableValues="0 0.27843137254902" /><feFuncB type="table" tableValues="0.5921568627451 0.27843137254902" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-midnight"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0 0" /><feFuncG type="table" tableValues="0 0.64705882352941" /><feFuncB type="table" tableValues="0 1" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-magenta-yellow"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0.78039215686275 1" /><feFuncG type="table" tableValues="0 0.94901960784314" /><feFuncB type="table" tableValues="0.35294117647059 0.47058823529412" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-purple-green"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0.65098039215686 0.40392156862745" /><feFuncG type="table" tableValues="0 1" /><feFuncB type="table" tableValues="0.44705882352941 0.4" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-blue-orange"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0.098039215686275 1" /><feFuncG type="table" tableValues="0 0.66274509803922" /><feFuncB type="table" tableValues="0.84705882352941 0.41960784313725" /></feComponentTransfer></filter></defs></svg>
+<script>
+window.addEventListener( "load", function( event ) {
+	var link = document.createElement( "link" );
+	link.href = "https://s0.wp.com/wp-content/mu-plugins/actionbar/actionbar.css?v=20210915";
+	link.type = "text/css";
+	link.rel = "stylesheet";
+	document.head.appendChild( link );
+
+	var script = document.createElement( "script" );
+	script.src = "https://s0.wp.com/wp-content/mu-plugins/actionbar/actionbar.js?v=20211021";
+	script.defer = true;
+	document.body.appendChild( script );
+} );
+</script>
+
+			<div id="jp-carousel-loading-overlay">
+			<div id="jp-carousel-loading-wrapper">
+				<span id="jp-carousel-library-loading">&nbsp;</span>
+			</div>
+		</div>
+		<div class="jp-carousel-overlay" style="display: none;">
+
+		<div class="jp-carousel-container">
+			<!-- The Carousel Swiper -->
+			<div
+				class="jp-carousel-wrap swiper-container jp-carousel-swiper-container jp-carousel-transitions"
+				itemscope
+				itemtype="https://schema.org/ImageGallery">
+				<div class="jp-carousel swiper-wrapper"></div>
+				<div class="jp-swiper-button-prev swiper-button-prev">
+					<svg width="25" height="24" viewBox="0 0 25 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+						<mask id="maskPrev" mask-type="alpha" maskUnits="userSpaceOnUse" x="8" y="6" width="9" height="12">
+							<path d="M16.2072 16.59L11.6496 12L16.2072 7.41L14.8041 6L8.8335 12L14.8041 18L16.2072 16.59Z" fill="white"/>
+						</mask>
+						<g mask="url(#maskPrev)">
+							<rect x="0.579102" width="23.8823" height="24" fill="#FFFFFF"/>
+						</g>
+					</svg>
+				</div>
+				<div class="jp-swiper-button-next swiper-button-next">
+					<svg width="25" height="24" viewBox="0 0 25 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+						<mask id="maskNext" mask-type="alpha" maskUnits="userSpaceOnUse" x="8" y="6" width="8" height="12">
+							<path d="M8.59814 16.59L13.1557 12L8.59814 7.41L10.0012 6L15.9718 12L10.0012 18L8.59814 16.59Z" fill="white"/>
+						</mask>
+						<g mask="url(#maskNext)">
+							<rect x="0.34375" width="23.8822" height="24" fill="#FFFFFF"/>
+						</g>
+					</svg>
+				</div>
+			</div>
+			<!-- The main close buton -->
+			<div class="jp-carousel-close-hint">
+				<svg width="25" height="24" viewBox="0 0 25 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+					<mask id="maskClose" mask-type="alpha" maskUnits="userSpaceOnUse" x="5" y="5" width="15" height="14">
+						<path d="M19.3166 6.41L17.9135 5L12.3509 10.59L6.78834 5L5.38525 6.41L10.9478 12L5.38525 17.59L6.78834 19L12.3509 13.41L17.9135 19L19.3166 17.59L13.754 12L19.3166 6.41Z" fill="white"/>
+					</mask>
+					<g mask="url(#maskClose)">
+						<rect x="0.409668" width="23.8823" height="24" fill="#FFFFFF"/>
+					</g>
+				</svg>
+			</div>
+			<!-- Image info, comments and meta -->
+			<div class="jp-carousel-info">
+				<div class="jp-carousel-info-footer">
+					<div class="jp-carousel-pagination-container">
+						<div class="jp-swiper-pagination swiper-pagination"></div>
+						<div class="jp-carousel-pagination"></div>
+					</div>
+					<div class="jp-carousel-photo-title-container">
+						<h2 class="jp-carousel-photo-caption"></h2>
+					</div>
+					<div class="jp-carousel-photo-icons-container">
+						<a href="#" class="jp-carousel-icon-btn jp-carousel-icon-info" aria-label="Toggle photo metadata visibility">
+							<span class="jp-carousel-icon">
+								<svg width="25" height="24" viewBox="0 0 25 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+									<mask id="maskInfo" mask-type="alpha" maskUnits="userSpaceOnUse" x="2" y="2" width="21" height="20">
+										<path fill-rule="evenodd" clip-rule="evenodd" d="M12.7537 2C7.26076 2 2.80273 6.48 2.80273 12C2.80273 17.52 7.26076 22 12.7537 22C18.2466 22 22.7046 17.52 22.7046 12C22.7046 6.48 18.2466 2 12.7537 2ZM11.7586 7V9H13.7488V7H11.7586ZM11.7586 11V17H13.7488V11H11.7586ZM4.79292 12C4.79292 16.41 8.36531 20 12.7537 20C17.142 20 20.7144 16.41 20.7144 12C20.7144 7.59 17.142 4 12.7537 4C8.36531 4 4.79292 7.59 4.79292 12Z" fill="white"/>
+									</mask>
+									<g mask="url(#maskInfo)">
+										<rect x="0.8125" width="23.8823" height="24" fill="#FFFFFF"/>
+									</g>
+								</svg>
+							</span>
+						</a>
+												<a href="#" class="jp-carousel-icon-btn jp-carousel-icon-comments" aria-label="Toggle photo comments visibility">
+							<span class="jp-carousel-icon">
+								<svg width="25" height="24" viewBox="0 0 25 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+									<mask id="maskComments" mask-type="alpha" maskUnits="userSpaceOnUse" x="2" y="2" width="21" height="20">
+										<path fill-rule="evenodd" clip-rule="evenodd" d="M4.3271 2H20.2486C21.3432 2 22.2388 2.9 22.2388 4V16C22.2388 17.1 21.3432 18 20.2486 18H6.31729L2.33691 22V4C2.33691 2.9 3.2325 2 4.3271 2ZM6.31729 16H20.2486V4H4.3271V18L6.31729 16Z" fill="white"/>
+									</mask>
+									<g mask="url(#maskComments)">
+										<rect x="0.34668" width="23.8823" height="24" fill="#FFFFFF"/>
+									</g>
+								</svg>
+
+								<span class="jp-carousel-has-comments-indicator" aria-label="This image has comments."></span>
+							</span>
+						</a>
+											</div>
+				</div>
+				<div class="jp-carousel-info-extra">
+					<div class="jp-carousel-info-content-wrapper">
+						<div class="jp-carousel-photo-title-container">
+							<h2 class="jp-carousel-photo-title"></h2>
+						</div>
+						<div class="jp-carousel-comments-wrapper">
+															<div id="jp-carousel-comments-loading">
+									<span>Loading Comments...</span>
+								</div>
+								<div class="jp-carousel-comments"></div>
+								<div id="jp-carousel-comment-form-container">
+									<span id="jp-carousel-comment-form-spinner">&nbsp;</span>
+									<div id="jp-carousel-comment-post-results"></div>
+																														<form id="jp-carousel-comment-form">
+												<label for="jp-carousel-comment-form-comment-field" class="screen-reader-text">Write a Comment...</label>
+												<textarea
+													name="comment"
+													class="jp-carousel-comment-form-field jp-carousel-comment-form-textarea"
+													id="jp-carousel-comment-form-comment-field"
+													placeholder="Write a Comment..."
+												></textarea>
+												<div id="jp-carousel-comment-form-submit-and-info-wrapper">
+													<div id="jp-carousel-comment-form-commenting-as">
+																													<fieldset>
+																<label for="jp-carousel-comment-form-email-field">Email (Required)</label>
+																<input type="text" name="email" class="jp-carousel-comment-form-field jp-carousel-comment-form-text-field" id="jp-carousel-comment-form-email-field" />
+															</fieldset>
+															<fieldset>
+																<label for="jp-carousel-comment-form-author-field">Name (Required)</label>
+																<input type="text" name="author" class="jp-carousel-comment-form-field jp-carousel-comment-form-text-field" id="jp-carousel-comment-form-author-field" />
+															</fieldset>
+															<fieldset>
+																<label for="jp-carousel-comment-form-url-field">Website</label>
+																<input type="text" name="url" class="jp-carousel-comment-form-field jp-carousel-comment-form-text-field" id="jp-carousel-comment-form-url-field" />
+															</fieldset>
+																											</div>
+													<input
+														type="submit"
+														name="submit"
+														class="jp-carousel-comment-form-button"
+														id="jp-carousel-comment-form-button-submit"
+														value="Post Comment" />
+												</div>
+											</form>
+																											</div>
+													</div>
+						<div class="jp-carousel-image-meta">
+							<div class="jp-carousel-title-and-caption">
+								<div class="jp-carousel-photo-info">
+									<h3 class="jp-carousel-caption" itemprop="caption description"></h3>
+								</div>
+
+								<div class="jp-carousel-photo-description"></div>
+							</div>
+							<ul class="jp-carousel-image-exif" style="display: none;"></ul>
+							<a class="jp-carousel-image-download" target="_blank" style="display: none;">
+								<svg width="25" height="24" viewBox="0 0 25 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+									<mask id="mask0" mask-type="alpha" maskUnits="userSpaceOnUse" x="3" y="3" width="19" height="18">
+										<path fill-rule="evenodd" clip-rule="evenodd" d="M5.84615 5V19H19.7775V12H21.7677V19C21.7677 20.1 20.8721 21 19.7775 21H5.84615C4.74159 21 3.85596 20.1 3.85596 19V5C3.85596 3.9 4.74159 3 5.84615 3H12.8118V5H5.84615ZM14.802 5V3H21.7677V10H19.7775V6.41L9.99569 16.24L8.59261 14.83L18.3744 5H14.802Z" fill="white"/>
+									</mask>
+									<g mask="url(#mask0)">
+										<rect x="0.870605" width="23.8823" height="24" fill="#FFFFFF"/>
+									</g>
+								</svg>
+								<span class="jp-carousel-download-text"></span>
+							</a>
+							<div class="jp-carousel-image-map" style="display: none;"></div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		</div>
+		
+	<script type="text/javascript">
+		window.WPCOM_sharing_counts = {"https:\/\/bitslog.com\/2018\/06\/09\/leaf-node-weakness-in-bitcoin-merkle-tree-design\/":1996};
+	</script>
+				<link rel='stylesheet' id='all-css-0-3' href='https://s0.wp.com/_static/??/wp-content/mu-plugins/carousel/swiper-bundle.css,/wp-content/mu-plugins/carousel/jetpack-carousel.css?m=1630955947j&cssminify=yes' type='text/css' media='all' />
+<script id='jetpack-carousel-js-extra'>
+var jetpackSwiperLibraryPath = {"url":"\/wp-content\/mu-plugins\/carousel\/swiper-bundle.js"};
+var jetpackCarouselStrings = {"widths":[370,700,1000,1200,1400,2000],"is_logged_in":"","lang":"en","ajaxurl":"https:\/\/bitslog.com\/wp-admin\/admin-ajax.php","nonce":"697ef9117f","display_exif":"1","display_comments":"1","display_geo":"1","single_image_gallery":"1","single_image_gallery_media_file":"","background_color":"black","comment":"Comment","post_comment":"Post Comment","write_comment":"Write a Comment...","loading_comments":"Loading Comments...","download_original":"View full size <span class=\"photo-size\">{0}<span class=\"photo-size-times\">\u00d7<\/span>{1}<\/span>","no_comment_text":"Please be sure to submit some text with your comment.","no_comment_email":"Please provide an email address to comment.","no_comment_author":"Please provide your name to comment.","comment_post_error":"Sorry, but there was an error posting your comment. Please try again later.","comment_approved":"Your comment was approved.","comment_unapproved":"Your comment is in moderation.","camera":"Camera","aperture":"Aperture","shutter_speed":"Shutter Speed","focal_length":"Focal Length","copyright":"Copyright","comment_registration":"0","require_name_email":"1","login_url":"https:\/\/bitslog.wordpress.com\/wp-login.php?redirect_to=https%3A%2F%2Fbitslog.com%2F2018%2F06%2F09%2Fleaf-node-weakness-in-bitcoin-merkle-tree-design%2F","blog_id":"26028371","meta_data":["camera","aperture","shutter_speed","focal_length","copyright"],"stats_query_args":"blog=26028371&v=wpcom&tz=0&user_id=0&subd=bitslog","is_public":"1"};
+</script>
+<script id='sharing-js-js-extra'>
+var sharing_js_options = {"lang":"en","counts":"1","is_stats_active":"1"};
+</script>
+<script crossorigin='anonymous' type='text/javascript' src='https://s1.wp.com/_static/??-eJyNj01ywjAMhS9UR1M6pN0wPYuxBZGxHVeyE+D0aNEsyDDASj/vvW8kmItxY66YKwQBjxM5LOcuyAfcS+GvIV/+S0d5Ipxf2gLWYt3JMApdcW1PzZTYjpQFIp1QQEMNB5t9RF7MlF1sXkWFuzElDSquxEuXKD8hWq+62VuGZKUia2cq6zHyiKwjpj36F1BneWyCEZbHlsUbGTMXvX81PsmVUao5REsMMlimfFyqhn7T7rP/2nz/bPp+G25wkan0'></script>
+<script type='text/javascript'>
+var windowOpen;
+			( function () {
+				function matches( el, sel ) {
+					return !! (
+						el.matches && el.matches( sel ) ||
+						el.msMatchesSelector && el.msMatchesSelector( sel )
+					);
+				}
+
+				document.body.addEventListener( 'click', function ( event ) {
+					if ( ! event.target ) {
+						return;
+					}
+
+					var el;
+					if ( matches( event.target, 'a.share-twitter' ) ) {
+						el = event.target;
+					} else if ( event.target.parentNode && matches( event.target.parentNode, 'a.share-twitter' ) ) {
+						el = event.target.parentNode;
+					}
+
+					if ( el ) {
+						event.preventDefault();
+
+						// If there's another sharing window open, close it.
+						if ( typeof windowOpen !== 'undefined' ) {
+							windowOpen.close();
+						}
+						windowOpen = window.open( el.getAttribute( 'href' ), 'wpcomtwitter', 'menubar=1,resizable=1,width=600,height=350' );
+						return false;
+					}
+				} );
+			} )();
+var windowOpen;
+			( function () {
+				function matches( el, sel ) {
+					return !! (
+						el.matches && el.matches( sel ) ||
+						el.msMatchesSelector && el.msMatchesSelector( sel )
+					);
+				}
+
+				document.body.addEventListener( 'click', function ( event ) {
+					if ( ! event.target ) {
+						return;
+					}
+
+					var el;
+					if ( matches( event.target, 'a.share-facebook' ) ) {
+						el = event.target;
+					} else if ( event.target.parentNode && matches( event.target.parentNode, 'a.share-facebook' ) ) {
+						el = event.target.parentNode;
+					}
+
+					if ( el ) {
+						event.preventDefault();
+
+						// If there's another sharing window open, close it.
+						if ( typeof windowOpen !== 'undefined' ) {
+							windowOpen.close();
+						}
+						windowOpen = window.open( el.getAttribute( 'href' ), 'wpcomfacebook', 'menubar=1,resizable=1,width=600,height=400' );
+						return false;
+					}
+				} );
+			} )();
+</script>
+<script type="text/javascript">
+// <![CDATA[
+(function() {
+try{
+  if ( window.external &&'msIsSiteMode' in window.external) {
+    if (window.external.msIsSiteMode()) {
+      var jl = document.createElement('script');
+      jl.type='text/javascript';
+      jl.async=true;
+      jl.src='/wp-content/plugins/ie-sitemode/custom-jumplist.php';
+      var s = document.getElementsByTagName('script')[0];
+      s.parentNode.insertBefore(jl, s);
+    }
+  }
+}catch(e){}
+})();
+// ]]>
+</script>	<iframe src='https://widgets.wp.com/likes/master.html?ver=20210831#ver=20210831&amp;origin=https://bitslog.com' scrolling='no' id='likes-master' name='likes-master' style='display:none;'></iframe>
+	<div id='likes-other-gravatars'>
+		<div class="likes-text">
+			<span>%d</span> bloggers like this:		</div>
+		<ul class="wpl-avatars sd-like-gravatars"></ul>
+	</div>
+	
+		<script src="//stats.wp.com/w.js?62" defer></script> <script type="text/javascript">
+_tkq = window._tkq || [];
+_stq = window._stq || [];
+_tkq.push(['storeContext', {'blog_id':'26028371','blog_tz':'0','user_lang':'en','blog_lang':'en','user_id':'0'}]);
+_stq.push(['view', {'blog':'26028371','v':'wpcom','tz':'0','user_id':'0','post':'1996','subd':'bitslog'}]);
+_stq.push(['extra', {'crypt':'UE40eW5QN0p8M2Y/RE1TaVhzUzFMbjdWNHpwZGhTayxPSUFCMGNrd29+Smw0TDhnZmRTK0hlRi9QSGh6bi9GXVhBJWIlZlR5U1JMLU8/MkNtblkvY1c9TURlVTIrLXFWUS5mKzJmV20/QS9SVDl8UFhfV1MwLz12X1hyQ1FFNDYsbDkuYmN1bTN4LVFvZVtvZC5mM3EmW2xOfl1RNXEsdGNEJS58aDJbT1d1X1E9Yl8mR2xHSmV3ci8vQXFKPz93Z0tiL00wMmdiVXdKZmcuN00uS18zUHNJNT1OTisrRUh4RHxkTzFTLnZaZF1ZdiV6UnRlVHh6L2tbU2xdWlZPcHhJWCtLN1JpV3xPP1dHSEE0MmFWOHpKbnB2W1EmSGE4WldWeiV3MS94VkY/ZWphbw=='}]);
+_stq.push([ 'clickTrackerInit', '26028371', '1996' ]);
+	</script>
+<noscript><img src="https://pixel.wp.com/b.gif?v=noscript" style="height:1px;width:1px;overflow:hidden;position:absolute;bottom:1px;" alt="" /></noscript>
+<script>
+if ( 'object' === typeof wpcom_mobile_user_agent_info ) {
+
+	wpcom_mobile_user_agent_info.init();
+	var mobileStatsQueryString = "";
+	
+	if( false !== wpcom_mobile_user_agent_info.matchedPlatformName )
+		mobileStatsQueryString += "&x_" + 'mobile_platforms' + '=' + wpcom_mobile_user_agent_info.matchedPlatformName;
+	
+	if( false !== wpcom_mobile_user_agent_info.matchedUserAgentName )
+		mobileStatsQueryString += "&x_" + 'mobile_devices' + '=' + wpcom_mobile_user_agent_info.matchedUserAgentName;
+	
+	if( wpcom_mobile_user_agent_info.isIPad() )
+		mobileStatsQueryString += "&x_" + 'ipad_views' + '=' + 'views';
+
+	if( "" != mobileStatsQueryString ) {
+		new Image().src = document.location.protocol + '//pixel.wp.com/g.gif?v=wpcom-no-pv' + mobileStatsQueryString + '&baba=' + Math.random();
+	}
+	
+}
+</script></body>
+</html>

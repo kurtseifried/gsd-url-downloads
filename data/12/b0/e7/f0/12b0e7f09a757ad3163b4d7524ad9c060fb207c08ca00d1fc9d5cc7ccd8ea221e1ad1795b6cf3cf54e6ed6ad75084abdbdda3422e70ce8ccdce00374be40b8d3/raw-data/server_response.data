@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<!--[if IE 7]>
+<html id="ie7" lang="en">
+<![endif]-->
+<!--[if (!IE 7)]><!-->
+<html lang="en">
+<!--<![endif]-->
+<head>
+<meta charset="UTF-8" />
+<title>SQL Injection with New Relic [PATCHED] | Knowledge is Capital</title>
+<link rel="profile" href="http://gmpg.org/xfn/11" />
+<link rel="pingback" href="https://blog.seanmcelroy.com/xmlrpc.php" />
+<meta name='robots' content='max-image-preview:large' />
+
+<!-- Async WordPress.com Remote Login -->
+<script id="wpcom_remote_login_js">
+var wpcom_remote_login_extra_auth = '';
+function wpcom_remote_login_remove_dom_node_id( element_id ) {
+	var dom_node = document.getElementById( element_id );
+	if ( dom_node ) { dom_node.parentNode.removeChild( dom_node ); }
+}
+function wpcom_remote_login_remove_dom_node_classes( class_name ) {
+	var dom_nodes = document.querySelectorAll( '.' + class_name );
+	for ( var i = 0; i < dom_nodes.length; i++ ) {
+		dom_nodes[ i ].parentNode.removeChild( dom_nodes[ i ] );
+	}
+}
+function wpcom_remote_login_final_cleanup() {
+	wpcom_remote_login_remove_dom_node_classes( "wpcom_remote_login_msg" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_key" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_validate" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_js" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_request_access_iframe" );
+	wpcom_remote_login_remove_dom_node_id( "wpcom_request_access_styles" );
+}
+
+// Watch for messages back from the remote login
+window.addEventListener( "message", function( e ) {
+	if ( e.origin === "https://r-login.wordpress.com" ) {
+		var data = {};
+		try {
+			data = JSON.parse( e.data );
+		} catch( e ) {
+			wpcom_remote_login_final_cleanup();
+			return;
+		}
+
+		if ( data.msg === 'LOGIN' ) {
+			// Clean up the login check iframe
+			wpcom_remote_login_remove_dom_node_id( "wpcom_remote_login_key" );
+
+			var id_regex = new RegExp( /^[0-9]+$/ );
+			var token_regex = new RegExp( /^.*|.*|.*$/ );
+			if (
+				token_regex.test( data.token )
+				&& id_regex.test( data.wpcomid )
+			) {
+				// We have everything we need to ask for a login
+				var script = document.createElement( "script" );
+				script.setAttribute( "id", "wpcom_remote_login_validate" );
+				script.src = '/remote-login.php?wpcom_remote_login=validate'
+					+ '&wpcomid=' + data.wpcomid
+					+ '&token=' + encodeURIComponent( data.token )
+					+ '&host=' + window.location.protocol
+					+ '//' + window.location.hostname
+					+ '&postid=303'
+					+ '&is_singular=1';
+				document.body.appendChild( script );
+			}
+
+			return;
+		}
+
+		// Safari ITP, not logged in, so redirect
+		if ( data.msg === 'LOGIN-REDIRECT' ) {
+			window.location = 'https://wordpress.com/log-in?redirect_to=' + window.location.href;
+			return;
+		}
+
+		// Safari ITP, storage access failed, remove the request
+		if ( data.msg === 'LOGIN-REMOVE' ) {
+			var css_zap = 'html { -webkit-transition: margin-top 1s; transition: margin-top 1s; } /* 9001 */ html { margin-top: 0 !important; } * html body { margin-top: 0 !important; } @media screen and ( max-width: 782px ) { html { margin-top: 0 !important; } * html body { margin-top: 0 !important; } }';
+			var style_zap = document.createElement( 'style' );
+			style_zap.type = 'text/css';
+			style_zap.appendChild( document.createTextNode( css_zap ) );
+			document.body.appendChild( style_zap );
+
+			var e = document.getElementById( 'wpcom_request_access_iframe' );
+			e.parentNode.removeChild( e );
+
+			document.cookie = 'wordpress_com_login_access=denied; path=/; max-age=31536000';
+
+			return;
+		}
+
+		// Safari ITP
+		if ( data.msg === 'REQUEST_ACCESS' ) {
+			console.log( 'request access: safari' );
+
+			// Check ITP iframe enable/disable knob
+			if ( wpcom_remote_login_extra_auth !== 'safari_itp_iframe' ) {
+				return;
+			}
+
+			// If we are in a "private window" there is no ITP.
+			var private_window = false;
+			try {
+				var opendb = window.openDatabase( null, null, null, null );
+			} catch( e ) {
+				private_window = true;
+			}
+
+			if ( private_window ) {
+				console.log( 'private window' );
+				return;
+			}
+
+			var iframe = document.createElement( 'iframe' );
+			iframe.id = 'wpcom_request_access_iframe';
+			iframe.setAttribute( 'scrolling', 'no' );
+			iframe.setAttribute( 'sandbox', 'allow-storage-access-by-user-activation allow-scripts allow-same-origin allow-top-navigation-by-user-activation' );
+			iframe.src = 'https://r-login.wordpress.com/remote-login.php?wpcom_remote_login=request_access&origin=' + encodeURIComponent( data.origin ) + '&wpcomid=' + encodeURIComponent( data.wpcomid );
+
+			var css = 'html { -webkit-transition: margin-top 1s; transition: margin-top 1s; } /* 9001 */ html { margin-top: 46px !important; } * html body { margin-top: 46px !important; } @media screen and ( max-width: 660px ) { html { margin-top: 71px !important; } * html body { margin-top: 71px !important; } #wpcom_request_access_iframe { display: block; height: 71px !important; } } #wpcom_request_access_iframe { border: 0px; height: 46px; position: fixed; top: 0; left: 0; width: 100%; min-width: 100%; z-index: 99999; background: #23282d; } ';
+
+			var style = document.createElement( 'style' );
+			style.type = 'text/css';
+			style.id = 'wpcom_request_access_styles';
+			style.appendChild( document.createTextNode( css ) );
+			document.body.appendChild( style );
+
+			document.body.appendChild( iframe );
+		}
+
+		if ( data.msg === 'DONE' ) {
+			wpcom_remote_login_final_cleanup();
+		}
+	}
+}, false );
+
+// Inject the remote login iframe after the page has had a chance to load
+// more critical resources
+window.addEventListener( "DOMContentLoaded", function( e ) {
+	var iframe = document.createElement( "iframe" );
+	iframe.style.display = "none";
+	iframe.setAttribute( "scrolling", "no" );
+	iframe.setAttribute( "id", "wpcom_remote_login_key" );
+	iframe.src = "https://r-login.wordpress.com/remote-login.php"
+		+ "?wpcom_remote_login=key"
+		+ "&origin=aHR0cHM6Ly9ibG9nLnNlYW5tY2Vscm95LmNvbQ%3D%3D"
+		+ "&wpcomid=10300086"
+		+ "&time=1635610480";
+	document.body.appendChild( iframe );
+}, false );
+</script>
+<link rel='dns-prefetch' href='//s2.wp.com' />
+<link rel='dns-prefetch' href='//blueprintsforsuccess.wordpress.com' />
+<link rel='dns-prefetch' href='//s0.wp.com' />
+<link rel="alternate" type="application/rss+xml" title="Knowledge is Capital &raquo; Feed" href="https://blog.seanmcelroy.com/feed/" />
+<link rel="alternate" type="application/rss+xml" title="Knowledge is Capital &raquo; Comments Feed" href="https://blog.seanmcelroy.com/comments/feed/" />
+<link rel="alternate" type="application/rss+xml" title="Knowledge is Capital &raquo; SQL Injection with New Relic&nbsp;[PATCHED] Comments Feed" href="https://blog.seanmcelroy.com/2017/05/26/sql-injection-with-new-relic-patched/feed/" />
+	<script type="text/javascript">
+		/* <![CDATA[ */
+		function addLoadEvent(func) {
+			var oldonload = window.onload;
+			if (typeof window.onload != 'function') {
+				window.onload = func;
+			} else {
+				window.onload = function () {
+					oldonload();
+					func();
+				}
+			}
+		}
+		/* ]]> */
+	</script>
+			<script type="text/javascript">
+			window._wpemojiSettings = {"baseUrl":"https:\/\/s0.wp.com\/wp-content\/mu-plugins\/wpcom-smileys\/twemoji\/2\/72x72\/","ext":".png","svgUrl":"https:\/\/s0.wp.com\/wp-content\/mu-plugins\/wpcom-smileys\/twemoji\/2\/svg\/","svgExt":".svg","source":{"concatemoji":"https:\/\/s1.wp.com\/wp-includes\/js\/wp-emoji-release.min.js?m=1625065786h&ver=5.8.1"}};
+			!function(e,a,t){var n,r,o,i=a.createElement("canvas"),p=i.getContext&&i.getContext("2d");function s(e,t){var a=String.fromCharCode;p.clearRect(0,0,i.width,i.height),p.fillText(a.apply(this,e),0,0);e=i.toDataURL();return p.clearRect(0,0,i.width,i.height),p.fillText(a.apply(this,t),0,0),e===i.toDataURL()}function c(e){var t=a.createElement("script");t.src=e,t.defer=t.type="text/javascript",a.getElementsByTagName("head")[0].appendChild(t)}for(o=Array("flag","emoji"),t.supports={everything:!0,everythingExceptFlag:!0},r=0;r<o.length;r++)t.supports[o[r]]=function(e){if(!p||!p.fillText)return!1;switch(p.textBaseline="top",p.font="600 32px Arial",e){case"flag":return s([127987,65039,8205,9895,65039],[127987,65039,8203,9895,65039])?!1:!s([55356,56826,55356,56819],[55356,56826,8203,55356,56819])&&!s([55356,57332,56128,56423,56128,56418,56128,56421,56128,56430,56128,56423,56128,56447],[55356,57332,8203,56128,56423,8203,56128,56418,8203,56128,56421,8203,56128,56430,8203,56128,56423,8203,56128,56447]);case"emoji":return!s([10084,65039,8205,55357,56613],[10084,65039,8203,55357,56613])}return!1}(o[r]),t.supports.everything=t.supports.everything&&t.supports[o[r]],"flag"!==o[r]&&(t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&t.supports[o[r]]);t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&!t.supports.flag,t.DOMReady=!1,t.readyCallback=function(){t.DOMReady=!0},t.supports.everything||(n=function(){t.readyCallback()},a.addEventListener?(a.addEventListener("DOMContentLoaded",n,!1),e.addEventListener("load",n,!1)):(e.attachEvent("onload",n),a.attachEvent("onreadystatechange",function(){"complete"===a.readyState&&t.readyCallback()})),(n=t.source||{}).concatemoji?c(n.concatemoji):n.wpemoji&&n.twemoji&&(c(n.twemoji),c(n.wpemoji)))}(window,document,window._wpemojiSettings);
+		</script>
+		<style type="text/css">
+img.wp-smiley,
+img.emoji {
+	display: inline !important;
+	border: none !important;
+	box-shadow: none !important;
+	height: 1em !important;
+	width: 1em !important;
+	margin: 0 .07em !important;
+	vertical-align: -0.1em !important;
+	background: none !important;
+	padding: 0 !important;
+}
+</style>
+	<link rel='stylesheet' id='all-css-0-1' href='https://s1.wp.com/_static/??-eJyNkt1OAyEQhV9IFjdurDfGZ+FngrQzQBhow9tLaWrWra3ekBxmvsNhQJ6SMDEUCEVSFQmr84HlKZlIgskjtI2aDPOT/B3LgKqAFSly2ahHGPoDsNxDScocxFA37ddeV7vUkF2vZJDHeZ520yx19WilxjgMdFa5SS4N4dvIB4PVns9hSWC9AgQaQVYioWqQBYJTpk3kw994r631D+h++JF0dWfVYi3CZW83sf9tkVXxwfEdfDXt89z6PiV1G/4BdvkEWqcMzKKv5CuJ8tnB8Vof9D6/vizzsnte3vZfNIviNA==?cssminify=yes' type='text/css' media='all' />
+<style id='wp-block-library-inline-css'>
+.has-text-align-justify {
+	text-align:justify;
+}
+</style>
+<style id='global-styles-inline-css'>
+body{--wp--preset--color--black: #000000;--wp--preset--color--cyan-bluish-gray: #abb8c3;--wp--preset--color--white: #ffffff;--wp--preset--color--pale-pink: #f78da7;--wp--preset--color--vivid-red: #cf2e2e;--wp--preset--color--luminous-vivid-orange: #ff6900;--wp--preset--color--luminous-vivid-amber: #fcb900;--wp--preset--color--light-green-cyan: #7bdcb5;--wp--preset--color--vivid-green-cyan: #00d084;--wp--preset--color--pale-cyan-blue: #8ed1fc;--wp--preset--color--vivid-cyan-blue: #0693e3;--wp--preset--color--vivid-purple: #9b51e0;--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple: linear-gradient(135deg,rgba(6,147,227,1) 0%,rgb(155,81,224) 100%);--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan: linear-gradient(135deg,rgb(122,220,180) 0%,rgb(0,208,130) 100%);--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange: linear-gradient(135deg,rgba(252,185,0,1) 0%,rgba(255,105,0,1) 100%);--wp--preset--gradient--luminous-vivid-orange-to-vivid-red: linear-gradient(135deg,rgba(255,105,0,1) 0%,rgb(207,46,46) 100%);--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray: linear-gradient(135deg,rgb(238,238,238) 0%,rgb(169,184,195) 100%);--wp--preset--gradient--cool-to-warm-spectrum: linear-gradient(135deg,rgb(74,234,220) 0%,rgb(151,120,209) 20%,rgb(207,42,186) 40%,rgb(238,44,130) 60%,rgb(251,105,98) 80%,rgb(254,248,76) 100%);--wp--preset--gradient--blush-light-purple: linear-gradient(135deg,rgb(255,206,236) 0%,rgb(152,150,240) 100%);--wp--preset--gradient--blush-bordeaux: linear-gradient(135deg,rgb(254,205,165) 0%,rgb(254,45,45) 50%,rgb(107,0,62) 100%);--wp--preset--gradient--luminous-dusk: linear-gradient(135deg,rgb(255,203,112) 0%,rgb(199,81,192) 50%,rgb(65,88,208) 100%);--wp--preset--gradient--pale-ocean: linear-gradient(135deg,rgb(255,245,203) 0%,rgb(182,227,212) 50%,rgb(51,167,181) 100%);--wp--preset--gradient--electric-grass: linear-gradient(135deg,rgb(202,248,128) 0%,rgb(113,206,126) 100%);--wp--preset--gradient--midnight: linear-gradient(135deg,rgb(2,3,129) 0%,rgb(40,116,252) 100%);--wp--preset--duotone--dark-grayscale: url('#wp-duotone-dark-grayscale');--wp--preset--duotone--grayscale: url('#wp-duotone-grayscale');--wp--preset--duotone--purple-yellow: url('#wp-duotone-purple-yellow');--wp--preset--duotone--blue-red: url('#wp-duotone-blue-red');--wp--preset--duotone--midnight: url('#wp-duotone-midnight');--wp--preset--duotone--magenta-yellow: url('#wp-duotone-magenta-yellow');--wp--preset--duotone--purple-green: url('#wp-duotone-purple-green');--wp--preset--duotone--blue-orange: url('#wp-duotone-blue-orange');--wp--preset--font-size--small: 13px;--wp--preset--font-size--normal: 16px;--wp--preset--font-size--medium: 20px;--wp--preset--font-size--large: 36px;--wp--preset--font-size--huge: 42px;}.has-black-color{color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-color{color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-color{color: var(--wp--preset--color--white) !important;}.has-pale-pink-color{color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-color{color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-color{color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-color{color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-color{color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-color{color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-color{color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-color{color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-color{color: var(--wp--preset--color--vivid-purple) !important;}.has-black-background-color{background-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-background-color{background-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-background-color{background-color: var(--wp--preset--color--white) !important;}.has-pale-pink-background-color{background-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-background-color{background-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-background-color{background-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-background-color{background-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-background-color{background-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-background-color{background-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-background-color{background-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-background-color{background-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-background-color{background-color: var(--wp--preset--color--vivid-purple) !important;}.has-black-border-color{border-color: var(--wp--preset--color--black) !important;}.has-cyan-bluish-gray-border-color{border-color: var(--wp--preset--color--cyan-bluish-gray) !important;}.has-white-border-color{border-color: var(--wp--preset--color--white) !important;}.has-pale-pink-border-color{border-color: var(--wp--preset--color--pale-pink) !important;}.has-vivid-red-border-color{border-color: var(--wp--preset--color--vivid-red) !important;}.has-luminous-vivid-orange-border-color{border-color: var(--wp--preset--color--luminous-vivid-orange) !important;}.has-luminous-vivid-amber-border-color{border-color: var(--wp--preset--color--luminous-vivid-amber) !important;}.has-light-green-cyan-border-color{border-color: var(--wp--preset--color--light-green-cyan) !important;}.has-vivid-green-cyan-border-color{border-color: var(--wp--preset--color--vivid-green-cyan) !important;}.has-pale-cyan-blue-border-color{border-color: var(--wp--preset--color--pale-cyan-blue) !important;}.has-vivid-cyan-blue-border-color{border-color: var(--wp--preset--color--vivid-cyan-blue) !important;}.has-vivid-purple-border-color{border-color: var(--wp--preset--color--vivid-purple) !important;}.has-vivid-cyan-blue-to-vivid-purple-gradient-background{background: var(--wp--preset--gradient--vivid-cyan-blue-to-vivid-purple) !important;}.has-light-green-cyan-to-vivid-green-cyan-gradient-background{background: var(--wp--preset--gradient--light-green-cyan-to-vivid-green-cyan) !important;}.has-luminous-vivid-amber-to-luminous-vivid-orange-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-amber-to-luminous-vivid-orange) !important;}.has-luminous-vivid-orange-to-vivid-red-gradient-background{background: var(--wp--preset--gradient--luminous-vivid-orange-to-vivid-red) !important;}.has-very-light-gray-to-cyan-bluish-gray-gradient-background{background: var(--wp--preset--gradient--very-light-gray-to-cyan-bluish-gray) !important;}.has-cool-to-warm-spectrum-gradient-background{background: var(--wp--preset--gradient--cool-to-warm-spectrum) !important;}.has-blush-light-purple-gradient-background{background: var(--wp--preset--gradient--blush-light-purple) !important;}.has-blush-bordeaux-gradient-background{background: var(--wp--preset--gradient--blush-bordeaux) !important;}.has-luminous-dusk-gradient-background{background: var(--wp--preset--gradient--luminous-dusk) !important;}.has-pale-ocean-gradient-background{background: var(--wp--preset--gradient--pale-ocean) !important;}.has-electric-grass-gradient-background{background: var(--wp--preset--gradient--electric-grass) !important;}.has-midnight-gradient-background{background: var(--wp--preset--gradient--midnight) !important;}.has-small-font-size{font-size: var(--wp--preset--font-size--small) !important;}.has-normal-font-size{font-size: var(--wp--preset--font-size--normal) !important;}.has-medium-font-size{font-size: var(--wp--preset--font-size--medium) !important;}.has-large-font-size{font-size: var(--wp--preset--font-size--large) !important;}.has-huge-font-size{font-size: var(--wp--preset--font-size--huge) !important;}
+</style>
+<link rel='stylesheet' id='all-css-2-1' href='https://s1.wp.com/_static/??-eJyNy9EKwjAMheEXsoZBRb0Qn6WLWVdJm9KkDN/eiTeKMLw7B/4PlupQilExsJkyKdQ+As6CAmoPpj2q7mArQ2FpCjeaQmf7V6WC79QtFSX/gNxd5R5TUYgkjgWDJSlfx00cUtuijUaWuM4Ia/VxX+iaL4M/nL0/HQd/fwK2LmMw?cssminify=yes' type='text/css' media='all' />
+<link rel='stylesheet' id='print-css-3-1' href='https://s2.wp.com/wp-content/mu-plugins/global-print/global-print.css?m=1465851035h&cssminify=yes' type='text/css' media='print' />
+<style id='jetpack-global-styles-frontend-style-inline-css'>
+:root { --font-headings: unset; --font-base: unset; --font-headings-default: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif; --font-base-default: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;}
+</style>
+<link rel='stylesheet' id='all-css-6-1' href='https://s1.wp.com/_static/??-eJxti8sKgCAQAH8o297RIfoWE1NjdaVV+v3o0CHqNAzMwBmFopB0SOCziJiNCwyROIkNpTuArTxcMA9LxVzA/8WknESBZOgtnylZ7TWD7cAgrRLvYPFzPbT12PRTX+0XZRA3zg==?cssminify=yes' type='text/css' media='all' />
+<script id='jetpack_related-posts-js-extra'>
+var related_posts_js_options = {"post_heading":"h4"};
+</script>
+<script id='wpcom-actionbar-placeholder-js-extra'>
+var actionbardata = {"siteID":"10300086","siteName":"Knowledge is Capital","siteURL":"https:\/\/blog.seanmcelroy.com","siteHost":"blog.seanmcelroy.com","icon":"<img alt='' src='https:\/\/secure.gravatar.com\/blavatar\/d9be99eacc8dac4252c3bd0f1e7a59b1?s=50&d=https%3A%2F%2Fs2.wp.com%2Fi%2Flogo%2Fwpcom-gray-white.png' class='avatar avatar-50' height='50' width='50' \/>","canManageOptions":"","canCustomizeSite":"","isFollowing":"","themeSlug":"pub\/choco","signupURL":"https:\/\/wordpress.com\/start\/","loginURL":"https:\/\/wordpress.com\/log-in?redirect_to=https%3A%2F%2Fr-login.wordpress.com%2Fremote-login.php%3Faction%3Dlink%26back%3Dhttps%253A%252F%252Fblog.seanmcelroy.com%252F2017%252F05%252F26%252Fsql-injection-with-new-relic-patched%252F","themeURL":"","xhrURL":"https:\/\/blog.seanmcelroy.com\/wp-admin\/admin-ajax.php","nonce":"8ec0ac2dfd","isSingular":"1","isFolded":"","isLoggedIn":"","isMobile":"","subscribeNonce":"<input type=\"hidden\" id=\"_wpnonce\" name=\"_wpnonce\" value=\"013f5eaadd\" \/>","referer":"https:\/\/blog.seanmcelroy.com\/2017\/05\/26\/sql-injection-with-new-relic-patched\/","canFollow":"1","feedID":"11332843","statusMessage":"","subsEmailDefault":"instantly","customizeLink":"https:\/\/blueprintsforsuccess.wordpress.com\/wp-admin\/customize.php?url=https%3A%2F%2Fblueprintsforsuccess.wordpress.com%2F2017%2F05%2F26%2Fsql-injection-with-new-relic-patched%2F","postID":"303","shortlink":"https:\/\/wp.me\/pHdwq-4T","canEditPost":"","editLink":"https:\/\/wordpress.com\/post\/blog.seanmcelroy.com\/303","statsLink":"https:\/\/wordpress.com\/stats\/post\/303\/blog.seanmcelroy.com","i18n":{"view":"View site","follow":"Follow","following":"Following","edit":"Edit","login":"Log in","signup":"Sign up","customize":"Customize","report":"Report this content","themeInfo":"Get theme: Choco","shortlink":"Copy shortlink","copied":"Copied","followedText":"New posts from this site will now appear in your <a href=\"https:\/\/wordpress.com\/read\">Reader<\/a>","foldBar":"Collapse this bar","unfoldBar":"Expand this bar","editSubs":"Manage subscriptions","viewReader":"View site in Reader","viewReadPost":"View post in Reader","subscribe":"Sign me up","enterEmail":"Enter your email address","followers":"Join 237 other followers","alreadyUser":"Already have a WordPress.com account? <a href=\"https:\/\/wordpress.com\/log-in?redirect_to=https%3A%2F%2Fr-login.wordpress.com%2Fremote-login.php%3Faction%3Dlink%26back%3Dhttps%253A%252F%252Fblog.seanmcelroy.com%252F2017%252F05%252F26%252Fsql-injection-with-new-relic-patched%252F\">Log in now.<\/a>","stats":"Stats","notifyNewPosts":"Notify me of new posts","notifyNewPostsDetails":"Receive web and mobile notifications for new posts from this site.","emailNewPosts":"Email me new posts","emailNewPostsDetails":"You can customize your notification settings further <a href=\"https:\/\/wordpress.com\/following\/manage?s=blog.seanmcelroy.com\">here<\/a>.","emailNewComments":"Email me new comments","instantly":"Instantly","daily":"Daily","weekly":"Weekly"}};
+</script>
+<script crossorigin='anonymous' type='text/javascript' src='https://s0.wp.com/_static/??-eJyFjlEKwjAMQC9kVotMv8SzzC2OljatScrc7e1QYQ7BrxDeyyNmytAnUiQ1XkxOohFFuhEbLzvzTWO6uoBQBLkKpODolrZeLJBDGR2JYQyd4gBLdbN9rhz1oQwoS97fC/L8Hk109FeC6Eau0bW8+peDQub0mH+wKfcpvigw1ppotS7xbI8He9q31rb+CSjcafo='></script>
+<script type='text/javascript'>
+	window.addEventListener( 'DOMContentLoaded', function() {
+		rltInitialize( {"token":null,"iframeOrigins":["https:\/\/widgets.wp.com"]} );
+	} );
+</script>
+<link rel='stylesheet' id='all-css-0-2' href='https://s1.wp.com/wp-content/mu-plugins/highlander-comments/style.css?m=1633595895h&cssminify=yes' type='text/css' media='all' />
+<!--[if lt IE 8]>
+<link rel='stylesheet' id='highlander-comments-ie7-css'  href='https://s2.wp.com/wp-content/mu-plugins/highlander-comments/style-ie7.css?m=1351637563h&#038;ver=20110606' media='all' />
+<![endif]-->
+<link rel="EditURI" type="application/rsd+xml" title="RSD" href="https://blueprintsforsuccess.wordpress.com/xmlrpc.php?rsd" />
+<link rel="wlwmanifest" type="application/wlwmanifest+xml" href="https://s1.wp.com/wp-includes/wlwmanifest.xml" /> 
+<meta name="generator" content="WordPress.com" />
+<link rel="canonical" href="https://blog.seanmcelroy.com/2017/05/26/sql-injection-with-new-relic-patched/" />
+<link rel='shortlink' href='https://wp.me/pHdwq-4T' />
+<link rel="alternate" type="application/json+oembed" href="https://public-api.wordpress.com/oembed/?format=json&amp;url=https%3A%2F%2Fblog.seanmcelroy.com%2F2017%2F05%2F26%2Fsql-injection-with-new-relic-patched%2F&amp;for=wpcom-auto-discovery" /><link rel="alternate" type="application/xml+oembed" href="https://public-api.wordpress.com/oembed/?format=xml&amp;url=https%3A%2F%2Fblog.seanmcelroy.com%2F2017%2F05%2F26%2Fsql-injection-with-new-relic-patched%2F&amp;for=wpcom-auto-discovery" />
+<!-- Jetpack Open Graph Tags -->
+<meta property="og:type" content="article" />
+<meta property="og:title" content="SQL Injection with New Relic [PATCHED]" />
+<meta property="og:url" content="https://blog.seanmcelroy.com/2017/05/26/sql-injection-with-new-relic-patched/" />
+<meta property="og:description" content="Background First off, I have found New Relic to be a great application performance monitoring (APM) tool.  Its ability to link transaction performance from the front-end all the way to back-end dat…" />
+<meta property="article:published_time" content="2017-05-27T01:10:31+00:00" />
+<meta property="article:modified_time" content="2017-05-27T04:26:30+00:00" />
+<meta property="og:site_name" content="Knowledge is Capital" />
+<meta property="og:image" content="https://blueprintsforsuccess.files.wordpress.com/2017/05/have_i_been_pwned_logo.png" />
+<meta property="og:image:width" content="240" />
+<meta property="og:image:height" content="240" />
+<meta property="og:locale" content="en_US" />
+<meta name="twitter:creator" content="@SeanMcElroy" />
+<meta name="twitter:site" content="@SeanMcElroy" />
+<meta name="twitter:text:title" content="SQL Injection with New Relic&nbsp;[PATCHED]" />
+<meta name="twitter:image" content="https://blueprintsforsuccess.files.wordpress.com/2017/05/have_i_been_pwned_logo.png?w=144" />
+<meta name="twitter:card" content="summary" />
+<meta property="article:publisher" content="https://www.facebook.com/WordPresscom" />
+
+<!-- End Jetpack Open Graph Tags -->
+<link rel="shortcut icon" type="image/x-icon" href="https://secure.gravatar.com/blavatar/d9be99eacc8dac4252c3bd0f1e7a59b1?s=32" sizes="16x16" />
+<link rel="icon" type="image/x-icon" href="https://secure.gravatar.com/blavatar/d9be99eacc8dac4252c3bd0f1e7a59b1?s=32" sizes="16x16" />
+<link rel="apple-touch-icon" href="https://secure.gravatar.com/blavatar/d9be99eacc8dac4252c3bd0f1e7a59b1?s=114" />
+<link rel='openid.server' href='https://blog.seanmcelroy.com/?openidserver=1' />
+<link rel='openid.delegate' href='https://blog.seanmcelroy.com/' />
+<link rel="search" type="application/opensearchdescription+xml" href="https://blog.seanmcelroy.com/osd.xml" title="Knowledge is Capital" />
+<link rel="search" type="application/opensearchdescription+xml" href="https://s1.wp.com/opensearch.xml" title="WordPress.com" />
+<meta name="application-name" content="Knowledge is Capital" /><meta name="msapplication-window" content="width=device-width;height=device-height" /><meta name="msapplication-tooltip" content="The Technical Musings of Sean McElroy" /><meta name="msapplication-task" content="name=Subscribe;action-uri=https://blog.seanmcelroy.com/feed/;icon-uri=https://secure.gravatar.com/blavatar/d9be99eacc8dac4252c3bd0f1e7a59b1?s=16" /><meta name="msapplication-task" content="name=Sign up for a free blog;action-uri=http://wordpress.com/signup/;icon-uri=https://s1.wp.com/i/favicon.ico" /><meta name="msapplication-task" content="name=WordPress.com Support;action-uri=http://support.wordpress.com/;icon-uri=https://s1.wp.com/i/favicon.ico" /><meta name="msapplication-task" content="name=WordPress.com Forums;action-uri=http://forums.wordpress.com/;icon-uri=https://s1.wp.com/i/favicon.ico" /><meta name="description" content="Background First off, I have found New Relic to be a great application performance monitoring (APM) tool.  Its ability to link transaction performance from the front-end all the way to back-end database queries that slow your web application is pretty awesome.  This feature lets you see specific queries that are running slowly, including the query execution plans and how much time&hellip;" />
+<link rel="amphtml" href="https://blog.seanmcelroy.com/2017/05/26/sql-injection-with-new-relic-patched/amp/"><!-- Your Google Analytics Plugin is missing the tracking ID -->
+</head>
+<body class="post-template-default single single-post postid-303 single-format-standard customizer-styles-applied color-default highlander-enabled highlander-light">
+
+<div id="page">
+	<div id="header" class="clear-fix">
+		<div id="logo">
+						<h3 id="site-title">
+				<span>
+					<a href="https://blog.seanmcelroy.com/" title="Knowledge is Capital" rel="home">Knowledge is Capital</a>
+				</span>
+			</h3>
+			<div class="description">The Technical Musings of Sean McElroy</div>
+
+		</div><!-- #logo -->
+
+		<div id="nav">
+			<ul class="menu">
+<li ><a href="https://blog.seanmcelroy.com/">Home</a></li></ul>
+		</div><!-- #nav -->
+
+	</div><!-- #header -->
+
+	<div id="main">
+		<a href="https://blog.seanmcelroy.com/feed/rss/" id="rss-link">RSS</a>
+		<div id="main-top">
+			<div id="main-bot" class="clear-fix">
+				<div id="content">
+	<div class="post-navigation clear-fix">
+		<div class="nav-previous">
+			<a href="https://blog.seanmcelroy.com/2016/09/13/296/" rel="prev"><span class="meta-nav">&larr;</span> Previous Post</a>		</div>
+		<div class="nav-next">
+			<a href="https://blog.seanmcelroy.com/2017/06/24/powershell-one-liner-to-find-outbound-connectivity-via-winrm/" rel="next">PowerShell one-liner to find outbound connectivity via&nbsp;WinRM <span class="meta-nav">&rarr;</span></a>		</div>
+	</div><!-- .post-navigation -->
+
+	<div class="post post-303 type-post status-publish format-standard has-post-thumbnail hentry category-security">
+
+		
+				<h2 class="post-title">
+							SQL Injection with New Relic&nbsp;[PATCHED]					</h2>
+	
+				<div class="date">
+			<div class="bg">
+									<span class="day">26</span>
+					<span>May</span>
+							</div>
+		</div><!-- .date -->
+	
+	<div class="entry">
+									<img width="150" height="150" src="https://blueprintsforsuccess.files.wordpress.com/2017/05/have_i_been_pwned_logo.png?w=150" class="post-thumbnail wp-post-image" alt="SQL Injection with New Relic&nbsp;[PATCHED]" loading="lazy" title="SQL Injection with New Relic&nbsp;[PATCHED]" srcset="https://blueprintsforsuccess.files.wordpress.com/2017/05/have_i_been_pwned_logo.png?w=150 150w, https://blueprintsforsuccess.files.wordpress.com/2017/05/have_i_been_pwned_logo.png 240w" sizes="(max-width: 150px) 100vw, 150px" data-attachment-id="311" data-permalink="https://blog.seanmcelroy.com/2017/05/26/sql-injection-with-new-relic-patched/have_i_been_pwned_logo/" data-orig-file="https://blueprintsforsuccess.files.wordpress.com/2017/05/have_i_been_pwned_logo.png" data-orig-size="240,240" data-comments-opened="1" data-image-meta="{&quot;aperture&quot;:&quot;0&quot;,&quot;credit&quot;:&quot;&quot;,&quot;camera&quot;:&quot;&quot;,&quot;caption&quot;:&quot;&quot;,&quot;created_timestamp&quot;:&quot;0&quot;,&quot;copyright&quot;:&quot;&quot;,&quot;focal_length&quot;:&quot;0&quot;,&quot;iso&quot;:&quot;0&quot;,&quot;shutter_speed&quot;:&quot;0&quot;,&quot;title&quot;:&quot;&quot;,&quot;orientation&quot;:&quot;0&quot;}" data-image-title="have_i_been_pwned_logo" data-image-description="" data-image-caption="" data-medium-file="https://blueprintsforsuccess.files.wordpress.com/2017/05/have_i_been_pwned_logo.png?w=240" data-large-file="https://blueprintsforsuccess.files.wordpress.com/2017/05/have_i_been_pwned_logo.png?w=240" />					
+		<h2>Background</h2>
+<p>First off, I have found New Relic to be a great application performance monitoring (APM) tool.  Its ability to link transaction performance from the front-end all the way to back-end database queries that slow your web application is pretty awesome.  This feature lets you see specific queries that are running slowly, including the query execution plans and how much time is spent on processing various parts of a database request.  From their <a href="https://docs.newrelic.com/docs/apm/applications-menu/monitoring/viewing-slow-query-details" target="_blank" rel="noopener noreferrer">online documentation</a>, the interface looks similar to this:</p>
+<p><img style="max-width:100%;" src="https://docs.newrelic.com/sites/default/files/thumbnails/image/APM-Databases-Slow-query-trace.png" /></p>
+<p>What&#8217;s not so awesome is when your APM&#8217;s method for retrieving this data creates a <a href="https://www.owasp.org/index.php/SQL_Injection" target="_blank" rel="noopener noreferrer">SQL injection</a> flaw in your application that wasn&#8217;t there before.  In October 2016, I became aware of some strange errors when a DBA was trying to load SQL Server trace files into <a href="https://support.microsoft.com/en-us/help/830232/pssdiag-data-collection-utility" target="_blank" rel="noopener noreferrer">PSSDiag</a>, due to a formatting problem in the trace file itself.  Our DBA discovered that unclosed quotation marks were causing problems with PSSDiag loading trace files.  So, how could an unclosed quotation mark even be happening?  It&#8217;s a <a href="https://www.owasp.org/index.php/Testing_for_SQL_Injection_(OTG-INPVAL-005)" target="_blank" rel="noopener noreferrer">hallmark</a> of a SQL injection exploit, and so I began digging.</p>
+<p>It appeared our ORM (NHibernate at the time) was sending unparameterized queries, and one of the field values had an unescaped quotation mark, which was causing the error in PSSDiag.  However, in other cases the same query, unique to an area of our code, would be issued with parameters.  Upon further digging, it actually appeared our application was submitting the same query twice, first with the parameterized query version, and a second with parameter values replaced into the query string, sandwiched with a SET SHOWPLAN_ALL.  It looked a bit like this:</p>
+<pre>exec sp_executesql N'INSERT INTO dbo.Table (A, B, C) 
+VALUES (@p0, @p1, @p2);select SCOPE_IDENTITY()'
+,N'@p0 uniqueidentifier,@p1 uniqueidentifier, @p2 nvarchar(50)'
+,@p0='{Snipped}',@p1='{Snipped}',@p2=N'I don''t even'</pre>
+<p>Followed by:</p>
+<pre>SET SHOWPLAN_ALL ON
+INSERT INTO dbo.Table (A, B, C)
+VALUES ('{Snipped}', '{Snipped}', 'I don't even');select SCOPE_IDENTITY()</pre>
+<p>As you can see in the first example created by NHibernate, the word &#8220;don&#8217;t&#8221; was properly escaped; however, in the subsequent execution, it was not.  This second statement is sent by our very same application process, which New Relic will instrument using the <a href="https://msdn.microsoft.com/en-us/library/ms230825(v=vs.110).aspx" target="_blank" rel="noopener noreferrer">ICorProfilerCallback2</a> profiler hook to retrieve application performance statistics.  But it doesn&#8217;t just snoop on the process, it actually hijacks database connections to periodically piggyback on their &#8216;echo&#8217; of requests to retrieve metrics used to populate their slow queries feature.  The <a href="https://docs.microsoft.com/en-us/sql/t-sql/statements/set-showplan-all-transact-sql" target="_blank" rel="noopener noreferrer">SET SHOWPLAN_ALL</a> directive causes the subsequent request not actually to return data, but to just return the execution plan.</p>
+<p>(DBA&#8217;s will note this is actually not a reliable way retrieve this data at all, as parameterized queries can and often do have very different query execution plans when parameter sniffing and lopsided column statistics are in play.  But that&#8217;s how New Relic does it.)</p>
+<p><strong>This is pretty bad</strong>, because now virtually <em>every</em> user-provided input that is sent to your database, even if programmed using secure programming practices to avoid SQL injection flaws, becomes vulnerable with New Relic is installed with the Slow Queries feature enabled.  That being said, New Relic does not send this second &#8216;show plan&#8217; and repeated statement set for every query.  It samples, appending it only onto some executions of any given statement.  An attacker attempting to exploit this would not be able to do so consistently; although, repeated attempts on something like the username field of a login screen, which in many systems is likely log to a database table that stores usernames of failed login attempts, would occasionally succeed when the subsequent SHOWPLAN_ALL and unparamaterized version of the original query is injected at the end of the request by New Relic.</p>
+<h2>Timeline</h2>
+<ul>
+<li>October 5, 2016: Notified New Relic</li>
+<li>October 5: New Relic acknowledges issue and provides a workaround (disabling explain plans)</li>
+<li>October 6: New Relic&#8217;s application security team responds with details explaining why they believe the issue is not exploitable as a security vulnerability. Their reasoning is based on the expected behavior of SHOWPLAN_ALL, which would not execute subsequent commands</li>
+<li>October 6: I provide a specific example of how to bypass the &#8216;protection&#8217; of the preceding SHOWPLAN_ALL statement that confirms this is an exploitable vulnerability.</li>
+<li>October 6 New Relic confirms the exploit and indicates it is targeted for resolution in their upcoming 6.x version of the New Relic .NET Agent.  I confirm the issue in New Relic .NET Agent 5.22.6.</li>
+<li>October 7: New Relic indicates they will not issue a CVE for this issue.</li>
+<li>October 12: New Relic updates us a fix is still in development, but a new member of their application security team questions the exploit-ability of the issue.</li>
+<li>October 12: I provide an updated, detailed exploit to the New Relic security team to demonstrate how to exploit the flaw.</li>
+<li>November 8: Follow-up call with New Relic security team and .NET product manager on progress.  They confirm they <a href="https://docs.newrelic.com/docs/release-notes/agent-release-notes/net-release-notes/net-agent-631230" target="_blank" rel="noopener noreferrer">have resolved the issue as of the New Relic .NET Agent 6.3.123.0</a>.</li>
+<li>November 9: .NET Agent with issue fixed addressed.</li>
+<li>May 26, 2017: Public disclosure</li>
+</ul>
+<h2>Conclusion</h2>
+<p>First off, I want to applaud New Relic on their speedy response and continued dialogue as we worked through the communication of this issue so they understood how to remediate it.  On our November 8 call, I specifically asked if New Relic would reconsider their stance of not issuing a CVE for the issue, or at least clearly identify 6.3.123.0 as a security update so developers and companies that use this agent would know they needed to prioritize this update.  They thoughtfully declined, and I did inform them that I would then be publicly disclosing the vulnerability if they did not.</p>
+<p><strong>Even if I don&#8217;t agree with it</strong>, I understand the position companies take about not proactively issuing CVE&#8217;s.  However, I do believe software creators must clearly indicate when action is needed by their users to update software they provide to resolve security vulnerabilities. Many IT administrators take the &#8216;if it&#8217;s not broken, don&#8217;t update it&#8217; approach to components like the New Relic .NET Agent, and if no security urgency is communicated for an update, it could take months to years for it to be updated in some environments.  While some companies may be worried about competitors&#8217; narratives or market reactions to self-disclosing, the truth is vulnerabilities will eventually be disclosed anyway, and providing an appropriate amount of disclosure and timely communications for security fixes is a sign of a mature vulnerability management program within a software company.</p>
+<p>Also, be sure if you put any mitigation techniques in place that they actually work.  We stumbled upon another bug in working around the issue that was subsequently fixed in <a href="https://docs.newrelic.com/docs/release-notes/agent-release-notes/net-release-notes/net-agent-6116130" target="_blank" rel="noopener noreferrer">6.11.613</a> where trying to turn off the &#8216;slow query&#8217; analysis feature per the New Relic documentation did not consistently work.</p>
+<p>Given the potential gravity of this issue, I have quietly sat on this for almost 7 months to allow for old versions of this agent to be upgraded by New Relic customers, in the name of <a href="https://en.wikipedia.org/wiki/Responsible_disclosure">responsible disclosure</a>.  I have not done any testing on versions of New Relic agents other than the .NET one, but I would implore security researchers to test agents from any APM vendor that collects execution plans as part of their solution for this or similar weaknesses.</p>
+<div id="jp-post-flair" class="sharedaddy sd-like-enabled sd-sharing-enabled"><div class="sharedaddy sd-sharing-enabled"><div class="robots-nocontent sd-block sd-social sd-social-icon-text sd-sharing"><h3 class="sd-title">Share this:</h3><div class="sd-content"><ul><li class="share-twitter"><a rel="nofollow noopener noreferrer" data-shared="sharing-twitter-303" class="share-twitter sd-button share-icon" href="https://blog.seanmcelroy.com/2017/05/26/sql-injection-with-new-relic-patched/?share=twitter" target="_blank" title="Click to share on Twitter"><span>Twitter</span></a></li><li class="share-facebook"><a rel="nofollow noopener noreferrer" data-shared="sharing-facebook-303" class="share-facebook sd-button share-icon" href="https://blog.seanmcelroy.com/2017/05/26/sql-injection-with-new-relic-patched/?share=facebook" target="_blank" title="Click to share on Facebook"><span>Facebook</span></a></li><li class="share-end"></li></ul></div></div></div><div class='sharedaddy sd-block sd-like jetpack-likes-widget-wrapper jetpack-likes-widget-unloaded' id='like-post-wrapper-10300086-303-617d6f7038d27' data-src='//widgets.wp.com/likes/index.html?ver=20210831#blog_id=10300086&amp;post_id=303&amp;origin=blueprintsforsuccess.wordpress.com&amp;obj_id=10300086-303-617d6f7038d27&amp;domain=blog.seanmcelroy.com' data-name='like-post-frame-10300086-303-617d6f7038d27' data-title='Like or Reblog'><h3 class='sd-title'>Like this:</h3><div class='likes-widget-placeholder post-likes-widget-placeholder' style='height: 55px;'><span class='button'><span>Like</span></span> <span class="loading">Loading...</span></div><span class='sd-text-color'></span><a class='sd-link-color'></a></div>
+<div id='jp-relatedposts' class='jp-relatedposts' >
+	<h3 class="jp-relatedposts-headline"><em>Related</em></h3>
+</div></div>
+		<div class="cl">&nbsp;</div>
+
+		
+			</div><!-- .entry -->
+
+				<div class="meta">
+			<div class="bg">
+				<span class="comments-num"><a href="https://blog.seanmcelroy.com/2017/05/26/sql-injection-with-new-relic-patched/#comments">2 Comments</a></span>
+				<p>Posted by <a href="https://blog.seanmcelroy.com/author/seanamcelroy/" title="Posts by Sean McElroy" rel="author">Sean McElroy</a> on May 26, 2017 in <a href="https://blog.seanmcelroy.com/category/security/" rel="category tag">Security</a></p>
+			</div>
+			<div class="bot">&nbsp;</div>
+		</div><!-- .meta -->
+			</div>
+	<div class="post-navigation clear-fix">
+		<div class="nav-previous">
+			<a href="https://blog.seanmcelroy.com/2016/09/13/296/" rel="prev"><span class="meta-nav">&larr;</span> Previous Post</a>		</div>
+		<div class="nav-next">
+			<a href="https://blog.seanmcelroy.com/2017/06/24/powershell-one-liner-to-find-outbound-connectivity-via-winrm/" rel="next">PowerShell one-liner to find outbound connectivity via&nbsp;WinRM <span class="meta-nav">&rarr;</span></a>		</div>
+	</div><!-- .post-navigation -->
+
+	
+			<div id="comments">
+
+
+			<h3 id="comments-title">
+			2 responses to &ldquo;<em>SQL Injection with New Relic&nbsp;[PATCHED]</em>&rdquo;			</h3>
+
+
+			<ol class="commentlist">
+					<li class="comment even thread-even depth-1 comment highlander-comment">
+		<div class="comment-body" id="comment-1093">
+			<img alt='' src='https://1.gravatar.com/avatar/d3fcaa751273a543d09b5506d9998c0d?s=70&#038;d=identicon&#038;r=G' class='avatar avatar-70' height='70' width='70' />			<p class="author">
+				Bob Vandehey			</p>
+			<p class="comment-meta">
+				May 26, 2017 at 11:20 pm			</p>
+			<div class="comment-content">
+				
+				<p>Nice write up. Tracking that down was tricky. It definitely looked like our app was doing something wrong.</p>
+				<div class="alignleft"></div>
+
+			</div>
+			<div class="reply">
+				<a rel='nofollow' class='comment-reply-link' href='https://blog.seanmcelroy.com/2017/05/26/sql-injection-with-new-relic-patched/?replytocom=1093#respond' data-commentid="1093" data-postid="303" data-belowelement="comment-1093" data-respondelement="respond" data-replyto="Reply to Bob Vandehey" aria-label='Reply to Bob Vandehey'>Reply</a>			</div>
+			<div class="cl">&nbsp;</div>
+		</div>
+	</li><!-- #comment-## -->
+	<li class="comment odd alt thread-odd thread-alt depth-1 comment highlander-comment">
+		<div class="comment-body" id="comment-1102">
+			<img alt='' src='https://1.gravatar.com/avatar/de99064aff516ccb2c44aeb271f89699?s=70&#038;d=identicon&#038;r=G' class='avatar avatar-70' height='70' width='70' />			<p class="author">
+				Jim			</p>
+			<p class="comment-meta">
+				May 31, 2017 at 10:31 pm			</p>
+			<div class="comment-content">
+				
+				<p>Where do I even begin&#8230;&#8230;</p>
+				<div class="alignleft"></div>
+
+			</div>
+			<div class="reply">
+				<a rel='nofollow' class='comment-reply-link' href='https://blog.seanmcelroy.com/2017/05/26/sql-injection-with-new-relic-patched/?replytocom=1102#respond' data-commentid="1102" data-postid="303" data-belowelement="comment-1102" data-respondelement="respond" data-replyto="Reply to Jim" aria-label='Reply to Jim'>Reply</a>			</div>
+			<div class="cl">&nbsp;</div>
+		</div>
+	</li><!-- #comment-## -->
+			</ol>
+
+
+
+	<div id="respond" class="comment-respond">
+		<h3 id="reply-title" class="comment-reply-title">Leave a Reply <small><a rel="nofollow" id="cancel-comment-reply-link" href="/2017/05/26/sql-injection-with-new-relic-patched/#respond" style="display:none;">Cancel reply</a></small></h3><form action="https://blog.seanmcelroy.com/wp-comments-post.php" method="post" id="commentform" class="comment-form"><input type="hidden" id="highlander_comment_nonce" name="highlander_comment_nonce" value="80843b1c61" /><input type="hidden" name="_wp_http_referer" value="/2017/05/26/sql-injection-with-new-relic-patched/" />
+<input type="hidden" name="hc_post_as" id="hc_post_as" value="guest" />
+
+<div class="comment-form-field comment-textarea">
+	<label for="comment">Enter your comment here...</label>
+	<div id="comment-form-comment"><textarea id="comment" name="comment" title="Enter your comment here..."></textarea></div>
+</div>
+
+<div id="comment-form-identity">
+	<div id="comment-form-nascar">
+		<p>Fill in your details below or click an icon to log in:</p>
+		<ul>
+			<li class="selected" style="display:none;">
+				<a href="#comment-form-guest" id="postas-guest" class="nascar-signin-link"
+                   title="Login via Guest">
+									</a>
+			</li>
+			<li>
+				<a href="#comment-form-load-service:WordPress.com" id="postas-wordpress" class="nascar-signin-link"
+                   title="Login via WordPress.com">
+					<svg xmlns="http://www.w3.org/2000/svg" role="presentation" viewBox="0 0 24 24" ><rect x="0" fill="none" width="24" height="24"/><g><path fill="#0087be" d="M12.158 12.786l-2.698 7.84c.806.236 1.657.365 2.54.365 1.047 0 2.05-.18 2.986-.51-.024-.037-.046-.078-.065-.123l-2.762-7.57zM3.008 12c0 3.56 2.07 6.634 5.068 8.092L3.788 8.342c-.5 1.117-.78 2.354-.78 3.658zm15.06-.454c0-1.112-.398-1.88-.74-2.48-.456-.74-.883-1.368-.883-2.11 0-.825.627-1.595 1.51-1.595.04 0 .078.006.116.008-1.598-1.464-3.73-2.36-6.07-2.36-3.14 0-5.904 1.613-7.512 4.053.21.008.41.012.58.012.94 0 2.395-.114 2.395-.114.484-.028.54.684.057.74 0 0-.487.058-1.03.086l3.275 9.74 1.968-5.902-1.4-3.838c-.485-.028-.944-.085-.944-.085-.486-.03-.43-.77.056-.742 0 0 1.484.114 2.368.114.94 0 2.397-.114 2.397-.114.486-.028.543.684.058.74 0 0-.488.058-1.03.086l3.25 9.665.897-2.997c.456-1.17.684-2.137.684-2.907zm1.82-3.86c.04.286.06.593.06.924 0 .912-.17 1.938-.683 3.22l-2.746 7.94c2.672-1.558 4.47-4.454 4.47-7.77 0-1.564-.4-3.033-1.1-4.314zM12 22C6.486 22 2 17.514 2 12S6.486 2 12 2s10 4.486 10 10-4.486 10-10 10z"/></g></svg>				</a>
+			</li>
+			<li>
+				<a href="#comment-form-load-service:Twitter" id="postas-twitter" class="nascar-signin-link"
+                   title="Login via Twitter">
+					<svg xmlns="http://www.w3.org/2000/svg" role="presentation" viewBox="0 0 24 24" ><rect x="0" fill="none" width="24" height="24"/><g><path fill="#1DA1F2" d="M22.23 5.924c-.736.326-1.527.547-2.357.646.847-.508 1.498-1.312 1.804-2.27-.793.47-1.67.812-2.606.996C18.325 4.498 17.258 4 16.078 4c-2.266 0-4.103 1.837-4.103 4.103 0 .322.036.635.106.935-3.41-.17-6.433-1.804-8.457-4.287-.353.607-.556 1.312-.556 2.064 0 1.424.724 2.68 1.825 3.415-.673-.022-1.305-.207-1.86-.514v.052c0 1.988 1.415 3.647 3.293 4.023-.344.095-.707.145-1.08.145-.265 0-.522-.026-.773-.074.522 1.63 2.038 2.817 3.833 2.85-1.404 1.1-3.174 1.757-5.096 1.757-.332 0-.66-.02-.98-.057 1.816 1.164 3.973 1.843 6.29 1.843 7.547 0 11.675-6.252 11.675-11.675 0-.178-.004-.355-.012-.53.802-.578 1.497-1.3 2.047-2.124z"/></g></svg>				</a>
+			</li>
+			<li>
+				<a href="#comment-form-load-service:Facebook" id="postas-facebook" class="nascar-signin-link"
+                   title="Login via Facebook">
+					<svg xmlns="http://www.w3.org/2000/svg" role="presentation" viewBox="0 0 24 24" ><rect x="0" fill="none" width="24" height="24"/><g><path fill="#3B5998" d="M20.007 3H3.993C3.445 3 3 3.445 3 3.993v16.013c0 .55.445.994.993.994h8.62v-6.97H10.27V11.31h2.346V9.31c0-2.325 1.42-3.59 3.494-3.59.993 0 1.847.073 2.096.106v2.43h-1.438c-1.128 0-1.346.537-1.346 1.324v1.734h2.69l-.35 2.717h-2.34V21h4.587c.548 0 .993-.445.993-.993V3.993c0-.548-.445-.993-.993-.993z"/></g></svg>				</a>
+			</li>
+		</ul>
+	</div>
+
+	<div id="comment-form-guest" class="comment-form-service selected">
+		<div class="comment-form-padder">
+			<div class="comment-form-avatar">
+<a href="https://gravatar.com/site/signup/" target="_blank">				<img src="https://1.gravatar.com/avatar/ad516503a11cd5ca435acc9bb6523536?s=25&amp;d=identicon&amp;forcedefault=y&amp;r=G" alt="Gravatar" width="25" class="no-grav" />
+</a>			</div>
+
+				<div class="comment-form-fields">
+				<div class="comment-form-field comment-form-email">
+					<label for="email">Email <span class="required">(required)</span> <span class="nopublish">(Address never made public)</span></label>
+					<div class="comment-form-input"><input id="email" name="email" type="email" value="" /></div>
+				</div>
+				<div class="comment-form-field comment-form-author">
+					<label for="author">Name <span class="required">(required)</span></label>
+					<div class="comment-form-input"><input id="author" name="author" type="text" value="" /></div>
+				</div>
+				<div class="comment-form-field comment-form-url">
+					<label for="url">Website</label>
+					<div class="comment-form-input"><input id="url" name="url" type="url" value="" /></div>
+				</div>
+			</div>
+			
+		</div>
+	</div>
+
+	<div id="comment-form-wordpress" class="comment-form-service">
+		<div class="comment-form-padder">
+			<div class="comment-form-avatar">
+				<img src="https://1.gravatar.com/avatar/ad516503a11cd5ca435acc9bb6523536?s=25&amp;d=identicon&amp;forcedefault=y&amp;r=G" alt="WordPress.com Logo" width="25" class="no-grav" />
+			</div>
+
+				<div class="comment-form-fields">
+				<input type="hidden" name="wp_avatar" id="wordpress-avatar" class="comment-meta-wordpress" value="" />
+				<input type="hidden" name="wp_user_id" id="wordpress-user_id" class="comment-meta-wordpress" value="" />
+				<input type="hidden" name="wp_access_token" id="wordpress-access_token" class="comment-meta-wordpress" value="" />
+						<p class="comment-form-posting-as pa-wordpress">
+			<strong></strong>
+			You are commenting using your WordPress.com account.			<span class="comment-form-log-out">
+				(&nbsp;<a href="javascript:HighlanderComments.doExternalLogout( 'wordpress' );">Log&nbsp;Out</a>&nbsp;/&nbsp;
+				<a href="#" onclick="javascript:HighlanderComments.switchAccount();return false;">Change</a>&nbsp;)
+			</span>
+			<span class="pa-icon"><svg xmlns="http://www.w3.org/2000/svg" role="presentation" viewBox="0 0 24 24" ><rect x="0" fill="none" width="24" height="24"/><g><path fill="#0087be" d="M12.158 12.786l-2.698 7.84c.806.236 1.657.365 2.54.365 1.047 0 2.05-.18 2.986-.51-.024-.037-.046-.078-.065-.123l-2.762-7.57zM3.008 12c0 3.56 2.07 6.634 5.068 8.092L3.788 8.342c-.5 1.117-.78 2.354-.78 3.658zm15.06-.454c0-1.112-.398-1.88-.74-2.48-.456-.74-.883-1.368-.883-2.11 0-.825.627-1.595 1.51-1.595.04 0 .078.006.116.008-1.598-1.464-3.73-2.36-6.07-2.36-3.14 0-5.904 1.613-7.512 4.053.21.008.41.012.58.012.94 0 2.395-.114 2.395-.114.484-.028.54.684.057.74 0 0-.487.058-1.03.086l3.275 9.74 1.968-5.902-1.4-3.838c-.485-.028-.944-.085-.944-.085-.486-.03-.43-.77.056-.742 0 0 1.484.114 2.368.114.94 0 2.397-.114 2.397-.114.486-.028.543.684.058.74 0 0-.488.058-1.03.086l3.25 9.665.897-2.997c.456-1.17.684-2.137.684-2.907zm1.82-3.86c.04.286.06.593.06.924 0 .912-.17 1.938-.683 3.22l-2.746 7.94c2.672-1.558 4.47-4.454 4.47-7.77 0-1.564-.4-3.033-1.1-4.314zM12 22C6.486 22 2 17.514 2 12S6.486 2 12 2s10 4.486 10 10-4.486 10-10 10z"/></g></svg></span>
+		</p>
+					</div>
+	
+		</div>
+	</div>
+
+	<div id="comment-form-googleplus" class="comment-form-service">
+		<div class="comment-form-padder">
+			<div class="comment-form-avatar">
+				<img src="https://1.gravatar.com/avatar/ad516503a11cd5ca435acc9bb6523536?s=25&amp;d=identicon&amp;forcedefault=y&amp;r=G" alt="Google photo" width="25" class="no-grav" />
+			</div>
+
+				<div class="comment-form-fields">
+				<input type="hidden" name="googleplus_avatar" id="googleplus-avatar" class="comment-meta-googleplus" value="" />
+				<input type="hidden" name="googleplus_user_id" id="googleplus-user_id" class="comment-meta-googleplus" value="" />
+				<input type="hidden" name="googleplus_access_token" id="googleplus-access_token" class="comment-meta-googleplus" value="" />
+						<p class="comment-form-posting-as pa-googleplus">
+			<strong></strong>
+			You are commenting using your Google account.			<span class="comment-form-log-out">
+				(&nbsp;<a href="javascript:HighlanderComments.doExternalLogout( 'googleplus' );">Log&nbsp;Out</a>&nbsp;/&nbsp;
+				<a href="#" onclick="javascript:HighlanderComments.switchAccount();return false;">Change</a>&nbsp;)
+			</span>
+			<span class="pa-icon"><svg xmlns="http://www.w3.org/2000/svg" role="presentation" x="0px" y="0px" viewBox="0 0 60 60" ><path fill="#519bf7" d="M56.3,30c0,-1.6 -0.2,-3.4 -0.6,-5h-3.1H42.2H30v10.6h14.8C44,39.3 42,42 39.1,43.9l8.8,6.8C53,46 56.3,39 56.3,30z" /><path fill="#3db366" d="M30,57.5c6.7,0 13.1,-2.4 17.9,-6.8l-8.8,-6.8c-2.5,1.6 -5.6,2.4 -9.1,2.4c-7.2,0 -13.3,-4.7 -15.4,-11.2l-9.3,7.1C9.8,51.3 19.1,57.5 30,57.5z" /><path fill="#fdc600" d="M5.3,42.2l9.3,-7.1c-0.5,-1.6 -0.8,-3.3 -0.8,-5.1s0.3,-3.5 0.8,-5.1l-9.3,-7.1C3.5,21.5 2.5,25.6 2.5,30S3.5,38.5 5.3,42.2z" /><path fill="#f15b44" d="M40.1,17.4l8,-8C43.3,5.1 37,2.5 30,2.5C19.1,2.5 9.8,8.7 5.3,17.8l9.3,7.1c2.1,-6.5 8.2,-11.1 15.4,-11.1C33.9,13.7 37.4,15.1 40.1,17.4z" /></svg></span>
+		</p>
+					</div>
+	
+		</div>
+	</div>
+
+	<div id="comment-form-twitter" class="comment-form-service">
+		<div class="comment-form-padder">
+			<div class="comment-form-avatar">
+				<img src="https://1.gravatar.com/avatar/ad516503a11cd5ca435acc9bb6523536?s=25&amp;d=identicon&amp;forcedefault=y&amp;r=G" alt="Twitter picture" width="25" class="no-grav" />
+			</div>
+
+				<div class="comment-form-fields">
+				<input type="hidden" name="twitter_avatar" id="twitter-avatar" class="comment-meta-twitter" value="" />
+				<input type="hidden" name="twitter_user_id" id="twitter-user_id" class="comment-meta-twitter" value="" />
+				<input type="hidden" name="twitter_access_token" id="twitter-access_token" class="comment-meta-twitter" value="" />
+						<p class="comment-form-posting-as pa-twitter">
+			<strong></strong>
+			You are commenting using your Twitter account.			<span class="comment-form-log-out">
+				(&nbsp;<a href="javascript:HighlanderComments.doExternalLogout( 'twitter' );">Log&nbsp;Out</a>&nbsp;/&nbsp;
+				<a href="#" onclick="javascript:HighlanderComments.switchAccount();return false;">Change</a>&nbsp;)
+			</span>
+			<span class="pa-icon"><svg xmlns="http://www.w3.org/2000/svg" role="presentation" viewBox="0 0 24 24" ><rect x="0" fill="none" width="24" height="24"/><g><path fill="#1DA1F2" d="M22.23 5.924c-.736.326-1.527.547-2.357.646.847-.508 1.498-1.312 1.804-2.27-.793.47-1.67.812-2.606.996C18.325 4.498 17.258 4 16.078 4c-2.266 0-4.103 1.837-4.103 4.103 0 .322.036.635.106.935-3.41-.17-6.433-1.804-8.457-4.287-.353.607-.556 1.312-.556 2.064 0 1.424.724 2.68 1.825 3.415-.673-.022-1.305-.207-1.86-.514v.052c0 1.988 1.415 3.647 3.293 4.023-.344.095-.707.145-1.08.145-.265 0-.522-.026-.773-.074.522 1.63 2.038 2.817 3.833 2.85-1.404 1.1-3.174 1.757-5.096 1.757-.332 0-.66-.02-.98-.057 1.816 1.164 3.973 1.843 6.29 1.843 7.547 0 11.675-6.252 11.675-11.675 0-.178-.004-.355-.012-.53.802-.578 1.497-1.3 2.047-2.124z"/></g></svg></span>
+		</p>
+					</div>
+	
+		</div>
+	</div>
+
+	<div id="comment-form-facebook" class="comment-form-service">
+		<div class="comment-form-padder">
+			<div class="comment-form-avatar">
+				<img src="" alt="Facebook photo" width="25" class="no-grav" />
+			</div>
+
+				<div class="comment-form-fields">
+				<input type="hidden" name="fb_avatar" id="facebook-avatar" class="comment-meta-facebook" value="" />
+				<input type="hidden" name="fb_user_id" id="facebook-user_id" class="comment-meta-facebook" value="" />
+				<input type="hidden" name="fb_access_token" id="facebook-access_token" class="comment-meta-facebook" value="" />
+						<p class="comment-form-posting-as pa-facebook">
+			<strong></strong>
+			You are commenting using your Facebook account.			<span class="comment-form-log-out">
+				(&nbsp;<a href="javascript:HighlanderComments.doExternalLogout( 'facebook' );">Log&nbsp;Out</a>&nbsp;/&nbsp;
+				<a href="#" onclick="javascript:HighlanderComments.switchAccount();return false;">Change</a>&nbsp;)
+			</span>
+			<span class="pa-icon"><svg xmlns="http://www.w3.org/2000/svg" role="presentation" viewBox="0 0 24 24" ><rect x="0" fill="none" width="24" height="24"/><g><path fill="#3B5998" d="M20.007 3H3.993C3.445 3 3 3.445 3 3.993v16.013c0 .55.445.994.993.994h8.62v-6.97H10.27V11.31h2.346V9.31c0-2.325 1.42-3.59 3.494-3.59.993 0 1.847.073 2.096.106v2.43h-1.438c-1.128 0-1.346.537-1.346 1.324v1.734h2.69l-.35 2.717h-2.34V21h4.587c.548 0 .993-.445.993-.993V3.993c0-.548-.445-.993-.993-.993z"/></g></svg></span>
+		</p>
+					</div>
+	
+		</div>
+	</div>
+
+
+	<div id="comment-form-load-service" class="comment-form-service">
+		<div class="comment-form-posting-as-cancel"><a href="javascript:HighlanderComments.cancelExternalWindow();">Cancel</a></div>
+		<p>Connecting to %s</p>
+	</div>
+
+</div>
+
+<script type="text/javascript">
+var highlander_expando_javascript = function () {
+
+	function hide( sel ) {
+		var el = document.querySelector( sel );
+		if ( el ) {
+			el.style.setProperty( 'display', 'none' );
+		}
+	}
+
+	function show( sel ) {
+		var el = document.querySelector( sel );
+		if ( el ) {
+			el.style.removeProperty( 'display' );
+		}
+	}
+
+	var input = document.createElement( 'input' );
+	var comment = document.querySelector( '#comment' );
+
+	if ( input && comment && 'placeholder' in input ) {
+		var label = document.querySelector( '.comment-textarea label' );
+		if ( label ) {
+			var text = label.textContent;
+			label.parentNode.removeChild( label );
+			comment.setAttribute( 'placeholder', text );
+		}
+	}
+
+	// Expando Mode: start small, then auto-resize on first click + text length
+	hide( '#comment-form-identity' );
+	hide( '#comment-form-subscribe' );
+	hide( '#commentform .form-submit' );
+
+	if ( comment ) {
+		comment.style.height = '10px';
+
+		var handler = function () {
+			comment.style.height = HighlanderComments.initialHeight + 'px';
+			show( '#comment-form-identity' );
+			show( '#comment-form-subscribe' );
+			show( '#commentform .form-submit' );
+			HighlanderComments.resizeCallback();
+
+			comment.removeEventListener( 'focus', handler );
+		};
+
+		comment.addEventListener( 'focus', handler );
+	}
+}
+
+if ( document.readyState !== 'loading' ) {
+	highlander_expando_javascript();
+} else {
+	if ( typeof window.jQuery === 'function' ) {
+		// Use jQuery's `ready` if available.
+		// This solves some scheduling issues between this script and the main highlander script.
+		jQuery( document ).ready( highlander_expando_javascript );
+	} else {
+		// If not available, add a vanilla event listener.
+		document.addEventListener( 'DOMContentLoaded', highlander_expando_javascript );
+	}
+}
+
+</script>
+
+<div id="comment-form-subscribe">
+	<p class="comment-subscription-form"><input type="checkbox" name="subscribe" id="subscribe" value="subscribe" style="width: auto;"/> <label class="subscribe-label" id="subscribe-label" for="subscribe" style="display: inline;">Notify me of new comments via email.</label></p><p class="post-subscription-form"><input type="checkbox" name="subscribe_blog" id="subscribe_blog" value="subscribe" style="width: auto;"/> <label class="subscribe-label" id="subscribe-blog-label" for="subscribe_blog"  style="display: inline;">Notify me of new posts via email.</label></p></div>
+
+
+
+
+<p class="form-submit wp-block-button"><input name="submit" type="submit" id="comment-submit" class="submit wp-block-button__link" value="Post Comment" /> <input type='hidden' name='comment_post_ID' value='303' id='comment_post_ID' />
+<input type='hidden' name='comment_parent' id='comment_parent' value='0' />
+</p><p style="display: none;"><input type="hidden" id="akismet_comment_nonce" name="akismet_comment_nonce" value="e323b9bfd3" /></p>
+<input type="hidden" name="genseq" value="1635610480" />
+<p style="display: none !important;"><label>&#916;<textarea name="ak_hp_textarea" cols="45" rows="8" maxlength="100"></textarea></label><input type="hidden" id="ak_js_1" name="ak_js" value="101"/><script>document.getElementById( "ak_js_1" ).setAttribute( "value", ( new Date() ).getTime() );</script></p></form>	</div><!-- #respond -->
+	<div style="clear: both"></div>
+</div><!-- #comments -->
+
+
+				</div><!-- END Content -->
+				<div id="sidebar">
+										<ul class="xoxo">
+													<li class="widget widget_search">
+								<form action="https://blog.seanmcelroy.com/" id="searchform" method="get">
+	<label for="s" class="screen-reader-text">Search</label>
+	<div class="field-place">
+		<input type="text" class="field" id="s" name="s" value=""/>
+		<input type="submit" class="button" value="Search" id="searchsubmit"/>
+	</div>
+</form>							</li>
+
+							<li class="widget widget_pages">
+								<h4>Pages</h4>
+								<ul>
+																</ul>
+							</li>
+
+							<li class="widget widget_archive">
+								<h4>Archives</h4>
+								<ul>
+									<li><a href='https://blog.seanmcelroy.com/2019/01/'>January 2019</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2017/06/'>June 2017</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2017/05/'>May 2017</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2016/09/'>September 2016</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2015/08/'>August 2015</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2015/06/'>June 2015</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2014/10/'>October 2014</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2014/09/'>September 2014</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2014/08/'>August 2014</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2014/04/'>April 2014</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2014/02/'>February 2014</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2013/12/'>December 2013</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2013/08/'>August 2013</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2013/06/'>June 2013</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2013/05/'>May 2013</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2012/09/'>September 2012</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2012/07/'>July 2012</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2012/05/'>May 2012</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2011/08/'>August 2011</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2011/02/'>February 2011</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2010/12/'>December 2010</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2010/08/'>August 2010</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2010/06/'>June 2010</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2010/01/'>January 2010</a></li>
+	<li><a href='https://blog.seanmcelroy.com/2009/11/'>November 2009</a></li>
+								</ul>
+							</li>
+
+							<li class="widget widget_categories">
+								<h4>Categories</h4>
+								<ul>
+									<li class="cat-item cat-item-4202075"><a href="https://blog.seanmcelroy.com/category/ethical-concerns/">Ethical Concerns</a> (6)
+</li>
+	<li class="cat-item cat-item-81819"><a href="https://blog.seanmcelroy.com/category/facebook/">Facebook</a> (2)
+</li>
+	<li class="cat-item cat-item-4185"><a href="https://blog.seanmcelroy.com/category/open-standards/">Open Standards</a> (4)
+</li>
+	<li class="cat-item cat-item-3279"><a href="https://blog.seanmcelroy.com/category/privacy/">Privacy</a> (7)
+</li>
+	<li class="cat-item cat-item-196"><a href="https://blog.seanmcelroy.com/category/programming/">Programming</a> (5)
+</li>
+	<li class="cat-item cat-item-801"><a href="https://blog.seanmcelroy.com/category/security/">Security</a> (10)
+</li>
+	<li class="cat-item cat-item-49818"><a href="https://blog.seanmcelroy.com/category/social-media/">Social Media</a> (2)
+</li>
+	<li class="cat-item cat-item-83846"><a href="https://blog.seanmcelroy.com/category/social-responsibility/">Social Responsibility</a> (5)
+</li>
+	<li class="cat-item cat-item-51691170"><a href="https://blog.seanmcelroy.com/category/technology-policies/">Technology Policies</a> (3)
+</li>
+	<li class="cat-item cat-item-1"><a href="https://blog.seanmcelroy.com/category/uncategorized/">Uncategorized</a> (6)
+</li>
+	<li class="cat-item cat-item-9280"><a href="https://blog.seanmcelroy.com/category/user-experience/">User Experience</a> (2)
+</li>
+								</ul>
+							</li>
+
+																		</ul>
+				</div><!-- END Sidebar -->
+				<div class="cl">&nbsp;</div>					</div><!-- #main-bot -->
+				</div><!-- #main-top -->
+			</div><!-- #main -->
+			<div id="footer">
+				<p><a href="https://wordpress.com/?ref=footer_blog" rel="nofollow">Blog at WordPress.com.</a>
+</p>
+
+				<p class="rss"><a href="https://blog.seanmcelroy.com/feed/rss/">Entries (RSS)</a> and <a href="https://blog.seanmcelroy.com/comments/feed/">Comments (RSS)</a></p>
+			</div><!-- #footer -->
+		</div><!-- #page -->
+		<!--  -->
+<script src='//0.gravatar.com/js/gprofiles.js?ver=202143y' id='grofiles-cards-js'></script>
+<script id='wpgroho-js-extra'>
+var WPGroHo = {"my_hash":""};
+</script>
+<script crossorigin='anonymous' type='text/javascript' src='https://s1.wp.com/wp-content/mu-plugins/gravatar-hovercards/wpgroho.js?m=1610363240h'></script>
+
+	<script>
+		// Initialize and attach hovercards to all gravatars
+		( function() {
+			function init() {
+				if ( typeof Gravatar === 'undefined' ) {
+					return;
+				}
+
+				if ( typeof Gravatar.init !== 'function' ) {
+					return;
+				}
+
+				Gravatar.profile_cb = function ( hash, id ) {
+					WPGroHo.syncProfileData( hash, id );
+				};
+
+				Gravatar.my_hash = WPGroHo.my_hash;
+				Gravatar.init( 'body', '#wp-admin-bar-my-account' );
+			}
+
+			if ( document.readyState !== 'loading' ) {
+				init();
+			} else {
+				document.addEventListener( 'DOMContentLoaded', init );
+			}
+		} )();
+	</script>
+
+		<div style="display:none">
+	<div class="grofile-hash-map-d3fcaa751273a543d09b5506d9998c0d">
+	</div>
+	<div class="grofile-hash-map-de99064aff516ccb2c44aeb271f89699">
+	</div>
+	</div>
+<script id='highlander-comments-js-extra'>
+var HighlanderComments = {"loggingInText":"Logging In\u2026","submittingText":"Posting Comment\u2026","postCommentText":"Post Comment","connectingToText":"Connecting to %s","commentingAsText":"%1$s: You are commenting using your %2$s account.","logoutText":"Log Out","loginText":"Log In","connectURL":"https:\/\/blueprintsforsuccess.wordpress.com\/public.api\/connect\/?action=request&domain=blog.seanmcelroy.com","logoutURL":"https:\/\/blueprintsforsuccess.wordpress.com\/wp-login.php?action=logout&_wpnonce=59d10fafa1","homeURL":"https:\/\/blog.seanmcelroy.com\/","postID":"303","gravDefault":"identicon","enterACommentError":"Please enter a comment","enterEmailError":"Please enter your email address here","invalidEmailError":"Invalid email address","enterAuthorError":"Please enter your name here","gravatarFromEmail":"This picture will show whenever you leave a comment. Click to customize it.","logInToExternalAccount":"Log in to use details from one of these accounts.","change":"Change","changeAccount":"Change Account","comment_registration":"0","userIsLoggedIn":"","isJetpack":"","text_direction":"ltr"};
+</script>
+<script crossorigin='anonymous' type='text/javascript' src='https://s1.wp.com/_static/??/wp-content/js/jquery/jquery.autoresize.js,/wp-content/mu-plugins/highlander-comments/script.js?m=1626677336j'></script>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-dark-grayscale"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0 0.49803921568627" /><feFuncG type="table" tableValues="0 0.49803921568627" /><feFuncB type="table" tableValues="0 0.49803921568627" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-grayscale"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0 1" /><feFuncG type="table" tableValues="0 1" /><feFuncB type="table" tableValues="0 1" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-purple-yellow"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0.54901960784314 0.98823529411765" /><feFuncG type="table" tableValues="0 1" /><feFuncB type="table" tableValues="0.71764705882353 0.25490196078431" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-blue-red"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0 1" /><feFuncG type="table" tableValues="0 0.27843137254902" /><feFuncB type="table" tableValues="0.5921568627451 0.27843137254902" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-midnight"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0 0" /><feFuncG type="table" tableValues="0 0.64705882352941" /><feFuncB type="table" tableValues="0 1" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-magenta-yellow"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0.78039215686275 1" /><feFuncG type="table" tableValues="0 0.94901960784314" /><feFuncB type="table" tableValues="0.35294117647059 0.47058823529412" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-purple-green"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0.65098039215686 0.40392156862745" /><feFuncG type="table" tableValues="0 1" /><feFuncB type="table" tableValues="0.44705882352941 0.4" /></feComponentTransfer></filter></defs></svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 0 0" width="0" height="0" focusable="false" role="none" style="visibility: hidden; position: absolute; left: -9999px; overflow: hidden;" ><defs><filter id="wp-duotone-blue-orange"><feColorMatrix type="matrix" values=" .299 .587 .114 0 0 .299 .587 .114 0 0 .299 .587 .114 0 0 0 0 0 1 0 " /><feComponentTransfer color-interpolation-filters="sRGB" ><feFuncR type="table" tableValues="0.098039215686275 1" /><feFuncG type="table" tableValues="0 0.66274509803922" /><feFuncB type="table" tableValues="0.84705882352941 0.41960784313725" /></feComponentTransfer></filter></defs></svg>
+<script>
+window.addEventListener( "load", function( event ) {
+	var link = document.createElement( "link" );
+	link.href = "https://s0.wp.com/wp-content/mu-plugins/actionbar/actionbar.css?v=20210915";
+	link.type = "text/css";
+	link.rel = "stylesheet";
+	document.head.appendChild( link );
+
+	var script = document.createElement( "script" );
+	script.src = "https://s0.wp.com/wp-content/mu-plugins/actionbar/actionbar.js?v=20211021";
+	script.defer = true;
+	document.body.appendChild( script );
+} );
+</script>
+
+	
+	<script type="text/javascript">
+		window.WPCOM_sharing_counts = {"https:\/\/blog.seanmcelroy.com\/2017\/05\/26\/sql-injection-with-new-relic-patched\/":303};
+	</script>
+				<script id='sharing-js-js-extra'>
+var sharing_js_options = {"lang":"en","counts":"1","is_stats_active":"1"};
+</script>
+<script crossorigin='anonymous' type='text/javascript' src='https://s1.wp.com/_static/??-eJyFjsEOwiAQRH9ISqy2iQfjt1BY26VAkYXW+vXuwR40Rk+zm5l5GblEoaeQIWRpSRqYUUO8V5Z28t2ytwJpfUmFYUZY/sYs5Kj0KBIQPuAz7ouIrvQYSDocgSSXCgwqGAdpC2PQrhg2Ga4n77nIuOjWymP4QVSGfdGpJL2iDIkvkROPoW9kfsF3YP5A40RZXJ3CJGlQCUO/KZcu/rxv6/ZYH5pTY5+LfYCe'></script>
+<script type='text/javascript'>
+var windowOpen;
+			( function () {
+				function matches( el, sel ) {
+					return !! (
+						el.matches && el.matches( sel ) ||
+						el.msMatchesSelector && el.msMatchesSelector( sel )
+					);
+				}
+
+				document.body.addEventListener( 'click', function ( event ) {
+					if ( ! event.target ) {
+						return;
+					}
+
+					var el;
+					if ( matches( event.target, 'a.share-twitter' ) ) {
+						el = event.target;
+					} else if ( event.target.parentNode && matches( event.target.parentNode, 'a.share-twitter' ) ) {
+						el = event.target.parentNode;
+					}
+
+					if ( el ) {
+						event.preventDefault();
+
+						// If there's another sharing window open, close it.
+						if ( typeof windowOpen !== 'undefined' ) {
+							windowOpen.close();
+						}
+						windowOpen = window.open( el.getAttribute( 'href' ), 'wpcomtwitter', 'menubar=1,resizable=1,width=600,height=350' );
+						return false;
+					}
+				} );
+			} )();
+var windowOpen;
+			( function () {
+				function matches( el, sel ) {
+					return !! (
+						el.matches && el.matches( sel ) ||
+						el.msMatchesSelector && el.msMatchesSelector( sel )
+					);
+				}
+
+				document.body.addEventListener( 'click', function ( event ) {
+					if ( ! event.target ) {
+						return;
+					}
+
+					var el;
+					if ( matches( event.target, 'a.share-facebook' ) ) {
+						el = event.target;
+					} else if ( event.target.parentNode && matches( event.target.parentNode, 'a.share-facebook' ) ) {
+						el = event.target.parentNode;
+					}
+
+					if ( el ) {
+						event.preventDefault();
+
+						// If there's another sharing window open, close it.
+						if ( typeof windowOpen !== 'undefined' ) {
+							windowOpen.close();
+						}
+						windowOpen = window.open( el.getAttribute( 'href' ), 'wpcomfacebook', 'menubar=1,resizable=1,width=600,height=400' );
+						return false;
+					}
+				} );
+			} )();
+</script>
+<script type="text/javascript">
+// <![CDATA[
+(function() {
+try{
+  if ( window.external &&'msIsSiteMode' in window.external) {
+    if (window.external.msIsSiteMode()) {
+      var jl = document.createElement('script');
+      jl.type='text/javascript';
+      jl.async=true;
+      jl.src='/wp-content/plugins/ie-sitemode/custom-jumplist.php';
+      var s = document.getElementsByTagName('script')[0];
+      s.parentNode.insertBefore(jl, s);
+    }
+  }
+}catch(e){}
+})();
+// ]]>
+</script>	<iframe src='https://widgets.wp.com/likes/master.html?ver=20210831#ver=20210831&amp;origin=https://blog.seanmcelroy.com' scrolling='no' id='likes-master' name='likes-master' style='display:none;'></iframe>
+	<div id='likes-other-gravatars'>
+		<div class="likes-text">
+			<span>%d</span> bloggers like this:		</div>
+		<ul class="wpl-avatars sd-like-gravatars"></ul>
+	</div>
+	
+		<script src="//stats.wp.com/w.js?62" defer></script> <script type="text/javascript">
+_tkq = window._tkq || [];
+_stq = window._stq || [];
+_tkq.push(['storeContext', {'blog_id':'10300086','blog_tz':'-5','user_lang':'en','blog_lang':'en','user_id':'0'}]);
+_stq.push(['view', {'blog':'10300086','v':'wpcom','tz':'-5','user_id':'0','post':'303','subd':'blueprintsforsuccess'}]);
+_stq.push(['extra', {'crypt':'UE40eW5QN0p8M2Y/RE1TaVhzUzFMbjdWNHpwZGhTayxPSUFCMGNrd29+Smw0TDhnZmRTK0hlRi9QSGh6bi9GXVhBJWIlZlR5U1JMLU8/MkNtblkvY1d6L2dFSjMyeElqTDVvLW9PSHJOTjZ8LjVFQUJxZ1JhN2N2bnl0YWVoNGUlcEk0VjQyL1BQVXVqTmN6WWVyPUNSNGRkPVNaRnpBZW5pQWV5MmZ4bnQuVW04X05iS05xcG4zNG9NclVFYnprTz95bVR4cmFkeixnfi50c0RZbE5yNV16YTB6WDc5akYwWmJiamJtcFo5R1ouTTRDTm5KLUFORDRMVE5URERFRSU3bWIzWWhCSi80b3p8Rj1vUQ=='}]);
+_stq.push([ 'clickTrackerInit', '10300086', '303' ]);
+	</script>
+<noscript><img src="https://pixel.wp.com/b.gif?v=noscript" style="height:1px;width:1px;overflow:hidden;position:absolute;bottom:1px;" alt="" /></noscript>
+<script>
+if ( 'object' === typeof wpcom_mobile_user_agent_info ) {
+
+	wpcom_mobile_user_agent_info.init();
+	var mobileStatsQueryString = "";
+	
+	if( false !== wpcom_mobile_user_agent_info.matchedPlatformName )
+		mobileStatsQueryString += "&x_" + 'mobile_platforms' + '=' + wpcom_mobile_user_agent_info.matchedPlatformName;
+	
+	if( false !== wpcom_mobile_user_agent_info.matchedUserAgentName )
+		mobileStatsQueryString += "&x_" + 'mobile_devices' + '=' + wpcom_mobile_user_agent_info.matchedUserAgentName;
+	
+	if( wpcom_mobile_user_agent_info.isIPad() )
+		mobileStatsQueryString += "&x_" + 'ipad_views' + '=' + 'views';
+
+	if( "" != mobileStatsQueryString ) {
+		new Image().src = document.location.protocol + '//pixel.wp.com/g.gif?v=wpcom-no-pv' + mobileStatsQueryString + '&baba=' + Math.random();
+	}
+	
+}
+</script>	</body>
+</html>

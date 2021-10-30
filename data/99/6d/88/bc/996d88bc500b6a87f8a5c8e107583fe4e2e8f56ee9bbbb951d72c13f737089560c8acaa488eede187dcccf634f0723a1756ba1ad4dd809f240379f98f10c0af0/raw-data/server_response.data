@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag -->
+<title>KeepKey receive buffer vulnerability (CVE-2019-18671) | invd blog</title>
+<meta name="generator" content="Jekyll" />
+<meta property="og:title" content="KeepKey receive buffer vulnerability (CVE-2019-18671)" />
+<meta name="author" content="Christian Reitter" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="The article describes a buffer overflow vulnerability in the USB receive buffer of the KeepKey hardware wallet that was fixed with firmware v6.2.2 in September 2019. I discovered this issue by fuzzing a custom KeepKey emulator setup with libFuzzer and AddressSanitizer." />
+<meta property="og:description" content="The article describes a buffer overflow vulnerability in the USB receive buffer of the KeepKey hardware wallet that was fixed with firmware v6.2.2 in September 2019. I discovered this issue by fuzzing a custom KeepKey emulator setup with libFuzzer and AddressSanitizer." />
+<link rel="canonical" href="https://blog.inhq.net/posts/keepkey-CVE-2019-18671/" />
+<meta property="og:url" content="https://blog.inhq.net/posts/keepkey-CVE-2019-18671/" />
+<meta property="og:site_name" content="invd blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-02-11T00:00:00+01:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="KeepKey receive buffer vulnerability (CVE-2019-18671)" />
+<script type="application/ld+json">
+{"description":"The article describes a buffer overflow vulnerability in the USB receive buffer of the KeepKey hardware wallet that was fixed with firmware v6.2.2 in September 2019. I discovered this issue by fuzzing a custom KeepKey emulator setup with libFuzzer and AddressSanitizer.","@type":"BlogPosting","datePublished":"2020-02-11T00:00:00+01:00","url":"https://blog.inhq.net/posts/keepkey-CVE-2019-18671/","mainEntityOfPage":{"@type":"WebPage","@id":"https://blog.inhq.net/posts/keepkey-CVE-2019-18671/"},"author":{"@type":"Person","name":"Christian Reitter"},"headline":"KeepKey receive buffer vulnerability (CVE-2019-18671)","dateModified":"2020-02-11T00:00:00+01:00","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/css/style.css"><link type="application/atom+xml" rel="alternate" href="https://blog.inhq.net/feed.xml" title="invd blog" /><script type="text/javascript">
+  var _paq = window._paq || [];
+  _paq.push(['trackPageView']);
+  _paq.push(['enableLinkTracking']);
+  _paq.push(['setSecureCookie', true]);
+  _paq.push(['setVisitorCookieTimeout', 60 * 60 * 24 * 90]);
+  _paq.push(['setReferralCookieTimeout', 60 * 60 * 24 * 90]);
+  _paq.push(['appendToTrackingUrl', 'bots=1']);
+  (function() {
+    var u="https://mato.inhq.net/";
+    _paq.push(['setTrackerUrl', u+'m']);
+    _paq.push(['setSiteId', '1']);
+    var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+    g.type='text/javascript'; g.async=true; g.defer=true; g.src=u+'mat.js'; s.parentNode.insertBefore(g,s);
+  })();
+  </script></head>
+<body><header class="site-header"><noscript><img src="https://mato.inhq.net/m?rec=1&bots=1&idsite=1" alt="" style="position:absolute; visibility:hidden" /></noscript><div class="wrapper"><a class="site-title" rel="author" href="/">invd blog</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger">
+        <a class="page-link" href="/archive/">Archive</a><a class="page-link" href="/cve/">CVEs</a><a class="page-link" href="/consulting/">Consulting</a><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">KeepKey receive buffer vulnerability (CVE-2019-18671)</h1>
+    <p class="post-meta"><time class="dt-published" datetime="2020-02-11T00:00:00+01:00" itemprop="datePublished">
+        Feb 11, 2020
+      </time>• <span itemprop="author" itemscope itemtype="http://schema.org/Person">
+            <span class="p-author h-card" itemprop="name">Christian Reitter</span></span><br/>ID:
+        
+          
+          <span>CVE-2019-18671</span>
+        <br/>
+      Related articles:
+      <a href="/posts/keepkey-glitching-vuln-21020/">Glitching over KeepKey Firmware Protections (VULN-21020)</a>
+          • <a href="/posts/faulty-stack-canary-arm-systems/">Faulty Stack Smashing Protection on ARM Systems</a>
+          • <a href="/posts/exploiting-CVE-2021-31616-part1/">Exploiting KeepKey CVE-2021-31616 - Part I</a>
+          </p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>The article describes a <strong>buffer overflow</strong> vulnerability in the USB receive buffer of the KeepKey hardware wallet that was fixed with firmware <strong>v6.2.2</strong> in September 2019. I discovered this issue by fuzzing a custom KeepKey emulator setup with libFuzzer and AddressSanitizer.</p>
+
+<p>See the <a href="/posts/keepkey-CVE-2019-18672/">CVE-2019-18672</a> disclosure post for another KeepKey vulnerability disclosed at the same time.</p>
+
+<p><i><strong>Please note:</strong> As with other articles, this is going to be a technical deep-dive into the specific details that are relevant for the issue.<br />
+Correspondingly, the article is written for technical readers with IT security and coding experience.</i></p>
+
+<div id="toc-container">
+  <h2 class="no_toc">Contents</h2>
+<ul id="markdown-toc">
+  <li><a href="#consulting" id="markdown-toc-consulting">Consulting</a></li>
+  <li><a href="#technical-background" id="markdown-toc-technical-background">Technical background</a></li>
+  <li><a href="#the-vulnerability" id="markdown-toc-the-vulnerability">The vulnerability</a>    <ul>
+      <li><a href="#the-fix" id="markdown-toc-the-fix">The fix</a></li>
+      <li><a href="#attack-scenario-and-security-implications" id="markdown-toc-attack-scenario-and-security-implications">Attack scenario and security implications</a></li>
+    </ul>
+  </li>
+  <li><a href="#coordinated-disclosure" id="markdown-toc-coordinated-disclosure">Coordinated disclosure</a>    <ul>
+      <li><a href="#relevant-product" id="markdown-toc-relevant-product">Relevant product</a></li>
+      <li><a href="#detailed-timeline" id="markdown-toc-detailed-timeline">Detailed timeline</a></li>
+      <li><a href="#bug-bounty" id="markdown-toc-bug-bounty">Bug bounty</a></li>
+    </ul>
+  </li>
+</ul>
+
+</div>
+
+<h2 id="consulting">Consulting</h2>
+
+<p><i>I’m a freelance Security Consultant and currently available for new projects.
+  If you are looking for assistance to secure your projects or organization, <a href="/consulting">get in touch</a>.</i></p>
+
+<h2 id="technical-background">Technical background</h2>
+<p>As described in the article on a <a href="/posts/keepkey-rx-buffer-overflow/">previous KeepKey buffer overflow</a>, the KeepKey uses a specific packet encoding scheme to transport custom protobuf messages over USB, similar to the Trezor devices.</p>
+
+<p>There is a special subset of protobuf messages that are designated as “<strong>tiny</strong>” and are particularly small and simple in both their <strong>encoded</strong> as well as <strong>decoded</strong> form. Their main use is to signal user-related decisions like a <strong>cancel action</strong> that concern ongoing operations. The state machine of the KeepKey is designed to allow special handling of these messages during certain time periods when all other messages are rejected.</p>
+
+<p>Unfortunately, the packet handling logic of the KeepKey insufficiently checks whether the received messages are actually “tiny”.</p>
+
+<h2 id="the-vulnerability">The vulnerability</h2>
+<p>This message handling issue can be attacked once a regular operation goes into a state where feedback from the host computer via a “tiny” message is required. As a practical example, this is the case once the firmware requests a physical button confirmation by the user.</p>
+
+<p>To signal this special mode, the firmware will set <code>msg_tiny_flag</code> to <strong>true</strong>.</p>
+
+<p>When the next (<em>attacker-controlled</em>) USB packet from the host is processed, the <code>uint16_t msgId</code> and <code>uint32_t msgSize</code> parameters are read from the packet header:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="kt">void</span> <span class="nf">handle_usb_rx</span><span class="p">(</span><span class="k">const</span> <span class="kt">void</span> <span class="o">*</span><span class="n">msg</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">len</span><span class="p">)</span>
+<span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">msg_tiny_flag</span><span class="p">)</span> <span class="p">{</span>
+    <span class="kt">uint8_t</span> <span class="n">buf</span><span class="p">[</span><span class="mi">64</span><span class="p">];</span>
+    <span class="n">memcpy</span><span class="p">(</span><span class="n">buf</span><span class="p">,</span> <span class="n">msg</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">buf</span><span class="p">));</span>
+
+    <span class="kt">uint16_t</span> <span class="n">msgId</span> <span class="o">=</span> <span class="n">buf</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span> <span class="o">|</span> <span class="p">((</span><span class="kt">uint16_t</span><span class="p">)</span><span class="n">buf</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span> <span class="o">&lt;&lt;</span> <span class="mi">8</span><span class="p">;</span>
+    <span class="kt">uint32_t</span> <span class="n">msgSize</span> <span class="o">=</span> <span class="n">buf</span><span class="p">[</span><span class="mi">8</span><span class="p">]</span>        <span class="o">|</span>
+          <span class="p">((</span><span class="kt">uint32_t</span><span class="p">)</span><span class="n">buf</span><span class="p">[</span><span class="mi">7</span><span class="p">])</span> <span class="o">&lt;&lt;</span>  <span class="mi">8</span> <span class="o">|</span>
+          <span class="p">((</span><span class="kt">uint32_t</span><span class="p">)</span><span class="n">buf</span><span class="p">[</span><span class="mi">6</span><span class="p">])</span> <span class="o">&lt;&lt;</span> <span class="mi">16</span> <span class="o">|</span>
+          <span class="p">((</span><span class="kt">uint32_t</span><span class="p">)</span><span class="n">buf</span><span class="p">[</span><span class="mi">5</span><span class="p">])</span> <span class="o">&lt;&lt;</span> <span class="mi">24</span><span class="p">;</span></code></pre></figure>
+
+<p><a href="https://github.com/keepkey/keepkey-firmware/blob/11cb18e2e734fce22d88c38187fcbcdf166f7c07/lib/board/messages.c#L340-L350" class="highlightref">messages.c</a></p>
+
+<p>The <strong>encoded</strong> size of the protobuf message is checked to be <code>&lt;= 55</code> byte in length.<br />
+(<em>Note that this does not give guarantees about the <strong>decoded</strong> size of the message, which is relevant for later</em>.)</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="k">if</span> <span class="p">(</span><span class="n">msgSize</span> <span class="o">&gt;</span> <span class="mi">64</span> <span class="o">-</span> <span class="mi">9</span><span class="p">)</span> <span class="p">{</span>
+  <span class="p">(</span><span class="o">*</span><span class="n">msg_failure</span><span class="p">)(</span><span class="n">FailureType_Failure_UnexpectedMessage</span><span class="p">,</span> <span class="s">"Malformed tiny packet"</span><span class="p">);</span>
+  <span class="k">return</span><span class="p">;</span>
+<span class="p">}</span></code></pre></figure>
+
+<p><a href="https://github.com/keepkey/keepkey-firmware/blob/11cb18e2e734fce22d88c38187fcbcdf166f7c07/lib/board/messages.c#L352-L355" class="highlightref">messages.c</a></p>
+
+<p>The <code>msg_id</code> is then checked against the known list of <strong>all</strong> protobuf input message types that the device recognizes. This will reject <strong>unknown</strong> message types, but does <strong>not</strong> actually check whether the message belongs to the “tiny” message subset.</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="c1">// Determine callback handler and message map type.</span>
+<span class="k">const</span> <span class="n">MessagesMap_t</span> <span class="o">*</span><span class="n">entry</span> <span class="o">=</span> <span class="n">message_map_entry</span><span class="p">(</span><span class="n">NORMAL_MSG</span><span class="p">,</span> <span class="n">msgId</span><span class="p">,</span> <span class="n">IN_MSG</span><span class="p">);</span>
+<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">entry</span><span class="p">)</span> <span class="p">{</span>
+  <span class="p">(</span><span class="o">*</span><span class="n">msg_failure</span><span class="p">)(</span><span class="n">FailureType_Failure_UnexpectedMessage</span><span class="p">,</span> <span class="s">"Unknown message"</span><span class="p">);</span>
+  <span class="k">return</span><span class="p">;</span>
+<span class="p">}</span></code></pre></figure>
+
+<p><a href="https://github.com/keepkey/keepkey-firmware/blob/11cb18e2e734fce22d88c38187fcbcdf166f7c07/lib/board/messages.c#L357-L362" class="highlightref">messages.c</a></p>
+
+<p>After passing the checks, <code>tiny_dispatch()</code> is called with the attacker-controlled message body (<em>up to 55 bytes in length</em>):</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="k">static</span> <span class="kt">void</span> <span class="nf">tiny_dispatch</span><span class="p">(</span><span class="k">const</span> <span class="n">MessagesMap_t</span> <span class="o">*</span><span class="n">entry</span><span class="p">,</span> <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">msg</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">msg_size</span><span class="p">)</span>
+<span class="p">{</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">pb_parse</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">msg</span><span class="p">,</span> <span class="n">msg_size</span><span class="p">,</span> <span class="n">msg_tiny</span><span class="p">))</span> <span class="p">{</span></code></pre></figure>
+
+<p><a href="https://github.com/keepkey/keepkey-firmware/blob/11cb18e2e734fce22d88c38187fcbcdf166f7c07/lib/board/messages.c#L161-L163" class="highlightref">messages.c</a></p>
+
+<p>Within the <code>tiny_dispatch()</code> function, <code>pb_parse()</code> will be called with a target buffer of size <strong>64</strong>. The buffer is globally defined and therefore lives in the <code>.bss</code> segment:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="k">static</span> <span class="n">CONFIDENTIAL</span> <span class="kt">uint8_t</span> <span class="n">msg_tiny</span><span class="p">[</span><span class="n">MSG_TINY_BFR_SZ</span><span class="p">];</span></code></pre></figure>
+
+<p><a href="https://github.com/keepkey/keepkey-firmware/blob/11cb18e2e734fce22d88c38187fcbcdf166f7c07/lib/board/messages.c#L42" class="highlightref">messages.c</a></p>
+
+<p>The <code>pb_parse()</code> function then calls the <a href="https://github.com/nanopb/nanopb">Nanopb library</a>’s <code>pb_decode()</code> function, trusting that the small target buffer will be <strong>large enough</strong> for the expanded message:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="k">static</span> <span class="n">bool</span> <span class="nf">pb_parse</span><span class="p">(</span><span class="k">const</span> <span class="n">MessagesMap_t</span> <span class="o">*</span><span class="n">entry</span><span class="p">,</span> <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">msg</span><span class="p">,</span> <span class="kt">uint32_t</span> <span class="n">msg_size</span><span class="p">,</span>
+                     <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">buf</span><span class="p">)</span>
+<span class="p">{</span>
+  <span class="n">pb_istream_t</span> <span class="n">stream</span> <span class="o">=</span> <span class="n">pb_istream_from_buffer</span><span class="p">(</span><span class="n">msg</span><span class="p">,</span> <span class="n">msg_size</span><span class="p">);</span>
+  <span class="k">return</span> <span class="n">pb_decode</span><span class="p">(</span><span class="o">&amp;</span><span class="n">stream</span><span class="p">,</span> <span class="n">entry</span><span class="o">-&gt;</span><span class="n">fields</span><span class="p">,</span> <span class="n">buf</span><span class="p">);</span>
+<span class="p">}</span></code></pre></figure>
+
+<p><a href="https://github.com/keepkey/keepkey-firmware/blob/11cb18e2e734fce22d88c38187fcbcdf166f7c07/lib/board/messages.c#L113-L118" class="highlightref">messages.c</a></p>
+
+<p>Unfortunately, the KeepKey includes several protobuf input message definitions that can have valid, short encoded representations when sent over USB, but need much more space in their decoded representation in the target buffer (<em>large <code>max_size</code>, optional fields</em>).</p>
+
+<p>In those cases, Nanopb will perform multiple non-continuous <strong>out of bounds writes</strong> with known values behind the <code>msg_tiny</code>. Additionally, some of those out of bounds writes are likely <em>partially</em> controllable by the attacker through data in the encoded message.</p>
+
+<h3 id="the-fix">The fix</h3>
+
+<p>In <a href="https://github.com/keepkey/keepkey-firmware/commit/b222c66cdd7c3203d917c80ba615082d309d80c3#diff-033045fcd3f0311ac71fdbc91dce0761R353-R371">their patch</a>, ShapeShift has reworked the code to perform actual checks that the <code>msg_id</code> corresponds to one of the five whitelisted “tiny” message types via a switch-case statement <strong>before</strong> calling <code>pb_decode()</code>. This resolves this issue.</p>
+
+<h3 id="attack-scenario-and-security-implications">Attack scenario and security implications</h3>
+
+<p>As described in previous articles, this type of vulnerability in “always exposed” USB packet handling code can be particularly serious due to the potential of automated attacks via malware or impact on stolen devices.</p>
+
+<p>The relevant functionality can be triggered without unlocking the device (<em>-&gt; without PIN</em>) and allows overwriting certain memory areas in or behind the .bss segment with known values.This might be leveraged to change the regular program flow and compromise the device depending on the memory layout of individual firmware versions.</p>
+
+<h4 id="existing-countermeasures-and-mitigating-factors">Existing countermeasures and mitigating factors</h4>
+
+<p>As far as I’m aware, existing countermeasures such as stack protection and MPU configuration do not directly detect and prevent this issue.</p>
+
+<h4 id="proof-of-concept">Proof of concept</h4>
+
+<p>Only two ping packets are required to trigger the issue:</p>
+<pre>
+# 1x ping message with physical button confirmation request
+\x3f\x23\x23\x00\x01\x00\x00\x00\x11\x0a\x09\x56\x55\x4c\x4e\x2d\x31\x39\x36\x39\x10\x01\x18\x00\x20\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
+
+# note: the firmware is now expecting a "tiny" message
+
+# 1x ping message with content, this will be expanded to 256+ bytes in decoded form
+\x3f\x23\x23\x00\x01\x00\x00\x00\x11\x0a\x09\x76\x65\x72\x79\x20\x6c\x6f\x6e\x67\x10\x00\x18\x00\x20\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00
+</pre>
+
+<h4 id="affected-versions">Affected versions</h4>
+
+<p>The relevant message handling code was last changed <a href="https://github.com/keepkey/keepkey-firmware/commit/bfc5b83003279c36722a6b53676a9ff02e53d008">in May 2019</a>, but as far as I can see, the vulnerability also affects previous code versions. I would assume that all recent versions are affected unless other information becomes available via the vendor.</p>
+
+<h2 id="coordinated-disclosure">Coordinated disclosure</h2>
+
+<p>I confidentially disclosed the issue to ShapeShift in September 2019 and they quickly acknowledged the report and started looking into the issue. The disclosure was simplified by the fact that only one vendor was affected. <em>The Trezor One uses different code to handle the relevant packets and was <strong>not</strong> vulnerable.</em></p>
+
+<p>During the relevant time in September, I discovered <a href="/posts/keepkey-CVE-2019-18672/">CVE-2019-18672</a> and several smaller issues and disclosed them as well. As with previous reports, they assigned clear internal issue identifiers for each distinct issue. This is helpful to keep track of vulnerabilities and reference then in internal and public reports - even more so when reporting half a dozen vulnerabilities at once!<br />
+I also value the fact that I was able to give feedback on their planned patches before the release.</p>
+
+<p>They shipped a fixed release within <strong>19 days</strong> of the disclosure, which is a fairly good response time for firmware issues in my opinion.</p>
+
+<p>As discussed with ShapeShift in multiple emails during the disclosure process, I highly recommend publishing a reasonable amount of details about the fixed vulnerabilities either <strong>with</strong> the release or <strong>soon after</strong> in a separate article. I realize that the release of security fixes is a stressful time and the release of accompanying disclosure articles easily get pushed back a few days behind schedule.</p>
+
+<p>Nevertheless, public security patches essentially give away the vulnerability to malicious actors but <strong>not</strong> to customers. They might not prioritize the upgrade soon enough without knowing its importance. In my opinion, the benefit of substantially delayed publication of relevant information on publicly fixed vulnerabilities is therefore questionable. <em>For more context on this topic, I recommend the <a href="https://googleprojectzero.blogspot.com/p/vulnerability-disclosure-faq.html">Google Project Zero FAQ</a></em>.</p>
+
+<p>After the initial analysis phase had been completed, I decided that this issue was relevant enough to request a CVE ID from MITRE and ShapeShift was supportive of this step. 
+The CVE assignment itself went quickly and smoothly. <em>See the references below for the technical information.</em></p>
+
+<h3 id="relevant-product">Relevant product</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>product</th>
+      <th>source</th>
+      <th>fixed version</th>
+      <th>vendor references</th>
+      <th>CVE</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>ShapeShift KeepKey</td>
+      <td><a href="https://github.com/keepkey/keepkey-firmware/">Github</a></td>
+      <td><strong>v6.2.2</strong> via <a href="https://github.com/keepkey/keepkey-firmware/commit/b222c66cdd7c3203d917c80ba615082d309d80c3#diff-033045fcd3f0311ac71fdbc91dce0761">patch</a></td>
+      <td><a href="https://medium.com/shapeshift-stories/shapeshift-security-update-8ec89bb1b4e3">disclosure post</a>, <a href="https://medium.com/shapeshift-stories/keepkey-release-notes-v-6f7d2ec78065">release notes</a> , VULN-1969</td>
+      <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-18671">CVE-2019-18671</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="detailed-timeline">Detailed timeline</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>info</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2019-09-01</td>
+      <td>Confidential disclosure to ShapeShift</td>
+    </tr>
+    <tr>
+      <td>2019-09-03</td>
+      <td>ShapeShift acknowledges the report</td>
+    </tr>
+    <tr>
+      <td>2019-09-11</td>
+      <td>ShapeShift assigns VULN-1969, severity assessment: critical</td>
+    </tr>
+    <tr>
+      <td>2019-09-15</td>
+      <td>ShapeShift proposes a patch</td>
+    </tr>
+    <tr>
+      <td>2019-09-19</td>
+      <td>ShapeShift releases firmware v6.2.2</td>
+    </tr>
+    <tr>
+      <td>2019-09-19</td>
+      <td>ShapeShift publishes v6.2.2 release announcement</td>
+    </tr>
+    <tr>
+      <td>2019-11-02</td>
+      <td>CVE requested from MITRE</td>
+    </tr>
+    <tr>
+      <td>2019-11-02</td>
+      <td>MITRE assigns CVE-2019-18671</td>
+    </tr>
+    <tr>
+      <td>2019-12-04</td>
+      <td>ShapeShift publishes disclosure post for v6.2.2</td>
+    </tr>
+    <tr>
+      <td>2019-12-04</td>
+      <td>The CVE-2019-18671 details are published</td>
+    </tr>
+  </tbody>
+</table>
+
+<p><em>Note: previous versions of this timeline included the wrong year.</em></p>
+
+<h3 id="bug-bounty">Bug bounty</h3>
+<p>ShapeShift provided a bug bounty for this issue.</p>
+
+  </div>
+
+
+  <a class="u-url" href="/posts/keepkey-CVE-2019-18671/" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col one-half"><ul class="contact-list">
+          <li class="p-name">
+            <b>Christian Reitter</b>
+          </li></ul></div>
+
+      <div class="footer-col one-half">
+        <p>Information security and other interests.</p>
+      </div>
+    </div>
+
+    <div class="social-ref"><ul class="social-ref-list"><li><a rel="me" href="https://github.com/invd" title="invd"><svg class="svg-icon grey"><use xlink:href="/assets/minima-icons.svg#github"></use></svg></a></li><li><a href="/feed.xml" title="rss"><svg class="svg-icon grey"><use xlink:href="/assets/minima-icons.svg#rss"></use></svg></a></li></ul>
+</div>
+
+  </div>
+</footer>
+</body>
+
+</html>

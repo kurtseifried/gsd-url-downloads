@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag -->
+<title>Yubico libyubihsm Vulnerabilities | invd blog</title>
+<meta name="generator" content="Jekyll" />
+<meta property="og:title" content="Yubico libyubihsm Vulnerabilities" />
+<meta name="author" content="Christian Reitter" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="After my previous research had uncovered security issues in other Yubico smartcard libraries, I decided in July to take a closer look at the Yubico libyubihsm library. Libyubihsm is responsible for interacting with the YubiHSM2 Hardware Security Module that is used in enterprise systems with advanced cryptography requirements. After applying a few days of my private research time &amp; fuzzing experience to it, I discovered multiple memory issues in the library code." />
+<meta property="og:description" content="After my previous research had uncovered security issues in other Yubico smartcard libraries, I decided in July to take a closer look at the Yubico libyubihsm library. Libyubihsm is responsible for interacting with the YubiHSM2 Hardware Security Module that is used in enterprise systems with advanced cryptography requirements. After applying a few days of my private research time &amp; fuzzing experience to it, I discovered multiple memory issues in the library code." />
+<link rel="canonical" href="https://blog.inhq.net/posts/yubico-libyubihsm-vuln/" />
+<meta property="og:url" content="https://blog.inhq.net/posts/yubico-libyubihsm-vuln/" />
+<meta property="og:site_name" content="invd blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-10-19T17:40:00+02:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Yubico libyubihsm Vulnerabilities" />
+<script type="application/ld+json">
+{"description":"After my previous research had uncovered security issues in other Yubico smartcard libraries, I decided in July to take a closer look at the Yubico libyubihsm library. Libyubihsm is responsible for interacting with the YubiHSM2 Hardware Security Module that is used in enterprise systems with advanced cryptography requirements. After applying a few days of my private research time &amp; fuzzing experience to it, I discovered multiple memory issues in the library code.","@type":"BlogPosting","datePublished":"2020-10-19T17:40:00+02:00","url":"https://blog.inhq.net/posts/yubico-libyubihsm-vuln/","mainEntityOfPage":{"@type":"WebPage","@id":"https://blog.inhq.net/posts/yubico-libyubihsm-vuln/"},"author":{"@type":"Person","name":"Christian Reitter"},"headline":"Yubico libyubihsm Vulnerabilities","dateModified":"2020-10-19T17:40:00+02:00","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/css/style.css"><link type="application/atom+xml" rel="alternate" href="https://blog.inhq.net/feed.xml" title="invd blog" /><script type="text/javascript">
+  var _paq = window._paq || [];
+  _paq.push(['trackPageView']);
+  _paq.push(['enableLinkTracking']);
+  _paq.push(['setSecureCookie', true]);
+  _paq.push(['setVisitorCookieTimeout', 60 * 60 * 24 * 90]);
+  _paq.push(['setReferralCookieTimeout', 60 * 60 * 24 * 90]);
+  _paq.push(['appendToTrackingUrl', 'bots=1']);
+  (function() {
+    var u="https://mato.inhq.net/";
+    _paq.push(['setTrackerUrl', u+'m']);
+    _paq.push(['setSiteId', '1']);
+    var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+    g.type='text/javascript'; g.async=true; g.defer=true; g.src=u+'mat.js'; s.parentNode.insertBefore(g,s);
+  })();
+  </script></head>
+<body><header class="site-header"><noscript><img src="https://mato.inhq.net/m?rec=1&bots=1&idsite=1" alt="" style="position:absolute; visibility:hidden" /></noscript><div class="wrapper"><a class="site-title" rel="author" href="/">invd blog</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger">
+        <a class="page-link" href="/archive/">Archive</a><a class="page-link" href="/cve/">CVEs</a><a class="page-link" href="/consulting/">Consulting</a><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Yubico libyubihsm Vulnerabilities</h1>
+    <p class="post-meta"><time class="dt-published" datetime="2020-10-19T17:40:00+02:00" itemprop="datePublished">
+        Oct 19, 2020
+      </time>• <span itemprop="author" itemscope itemtype="http://schema.org/Person">
+            <span class="p-author h-card" itemprop="name">Christian Reitter</span></span><br/>ID:
+        
+          
+          <span>CVE-2020-24387</span>,
+          
+          <span>CVE-2020-24388</span>
+        <br/>
+      Related articles:
+      <a href="/posts/yubico-libyubihsm-vuln2/">Yubico libyubihsm Vulnerabilities (CVE-2021-27217, CVE-2021-32489)</a>
+          • <a href="/posts/yubico-libykpiv-vuln/">Yubico libykpiv Vulnerabilities</a>
+          • <a href="/posts/yubico-libu2f-host-vuln-part2/">Yubico libu2f-host Vulnerability - Part Two</a>
+          </p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>After my previous research had uncovered security issues in other <a href="/posts/yubico-libykpiv-vuln/">Yubico smartcard libraries</a>,
+I decided in July to take a closer look at the Yubico libyubihsm library.
+Libyubihsm is responsible for interacting with the <a href="https://www.yubico.com/products/hardware-security-module/">YubiHSM2</a> Hardware Security Module that is used in enterprise systems with advanced cryptography requirements.
+After applying a few days of my private research time &amp; fuzzing experience to it, I discovered multiple memory issues in the library code.</p>
+
+<p>At least two of the issues are practical security vulnerabilities: a malicious HSM device or Man-In-The-Middle network attacker can trigger out of bounds write and read operations (<a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-24387">CVE-2020-24387</a>) and
+out of bounds read operations (<a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-24388">CVE-2020-24388</a>) that ultimately both lead to segmentation faults of the process which embeds libyubihsm.
+Notably, the built-in encryption and authentication of the regular HSM messages do not mitigate this attack since the issues are triggered before any effective cryptography.</p>
+
+<p>This article will describe the issues and give some background information on how they were found.</p>
+
+<div id="toc-container">
+  <h2 class="no_toc">Contents</h2>
+<ul id="markdown-toc">
+  <li><a href="#consulting" id="markdown-toc-consulting">Consulting</a></li>
+  <li><a href="#fuzzing-methodology" id="markdown-toc-fuzzing-methodology">Fuzzing Methodology</a></li>
+  <li><a href="#technical-background" id="markdown-toc-technical-background">Technical Background</a></li>
+  <li><a href="#the-vulnerabilities" id="markdown-toc-the-vulnerabilities">The Vulnerabilities</a>    <ul>
+      <li><a href="#cve-2020-24387" id="markdown-toc-cve-2020-24387">CVE-2020-24387</a></li>
+      <li><a href="#cve-2020-24388" id="markdown-toc-cve-2020-24388">CVE-2020-24388</a></li>
+      <li><a href="#out-of-bounds-read-in-hex_decode" id="markdown-toc-out-of-bounds-read-in-hex_decode">Out of Bounds Read in hex_decode()</a></li>
+      <li><a href="#undefined-behavior-in-send_secure_msg" id="markdown-toc-undefined-behavior-in-send_secure_msg">Undefined Behavior in send_secure_msg()</a></li>
+      <li><a href="#out-of-bounds-read-in-yh_util_get_log_entries" id="markdown-toc-out-of-bounds-read-in-yh_util_get_log_entries">Out of Bounds Read in yh_util_get_log_entries()</a></li>
+      <li><a href="#attack-scenario-and-security-implications" id="markdown-toc-attack-scenario-and-security-implications">Attack Scenario and Security Implications</a></li>
+      <li><a href="#proof-of-concept" id="markdown-toc-proof-of-concept">Proof Of Concept</a></li>
+    </ul>
+  </li>
+  <li><a href="#coordinated-disclosure" id="markdown-toc-coordinated-disclosure">Coordinated Disclosure</a>    <ul>
+      <li><a href="#relevant-yubihsm-shell-sources" id="markdown-toc-relevant-yubihsm-shell-sources">Relevant yubihsm-shell Sources</a></li>
+      <li><a href="#other-relevant-software" id="markdown-toc-other-relevant-software">Other Relevant Software</a></li>
+      <li><a href="#detailed-timeline" id="markdown-toc-detailed-timeline">Detailed Timeline</a></li>
+      <li><a href="#bug-bounty" id="markdown-toc-bug-bounty">Bug Bounty</a></li>
+    </ul>
+  </li>
+</ul>
+
+</div>
+
+<h2 id="consulting">Consulting</h2>
+
+<p><i>I’m a freelance Security Consultant and currently available for new projects.
+  If you are looking for assistance to secure your projects or organization, <a href="/consulting">get in touch</a>.</i></p>
+
+<h2 id="fuzzing-methodology">Fuzzing Methodology</h2>
+<p>The previous <a href="/posts/yubico-libykpiv-vuln/#fuzzing-methodology">libykpiv article</a> outlines the fuzzing approach and related strategies which I used.</p>
+
+<p>To summarize:</p>
+<ul>
+  <li>The libyubihsm library is fuzzed with libFuzzer through the yubihsm-shell CLI program.</li>
+  <li>The modified yubihsm-shell operates on HSM2 messages that the fuzzer creates (via a custom USB backend).</li>
+  <li>Yubihsm-shell is called with various command line parameters, covering a lot of the “shallow” HSM library functionality.</li>
+  <li>The in-process design of libFuzzer and omission of actual network or USB I/O operations keeps the executions reasonably fast.</li>
+  <li>The HTTP backend path was not fuzzed, but USB-related bugs mostly apply to it as well.</li>
+</ul>
+
+<p>Given the complexity of the encrypted and authenticated HSM message contents, the focus of this research was to check for <strong>low-level memory issues in the basic message handling code</strong>, 
+similar to previous libykpiv and libu2f-host issues.
+The custom fuzzing harness does not have an internal model of the HSM implementation details and performs no cryptographic steps such as encryption with hard-coded keys.
+While the resulting fuzzer setup is unable to reach a lot of the “complex” code paths, issues discovered via this unfocused approach have the nice property that they do not require specific knowledge of device secrets or special device states for the attacker.
+As mentioned in the following paragraphs, this strategy was successful in finding new low-level issues.</p>
+
+<p>To reach additional in-depth coverage of the complex message handling functions (and potential bugs that remain there), a more concentrated approach with extensive code changes such as circumvention of the encryption + authentication of the messages or a special message generation harness will likely be necessary.
+This could be explored in future research.</p>
+
+<p>As with most fuzzing targets, there were a number of functional issues which had to be discovered, debugged and <a href="https://github.com/Yubico/yubihsm-shell/issues/88">fixed</a> to allow a stable fuzzing operation.
+This is common for fuzzing research, but can significantly increase the necessary time required to reach interesting results.
+Overhead due to essential stability bugfixing should be factored in when estimating how long it takes to analyze a specific software.</p>
+
+<h2 id="technical-background">Technical Background</h2>
+
+<p>In the basic setup configuration, the HSM2 USB 2.0 device is directly attached to the host. The local software talks to the HSM via libyubihsm, the USB backend and operating system.
+This simple configuration is viable as a self-contained HSM setup and needs no network configuration.</p>
+
+<p>Schematic diagram:</p>
+<pre><code class="language-C">+--------------------------------+
+|                                |
+| HOST A   +------------------+  |
+|          |    libyubihsm    |  |
+| e.g.     |                  |  |
+| yubihsm- |   USB handling   |  |
+| shell    +--------+---------+  |
+|                   |            |
++--------------------------------+
+                    |
+            +-------v-------+
+            |  HSM2 device  |
+            +---------------+
+</code></pre>
+<p><br /></p>
+
+<p>This structure was also the conceptual base of the fuzzing setup:</p>
+<pre><code class="language-C">yubishm-  +-----------------+
+shell     |    libyubihsm   |
+fuzzer    |                 |
+          |   USB handling  |
+          +--------+--------+
+                   |
+                   |
+          +--------v--------+
+          | mod. USB backend|
+          |    libfuzzer    |
+          +-----------------+
+</code></pre>
+
+<p><br />
+Larger and more complex HSM setups have requirements for redundancy and abstraction from a single host and local HSM.
+Yubico addresses this by providing an additional HTTP-based network layer that can be used to connect the client host and HSM either locally or remotely.
+The requests are proxied over the network to the <a href="https://developers.yubico.com/YubiHSM2/Component_Reference/yubihsm-connector/">yubihsm-connector</a> server (written in Go) instead of direct USB communication.
+The connector service passes the raw USB messages over unencrypted HTTP to and from the HSM as a sort of USB proxy.</p>
+
+<p>Example configuration:</p>
+<pre><code class="language-C">         +---------------+            +--------------------------------+
+         |  HSM2 device  |            |                                |
+         +-------+-------+            | HOST A   +------------------+  |
+                 |                    |          |    libyubihsm    |  |
+                 |                    | e.g.     |                  |  |
++---------------------------------+   | yubihsm- |   USB handling   |  |
+|                |                |   | shell    +--------+---------+  |
+| HOST B  +------+----------+     |   |                   |            |
+|         |  USB wrapping   |     |   |          +--------v---------+  |
+|         +------+----------+     |   |          |   USB wrapping   |  |
+| yubihsm-       |                |   |          +--------+---------+  |
+| connector      |                |   |                   |            |
+|        +-------+----------+     |   |          +--------v---------+  |
+|        | HTTP proxy server|     |   |          |   http client    |  |
+|        +-------+----------+     |   |          +--------+---------+  |
+|                |                |   |                   |            |
++---------------------------------+   +--------------------------------+
+                 |                                        |
+            XXXXX+X                                       |
+          XXX     XXXXXX                                  |
+        XX              XXXXX                             |
+       XX   L3 network       XX                           |
+       X                      &lt;---------------------------+
+      XX   or localhost      XX
+       X                    XX
+       XXXXXXXX          XXXX
+              XXXXXXXXXXX
+</code></pre>
+<p><br />
+Note that the network connection adds no encryption or authentication by default and usually relies on the basic TCP checksum for message integrity.
+This is intentional and well-known via the official documentation:</p>
+
+<blockquote>
+[...] the Connector is not meant to be a trusted component. For this reason it defaults to HTTP connections. It is possible to use HTTPS, however this requires providing a key and a certificate to the Connector.
+</blockquote>
+<p>For the purpose of the discovered vulnerabilities, the default configuration provides no defense against network-level attackers that can mount a Man-In-The-Middle attack.</p>
+
+<p>Some of the documentation suggests that the existing inner security layer is sufficient:</p>
+<blockquote>
+Sessions are established cryptographically between the application and the YubiHSM 2 using a symmetric mutual authentication scheme that is both encrypted and authenticated.
+</blockquote>
+
+<p>However, as I will show, the cryptographic defenses on the HSM session level do not prevent the discovered attacks.</p>
+
+<h2 id="the-vulnerabilities">The Vulnerabilities</h2>
+
+<h3 id="cve-2020-24387">CVE-2020-24387</h3>
+<p>Interaction with the HSM2 device happens over individual logical <strong>sessions</strong> which represent open connections between an application and the HSM device.
+Session IDs and related decisions are coordinated by the HSM.
+This design allows concurrent access from multiple sources as well as long-running connections, but requires robust session management on all endpoints to avoid collisions or local issues.
+A noteworthy detail of the HSM message protocol design is that the initial session handshake between client and HSM is exchanged in cleartext and without message authentication.</p>
+
+<p>CVE-2020-24387 consists of an essential flaw in the handshake parsing on the library side. 
+This turns into a memory management and memory safety problem that terminates the running process.</p>
+
+<p>The relevant code to open a new connection with the HSM includes the following section:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="n">yrc</span> <span class="o">=</span> <span class="n">send_msg</span><span class="p">(</span><span class="n">connector</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">msg</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">response_msg</span><span class="p">,</span> <span class="n">new_session</span><span class="o">-&gt;</span><span class="n">s</span><span class="p">.</span><span class="n">identifier</span><span class="p">);</span>
+
+<span class="p">[...]</span> <span class="c1">// basic failure handling and sanity checks</span>
+
+<span class="n">ptr</span> <span class="o">=</span> <span class="n">response_msg</span><span class="p">.</span><span class="n">st</span><span class="p">.</span><span class="n">data</span><span class="p">;</span>
+
+<span class="c1">// Save sid</span>
+<span class="n">new_session</span><span class="o">-&gt;</span><span class="n">s</span><span class="p">.</span><span class="n">sid</span> <span class="o">=</span> <span class="p">(</span><span class="o">*</span><span class="n">ptr</span><span class="o">++</span><span class="p">);</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/yubihsm-shell/blob/130a1cf65d7bedefa7c700655884b3e75eb5223d/lib/yubihsm.c#L680-L702" class="highlightref">yubihsm.c</a></p>
+
+<p>The <code class="language-plaintext highlighter-rouge">new_session-&gt;s.sid</code> is an <code class="language-plaintext highlighter-rouge">uint8_t</code> integer with a maximum value of <strong>255</strong> that represents the session ID as decided by the HSM.</p>
+
+<p>There are a maximum of <strong>16</strong> sessions running with the HSM at any given time. A genuine HSM2 device will constantly reuse session IDs <strong>0</strong> to <strong>15</strong> for new connections.
+Although the library code is aware of the session limits via <code class="language-plaintext highlighter-rouge">#define YH_MAX_SESSIONS 16</code>,
+this limited value range <strong>is not actually enforced</strong> in the library code and session IDs with values between <strong>16</strong> and <strong>255</strong> are also accepted.
+This represents the main bug.</p>
+
+<p>The ID value range restrictions are important because the memory handling of libyubihsm directly uses the session ID parameter as an <strong>index value</strong> into the fixed session array <code class="language-plaintext highlighter-rouge">yh_session *sessions[YH_MAX_SESSIONS]</code> 
+that keeps track of the open connections.</p>
+
+<p>As it is common with C, the access happens without additional implicit or explicit bounds checking. 
+Successfully opening sessions with session IDs <strong>greater than 15 therefore cause out of bounds writes and reads behind this array</strong>.</p>
+
+<p><code class="language-plaintext highlighter-rouge">yh_com_open_session()</code> is one code section with unsafe session index usage:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="k">if</span> <span class="p">(</span><span class="n">ctx</span><span class="o">-&gt;</span><span class="n">sessions</span><span class="p">[</span><span class="n">session_id</span><span class="p">]</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+  <span class="n">yrc</span> <span class="o">=</span> <span class="n">yh_destroy_session</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ctx</span><span class="o">-&gt;</span><span class="n">sessions</span><span class="p">[</span><span class="n">session_id</span><span class="p">]);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">yrc</span> <span class="o">!=</span> <span class="n">YHR_SUCCESS</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">fprintf</span><span class="p">(</span><span class="n">stderr</span><span class="p">,</span> <span class="s">"Failed to destroy old session with same id (%d): %s</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span>
+            <span class="n">session_id</span><span class="p">,</span> <span class="n">yh_strerror</span><span class="p">(</span><span class="n">yrc</span><span class="p">));</span>
+    <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">}</span>
+<span class="n">ctx</span><span class="o">-&gt;</span><span class="n">sessions</span><span class="p">[</span><span class="n">session_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">ses</span><span class="p">;</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/yubihsm-shell/blob/34c717f1b94f9bedcf6e045cf2c598eefb42af30/src/commands.c#L1311-L1319" class="highlightref">commands.c</a></p>
+
+<p>The comparison check <code class="language-plaintext highlighter-rouge">ctx-&gt;sessions[session_id] != NULL</code> will evaluate to false in many cases, particularly early in the program execution.
+The <code class="language-plaintext highlighter-rouge">session</code> array is located on the global buffer which is initialized with <code class="language-plaintext highlighter-rouge">0x00</code> at startup by C specifications.</p>
+
+<p>Corresponding sanitizer warning:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="o">==</span><span class="mi">19585</span><span class="o">==</span><span class="n">ERROR</span><span class="o">:</span> <span class="n">AddressSanitizer</span><span class="o">:</span> <span class="n">global</span><span class="o">-</span><span class="n">buffer</span><span class="o">-</span><span class="n">overflow</span> <span class="n">on</span> <span class="n">address</span> <span class="mh">0x0000010c52b8</span> <span class="n">at</span> <span class="n">pc</span> <span class="mh">0x0000005a623a</span> <span class="n">bp</span> <span class="mh">0x7fffffff63d0</span> <span class="n">sp</span> <span class="mh">0x7fffffff63c8</span>
+<span class="n">READ</span> <span class="n">of</span> <span class="n">size</span> <span class="mi">8</span> <span class="n">at</span> <span class="mh">0x0000010c52b8</span> <span class="kr">thread</span> <span class="n">T0</span></code></pre></figure>
+
+<p>The <code class="language-plaintext highlighter-rouge">ctx-&gt;sessions[session_id] = ses</code> operation will then do an out of bounds write with the <code class="language-plaintext highlighter-rouge">ses</code> session pointer value into the global buffer. Under x86_64, this writes a 64 bit = 8 byte memory segment.
+An attacker can control <strong>the offset</strong> of the destination memory address via the session ID, but has no direct control over <strong>the value</strong> that is written.</p>
+
+<p>Corresponding sanitizer warning:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="o">==</span><span class="mi">19585</span><span class="o">==</span><span class="n">ERROR</span><span class="o">:</span> <span class="n">AddressSanitizer</span><span class="o">:</span> <span class="n">global</span><span class="o">-</span><span class="n">buffer</span><span class="o">-</span><span class="n">overflow</span> <span class="n">on</span> <span class="n">address</span> <span class="mh">0x0000010c52b8</span> <span class="n">at</span> <span class="n">pc</span> <span class="mh">0x0000005a6802</span> <span class="n">bp</span> <span class="mh">0x7fffffff63d0</span> <span class="n">sp</span> <span class="mh">0x7fffffff63c8</span> 
+<span class="n">WRITE</span> <span class="n">of</span> <span class="n">size</span> <span class="mi">8</span> <span class="n">at</span> <span class="mh">0x0000010c52b8</span> <span class="kr">thread</span> <span class="n">T0</span></code></pre></figure>
+
+<p>In order to trigger a successful session handshake and therefore practical code issues,
+the malicious HSM (or MITM network attacker) has to accept a response message that is addressed to the problematic session ID.
+This requires a HSM response with the <code class="language-plaintext highlighter-rouge">YHC_AUTHENTICATE_SESSION_R</code> flag. 
+In the hypothetical case where the session ID accidentally became large as a result of message transmission errors, a genuine HSM will not send a positive response. This should prevent further issues.</p>
+
+<p>In a targeted exploit, the required 2nd message is easily sent by the attacker and libyubihsm continues with problematic behavior.</p>
+
+<p>According to my understanding and the assessment of the relevant Yubico engineers, the out of bounds writes impact <strong>the general memory integrity</strong> of the program.
+However, we are not aware at the moment of a way to leverage this into some direct control over the code flow due to the location of the out of bounds write and other constraints.
+Since the writes are happening from a position on the global buffer and not the stack, existing stack protection countermeasures will be ineffective and the attack is not detected.</p>
+
+<p>In an attack scenario, the code flow continues without returning error codes and the CLI or library code will perform some additional function calls depending on the originally requested HSM command that invoked the session creation. 
+The original command may fail or succeed depending on the HSM behavior.</p>
+
+<p>At some point, the code will attempt to close the session via <code class="language-plaintext highlighter-rouge">yh_util_close_session()</code>, which sends an encrypted command via <code class="language-plaintext highlighter-rouge">_send_secure_msg()</code> towards the HSM to inform it of the session state change:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="n">yrc</span> <span class="o">=</span> <span class="n">yh_send_secure_msg</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">YHC_CLOSE_SESSION</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">response_cmd</span><span class="p">,</span>
+                         <span class="n">response</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">response_len</span><span class="p">);</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/yubihsm-shell/blob/130a1cf65d7bedefa7c700655884b3e75eb5223d/lib/yubihsm.c#L1292-L1293" class="highlightref">yubihsm.c</a></p>
+
+<p>Since the code is expecting an active session in the normal session array (but there is none), some steps of the parameter initialization fail and the session pointer given to the following functions is still in a strange state.
+Consequently, a lot of the message preparation routines in <code class="language-plaintext highlighter-rouge">_send_secure_msg()</code> silently fail.
+The first deadly error happens when preparing AES data for the message encryption:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="n">aes_set_encrypt_key</span><span class="p">((</span><span class="kt">uint8_t</span> <span class="o">*</span><span class="p">)</span> <span class="n">session</span><span class="o">-&gt;</span><span class="n">s</span><span class="p">.</span><span class="n">s_enc</span><span class="p">,</span> <span class="n">SCP_KEY_LEN</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">aes_ctx</span><span class="p">);</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/yubihsm-shell/blob/130a1cf65d7bedefa7c700655884b3e75eb5223d/lib/yubihsm.c#L308" class="highlightref">yubihsm.c</a></p>
+
+<p><code class="language-plaintext highlighter-rouge">session-&gt;s.s_enc</code> is not in a usable state, and it is not in a memory region that may be accessed:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="p">(</span><span class="n">gdb</span><span class="p">)</span> <span class="n">print</span> <span class="o">&amp;</span><span class="n">session</span><span class="o">-&gt;</span><span class="n">s</span>
+<span class="err">$</span><span class="mi">5</span> <span class="o">=</span> <span class="p">(</span><span class="n">Scp_ctx</span> <span class="o">*</span><span class="p">)</span> <span class="mh">0x2c</span></code></pre></figure>
+
+<p>The access results in a segfault that kills the process:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="o">==</span><span class="mi">20041</span><span class="o">==</span><span class="n">ERROR</span><span class="o">:</span> <span class="n">AddressSanitizer</span><span class="o">:</span> <span class="n">SEGV</span> <span class="n">on</span> <span class="n">unknown</span> <span class="n">address</span> <span class="mh">0x00000000002d</span> <span class="p">(</span><span class="n">pc</span> <span class="mh">0x7f304ec6e192</span> <span class="n">bp</span> <span class="mh">0x7fff50637810</span> <span class="n">sp</span> <span class="mh">0x7fff50637728</span> <span class="n">T0</span><span class="p">)</span>
+<span class="o">==</span><span class="mi">20041</span><span class="o">==</span><span class="n">The</span> <span class="n">signal</span> <span class="n">is</span> <span class="n">caused</span> <span class="n">by</span> <span class="n">a</span> <span class="n">READ</span> <span class="n">memory</span> <span class="n">access</span><span class="p">.</span>
+<span class="o">==</span><span class="mi">20041</span><span class="o">==</span><span class="n">Hint</span><span class="o">:</span> <span class="n">address</span> <span class="n">points</span> <span class="n">to</span> <span class="n">the</span> <span class="n">zero</span> <span class="n">page</span><span class="p">.</span>
+    <span class="cp">#0 0x7f304ec6e192 in AES_set_encrypt_key (/usr/lib/x86_64-linux-gnu/libcrypto.so.1.1+0x8f192)</span></code></pre></figure>
+
+<p>For the analyzed library use case, this denial of service represents the primary impact.</p>
+
+<h3 id="cve-2020-24388">CVE-2020-24388</h3>
+
+<p>When sending a secure message to the HSM via <code class="language-plaintext highlighter-rouge">_send_secure_msg()</code>, the code looks like this:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="n">yrc</span> <span class="o">=</span> <span class="n">send_authenticated_msg</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">msg</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">response_msg</span><span class="p">);</span>
+
+<span class="c1">// [...] error handling</span>
+
+<span class="c1">// definition: uint16_t out_len;</span>
+<span class="n">out_len</span> <span class="o">=</span> <span class="n">response_msg</span><span class="p">.</span><span class="n">st</span><span class="p">.</span><span class="n">len</span><span class="p">;</span>
+
+<span class="n">memcpy</span><span class="p">(</span><span class="n">work_buf</span><span class="p">,</span> <span class="n">session</span><span class="o">-&gt;</span><span class="n">s</span><span class="p">.</span><span class="n">mac_chaining_value</span><span class="p">,</span> <span class="n">SCP_PRF_LEN</span><span class="p">);</span>
+<span class="n">response_msg</span><span class="p">.</span><span class="n">st</span><span class="p">.</span><span class="n">len</span> <span class="o">=</span> <span class="n">htons</span><span class="p">(</span><span class="n">response_msg</span><span class="p">.</span><span class="n">st</span><span class="p">.</span><span class="n">len</span><span class="p">);</span>
+<span class="n">memcpy</span><span class="p">(</span><span class="n">work_buf</span> <span class="o">+</span> <span class="n">SCP_PRF_LEN</span><span class="p">,</span> <span class="n">response_msg</span><span class="p">.</span><span class="n">raw</span><span class="p">,</span> <span class="mi">3</span> <span class="o">+</span> <span class="n">out_len</span> <span class="o">-</span> <span class="n">SCP_MAC_LEN</span><span class="p">);</span>
+<span class="n">compute_full_mac</span><span class="p">(</span><span class="n">work_buf</span><span class="p">,</span> <span class="n">SCP_PRF_LEN</span> <span class="o">+</span> <span class="mi">3</span> <span class="o">+</span> <span class="n">out_len</span> <span class="o">-</span> <span class="n">SCP_MAC_LEN</span><span class="p">,</span>
+                 <span class="n">session</span><span class="o">-&gt;</span><span class="n">s</span><span class="p">.</span><span class="n">s_rmac</span><span class="p">,</span> <span class="n">SCP_KEY_LEN</span><span class="p">,</span> <span class="n">mac_buf</span><span class="p">);</span>
+
+<span class="c1">// [...] MAC result verification</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/yubihsm-shell/blob/130a1cf65d7bedefa7c700655884b3e75eb5223d/lib/yubihsm.c#L331-L356" class="highlightref">yubihsm.c</a></p>
+
+<p><code class="language-plaintext highlighter-rouge">send_authenticated_msg()</code> internally calls <code class="language-plaintext highlighter-rouge">send_msg()</code> to transmit the specified message and receive a response message from the HSM in <code class="language-plaintext highlighter-rouge">&amp;response_msg</code>.
+If the HSM sends a response and does not flag <code class="language-plaintext highlighter-rouge">YHC_ERROR</code>, the error handling code is passed and the code continues towards the response parsing section.</p>
+
+<p>Note that <code class="language-plaintext highlighter-rouge">out_len = response_msg.st.len</code> is fully controlled by the HSM.
+The essential flaw behind CVE-2020-24388 is the use of <code class="language-plaintext highlighter-rouge">out_len</code> as an unchecked length field.
+This becomes a problem a few lines down at</p>
+<pre><code class="language-C">memcpy(work_buf + SCP_PRF_LEN, response_msg.raw, 3 + out_len - SCP_MAC_LEN);
+</code></pre>
+<p><br /></p>
+
+<p>Since <code class="language-plaintext highlighter-rouge">SCP_MAC_LEN</code> is <strong>8</strong> , the length calculation for the <code class="language-plaintext highlighter-rouge">memcpy()</code> can result in negative numbers, for example with <code class="language-plaintext highlighter-rouge">out_len = 0</code>:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="o">==</span><span class="mi">16960</span><span class="o">==</span><span class="n">ERROR</span><span class="o">:</span> <span class="n">AddressSanitizer</span><span class="o">:</span> <span class="n">negative</span><span class="o">-</span><span class="n">size</span><span class="o">-</span><span class="n">param</span><span class="o">:</span> <span class="p">(</span><span class="n">size</span><span class="o">=-</span><span class="mi">5</span><span class="p">)</span> 
+    <span class="cp">#0 0x528eb4 in __asan_memcpy
+</span>    <span class="cp">#1 0x655456 in _send_secure_msg </span></code></pre></figure>
+
+<p><code class="language-plaintext highlighter-rouge">memcpy()</code> expects positive integers of type <code class="language-plaintext highlighter-rouge">size_t</code>. Negative parameter values get converted implicitly to a large positive number via an unsigned integer underflow.
+As a result, the memory copy attempts to significantly over-read from the target memory region and violates memory bounds:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="o">==</span><span class="mi">16649</span><span class="o">==</span><span class="n">ERROR</span><span class="o">:</span> <span class="n">UndefinedBehaviorSanitizer</span><span class="o">:</span> <span class="n">SEGV</span> <span class="n">on</span> <span class="n">unknown</span> <span class="n">address</span> <span class="mh">0x7ffc85183fe8</span>
+<span class="o">==</span><span class="mi">16649</span><span class="o">==</span><span class="n">The</span> <span class="n">signal</span> <span class="n">is</span> <span class="n">caused</span> <span class="n">by</span> <span class="n">a</span> <span class="n">READ</span> <span class="n">memory</span> <span class="n">access</span><span class="p">.</span>
+    <span class="cp">#0 0x7fcac423564d  (/lib/x86_64-linux-gnu/libc.so.6)</span></code></pre></figure>
+
+<p>The result is a segmentation fault that kills the program. 
+Notably, this happens before the message authentication code (MAC) on the response packet is checked, 
+so the provided authentication code is irrelevant.</p>
+
+<h3 id="out-of-bounds-read-in-hex_decode">Out of Bounds Read in hex_decode()</h3>
+
+<p>This is a small problem in a custom utility function.</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="n">bool</span> <span class="nf">hex_decode</span><span class="p">(</span><span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">in</span><span class="p">,</span> <span class="kt">uint8_t</span> <span class="o">*</span><span class="n">out</span><span class="p">,</span> <span class="kt">size_t</span> <span class="o">*</span><span class="n">len</span><span class="p">)</span> <span class="p">{</span>
+  <span class="kt">int</span> <span class="n">pos</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+  <span class="kt">size_t</span> <span class="n">in_len</span> <span class="o">=</span> <span class="n">strlen</span><span class="p">(</span><span class="n">in</span><span class="p">);</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">in</span><span class="p">[</span><span class="n">in_len</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="sc">'\n'</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">in_len</span><span class="o">--</span><span class="p">;</span>
+  <span class="p">}</span>
+  <span class="k">if</span> <span class="p">(</span><span class="n">in</span><span class="p">[</span><span class="n">in_len</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="sc">'\r'</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">in_len</span><span class="o">--</span><span class="p">;</span>
+  <span class="p">}</span>
+<span class="p">[...]</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/yubihsm-shell/blob/130a1cf65d7bedefa7c700655884b3e75eb5223d/common/util.c#L559-L567" class="highlightref">util.c</a></p>
+
+<p>For small inputs, <code class="language-plaintext highlighter-rouge">in[in_len - 1]</code> can perform stack out of bounds reads before the input buffer <code class="language-plaintext highlighter-rouge">in</code>:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="o">==</span><span class="mi">30564</span><span class="o">==</span><span class="n">ERROR</span><span class="o">:</span> <span class="n">AddressSanitizer</span><span class="o">:</span> <span class="n">stack</span><span class="o">-</span><span class="n">buffer</span><span class="o">-</span><span class="n">overflow</span> <span class="n">on</span> <span class="n">address</span> <span class="mh">0x7ffdf03b8bef</span> <span class="n">at</span> <span class="n">pc</span> <span class="mh">0x0000006e6bd2</span> <span class="n">bp</span> <span class="mh">0x7ffdf03b7d10</span> <span class="n">sp</span> <span class="mh">0x7ffdf03b7d08</span>
+<span class="n">READ</span> <span class="n">of</span> <span class="n">size</span> <span class="mi">1</span> <span class="n">at</span> <span class="mh">0x7ffdf03b8bef</span> <span class="kr">thread</span> <span class="n">T0</span>
+    <span class="cp">#0 0x6e6bd1 in hex_decode /yubihsm-shell/common/util.c:568:7
+</span>    <span class="cp">#1 0x616824 in get_input_data /yubihsm-shell/src/main.c:1446:11
+</span><span class="p">[...]</span>
+
+    <span class="p">[</span><span class="mi">1232</span><span class="p">,</span> <span class="mi">5328</span><span class="p">)</span> <span class="err">'</span><span class="n">buf</span><span class="err">'</span> <span class="p">(</span><span class="n">line</span> <span class="mi">1911</span><span class="p">)</span> <span class="o">&lt;==</span> <span class="n">Memory</span> <span class="n">access</span> <span class="n">at</span> <span class="n">offset</span> <span class="mi">1231</span> <span class="n">underflows</span> <span class="n">this</span> <span class="n">variable</span></code></pre></figure>
+
+<p>Given the context, this does not look like a serious security problem to me.</p>
+
+<h3 id="undefined-behavior-in-send_secure_msg">Undefined Behavior in send_secure_msg()</h3>
+
+<p>When closing a session, <code class="language-plaintext highlighter-rouge">send_secure_msg()</code> is called with the parameters <code class="language-plaintext highlighter-rouge">data_len = 0</code> and <code class="language-plaintext highlighter-rouge">*data = NULL</code>.</p>
+
+<p><code class="language-plaintext highlighter-rouge">send_secure_msg()</code> has the following line:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="n">memcpy</span><span class="p">(</span><span class="n">decrypted_data</span> <span class="o">+</span> <span class="mi">3</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">data_len</span><span class="p">);</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/yubihsm-shell/blob/130a1cf65d7bedefa7c700655884b3e75eb5223d/lib/yubihsm.c#L301" class="highlightref">yubihsm.c</a></p>
+
+<p>The send function will therefore call <code class="language-plaintext highlighter-rouge">memcpy(decrypted_data + 3, NULL, 0)</code>.</p>
+
+<p>This is undefined behavior:</p>
+<pre><code class="language-C">yubihsm-shell/lib/yubihsm.c:303:30: runtime error: null pointer passed as argument 2, which is declared to never be null
+</code></pre>
+
+<p>The simple solution is to skip this operation if no data source is given.
+Although technically all kind of things can go wrong, it is unlikely that this causes a notable issue in practice.</p>
+
+<h3 id="out-of-bounds-read-in-yh_util_get_log_entries">Out of Bounds Read in yh_util_get_log_entries()</h3>
+
+<p>This bug appears to be a combination of multiple issues.
+The main result are multiple out of bounds reads on the stack since <code class="language-plaintext highlighter-rouge">n_items</code> is larger than intended when processing log entries at the following location:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c">  <span class="k">for</span> <span class="p">(</span><span class="kt">uint16_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="o">*</span><span class="n">n_items</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+    <span class="n">out</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">number</span> <span class="o">=</span> <span class="n">ntohs</span><span class="p">(</span><span class="n">ptr</span><span class="p">[</span><span class="n">i</span><span class="p">].</span><span class="n">number</span><span class="p">);</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/yubihsm-shell/blob/130a1cf65d7bedefa7c700655884b3e75eb5223d/lib/yubihsm.c#L2613-L2614" class="highlightref">yubihsm.c</a></p>
+
+<p>Example warning for the resulting access:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="o">==</span><span class="mi">26697</span><span class="o">==</span><span class="n">ERROR</span><span class="o">:</span> <span class="n">AddressSanitizer</span><span class="o">:</span> <span class="n">stack</span><span class="o">-</span><span class="n">buffer</span><span class="o">-</span><span class="n">overflow</span> <span class="n">on</span> <span class="n">address</span> <span class="mh">0x7ffe14a9eb80</span> <span class="n">at</span> <span class="n">pc</span> <span class="mh">0x000000528ed7</span> <span class="n">bp</span> <span class="mh">0x7ffe14a9e270</span> <span class="n">sp</span> <span class="mh">0x7ffe14a9da38</span>
+<span class="n">READ</span> <span class="n">of</span> <span class="n">size</span> <span class="mi">16</span> <span class="n">at</span> <span class="mh">0x7ffe14a9eb80</span> <span class="kr">thread</span> <span class="n">T0</span>
+    <span class="cp">#0 0x528ed6 in __asan_memcpy (/yubihsm-shell/build/src/yubihsm-shell+0x528ed6)
+</span>    <span class="cp">#1 0x5d2775 in yh_util_get_log_entries /yubihsm-shell/lib/yubihsm.c:2659:5
+</span>    <span class="cp">#2 0x56dad9 in yh_com_audit /yubihsm-shell/src/commands.c:92:9
+</span>
+    <span class="p">[</span><span class="mi">256</span><span class="p">,</span> <span class="mi">2304</span><span class="p">)</span> <span class="err">'</span><span class="n">response</span><span class="err">'</span> <span class="p">(</span><span class="n">line</span> <span class="mi">2601</span><span class="p">)</span> <span class="o">&lt;==</span> <span class="n">Memory</span> <span class="n">access</span> <span class="n">at</span> <span class="n">offset</span> <span class="mi">2304</span> <span class="n">overflows</span> <span class="n">this</span> <span class="n">variable</span></code></pre></figure>
+
+<p>During fuzzing, this problem was not consistently reproducible. 
+It appears that at least one codepath that triggers this issue also depends on the state of uninitialized memory,
+so it is possible that this issue cannot be reached or fully controlled in a deterministic way by an attacker.</p>
+
+<p>This section will be updated later with more information.</p>
+
+<h3 id="attack-scenario-and-security-implications">Attack Scenario and Security Implications</h3>
+
+<p>Note that the vulnerabilities</p>
+<ul>
+  <li>will not be triggered by genuine HSMs (<em>when excluding transmission error events for CVE-2020-24388</em>)</li>
+  <li>are in the host side code and do not affect the HSM2 firmware</li>
+</ul>
+
+<p>If you use HSM2 devices via software stacks that exclude libyubihsm, you are not affected.</p>
+
+<h4 id="cvss-score">CVSS Score</h4>
+
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>CVSS 3.1 Score</th>
+      <th>Parameters</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>CVE-2020-24387</td>
+      <td>6.5 (Medium)</td>
+      <td><a href="https://www.first.org/cvss/calculator/3.1#CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:H"><code class="language-plaintext highlighter-rouge">CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:L/A:H</code></a></td>
+    </tr>
+    <tr>
+      <td>CVE-2020-24388</td>
+      <td>5.9 (Medium)</td>
+      <td><a href="https://www.first.org/cvss/calculator/3.1#CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H"><code class="language-plaintext highlighter-rouge">CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:H</code></a></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="proof-of-concept">Proof Of Concept</h3>
+
+<p>The following patches simulate the attack with limited code changes to a vulnerable library version.
+This can be tested with an expendable HSM2 device to validate the error behavior without a complex hardware setup.</p>
+
+<p><strong>WARNING: use the following code at your own risk. Although not intended, please assume that this will PERMANENTLY overwrite data on the HSM device that you have connected.</strong></p>
+
+<p>Procedure:</p>
+<ol>
+  <li>Rebuild libyubihsm and all relevant programs with the specified patch, example: <a href="https://github.com/Yubico/yubihsm-shell/commits/349418dd238ed53d74ed9d0ba68b2c12cfba13fb">vulnerable repo version</a></li>
+  <li>Insert a test HSM device in factory settings</li>
+  <li>Run a basic command to test the impact</li>
+</ol>
+
+<ul>
+  <li>Variant A: yubihsm-connector is running on localhost, run 
+<code class="language-plaintext highlighter-rouge">./yubihsm-shell -a blink-device -p password</code></li>
+  <li>Variant B: direct USB connection, run
+<code class="language-plaintext highlighter-rouge">./yubihsm-shell -C yhusb:// -a blink-device -p password</code></li>
+</ul>
+
+<p>If you observe connection problems, please make sure that your setup is working with the regular unmodified CLI.</p>
+
+<h4 id="cve-2020-24387-1">CVE-2020-24387</h4>
+
+<figure class="highlight"><pre><code class="language-diff" data-lang="diff"><span class="gh">diff --git a/lib/yubihsm.c b/lib/yubihsm.c
+index 565679a..427fbc2 100644
+</span><span class="gd">--- a/lib/yubihsm.c
+</span><span class="gi">+++ b/lib/yubihsm.c
+</span><span class="p">@@ -81,6 +81,12 @@</span> static yh_rc send_msg(yh_connector *connector, Msg *msg, Msg *response,
+     return YHR_INVALID_PARAMETERS;
+   }
+   DBG_NET(msg, dump_msg);
+<span class="gi">+  printf("sending message with id %u\n", msg-&gt;st.data[0]);
++  if(msg-&gt;st.data[0] == 0x42) {
++    printf("faking successful auth response\n");
++    response-&gt;st.cmd = YHC_AUTHENTICATE_SESSION_R;
++    return YHR_SUCCESS;
++  }
+</span>   yrc = connector-&gt;bf-&gt;backend_send_msg(connector-&gt;connection, msg, response,
+                                         identifier);
+   if (yrc == YHR_SUCCESS) {
+<span class="p">@@ -699,7 +705,9 @@</span> yh_rc yh_create_session(yh_connector *connector, uint16_t authkey_id,
+   ptr = response_msg.st.data;
+ 
+   // Save sid
+<span class="gd">-  new_session-&gt;s.sid = (*ptr++);
+</span><span class="gi">+  new_session-&gt;s.sid = 0x42;
++  printf("simulating malicious response with sid %u\n" , new_session-&gt;s.sid);
++  ptr++;
+</span> 
+   // Save card challenge
+   memcpy(new_session-&gt;context + SCP_HOST_CHAL_LEN, ptr, SCP_CARD_CHAL_LEN);</code></pre></figure>
+
+<p>Observed log:</p>
+<pre><code class="language-C">Using default connector URL: http://127.0.0.1:12345
+Session keepalive set up to run every 15 seconds
+sending message with id 0
+simulating malicious response with sid 66
+sending message with id 66
+faking successful auth response
+Created session 66
+Segmentation fault
+</code></pre>
+
+<h4 id="cve-2020-24388-1">CVE-2020-24388</h4>
+
+<figure class="highlight"><pre><code class="language-diff" data-lang="diff"><span class="gh">diff --git a/lib/yubihsm.c b/lib/yubihsm.c
+index 565679a..cfc4c77 100644
+</span><span class="gd">--- a/lib/yubihsm.c
+</span><span class="gi">+++ b/lib/yubihsm.c
+</span><span class="p">@@ -346,6 +346,9 @@</span> static yh_rc _send_secure_msg(yh_session *session, yh_cmd cmd,
+     goto cleanup;
+   }
+ 
+<span class="gi">+  printf("manipulating response to secure message\n");
++  response_msg.st.len = 0;
++
+</span>   // Response is MAC'ed and encrypted. Unwrap it
+   out_len = response_msg.st.len;</code></pre></figure>
+
+<p>Observed log:</p>
+<pre><code class="language-C">Using default connector URL: http://127.0.0.1:12345
+Session keepalive set up to run every 15 seconds
+Created session 0
+manipulating response to secure message
+Segmentation fault 
+</code></pre>
+
+<h2 id="coordinated-disclosure">Coordinated Disclosure</h2>
+
+<p>The disclosure went fairly smoothly. 
+All the essentials were already in place from previous vulnerability reports, which reduces the overhead.</p>
+
+<p>Similarly to the libykpiv disclosure, I was able to coordinate closely with a dedicated security contact person,
+evaluate the proposed security patches and make suggestions for technical reporting summaries such as the CVE descriptions.
+This process was again very positive and I appreciate the trust from the Yubico engineers.</p>
+
+<p>One aspect that could be improved in my opinion is the patch response time. Yubico spent basically the full 90 days of disclosure duration before 
+shipping the security patch release.
+I am aware that libyubihsm is used in large and complex software ecosystems and that the corresponding release preparations are not trivial, 
+so I am sympathetic towards not rushing a fix which might cause regressions.
+Nevertheless, I think it will be beneficial in the long run to work towards a more flexible release process that can accommodate security fixes in for example a month or less.</p>
+
+<p>Overall, I am satisfied with the disclosure process.</p>
+
+<h3 id="relevant-yubihsm-shell-sources">Relevant yubihsm-shell Sources</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>variant</th>
+      <th>source</th>
+      <th>fix</th>
+      <th>references</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Yubico upstream</td>
+      <td><a href="https://github.com/Yubico/yubihsm-shell">Github</a></td>
+      <td><a href="https://github.com/Yubico/yubihsm-shell/commit/52f9c0373b19215e5af622f436461f150968b2df">patch to 2.0.3</a>, bundled in SDK release <a href="https://developers.yubico.com/YubiHSM2/Releases">2020.10</a></td>
+      <td><a href="https://www.yubico.com/support/security-advisories/ysa-2020-06/">YSA-2020-06</a></td>
+    </tr>
+    <tr>
+      <td>Fedora</td>
+      <td><a href="https://src.fedoraproject.org/rpms/yubihsm-shell">Fedora</a></td>
+      <td><a href="https://src.fedoraproject.org/rpms/yubihsm-shell/c/47623caa26843dfe53c8c9f4fb9a4ac2d89c9062">update to 2.0.3-1</a></td>
+      <td><a href="https://bugzilla.redhat.com/show_bug.cgi?id=1890204">Bug 1890204</a>, <a href="https://bugzilla.redhat.com/show_bug.cgi?id=1890205">Bug 1890205</a>, <a href="https://bugzilla.redhat.com/show_bug.cgi?id=1890206">Bug 1890206</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="other-relevant-software">Other Relevant Software</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>variant</th>
+      <th>source</th>
+      <th>notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>yubihsm.rs</td>
+      <td><a href="https://github.com/iqlusioninc/yubihsm.rs">Github</a></td>
+      <td>not affected (AFAIK), not included in the disclosure</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="detailed-timeline">Detailed Timeline</h3>
+
+<table>
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>info</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2020-07-20</td>
+      <td>Disclosure of issue #1 to Yubico</td>
+    </tr>
+    <tr>
+      <td>2020-07-21</td>
+      <td>Disclosure of issue #2 to #7 to Yubico</td>
+    </tr>
+    <tr>
+      <td>2020-07-21</td>
+      <td>Yubico acknowledges receiving the reports</td>
+    </tr>
+    <tr>
+      <td>2020-08-05</td>
+      <td>Yubico confirms issue #1</td>
+    </tr>
+    <tr>
+      <td>2020-08-07</td>
+      <td>Yubico confirms issue #2 to #7</td>
+    </tr>
+    <tr>
+      <td>2020-08-12</td>
+      <td>Yubico sends preview of proposed fixes</td>
+    </tr>
+    <tr>
+      <td>2020-08-12</td>
+      <td>Positive feedback to Yubico on proposed fixes</td>
+    </tr>
+    <tr>
+      <td>2020-08-17</td>
+      <td>Discussion of planned CVE descriptions</td>
+    </tr>
+    <tr>
+      <td>2020-08-18</td>
+      <td>Yubico requests CVEs from MITRE</td>
+    </tr>
+    <tr>
+      <td>2020-08-19</td>
+      <td>MITRE assigns CVEs</td>
+    </tr>
+    <tr>
+      <td>2020-08-25</td>
+      <td>Yubico communicates planned disclosure date: 2020-09-29</td>
+    </tr>
+    <tr>
+      <td>2020-09-28</td>
+      <td>Yubico communicates planned disclosure date: 2020-10-14</td>
+    </tr>
+    <tr>
+      <td>2020-10-09</td>
+      <td>Yubico communicates planned disclosure date: 2020-10-19</td>
+    </tr>
+    <tr>
+      <td>2020-10-19</td>
+      <td>Release of patched HSM2 SDK version 2020.10</td>
+    </tr>
+    <tr>
+      <td>2020-10-19</td>
+      <td>Public disclosure via YSA-2020-06</td>
+    </tr>
+    <tr>
+      <td>2020-10-19</td>
+      <td>Publication of this blog post</td>
+    </tr>
+    <tr>
+      <td>2020-10-21</td>
+      <td>Fedora includes patched version</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="bug-bounty">Bug Bounty</h3>
+<p>Yubico provided hardware as a bug bounty for this issue.</p>
+
+  </div>
+
+
+  <a class="u-url" href="/posts/yubico-libyubihsm-vuln/" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col one-half"><ul class="contact-list">
+          <li class="p-name">
+            <b>Christian Reitter</b>
+          </li></ul></div>
+
+      <div class="footer-col one-half">
+        <p>Information security and other interests.</p>
+      </div>
+    </div>
+
+    <div class="social-ref"><ul class="social-ref-list"><li><a rel="me" href="https://github.com/invd" title="invd"><svg class="svg-icon grey"><use xlink:href="/assets/minima-icons.svg#github"></use></svg></a></li><li><a href="/feed.xml" title="rss"><svg class="svg-icon grey"><use xlink:href="/assets/minima-icons.svg#rss"></use></svg></a></li></ul>
+</div>
+
+  </div>
+</footer>
+</body>
+
+</html>

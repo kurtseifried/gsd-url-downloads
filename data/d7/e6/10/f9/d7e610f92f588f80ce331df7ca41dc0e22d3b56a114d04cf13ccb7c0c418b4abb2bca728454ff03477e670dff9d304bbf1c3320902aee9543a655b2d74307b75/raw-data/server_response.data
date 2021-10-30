@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stealing weapons from the Armoury | APT::WTF - APTortellini’s blog</title>
+<meta name="generator" content="Jekyll v3.9.0" />
+<meta property="og:title" content="Stealing weapons from the Armoury" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="TL;DR ASUS ROG Armoury Crate ships with a service called Armoury Crate Lite Service which suffers from a phantom DLL hijacking vulnerability that allows a low privilege user to execute code in the context other users, administrators included. To trigger the vulnerability, an administrator must log in after the attacker has placed the malicious DLL at the path C:\ProgramData\ASUS\GamingCenterLib\.DLL. The issue has been fixed with the release of Armoury Crate Lite Service 4.2.10." />
+<meta property="og:description" content="TL;DR ASUS ROG Armoury Crate ships with a service called Armoury Crate Lite Service which suffers from a phantom DLL hijacking vulnerability that allows a low privilege user to execute code in the context other users, administrators included. To trigger the vulnerability, an administrator must log in after the attacker has placed the malicious DLL at the path C:\ProgramData\ASUS\GamingCenterLib\.DLL. The issue has been fixed with the release of Armoury Crate Lite Service 4.2.10." />
+<link rel="canonical" href="https://aptw.tf/2021/09/24/armoury-crate-privesc.html" />
+<meta property="og:url" content="http://aptw.tf/2021/09/24/armoury-crate-privesc.html" />
+<meta property="og:site_name" content="APT::WTF - APTortellini’s blog" />
+<meta property="og:image" content="http://aptw.tf/img/armourytortellino.jpg" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2021-09-24T00:00:00+00:00" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta property="twitter:image" content="http://aptw.tf/img/armourytortellino.jpg" />
+<meta property="twitter:title" content="Stealing weapons from the Armoury" />
+<script type="application/ld+json">
+{"headline":"Stealing weapons from the Armoury","dateModified":"2021-09-24T00:00:00+00:00","datePublished":"2021-09-24T00:00:00+00:00","description":"TL;DR ASUS ROG Armoury Crate ships with a service called Armoury Crate Lite Service which suffers from a phantom DLL hijacking vulnerability that allows a low privilege user to execute code in the context other users, administrators included. To trigger the vulnerability, an administrator must log in after the attacker has placed the malicious DLL at the path C:\\ProgramData\\ASUS\\GamingCenterLib\\.DLL. The issue has been fixed with the release of Armoury Crate Lite Service 4.2.10.","url":"http://aptw.tf/2021/09/24/armoury-crate-privesc.html","@type":"BlogPosting","image":"http://aptw.tf/img/armourytortellino.jpg","mainEntityOfPage":{"@type":"WebPage","@id":"http://aptw.tf/2021/09/24/armoury-crate-privesc.html"},"@context":"https://schema.org"}</script>
+
+<link rel="stylesheet" href="/assets/css/style.css">
+<link rel="shortcut icon" href="/favicon.ico" type="image/x-icon"><link type="application/atom+xml" rel="alternate" href="https://aptw.tf/feed.xml" title="APT::WTF - APTortellini's blog" />
+<link href="https://fonts.googleapis.com/css?family=Space+Grotesk" rel="stylesheet">
+</head>
+<body><header class="site-header">
+<div class="wrapper"><a class="site-title" rel="author" href="/">APT::WTF - APTortellini&#39;s blog</a><nav class="site-nav">
+<input type="checkbox" id="nav-trigger" class="nav-trigger" />
+<label for="nav-trigger">
+<span class="menu-icon">
+<svg viewBox="0 0 18 15" width="18px" height="15px">
+<path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z" />
+</svg>
+</span>
+</label>
+<div class="trigger"><a class="page-link" href="/about/">The Collective</a></div>
+</nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+<div class="wrapper">
+<article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+<header class="post-header">
+<h1 class="post-title p-name" itemprop="name headline">Stealing weapons from the Armoury</h1><h3>Root cause analysis of a privilege escalation vulnerability in ASUS ROG Armoury Crate Lite Service v4.2.8 (CVE-2021-40981)</h3><p class="post-meta"><time class="dt-published" datetime="2021-09-24T00:00:00+00:00" itemprop="datePublished">
+Sep 24, 2021
+</time>•
+<span itemprop="author" itemscope itemtype="http://schema.org/Person">
+<span class="p-author h-card" itemprop="name">last</span></span></p>
+</header>
+<div class="post-content e-content" itemprop="articleBody">
+<p><a href="/img/armourytortellino.jpg"><img src="/img/armourytortellino.jpg" alt="armoury pwnd" /></a></p>
+<h3 id="tldr">TL;DR</h3>
+<p><a href="https://rog.asus.com/us/armoury-crate/">ASUS ROG Armoury Crate</a> ships with a service called Armoury Crate Lite Service which suffers from a phantom DLL hijacking vulnerability that allows a low privilege user to execute code in the context other users, administrators included. To trigger the vulnerability, an administrator must log in after the attacker has placed the malicious DLL at the path <code class="language-plaintext highlighter-rouge">C:\ProgramData\ASUS\GamingCenterLib\.DLL</code>. The issue has been fixed with the release of Armoury Crate Lite Service 4.2.10.</p>
+<h3 id="introduction">Introduction</h3>
+<p>Greetings fellow hackers, last here! Recently I’ve been looking for vulnerabilities here and there - too much free time maybe? Specifically, I focused on hunting for DLL hijackings in privileged processes, as they usually lead to a local privilege escalation. A DLL hijacking revolves around forcing a process to run an attacker controlled DLL instead of the legitimate DLL the process is trying to load, nothing more. To make a process load your DLL you have to control the path from which said DLL is loaded. There are essentially two kinds of DLL hijackings: standard DLL hijackings and phantom DLL hijackings. The main difference is that in standard ones the legitimate DLL exists and is overwritten or proxied by the attacker’s DLL, while in phantom DLL hijackings the process tries to load a non existing DLL, hence the attacker can just drop its malicious DLL in the path and call it a day.</p>
+<p>By messing up with <a href="https://docs.microsoft.com/en-us/sysinternals/downloads/procmon">Process Monitor</a> I ended up finding a phantom DLL hijacking in <a href="https://rog.asus.com/us/armoury-crate/">ASUS ROG Armoury Crate</a>, a software commonly installed in gaming PCs with a TUF/ROG motherboard to manage LEDs and fans.</p>
+<p><a href="/img/armourycratememe.gif"><img src="/img/armourycratememe.gif" alt="such gaming much 0days gif" /></a></p>
+<p>Last year I assembled a PC with an ASUS TUF motherboard, so I have this software installed. This kind of software is usually poorly designed from a security perspective - not shaming ASUS here, it’s just a matter of fact as gaming software is usually not designed with security in mind, it has to be flashy and eye-catching - so I ended up focusing my effort on this particular piece of software.</p>
+<p>At login time, Armoury Crate’s own service, called Armoury Crate Lite Service, spawns a number of processes, the ones that caught my eyes though were <code class="language-plaintext highlighter-rouge">ArmouryCrate.Service.exe</code> and its child <code class="language-plaintext highlighter-rouge">ArmouryCrate.UserSessionHelper.exe</code>. As you can see in the next screenshot, the first runs as SYSTEM as it’s the process of the service itself, while the second runs at High integrity (i.e. elevated) if the current user is an administrator, or Medium integrity if the user is a low privilege one. Keep this in mind, we will come back to it later.</p>
+<p><a href="/img/armouryservice0.png"><img src="/img/armouryservice0.png" alt="armourycrate arch" /></a></p>
+<h3 id="its-hunting-season">It’s hunting season</h3>
+<p>Now that we have laid down our targets, let’s look at how we are going to approach the research. The methodology we will use is the following:</p>
+<ol>
+<li>Look for <code class="language-plaintext highlighter-rouge">CreateFile</code> operations failing with a “NO SUCH FILE” or “PATH NOT FOUND” code;</li>
+<li>Inspect the operation to make sure it happens as a result of a call to a LoadLibrary-like function. CreateFile-like calls in Windows are not used only to create new files, but also to open existing ones;</li>
+<li>Make sure we can write to - or create the - path from which the DLL is loaded;</li>
+<li>Profit!</li>
+</ol>
+<p>Hunting for this type of vulnerabilities is actually fairly easy and requires little effort. As I have explained in <a href="https://twitter.com/last0x00/status/1435160730035183616">this Twitter thread</a>, you just have to fire up Process Monitor with admin privileges, set some filters and then investigate the results. Let’s start from the filters: since we are focusing on phantom DLL hijackings, we want to see all the <strong>privileged</strong> processes failing to load a DLL with an error like “PATH NOT FOUND” or “NO SUCH FILE”. To do so go to the menu bar, <code class="language-plaintext highlighter-rouge">Filter-&gt;Filter...</code> and add the following filters:</p>
+<ul>
+<li>Operation - is - CreateFile - Include</li>
+<li>Result - contains - not found - Include</li>
+<li>Result - contains - no such - Include</li>
+<li>Path - ends with - .dll - Include</li>
+<li>Integrity - is - System - Include</li>
+<li>Integrity - is - High - Include</li>
+</ul>
+<p><a href="/img/procmonfilter0.png"><img src="/img/procmonfilter0.png" alt="procmon filters" /></a></p>
+<p>Once you have done that, go back to the menu bar, then <code class="language-plaintext highlighter-rouge">Filter-&gt;Save Filter...</code> so that we can load it later. As a lot SYSTEM and High integrity processes run as a result of a service running we now want to log the boot process of the computer and analyze it with Process Monitor. In order to do so head to the menu bar, then <code class="language-plaintext highlighter-rouge">Options-&gt;Enable Boot Logging</code>, leave everything as default and restart the computer. After logging back in, open Process Monitor once again, save the <code class="language-plaintext highlighter-rouge">Bootlog.pml</code> file and wait for Process Monitor to parse it. Once it’s finished doing its things, load the filter we prepared previously by clicking on <code class="language-plaintext highlighter-rouge">Filter-&gt;Load Filter</code>. Now we should see only potential phantom hijackings.</p>
+<p><a href="/img/armourymissingdll.png"><img src="/img/armourymissingdll.png" alt="armoury missing DLL" /></a></p>
+<p>In Armoury Crate’s case, you can see it tries to load <code class="language-plaintext highlighter-rouge">C:\ProgramData\ASUS\GamingCenterLib\.DLL</code> which is an interesting path because ACLs are not set automatically in subfolders of <code class="language-plaintext highlighter-rouge">C:\ProgramData\</code>, a thing that happens instead for subfolders of <code class="language-plaintext highlighter-rouge">C:\Program Files\</code>. This means there’s a high probability <code class="language-plaintext highlighter-rouge">C:\ProgramData\</code> subfolders will be writable by unprivileged users.</p>
+<p>To make sure the <code class="language-plaintext highlighter-rouge">CreateFile</code> operation we are looking at happens as a result of a LoadLibrary-like function we can open the event and navigate to the <code class="language-plaintext highlighter-rouge">Stack</code> tab to check the sequence of function calls which lead to the <code class="language-plaintext highlighter-rouge">CreateFile</code> operation. As you can see from the following screenshot, this is exactly the case as we have a call to <code class="language-plaintext highlighter-rouge">LoadLibraryExW</code>:</p>
+<p><a href="/img/loadlibrary.png"><img src="/img/loadlibrary.png" alt="armoury crate loadlibrary" /></a></p>
+<p>To inspect the ACL of the folder from which Armoury Crate tries to load the DLL we can use Powershell’s <code class="language-plaintext highlighter-rouge">Get-Acl</code> cmdlet this way:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Get-Acl 'C:\ProgramData\ASUS\GamingCenterLib' | Select-Object *
+</code></pre></div></div>
+<p>This command will return a SDDL string (which is essentially a one-to-one string representation of the graphical ACL we are used to see in Windows), which when parsed with <code class="language-plaintext highlighter-rouge">ConvertFrom-SddlString</code> tells us <code class="language-plaintext highlighter-rouge">BUILTIN\Users</code> have write access to the directory:</p>
+<p><a href="/img/acl0.png"><img src="/img/acl0.png" alt="armoury acls" /></a></p>
+<p>A more user friendly way of showing the effective access a user has on a particular resource is to open its properties, navigate to the <code class="language-plaintext highlighter-rouge">Security</code> tab, click on <code class="language-plaintext highlighter-rouge">Advanced</code>, switch to the <code class="language-plaintext highlighter-rouge">Effective Access</code> tab, select a user and then click on <code class="language-plaintext highlighter-rouge">View effective access</code>. The result of this operation is the effective access a user has to said resource, considering also the permissions it inherits from the groups he is part of.</p>
+<p><a href="/img/acl.png"><img src="/img/acl.png" alt="armoury acls gui" /></a></p>
+<p>Alright, now that we know we can write to <code class="language-plaintext highlighter-rouge">C:\ProgramData\ASUS\GamingCenterLib</code> we just have to compile a DLL named <code class="language-plaintext highlighter-rouge">.DLL</code> and drop it there. We will go with a simple DLL which will add a new user to the local administrators:</p>
+<div class="language-c++ highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">BOOL</span> <span class="n">APIENTRY</span> <span class="nf">DllMain</span><span class="p">(</span> <span class="n">HMODULE</span> <span class="n">hModule</span><span class="p">,</span>
+                       <span class="n">DWORD</span>  <span class="n">ul_reason_for_call</span><span class="p">,</span>
+                       <span class="n">LPVOID</span> <span class="n">lpReserved</span>
+                     <span class="p">)</span>
+<span class="p">{</span>
+    <span class="n">system</span><span class="p">(</span><span class="s">"C:</span><span class="se">\\</span><span class="s">Windows</span><span class="se">\\</span><span class="s">System32</span><span class="se">\\</span><span class="s">cmd.exe /c </span><span class="se">\"</span><span class="s">net user aptortellini aptortellini /add</span><span class="se">\"</span><span class="s">"</span><span class="p">);</span>
+    <span class="n">system</span><span class="p">(</span><span class="s">"C:</span><span class="se">\\</span><span class="s">Windows</span><span class="se">\\</span><span class="s">System32</span><span class="se">\\</span><span class="s">cmd.exe /c </span><span class="se">\"</span><span class="s">net localgroup administrators aptortellini /add</span><span class="se">\"</span><span class="s">"</span><span class="p">);</span>
+    <span class="k">return</span> <span class="n">TRUE</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>Now that we have everything ready we just have to wait for a privileged user to log in. This is needed as the DLL is loaded by <code class="language-plaintext highlighter-rouge">ArmouryCrate.UserSessionHelper.exe</code> which runs with the highest privileges available to the user to which the session belongs. As soon as the privileged user logs in, we have a new admin user, confirming administrator-level code execution.</p>
+<h3 id="root-cause-analysis">Root cause analysis</h3>
+<p>Let’s now have a look at what caused this vulnerability. As you can see from the call stack shown in the screenshot in the beginning of this article, the DLL is loaded from code located inside <code class="language-plaintext highlighter-rouge">GameBoxPlugin.dll</code>, at offset <code class="language-plaintext highlighter-rouge">QueryLibrary + 0x167d</code> which is actually another function I renamed <code class="language-plaintext highlighter-rouge">DllLoadLibraryImplement</code> (by reversing <code class="language-plaintext highlighter-rouge">GameBoxPlugin.dll</code> with IDA Pro you can see most functions in this DLL have some sort of logging feature which references strings containing the possible name of the function). Here’s the code responsible for the call to <code class="language-plaintext highlighter-rouge">LoadLibraryExW</code>:</p>
+<p><a href="/img/idaloadlibrary.png"><img src="/img/idaloadlibrary.png" alt="ida call" /></a></p>
+<p>We have two culprits here:</p>
+<ol>
+<li>A DLL is loaded without any check. ASUS fixed this by implementing a cryptographic check on the DLLs loaded by this process to make sure they are signed by ASUS themselves;</li>
+<li>The ACL of <code class="language-plaintext highlighter-rouge">C:\ProgramData\ASUS\GamingCenterLib\</code> are not properly set. ASUS has <strong>NOT</strong> fixed this, which means that, in the case a bypass is found for reason 1, the software would be vulnerable again as <code class="language-plaintext highlighter-rouge">ArmouryCrate.UserSessionHelper.exe</code> now looks for DLLs in that folder with a 6-character-long name (by searching them with the wildcard <code class="language-plaintext highlighter-rouge">??????.DLL</code> as you can see with Procmon). If you use Armoury Crate I suggest hand-fixing the ACL of <code class="language-plaintext highlighter-rouge">C:\ProgramData\ASUS\GamingCenterLib\</code> in order to give access to the whole directory tree only to members of the Administrators group.</li>
+</ol>
+<h3 id="responsible-disclosure-timeline-yyyymmdd">Responsible disclosure timeline (YYYY/MM/DD)</h3>
+<ul>
+<li>2021/09/06: vulnerability reported to ASUS via their web portal;</li>
+<li>2021/09/10: ASUS acknowledges the report and forwards it to their dev branch;</li>
+<li>2021/09/13: ASUS devs confirm the vulnerability and say it will be fixed in the next release, expected for week 39 of this year (27/09 - 01/10);</li>
+<li>2021/09/24: ASUS confirms the vulnerability has been fixed in version 4.2.10 of the service;</li>
+<li>2021/09/27: MITRE assigns <a href="https://nvd.nist.gov/vuln/detail/CVE-2021-40981">CVE-2021-40981</a> to this vulnerability;</li>
+</ul>
+<p>Kudos to ASUS for the quick response and professionalism in dealing with the problem! That’s all for today lads, last out!</p>
+</div><a class="u-url" href="/2021/09/24/armoury-crate-privesc.html" hidden></a>
+</article>
+</div>
+</main><footer class="site-footer h-card">
+<data class="u-url" href="/"></data>
+<div class="wrapper">
+<div class="footer-col-wrapper">
+<div class="footer-col">
+<p class="feed-subscribe">
+<a href="/feed.xml">
+<svg class="svg-icon orange">
+<use xlink:href="/assets/minima-social-icons.svg#rss"></use>
+</svg><span>Subscribe</span>
+</a>
+</p>
+<ul class="contact-list">
+<li class="p-name">Advanced Persistent Tortellini</li>
+</ul>
+</div>
+<div class="footer-col">
+<p>Home of the Advanced Persistent Tortellini - aka APTortellini, an Italian collective of hackers publishing technical research regarding offensive security.
+</p>
+</div>
+</div>
+<div class="social-links"><ul class="social-media-list"><li><a rel="me" href="https://github.com/APTortellini" title="APTortellini"><svg class="svg-icon grey"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg></a></li><li><a rel="me" href="https://twitter.com/APTortellini" title="APTortellini"><svg class="svg-icon grey"><use xlink:href="/assets/minima-social-icons.svg#twitter"></use></svg></a></li><li><a rel="me" href="https://t.me/aptortellini" title="aptortellini"><svg class="svg-icon grey"><use xlink:href="/assets/minima-social-icons.svg#telegram"></use></svg></a></li></ul>
+</div>
+</div>
+<script type="text/javascript" src="/js/lightbox.js"></script>
+<link rel="stylesheet" href="/css/lightbox.css">
+</footer>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="GPGTools installerHelper - setuid Local Privilege Escalation (CVE-2014-4677).">
+    <title>0xbb - GPGTools</title>
+    <link rel="apple-touch-icon-precomposed" sizes="152x152" href="/images/favicon-152.png?ad510b8b07d33dcf41dd1e8ab9fbb93c">
+    <link rel="icon" type="image/png" sizes="192x192" href="/images/favicon-192.png?18297a3410b436023ca466a57af85d78">
+    <link rel="stylesheet" href="/css/style.min.css?aa098e29dc9c87bb137415d00c27295e">
+
+    <style> spam  	 	 , #yolo.trololo[ingo$="awesome" ],spam {display:none}</style>
+</head>
+<body>
+<div id="layout">
+    <div id="main">
+        <div class="header">
+            <h1>0xbb</h1>
+            <div class="pure-menu pure-menu-horizontal">
+                 <ul class="pure-menu-list">
+                    <li class="pure-menu-item ">
+                        <a href="/" class="pure-menu-link">Home</a>
+                    </li>
+                    <li class="pure-menu-item "><a href="/notes/" class="pure-menu-link">
+                        Notes</a>
+                    </li>
+                    <li class="pure-menu-item  pure-menu-selected ">
+                        <a href="/projects/" class="pure-menu-link">Projects</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="content">
+
+
+
+
+<h2 id="gpgtools-installerhelper-setuid-local-privilege-escalation">GPGTools installerHelper - setuid Local Privilege Escalation</h2>
+
+<h5 id="tracking-and-cve">Tracking and CVE:</h5>
+
+<ul>
+<li><a href="http://www.cve.mitre.org/cgi-bin/cvename.cgi?name=2014-4677">CVE-2014-4677</a></li>
+</ul>
+
+<h5 id="affected-version-s">Affected version(s):</h5>
+
+<ul>
+<li>&lt; GPGTools 2014.12-b4</li>
+</ul>
+
+<h5 id="fixed-version">Fixed version:</h5>
+
+<ul>
+<li>GPGTools 2015.06</li>
+<li>GPGTools 2015.08 - vulnerability disclosed (<a href="https://gpgtools.org/releases/gpgsuite/2015.08/release-notes.html">Release Notes</a>)</li>
+</ul>
+
+<h3 id="vulnerability">Vulnerability:</h3>
+
+<p>GPGTools ships with a set-setuid installHelper binary:</p>
+
+<pre><code>$ ls -l /Library/Frameworks/Libmacgpg.framework/Versions/Current/Resources/
+
+-rw-r--r--  1 root  wheel   1252 Oct 23  2013 Info.plist
+-rw-r--r--  1 root  wheel    407 Oct 23  2013 Keyservers.plist
+drwxr-xr-x  3 root  wheel    102 Aug 15 13:06 de.lproj
+drwxr-xr-x  3 root  wheel    102 Aug 15 13:06 en.lproj
+-rwsr-xr-x  1 root  wheel  68576 Oct 23  2013 installerHelper
+-rw-r--r--  1 root  wheel    550 Oct 23  2013 org.gpgtools.Libmacgpg.xpc.plist
+drwxr-xr-x  3 root  wheel    102 Aug 15 13:06 pinentry-mac.app
+</code></pre>
+
+<p>installHelper is used to install signed pkg-files as a normal user without root privileges:</p>
+
+<pre><code>$ /Library/Frameworks/Libmacgpg.framework/Versions/Current/Resources/installerHelper
+
+Usage: installerHelper pkg-file [xml-file]
+This tool checks the signature of an pkg file and installs it.
+You can specify a xml-file to override the standard choices.
+</code></pre>
+
+<p><a href="https://github.com/GPGTools/Libmacgpg/blob/246bbc62841847e591bc80c5926834c481bb96bb/installerHelper/main.m">installHelper</a> installs pkg-files by passing
+the pkg-file path and the xml-file path into the <code>installPackage</code> function:</p>
+<div class="highlight"><pre style="background-color:#f0f0f0;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-objc" data-lang="objc"><span style="color:#902000">BOOL</span> <span style="color:#06287e">installPackage</span>(NSString <span style="color:#666">*</span>pkgPath, NSString <span style="color:#666">*</span>xmlPath) {
+    <span style="color:#60a0b0;font-style:italic">// Run the installer command.
+</span><span style="color:#60a0b0;font-style:italic"></span>    NSString <span style="color:#666">*</span>commandString;
+    <span style="color:#007020;font-weight:bold">if</span> (xmlPath) {
+        commandString <span style="color:#666">=</span> [NSString <span style="color:#002070;font-weight:bold">stringWithFormat</span>:<span style="color:#4070a0">@&#34;/usr/sbin/installer -applyChoiceChangesXML </span><span style="color:#4070a0;font-weight:bold">\&#34;</span><span style="color:#4070a0">%@</span><span style="color:#4070a0;font-weight:bold">\&#34;</span><span style="color:#4070a0"> -pkg </span><span style="color:#4070a0;font-weight:bold">\&#34;</span><span style="color:#4070a0">%@</span><span style="color:#4070a0;font-weight:bold">\&#34;</span><span style="color:#4070a0"> -target /&#34;</span>, xmlPath, pkgPath];
+    }
+    <span style="color:#007020;font-weight:bold">else</span> {
+        commandString <span style="color:#666">=</span> [NSString <span style="color:#002070;font-weight:bold">stringWithFormat</span>:<span style="color:#4070a0">@&#34;/usr/sbin/installer -pkg </span><span style="color:#4070a0;font-weight:bold">\&#34;</span><span style="color:#4070a0">%@</span><span style="color:#4070a0;font-weight:bold">\&#34;</span><span style="color:#4070a0"> -target /&#34;</span>, pkgPath];
+    }
+    
+    <span style="color:#007020;font-weight:bold">const</span> <span style="color:#902000">char</span> <span style="color:#666">*</span>command <span style="color:#666">=</span> [commandString UTF8String];
+    
+    uid_t uid <span style="color:#666">=</span> getuid();
+    <span style="color:#902000">int</span> result <span style="color:#666">=</span> setuid(<span style="color:#40a070">0</span>);
+    <span style="color:#007020;font-weight:bold">if</span> (result <span style="color:#666">==</span> <span style="color:#40a070">0</span>) {
+        <span style="color:#60a0b0;font-style:italic">//Run only this command with root privileges.
+</span><span style="color:#60a0b0;font-style:italic"></span>        result <span style="color:#666">=</span> system(command);
+        setuid(uid);
+    } <span style="color:#007020;font-weight:bold">else</span> {
+        printf(<span style="color:#4070a0">&#34;This tool needs the setuid-bit to be set and the owner must be root!</span><span style="color:#4070a0;font-weight:bold">\n</span><span style="color:#4070a0">Start a normal installation using the GUI.</span><span style="color:#4070a0;font-weight:bold">\n</span><span style="color:#4070a0">&#34;</span>);
+        
+        commandString <span style="color:#666">=</span> [NSString <span style="color:#002070;font-weight:bold">stringWithFormat</span>:<span style="color:#4070a0">@&#34;/usr/bin/open -Wnb com.apple.installer </span><span style="color:#4070a0;font-weight:bold">\&#34;</span><span style="color:#4070a0">%@</span><span style="color:#4070a0;font-weight:bold">\&#34;</span><span style="color:#4070a0">&#34;</span>, pkgPath];
+        command <span style="color:#666">=</span> [commandString UTF8String];
+        
+        result <span style="color:#666">=</span> system(command);
+    }
+    
+    
+    <span style="color:#007020;font-weight:bold">return</span> <span style="color:#666">!!</span>result;
+}</code></pre></div>
+<p><code>installPackage</code> directly passed the two paths into the <code>system</code> function and therefore is vulnerable to command injection.</p>
+
+<h3 id="exploitation-proof-of-concept">Exploitation / Proof of Concept:</h3>
+
+<p>The PoC makes use of the command substitution (<code>`command`</code>) applied by <code>system</code> to injection user-defined commands.</p>
+
+<p>Before <code>installPackage</code> is called several  requirements need to be fulfilled (<a href="https://github.com/GPGTools/Libmacgpg/blob/246bbc62841847e591bc80c5926834c481bb96bb/installerHelper/main.m#L13-L48">see here</a>):</p>
+
+<ul>
+<li>the pkg-file must exist</li>
+<li>the pkg-file must be signed with GPGTools&rsquo;s key</li>
+<li>if passed the xml-file must exist</li>
+</ul>
+
+<p>A signed pkg-file (<code>Install.pkg</code>) can be obtained by downloading an <a href="https://raw.githubusercontent.com/0xbb/security-publications/master/GPGTools/GPG%20Suite%20-%202013.10.22.dmg">older release of GPGTools</a>.<br />
+Versions after 2014.12-b4 won&rsquo;t work, because the signing key has been replaced to prevent downgrading of fixed installHelper versions to vulnerable ones.</p>
+
+<p>After fulfilling the pkg-file requirements we want to inject commands via the xml-file path.<br />
+Therefore we create a  file called <code>`dummy`</code> and pass it as xml-file to installHelper.<br />
+installHelper will accept it as a valid path and the command <code>dummy</code> will get executed with elevated rights.<br />
+So if we put an executable file named <code>dummy</code> into <code>$PATH</code> it will get executed.</p>
+
+<p>For further details check out the full PoC: <a href="/CVE-2014-4677.sh">CVE-2014-4677.sh</a></p>
+
+<p><img src="/images/CVE-2014-4677.png" alt="CVE-2014-4677-PoC" /></p>
+
+
+
+
+
+        </div>
+    </div>
+</div>
+</body>
+</html>

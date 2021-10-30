@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+    <title>A little POODLE left in GnuTLS (old versions)  - Hanno's blog</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="generator" content="Serendipity v.2.3.5" />
+    <link rel="stylesheet" type="text/css" href="https://blog.hboeck.de/serendipity.css?v=" />
+    <link rel="alternate"  type="application/rss+xml" title="Hanno's blog RSS feed" href="https://blog.hboeck.de/feeds/index.rss2" />
+    <link rel="alternate"  type="application/x.atom+xml"  title="Hanno's blog Atom feed"  href="https://blog.hboeck.de/feeds/atom.xml" />
+    
+    <link rel="pingback" href="https://blog.hboeck.de/comment.php?type=pingback&amp;entry_id=877" />
+
+    <script src="/templates/jquery.js"></script>
+    <script>jQuery.noConflict();</script>
+
+</head>
+
+<body>
+<span class="rightbar">&#xA0;</span>
+<span class="leftbar">&#xA0;</span>
+<div id="serendipity_banner">
+    <h1><a class="homelink1" href="https://blog.hboeck.de/">A little POODLE left in GnuTLS (old versions)</a></h1>
+    <h2><a class="homelink2" href="https://blog.hboeck.de/">Hanno's blog</a></h2>
+</div>
+
+<table id="mainpane">
+    <tr>
+        <td id="content"><!-- CONTENT START -->
+
+	<div class="serendipity_content_message"></div>
+
+<!-- ENTRIES START -->
+    
+
+        <div class="serendipity_Entry_Date">
+                <h3 class="serendipity_date">Monday, November 30. 2015</h3>
+        
+                        <h4 class="serendipity_title"><a href="/archives/877-A-little-POODLE-left-in-GnuTLS-old-versions.html">A little POODLE left in GnuTLS (old versions)</a></h4>
+
+        <div class="serendipity_entry serendipity_entry_author_Hanno-Boeck ">
+                        <span class="serendipity_entryIcon">
+                                                                                                                                                                    </span>
+            
+            <div class="serendipity_entry_body">
+                <!-- s9ymdb:439 --><img class="serendipity_image_right" width="300" height="225"  src="/uploads/smallpoodle.jpg"  alt="Poodle" /><i><b>tl;dr</b> Older GnuTLS versions (2.x) fail to check the first byte of the padding in CBC modes. Various stable Linux distributions, including Ubuntu LTS and Debian wheezy (oldstable) use this version. Current GnuTLS versions are not affected.</i><br />
+<br />
+A few days ago an <a href="https://sourceforge.net/p/ssllabs/mailman/message/34629992/">email on the ssllabs mailing list</a> catched my attention. A Canonical developer had observed that the <a href="https://www.ssllabs.com/ssltest/">SSL Labs test</a> would report the GnuTLS version used in Ubuntu 14.04 (the current long time support version) as vulnerable to the POODLE TLS vulnerability, while other tests for the same vulnerability showed no such issue.<br />
+<br />
+A little background: The original POODLE vulnerability is a weakness of the old SSLv3 protocol that's now officially deprecated. POODLE is based on the fact that SSLv3 does not specify the padding of the CBC modes and the padding bytes can contain arbitrary bytes. A while after POODLE Adam Langley reported that there is <a href="https://www.imperialviolet.org/2014/12/08/poodleagain.html">a variant of POODLE in TLS</a>, however while the original POODLE is a protocol issue the POODLE TLS vulnerability is an implementation issue. TLS specifies the values of the padding bytes, but some implementations don't check them. Recently Yngve Pettersen reported that there are <a href="https://vivaldi.net/en-US/userblogs/entry/there-are-more-poodles-in-the-forest">different variants of this POODLE TLS vulnerability</a>: Some implementations only check parts of the padding. This is the reason why sometimes different tests lead to different results. A test that only changes one byte of the padding will lead to different results than one that changes all padding bytes. Yngve Pettersen uncovered POODLE variants in devices from Cisco (Cavium chip) and Citrix.<br />
+<br />
+I looked at the Ubuntu issue and found that this was exactly such a case of an incomplete padding check: The first byte wasn't checked. I believe this might explain some of the vulnerable hosts Yngve Pettersen found. This is the code:<br />
+<br />
+<code>for (i = 2; i &lt;= pad; i++)<br />
+  {<br />
+    if (ciphertext.data[ciphertext.size - i] != pad)<br />
+    pad_failed = GNUTLS_E_DECRYPTION_FAILED;<br />
+  }</code><br />
+<br />
+The padding in TLS is defined that the rightmost byte of the last block contains the length of the padding. This value is also used in all padding bytes. However the length field itself is not part of the padding. Therefore if we have e. g. a padding length of three this would result in four bytes with the value 3. The above code misses one byte. i goes from 2 (setting block length minus 2) to pad (block length minus pad length), which sets pad length minus one bytes. To correct it we need to change the loop to end with pad+1. The code is completely reworked in current GnuTLS versions, therefore they are not affected. Upstream has officially announced the end of life for GnuTLS 2, but some stable Linux distributions still use it.<br />
+<br />
+The story doesn't end here: After I found this bug I talked about it with Juraj Somorovsky. He mentioned that he already read about this before: In the <a href="http://www.isg.rhul.ac.uk/tls/TLStiming.pdf">paper of the Lucky Thirteen attack</a>. That was published in 2013 by Nadhem AlFardan and Kenny Paterson. Here's what the Lucky Thirteen paper has to say about this issue on page 13:<br />
+<br />
+<code>for (i = 2; i &lt; pad; i++)<br />
+  {<br />
+    if (ciphertext->data[ciphertext->size - i] != ciphertext->data[ciphertext->size - 1])<br />
+    pad_failed = GNUTLS_E_DECRYPTION_FAILED;<br />
+  }</code><br />
+<br />
+<i>It is not hard to see that this loop should also cover the edge case i=pad in order to carry out a full padding check. This means that one byte of what should be padding actually has a free format.</i><br />
+<br />
+If you look closely you will see that this code is actually different from the one I quoted above. The reason is that the GnuTLS version in question already contained <a href="https://gitlab.com/gnutls/gnutls/commit/eb2f4e7ca984c5ef765851388f829ef9e7ec5c9b">a fix that was applied in response to the Lucky Thirteen paper</a>. However what the Lucky Thirteen paper missed is that the original check was off by two bytes, not just one byte. Therefore it only got an incomplete fix reducing the attack surface from two bytes to one.<br />
+<br />
+In a later commit this whole code <a href="https://gitlab.com/gnutls/gnutls/commit/328ee22c1b3951e060c7124c7cb1cee592c59bc0">was reworked in response to the Lucky Thirteen attack</a> and there the problem got fixed for good. However that change never made it into version 2 of GnuTLS. Red Hat / CentOS packages contain a backport patch of those changes, therefore they are not affected.<br />
+<br />
+You might wonder what the impact of this bug is. I'm not totally familiar with the details of all the possible attacks, but the POODLE attack gets increasingly harder if fewer bytes of the padding can be freely set. It most likely is impossible if there is only one byte. The Lucky Thirteen paper says: "This would enable, for example, a variant of the short MAC attack of <a href="http://www.isg.rhul.ac.uk/~kp/mee-comp.pdf">[28]</a> even if variable length padding was not supported.". People that know more about crypto than I do should be left with the judgement whether this might be practically exploitabe.<br />
+<br />
+Fixing this bug is a simple <a href="/uploads/gnutls-2-fix-small-poodle.diff" title="gnutls-2-fix-small-poodle.diff">one-line patch I have attached here</a>. This will silence all POODLE checks, however this doesn't apply all the changes that were made in response to the Lucky Thirteen attack. I'm not sure if the code is practically vulnerable, but Lucky Thirteen is a tricky issue, recently a <a href="https://eprint.iacr.org/2015/1129.pdf">variant of that attack was shown against Amazon's s2n library</a>.<br />
+<br />
+The missing padding check for the first byte got <a href="https://web.nvd.nist.gov/view/vuln/detail?vulnId=CVE-2015-8313">CVE-2015-8313</a> assigned. Currently I'm aware of <a href="https://bugs.launchpad.net/ubuntu/+source/gnutls26/+bug/1510163">Ubuntu LTS</a> (now <a href="https://usn.ubuntu.com/usn/usn-2821-1/">fixed</a>) and Debian oldstable (Wheezy) being affected.
+            </div>
+
+            
+            
+            <div class='serendipity_entryFooter'>
+                Posted by <a href="https://blog.hboeck.de/authors/1-Hanno-Boeck">Hanno Böck</a>
+                                   in <a href="https://blog.hboeck.de/categories/20-Code">Code</a>, <a href="https://blog.hboeck.de/categories/5-Cryptography">Cryptography</a>, <a href="https://blog.hboeck.de/categories/14-English">English</a>, <a href="https://blog.hboeck.de/categories/2-Linux">Linux</a>, <a href="https://blog.hboeck.de/categories/22-Security">Security</a>                
+                                    at
+                 <a href="/archives/877-A-little-POODLE-left-in-GnuTLS-old-versions.html">20:32</a>
+
+                                                            | <a href="/archives/877-A-little-POODLE-left-in-GnuTLS-old-versions.html#comments">Comments (0)</a>
+                                    
+                                                            | <a href="/archives/877-A-little-POODLE-left-in-GnuTLS-old-versions.html#trackbacks">Trackbacks (0)</a>
+                                    
+                
+                <div class="serendipity_freeTag">Defined tags for this entry: <a href="https://blog.hboeck.de/plugin/tag/cbc" title="cbc" rel="tag">cbc</a>, <a href="https://blog.hboeck.de/plugin/tag/gnutls" title="gnutls" rel="tag">gnutls</a>, <a href="https://blog.hboeck.de/plugin/tag/luckythirteen" title="luckythirteen" rel="tag">luckythirteen</a>, <a href="https://blog.hboeck.de/plugin/tag/padding" title="padding" rel="tag">padding</a>, <a href="https://blog.hboeck.de/plugin/tag/poodle" title="poodle" rel="tag">poodle</a>, <a href="https://blog.hboeck.de/plugin/tag/security" title="security" rel="tag">security</a>, <a href="https://blog.hboeck.de/plugin/tag/ssl" title="ssl" rel="tag">ssl</a>, <a href="https://blog.hboeck.de/plugin/tag/tls" title="tls" rel="tag">tls</a>, <a href="https://blog.hboeck.de/plugin/tag/vulnerability" title="vulnerability" rel="tag">vulnerability</a></div><div class="serendipity_freeTag_related">Related entries by tags:<ul class="plainList"><li> <a href="https://blog.hboeck.de/archives/902-File-Exfiltration-via-Libreoffice-in-BigBlueButton-and-JODConverter.html" title="File Exfiltration via Libreoffice in BigBlueButton and JODConverter">File Exfiltration via Libreoffice in BigBlueButton and JODConverter</a></li><li> <a href="https://blog.hboeck.de/archives/900-Generating-CRIME-safe-CSRF-Tokens.html" title="Generating CRIME safe CSRF Tokens">Generating CRIME safe CSRF Tokens</a></li><li> <a href="https://blog.hboeck.de/archives/899-Userdir-URLs-like-httpsexample.orgusername-are-dangerous.html" title="Userdir URLs like https://example.org/~username/ are dangerous">Userdir URLs like https://example.org/~username/ are dangerous</a></li><li> <a href="https://blog.hboeck.de/archives/897-Security-Issues-with-PGP-Signatures-and-Linux-Package-Management.html" title="Security Issues with PGP Signatures and Linux Package Management">Security Issues with PGP Signatures and Linux Package Management</a></li><li> <a href="https://blog.hboeck.de/archives/896-How-my-personal-Bug-Bounty-Program-turned-into-a-Free-Security-Audit-for-the-Serendipity-Blog.html" title="How my personal Bug Bounty Program turned into a Free Security Audit for the Serendipity Blog">How my personal Bug Bounty Program turned into a Free Security Audit for the Serendipity Blog</a></li><li> <a href="https://blog.hboeck.de/archives/892-Introducing-Snallygaster-a-Tool-to-Scan-for-Secrets-on-Web-Servers.html" title="Introducing Snallygaster - a Tool to Scan for Secrets on Web Servers">Introducing Snallygaster - a Tool to Scan for Secrets on Web Servers</a></li><li> <a href="https://blog.hboeck.de/archives/891-Some-minor-Security-Quirks-in-Firefox.html" title="Some minor Security Quirks in Firefox">Some minor Security Quirks in Firefox</a></li><li> <a href="https://blog.hboeck.de/archives/889-Abandoned-Domain-Takeover-as-a-Web-Security-Risk.html" title="Abandoned Domain Takeover as a Web Security Risk">Abandoned Domain Takeover as a Web Security Risk</a></li><li> <a href="https://blog.hboeck.de/archives/888-How-I-tricked-Symantec-with-a-Fake-Private-Key.html" title="How I tricked Symantec with a Fake Private Key">How I tricked Symantec with a Fake Private Key</a></li><li> <a href="https://blog.hboeck.de/archives/887-Dont-leave-Coredumps-on-Web-Servers.html" title="Don't leave Coredumps on Web Servers">Don't leave Coredumps on Web Servers</a></li></ul></div>
+            </div>
+        </div>
+        <!--
+        <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                 xmlns:trackback="http://madskills.com/public/xml/rss/module/trackback/"
+                 xmlns:dc="http://purl.org/dc/elements/1.1/">
+        <rdf:Description
+                 rdf:about="https://blog.hboeck.de/feeds/ei_877.rdf"
+                 trackback:ping="https://blog.hboeck.de/comment.php?type=trackback&amp;entry_id=877"
+                 dc:title="A little POODLE left in GnuTLS (old versions)"
+                 dc:identifier="https://blog.hboeck.de/archives/877-A-little-POODLE-left-in-GnuTLS-old-versions.html" />
+        </rdf:RDF>
+        -->
+        
+
+                    
+            
+            
+            
+            
+            <div class="serendipity_comments serendipity_section_trackbacks">
+                <br />
+                <a id="trackbacks"></a>
+                <div class="serendipity_commentsTitle">Trackbacks</div>
+                    <div class="serendipity_center">
+                        <a rel="nofollow" style="font-weight: normal" href="https://blog.hboeck.de/comment.php?type=trackback&amp;entry_id=877" onclick="alert('This link is not meant to be clicked. It contains the trackback URI for this entry. You can use this URI to send ping- &amp; trackbacks from your own blog to this entry. To copy the link, right click and select &quot;Copy Shortcut&quot; in Internet Explorer or &quot;Copy Link Location&quot; in Mozilla.'); return false;" title="This link is not meant to be clicked. It contains the trackback URI for this entry. You can use this URI to send ping- &amp; trackbacks from your own blog to this entry. To copy the link, right click and select &quot;Copy Shortcut&quot; in Internet Explorer or &quot;Copy Link Location&quot; in Mozilla.">Trackback specific URI for this entry</a>
+                    </div>
+                    <br />
+                            <div class="serendipity_center">No Trackbacks</div>
+
+            </div>
+        
+                    <div class="serendipity_comments serendipity_section_comments">
+                <br />
+                <a id="comments"></a>
+                <div class="serendipity_commentsTitle">Comments</div>
+                <div class="serendipity_center">Display comments as
+                                    (<a rel="nofollow" href="/index.php?url=archives/877-A-little-POODLE-left-in-GnuTLS-old-versions.html&amp;serendipity[cview]=linear#comments">Linear</a> | Threaded)
+                                </div>
+                <br />
+                        <div class="serendipity_center nocomments">No comments</div>
+
+
+                                <a id="feedback"></a>
+
+                
+                
+                <br />
+                <div class="serendipity_section_commentform">
+	                <div class="serendipity_commentsTitle">Add Comment</div>
+	                <div id="serendipityCommentFormC" class="serendipityCommentForm">
+    <div id="serendipity_replyform_0"></div>
+    <a id="serendipity_CommentForm"></a>
+    <form id="serendipity_comment" action="/index.php?url=archives/877-A-little-POODLE-left-in-GnuTLS-old-versions.html#feedback" method="post">
+    <div><input type="hidden" name="serendipity[entry_id]" value="877" /></div>
+    <table border="0" width="100%" cellpadding="3">
+        <tr>
+            <td class="serendipity_commentsLabel"><label for="serendipity_commentform_name">Name</label></td>
+            <td class="serendipity_commentsValue"><input type="text" id="serendipity_commentform_name" name="serendipity[name]" value="" size="30" /></td>
+        </tr>
+
+        <tr>
+            <td class="serendipity_commentsLabel"><label for="serendipity_commentform_email">Email</label></td>
+            <td class="serendipity_commentsValue"><input type="text" id="serendipity_commentform_email" name="serendipity[email]" value="" /></td>
+        </tr>
+
+        <tr>
+            <td class="serendipity_commentsLabel"><label for="serendipity_commentform_url">Homepage</label></td>
+            <td class="serendipity_commentsValue"><input type="text" id="serendipity_commentform_url" name="serendipity[url]" value="" /></td>
+        </tr>
+
+        <tr>
+            <td class="serendipity_commentsLabel"><label for="serendipity_replyTo">In reply to</label></td>
+            <td class="serendipity_commentsValue"><select id="serendipity_replyTo" onchange="" name="serendipity[replyTo]"><option value="0">[ Top level ]</option></select></td>
+        </tr>
+
+        <tr>
+            <td class="serendipity_commentsLabel"><label for="serendipity_commentform_comment">Comment</label></td>
+            <td class="serendipity_commentsValue">
+                <textarea rows="10" cols="40" id="serendipity_commentform_comment" name="serendipity[comment]"></textarea><br />
+                <div class="serendipity_commentDirection serendipity_comment_spamblock">E-Mail addresses will not be displayed and will only be used for E-Mail notifications.</div><input type="hidden" name="serendipity[token]" value="75ef1cfbec232cb2a30be45824e0c050" />
+<div class="serendipity_commentDirection serendipity_comment_captcha"><br />To prevent automated Bots from commentspamming, please enter the string you see in the image below in the appropriate input box. Your comment will only be submitted if the strings match. Please ensure that your browser supports and accepts cookies, or your comment cannot be verified correctly.<br /><img src="https://blog.hboeck.de/plugin/captcha_6bb0382e91c69c7fe2aebe149078033a" onclick="this.src=this.src + '1'" title="Enter the string you see here in the input box!" alt="CAPTCHA" class="captcha" /><br /><label for="captcha">Enter the string from the spam-prevention image above: </label><br /><input class="input_textbox" type="text" size="5" name="serendipity[captcha]" value="" id="captcha" /></div>
+            </td>
+        </tr>
+
+        <tr>
+            <td>&#160;</td>
+            <td class="serendipity_commentsLabel">
+                <input id="checkbox_remember" type="checkbox" name="serendipity[remember]"  /><label for="checkbox_remember">Remember Information? </label>
+                    <br />
+                <input id="checkbox_subscribe" type="checkbox" name="serendipity[subscribe]"  /><label for="checkbox_subscribe">Subscribe to this entry</label>
+                </td>
+       </tr>
+
+
+       <tr>
+            <td>&#160;</td>
+            <td><input type="submit" name="serendipity[submit]" value="Submit Comment" /> <input type="submit" id="serendipity_preview" name="serendipity[preview]" value="Preview" /></td>
+        </tr>
+    </table>
+    </form>
+</div>
+
+				</div>
+
+                            </div>
+        
+        
+            </div>
+    
+    <div class='serendipity_entryFooter' style="text-align: center">
+    
+    
+    
+    
+    </div>
+<!-- ENTRIES END -->
+
+
+
+<!-- CONTENT END -->
+</td>
+        <td id="serendipityRightSideBar">    <div class="serendipitySideBarItem container_serendipity_plugin_quicksearch">
+        <h3 class="serendipitySideBarTitle serendipity_plugin_quicksearch">Quicksearch</h3>        <div class="serendipitySideBarContent"><form id="searchform" action="/index.php" method="get">
+    <div>
+        <input type="hidden" name="serendipity[action]" value="search" />
+        <input type="hidden" name="serendipity[fullentry]" value="1" />
+        <input type="text" id="serendipityQuickSearchTermField" name="serendipity[searchTerm]" size="13" />
+        <input class="quicksearch_submit" type="submit" value="&gt;" name="serendipity[searchButton]" title="Go!" style="width: 2em;" />
+    </div>
+    <div id="LSResult" style="display: none;"><div id="LSShadow"></div></div>
+</form>
+</div>
+    </div>
+    <div class="serendipitySideBarItem container_serendipity_plugin_html_nugget">
+        <h3 class="serendipitySideBarTitle serendipity_plugin_html_nugget">About me</h3>        <div class="serendipitySideBarContent">Informationen über meine Arbeit als freier Journalist finden Sie <a href="//hboeck.de/">hier</a>.<br />
+<br />
+<b>Hanno Böck</b><br />
+mail: <b>hanno@hboeck.de</b><br />
+jabber: <b>hanno@hboeck.de</b><br />
+<a href="/hanno.asc">GPG/OpenPGP key</a><br />
+<br />
+<a href="https://twitter.com/hanno">Hanno on Twitter</a><br />
+<br />
+<a href="//hboeck.de/kontakt.html">Impressum</a><br />
+<br />
+<a href="//schokokeks.org/"><img src="/uploads/schokokeks-80x15.png" width="80" height="15" alt="schokokeks.org" style="border:none;"/></a><br />
+</div>
+    </div>
+    <div class="serendipitySideBarItem container_serendipity_plugin_html_nugget">
+        <h3 class="serendipitySideBarTitle serendipity_plugin_html_nugget">Creative Commons</h3>        <div class="serendipitySideBarContent"><p style="text-align:center;"><a rel="license" href="https://creativecommons.org/publicdomain/zero/1.0/">
+<img src="/templates/hanno/cc-zero.png" width="88" height="31" style="border-style: none;" alt="CC0" />
+</a><br/>
+<!--
+<rdf:RDF>
+−
+<cc:License rdf:about="https://creativecommons.org/publicdomain/zero/1.0/">
+<foaf:logo rdf:resource="https://i.creativecommons.org/p/zero/1.0/80x15.png"/>
+<foaf:logo rdf:resource="https://i.creativecommons.org/p/zero/1.0/88x31.png"/>
+<dc:title xml:lang="tr">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="en-gb">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="ro">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="ko">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="mk">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="es-pe">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="zu">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="hr">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="de-at">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="pt-pt">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="zh-tw">CC0 1.0 通用</dc:title>
+<dc:title xml:lang="nso">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="sr-latn">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="ast-es">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="zh-hk">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="st">CC0 1.0 util.Universal</dc:title>
+<dc:title xml:lang="eo">CC0 1.0 Universala</dc:title>
+<dc:title xml:lang="ca">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="es-pr">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="pt-br">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="it-ch">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="fr-lu">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="fr">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="lt">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="en-us">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="es-ar">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="th">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="vi">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="el">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="sv">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="es-co">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="eu">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="oci-es">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="fr-ca">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="pl">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="en-hk">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="es-ec">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="ms">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="bg">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="i18n">CC0 1.0 ${util.Universal}</dc:title>
+<dc:title xml:lang="af">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="no">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="de-ch">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="es-mx">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="hu">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="fi">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="es-gt">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="pt">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="az">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="hy">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="ar">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="nl">CC0 1.0 Universeel</dc:title>
+<dc:title xml:lang="sr">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="de">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="he">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="lv">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="ja">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="es-cl">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="gl">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="be">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="ur">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="zh">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="sl">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="es">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="uk">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="da">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="ga">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="cs">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="fr-ch">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="it">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="en-sg">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="ru">CC0 1.0 Универсальная</dc:title>
+<dc:title xml:lang="en">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="en-ca">CC0 1.0 Universal</dc:title>
+<dc:title xml:lang="id">CC0 1.0 Universal</dc:title>
+<dcq:hasVersion>1.0</dcq:hasVersion>
+<cc:permits rdf:resource="https://creativecommons.org/ns#Distribution"/>
+<cc:permits rdf:resource="https://creativecommons.org/ns#DerivativeWorks"/>
+<cc:permits rdf:resource="https://creativecommons.org/ns#Reproduction"/>
+<dc:identifier>CC0</dc:identifier>
+<cc:legalcode rdf:resource="https://creativecommons.org/publicdomain/zero/1.0/legalcode"/>
+<cc:licenseClass rdf:resource="https://creativecommons.org/choose/zero/"/>
+</cc:License>
+</rdf:RDF>
+-->Unless noted otherwise, all content is CC Zero / public domain</p></div>
+    </div>
+    <div class="serendipitySideBarItem container_serendipity_plugin_freetag">
+        <h3 class="serendipitySideBarTitle serendipity_plugin_freetag">Show tagged entries</h3>        <div class="serendipitySideBarContent"><span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=asia" title="asia"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_53" style="font-size: 53%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/asia" title="asia (29) ">asia</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=asia2013" title="asia2013"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_33" style="font-size: 33%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/asia2013" title="asia2013 (15) ">asia2013</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=berlin" title="berlin"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_57" style="font-size: 57%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/berlin" title="berlin (32) ">berlin</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=ccc" title="ccc"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_37" style="font-size: 37%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/ccc" title="ccc (18) ">ccc</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=china" title="china"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_47" style="font-size: 47%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/china" title="china (25) ">china</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=copyright" title="copyright"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_55" style="font-size: 55%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/copyright" title="copyright (31) ">copyright</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=cryptography" title="cryptography"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_48" style="font-size: 48%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/cryptography" title="cryptography (26) ">cryptography</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=datenschutz" title="datenschutz"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_57" style="font-size: 57%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/datenschutz" title="datenschutz (32) ">datenschutz</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=demonstration" title="demonstration"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_31" style="font-size: 31%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/demonstration" title="demonstration (14) ">demonstration</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=freesoftware" title="freesoftware"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_75" style="font-size: 75%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/freesoftware" title="freesoftware (45) ">freesoftware</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=gentoo" title="gentoo"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_33" style="font-size: 33%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/gentoo" title="gentoo (15) ">gentoo</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=hardware" title="hardware"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_33" style="font-size: 33%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/hardware" title="hardware (15) ">hardware</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=https" title="https"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_30" style="font-size: 30%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/https" title="https (13) ">https</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=karlsruhe" title="karlsruhe"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_37" style="font-size: 37%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/karlsruhe" title="karlsruhe (18) ">karlsruhe</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=klimaschutz" title="klimaschutz"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_31" style="font-size: 31%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/klimaschutz" title="klimaschutz (14) ">klimaschutz</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=linux" title="linux"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_109" style="font-size: 109%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/linux" title="linux (69) ">linux</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=openstreetmap" title="openstreetmap"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_51" style="font-size: 51%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/openstreetmap" title="openstreetmap (28) ">openstreetmap</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=privacy" title="privacy"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_40" style="font-size: 40%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/privacy" title="privacy (20) ">privacy</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=russia" title="russia"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_36" style="font-size: 36%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/russia" title="russia (17) ">russia</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=security" title="security"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_120" style="font-size: 120%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/security" title="security (77) ">security</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=ssl" title="ssl"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_50" style="font-size: 50%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/ssl" title="ssl (27) ">ssl</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=tls" title="tls"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_44" style="font-size: 44%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/tls" title="tls (23) ">tls</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=travel" title="travel"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_57" style="font-size: 57%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/travel" title="travel (32) ">travel</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=trip2011" title="trip2011"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_44" style="font-size: 44%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/trip2011" title="trip2011 (23) ">trip2011</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=umwelt" title="umwelt"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_40" style="font-size: 40%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/umwelt" title="umwelt (20) ">umwelt</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=vorratsdatenspeicherung" title="vorratsdatenspeicherung"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_36" style="font-size: 36%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/vorratsdatenspeicherung" title="vorratsdatenspeicherung (17) ">vorratsdatenspeicherung</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=websecurity" title="websecurity"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_40" style="font-size: 40%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/websecurity" title="websecurity (20) ">websecurity</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=xss" title="xss"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_36" style="font-size: 36%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/xss" title="xss (17) ">xss</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=%C3%B6kologie" title="ökologie"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_41" style="font-size: 41%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/%C3%B6kologie" title="ökologie (21) ">ökologie</a></span></span> <span class="serendipity_freeTag_xmlTagEntry"><a rel="tag" class="serendipity_xml_icon" href="/rss.php?serendipity%5Btag%5D=%C3%BCberwachung" title="überwachung"><img alt="xml" src="/templates/hanno/img/xml.gif" class="serendipity_freeTag_xmlButton" /></a> <span class="tag_weight_31" style="font-size: 31%; white-space: normal;"><a rel="tag" href="https://blog.hboeck.de/plugin/tag/%C3%BCberwachung" title="überwachung (14) ">überwachung</a></span></span></div>
+    </div>
+    <div class="serendipitySideBarItem container_serendipity_plugin_staticpage">
+                <div class="serendipitySideBarContent"><a href="/index.php">Frontpage</a><br /><a href="/pages/privacy.html" title="privacy" style="padding-left: 0px;">Datenschutz / Privacy</a><br />
+</div>
+    </div>
+</td>
+    </tr>
+</table>
+
+
+
+</body>
+</html>

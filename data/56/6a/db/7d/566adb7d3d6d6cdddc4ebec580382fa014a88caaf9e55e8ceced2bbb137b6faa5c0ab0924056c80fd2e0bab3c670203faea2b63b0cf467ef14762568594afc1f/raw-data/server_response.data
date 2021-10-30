@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+<head>
+   <meta charset="utf-8">
+   <meta name="viewport" content="width=device-width">
+   <title>Adobe Flash: Bypassing the local sandbox to exfiltrate data, obtain Windows user credentials (CVE-2016-4271) | Björn Ruytenberg
+</title>
+   <link rel="icon" type="image/x-icon" href="/favicon.ico"/>
+   <link rel="icon" type="image/png" href="/favicon.png"/>
+   <link rel="apple-touch-icon" href="/favicon_mobile.png"/>
+   <link rel="stylesheet" type="text/css" href="/css/style.css" >
+   <link rel="stylesheet" type="text/css" href="//cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" >
+   <link rel="alternate" type="application/atom+xml" href="/feed.xml" title="RSS Feed">
+</head>
+<body>
+<div class="container">
+<div class="masthead">
+<div class="masthead-bwlogo"><a href="https://blog.bjornweb.nl"><img src="/assets/bjornweblogo.svg" alt="bjornweb.nl"></a></div>   
+   <h3 class="masthead-title">
+     <small>
+       &nbsp;&nbsp;&nbsp;<a href="/">about</a>
+     </small>
+	 <small>
+       &nbsp;&nbsp;&nbsp;<a href="/#blog">blog</a>
+     </small>
+     <small>
+       &nbsp;&nbsp;&nbsp;<a href="/feed.xml"><i class="fa fa-rss" aria-hidden="true"></i>
+feed</a>
+     </small>
+     <small>
+        &nbsp;&nbsp;&nbsp;<a href="/archive/">archive</a>
+     </small>
+   </h3>
+</div>
+
+<div id="content">
+  <article class='post'>
+  <h1 class='post-title'>Adobe Flash: Bypassing the local sandbox to exfiltrate data, obtain Windows user credentials (CVE-2016-4271)</h1>
+  <div class="post-date">Feb 5, 2017</div>
+
+<p>September 2016 marked the arrival of Flash Player 23. This time, it was more than just a security patch: Adobe disables the local-with-filesystem sandbox from <a href="https://forums.adobe.com/thread/2209269" title="9/13/2016 - Release - Flash Player 23 | Adobe Community">this release</a> forward.</p>
+
+<p>Having been part of Flash since ActionScript 3, introduced some ten years ago, the local sandbox’s demise is pretty significant. For developers, this means they will have to make the necessary adaptions. Ironically, with some of the Flash APIs now being deprecated, local file system interaction likely will require resorting to HTML5 techniques.</p>
+
+<p>Historically, the local sandbox has been a popular target for devising various bypass vulnerabilities. Data exfiltration is one of them. This has resulted in an ongoing arms race, with Adobe blacklisting keywords and pseudo URIs, and white hats (plus others) finding ways around those blacklists.</p>
+
+<p>With the local sandbox seemingly being a popular target, early last year I decided to join the race and have a look as well. This turned up a subtle but interesting flaw. In short, a combination of two URI schemes enable SMB access, sufficient to exfiltrate local data, and expose Windows user credentials to a remote server.</p>
+
+<p>Having reported this design flaw to Adobe, it was acknowledged in <a href="https://helpx.adobe.com/security/products/flash-player/apsb16-29.html">APSB16-29</a> and assigned <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-4271">CVE-2016-4271</a>. It turns out my report contributed to Adobe’s decision to drop the Flash local sandbox, so here’s a write up of how the flaw works.</p>
+
+<h3 id="by-definition-not-so-local">By definition, not so local</h3>
+
+<p>When opening a local SWF file, it is intended to run in the default Flash sandbox dubbed <code class="highlighter-rouge">local-with-filesystem</code>. From <a href="http://help.adobe.com/en_US/flex/using/WS2db454920e96a9e51e63e3d11c0bf6167e-7fff.html">Adobe</a>, we have:</p>
+<blockquote>
+  <p>local file: A local SWF file describes any file referenced by using the “file” protocol or a UNC path, which does not include an IP address or a qualifying domain. For example, “\test\test.swf” and “file:\test.swf” are considered local files, while “\test.com\test.swf” and “\192.168.0.1\test.swf” are not considered local files.</p>
+</blockquote>
+
+<blockquote>
+  <p>local-with-filesystem: The default sandbox for local files. SWF files in this sandbox may not contact the Internet (or any servers) in any way—they may not access network endpoints with addresses such as HTTP URLs.</p>
+</blockquote>
+
+<p>Both definitions are somewhat peculiar. We will illustrate this by discussing the mentioned schemes that locate a resource: <em>UNC</em> and the <em>File URI</em>.</p>
+
+<p>Windows supports the <a href="https://msdn.microsoft.com/en-us/library/gg465305.aspx">UNC scheme</a> to locate shared files and devices. A UNC string has a myriad of possibilities, with paths being expressed using an IP address, FQDN or NetBIOS host name. Hence, UNC paths are quite complex, and most importantly, in principle anything but local. Therefore, to meet the local file definition, Flash’s <code class="highlighter-rouge">URLLoader</code> disallows paths including an IP address, FQDN, or NetBIOS name - but with the latter category still permitting the local host’s name. Examples of valid UNC syntax include</p>
+<div class="highlighter-rouge"><pre class="highlight"><code>\\10.0.0.1\share\remote_resource.txt
+\\[local NetBIOS host]\c$\local_resource.txt
+</code></pre>
+</div>
+<p>where only the second is accepted by Flash.</p>
+
+<p>What about the other option - the <a href="https://en.wikipedia.org/wiki/File_URI_scheme">File URI</a>? This scheme expresses another variety of locations, albeit restricted to the local file system. There is one caveat, though: one path can be expressed in more than one way. From Wikipedia,</p>
+<div class="highlighter-rouge"><pre class="highlight"><code>file://localhost/c|/WINDOWS/clock.avi
+file:///c|/WINDOWS/clock.avi
+file://localhost/c:/WINDOWS/clock.avi
+</code></pre>
+</div>
+<p>all refer to the same resource.  We will see later how this characteristic comes into play.
+<br /></p>
+<h3 id="whats-in-a-scheme-exfiltrating-local-data">What’s in a scheme: exfiltrating local data</h3>
+
+<p>To summarize, we have the UNC and File URI schemes, with Flash restricting the former, and the latter taking only local paths. Now, what if we could combine them in one string? Taking the File URI as the top level, the Win32 Shell API conveniently lets us proceed using UNC notation by prepending the UNC path with <code class="highlighter-rouge">/</code>, and replacing any back slashes with their forward counterpart. We have:</p>
+<div class="highlighter-rouge"><pre class="highlight"><code>(UNC syntax)               \\10.0.0.1\share\remote_resource.txt
+(File URI + modified UNC)  file://///10.0.0.1/share/remote_resource.txt
+</code></pre>
+</div>
+<p>where both refer to the same resource.</p>
+
+<p><code class="highlighter-rouge">URLLoader</code> presumably calls the Win32 API at some point, and so this raises the obvious question of interest: does Flash still restrict UNC when inside a File URI string? Consider these examples:</p>
+<div class="highlighter-rouge"><pre class="highlight"><code>(1) file://///evilserver.com/
+(2) file://///23.100.122.2/
+(3) file://///192.168.1.1/
+</code></pre>
+</div>
+
+<p>(1) and (2) throw a SecurityError as expected:</p>
+
+<p class="img-caption"><img src="https://blog.bjornweb.nl/resources/evilserverdotcom_secerror.png" alt="Trying evilserver.com" />
+Figure 1. Connecting to evilserver.com</p>
+
+<p class="center-image">Interestingly though, (3) throws a different error:
+<img src="https://blog.bjornweb.nl/resources/ipaddr_streamerror_trunc.png" alt="Trying a C IP address" /></p>
+<p class="img-caption">Figure 2. Connecting to an IP address</p>
+
+<p class="center-image">Code #2032 is Flash terminology for <em>Stream Error</em>. Let’s see what actually happens:
+<img src="https://blog.bjornweb.nl/resources/CVE-2016-4271-localfileexfil-wireshark1.png" alt="Wireshark trace 1" /></p>
+<p class="img-caption">Figure 3. Wireshark trace</p>
+
+<p>Success! We have established an SMB connection from the victim’s machine to our remote server.</p>
+
+<p>With <code class="highlighter-rouge">local-with-filesystem</code> providing local file system access, we still need a means to upload the data from the victim’s machine. No Flash API will let us write to SMB resources, so we have to come up with something else. The basic approach is to append file content to the SMB path request. From there, the steps to take include:</p>
+<ul>
+  <li>Format file content to meet SMB path request limits:
+    <ul>
+      <li>Split content into &lt;260 bytes chunks (path <code class="highlighter-rouge">MAX_LEN</code>)</li>
+      <li>URL encode to avoid forbidden characters (e.g. /, \, #, @)</li>
+    </ul>
+  </li>
+  <li>Append chunks to SMB resource requests</li>
+  <li>Make the consecutive requests</li>
+  <li>Capture requests on remote (attacker-controlled) side</li>
+  <li>URL decode, reconstruct complete file on remote side</li>
+</ul>
+
+<p>Having done all that, our malicious Flash application outputs:</p>
+
+<p class="img-caption"><img src="https://blog.bjornweb.nl/resources/CVE-2016-4271-localfileexfil-msedge.png" alt="CVE-2016-4271-localfileexfil-msedge.png" class="center-image" />
+Figure 4. Client-side: exfiltrating local files on Edge</p>
+
+<p>Meanwhile, we create a Python script doubling as SMB server and requests logger. On the attacker-controlled side, we have:</p>
+
+<p class="img-caption"><img src="https://blog.bjornweb.nl/resources/CVE-2016-4271-localfileexfil-terminal.png" alt="CVE-2016-4271-localfileexfil-terminal.png" class="center-image" />
+Figure 5. Server-side: capturing SMB requests</p>
+
+<p>This shows we have succesfully exfiltrated a local file - to be precise, the Windows <code class="highlighter-rouge">hosts</code> file - from the victim’s machine.
+<br /></p>
+<h3 id="smb-at-play-leaking-windows-user-credentials">SMB at play: leaking Windows user credentials</h3>
+<p>Server Message Block, commonly abbreviated as <a href="https://en.wikipedia.org/wiki/Server_Message_Block">SMB</a>, is the protocol of choice for sharing files over Windows networks.</p>
+
+<p>SMB’s primary authentication scheme uses NTLM hashing to send over user passwords. This hash should be handled with caution: an 8-character password permutation can be bruteforced <a href="https://arstechnica.com/security/2012/12/25-gpu-cluster-cracks-every-standard-windows-password-in-6-hours/">in under 6 hours</a>, or if you are unlucky, less with a decent rainbow table.</p>
+
+<p>Unfortunately, keeping your hash private may not be that trivial. A victim’s machine can be made to transmit user credentials along with any of its SMB requests. One option is to have the SMB server deny access without authentication, effectively signalling Windows to try logging on with current user credentials. In essence, this translates to sending the username in plain text as well as the NTLM password hash. Hence, all it takes for an attacker to obtain user credentials is triggering Windows to connect to their malicious SMB server, let that SMB server deny access without authentication, after which the Windows machine will send the password hash.</p>
+
+<p><a href="https://github.com/CylanceSPEAR/SMBTrap">SMBtrap</a>, a Python script using <code class="highlighter-rouge">impacket</code>’s SMB support, leverages this characteristic to do just that. It hosts an SMB server, performs protocol negotiation and session setup, and finally terminates at the point where it receives user credentials:</p>
+
+<p class="img-caption"><img src="https://blog.bjornweb.nl/resources/smbtrap1.png" alt="smbtrap" class="center-image" />
+Figure 5. SMBtrap output</p>
+<p>In the above example, I have provided SMBtrap a precomputed NTLMv2 hash for the password ‘123321ab’. However, SMBtrap can be adapted to incorporate a real dictionary or invoke a tool like <a href="https://hashcat.net/hashcat/">Hashcat</a>.</p>
+
+<p>One may consider this flaw particularly worrying. A typical Windows account, being part of the <em>Administrators</em> group, has the ability to self-elevate. While this would still require an RCE, privilege escalation becomes significantly easier. <a href="https://msdn.microsoft.com/en-us/library/windows/desktop/aa378184(v=vs.85).aspx">Impersonating the user</a> and then using the returned token handle will usually suffice to run arbitrary processes with elevated privileges.</p>
+
+<h3 id="a-word-about-affected-versions">A word about affected versions</h3>
+
+<p>The flaw as described descends from Flash Player’s security design. I have verified all supported browsers and Microsoft Office products are vulnerable. Hence, this raises the question: how long has the flaw been part of Flash?</p>
+
+<p>To answer this question, we return to ActionScript 3. Flash Player 9, released in June 2006, <a href="https://www.adobe.com/devnet/actionscript/articles/six_reasons_as3.html">introduced</a> this scripting language version and its corresponding sandbox policies. Attempting to run the SWF in Flash Player 9 gives:</p>
+
+<p class="img-caption"><img src="https://blog.bjornweb.nl/resources/winxp_flash9.png" alt="flashplayer9" class="center-image" />
+Figure 6. PoC on Flash Player 9</p>
+
+<p>That looks surprisingly similar.
+<br /></p>
+<h3 id="conclusion">Conclusion</h3>
+
+<p>The flaw at hand is subtle but unforgiving: the File URI, being taken as local, effectively whitewashes the remote UNC path and therefore slips through Adobe’s blacklist.</p>
+
+<p>Arguably, a blacklist approach is likely to fail at some point. That is, without even having considered other allowed schemes, like  <a href="https://msdn.microsoft.com/en-us/windows/uwp/launch-resume/reserved-uri-scheme-names">pseudo</a> and <a href="https://msdn.microsoft.com/en-us/library/aa767914(v=vs.85).aspx">custom</a> URIs. On the other hand, with Windows enabling to combine multiple URI schemes in one, constructing a proper whitelist would seem a difficult task.</p>
+
+<p>Fortunately, the local sandbox’s demise renders this question moot. For websites still requiring Adobe’s runtime, browsing the web just got a little safer as the process of deprecating Flash continues.
+<br /><br /></p>
+
+<h3 id="overview">Overview</h3>
+
+<h5 id="affected-host-environments">Affected host environments</h5>
+<div class="highlighter-rouge"><pre class="highlight"><code>Firefox
+Chrome
+Internet Explorer 6 to 11
+Edge
+Microsoft Office 2010, 2013 and 2016
+</code></pre>
+</div>
+
+<h5 id="affected-platforms">Affected platforms</h5>
+<div class="highlighter-rouge"><pre class="highlight"><code>Flash Player 9.0.16.0 to 22.0.0.211
+Windows XP, Vista, 7, 8.x and 10
+</code></pre>
+</div>
+
+<h5 id="timeline">Timeline</h5>
+<div class="highlighter-rouge"><pre class="highlight"><code>27-03-2016: Vulnerability reported to Adobe PSIRT.
+28-03-2016: Adobe acknowledges the vulnerability and assigns it PSIRT-5019.
+10-04-2016: Requested status update. Adobe replies various mitigation options are being evaluated.
+26-04-2016: Requested status update. Adobe replies it plans to introduce a new sandbox security policy: the local-with-filesystem sandbox will be disabled by default. Adobe expects this policy to arrive in Flash Player in Fall 2016.
+13-09-2016: Adobe fixes the vulnerability in Flash Player 23.0.0.162.
+05-02-2017: Vulnerability published.
+</code></pre>
+</div>
+
+<h5 id="related-articles">Related articles</h5>
+<ul>
+  <li><a href="https://helpx.adobe.com/security/products/flash-player/apsb16-29.html">Adobe Security Bulletin APSB16-29</a></li>
+  <li><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-4271">CVE-2016-4271</a></li>
+  <li><a href="https://www.trendmicro.com/vinfo/us/threat-encyclopedia/vulnerability/10272/adobe-flash-player-security-bypass-vulnerability-cve20164271">Trend Micro - Adobe Flash Player Security Bypass Vulnerability (CVE-2016-4271)</a></li>
+  <li><a href="http://www.ru.nl/icis/news/recent_news/@1084943/radboud-student-discovers-decade-old-security-flaw/">Radboud University - Radboud student discovers decade-old security flaw in Adobe Flash</a></li>
+  <li><a href="https://www.security.nl/posting/506791/Radboud-student+ontdekt+10+jaar+oud+lek+in+Flash+Player">Security.NL (Dutch) - Radboud-student ontdekt 10 jaar oud lek in Flash Player</a></li>
+  <li><a href="http://securitytracker.com/id/1036791">SecurityTracker - Adobe Flash Player Bugs Let Remote Users Obtain Potentially Sensitive Information and Execute Arbitrary Code</a></li>
+</ul>
+
+<section id="social-share-section">
+
+  
+  <!--- Share on Twitter -->
+    <a href="https://twitter.com/intent/tweet?text=Adobe+Flash%3A+Bypassing+the+local+sandbox+to+exfiltrate+data%2C+obtain+Windows+user+credentials+%28CVE-2016-4271%29+https://blog.bjornweb.nl/2017/02/flash-bypassing-local-sandbox-data-exfiltration-credentials-leak/"
+      class="btn btn-social-icon btn-twitter" title="Share on Twitter">
+      <span class="fa fa-fw fa-twitter" aria-hidden="true"></span>
+    </a>
+  
+
+  
+  <!--- Share on Facebook -->
+    <a href="https://www.facebook.com/sharer/sharer.php?u=https://blog.bjornweb.nl/2017/02/flash-bypassing-local-sandbox-data-exfiltration-credentials-leak/"
+      class="btn btn-social-icon btn-facebook" title="Share on Facebook">
+      <span class="fa fa-fw fa-facebook" aria-hidden="true"></span>
+    </a>
+  
+
+  
+
+  
+  <!--- Share on LinkedIn -->
+    <a href="https://www.linkedin.com/shareArticle?mini=true&url=https://blog.bjornweb.nl/2017/02/flash-bypassing-local-sandbox-data-exfiltration-credentials-leak/"
+      class="btn btn-social-icon btn-linkedin" title="Share on LinkedIn">
+      <span class="fa fa-fw fa-linkedin" aria-hidden="true"></span>
+    </a>
+  
+
+</section>
+
+
+<small>Tags: 
+
+  <a href="/tags#vulnerability research">vulnerability research</a>&nbsp;</li>
+
+  <a href="/tags#adobe flash">adobe flash</a>&nbsp;</li>
+
+  <a href="/tags#smb">smb</a>&nbsp;</li>
+
+</small>
+
+</article>
+
+<ul class="pager">
+        
+          <a href="/2017/01/foxit-reader-sandbox-bypass-information-disclosure-vulnerability/" data-toggle="tooltip" data-placement="top" title="Foxit Reader: Bypassing the Safe Mode sandbox to execute arbitrary code, exfiltrate data (ZDI-16-395)">&larr; Foxit Reader: Bypassing the Safe Mode sandbox to execute arbitrary code, exfiltrate data (ZDI-16-395)</a>
+			
+				<br>
+			
+        
+        
+          <a href="/2017/08/flash-remote-sandbox-escape-windows-user-credentials-leak/" data-toggle="tooltip" data-placement="top" title="Playing in the Remote Sandbox: Adobe Flash Windows User Credentials Disclosure Vulnerability (CVE-2017-3085)">&rarr; Playing in the Remote Sandbox: Adobe Flash Windows User Credentials Disclosure Vulnerability (CVE-2017-3085)</a>
+        
+</ul>
+
+</div>
+
+<div class="footer">
+  <a href="/feed.xml" title="RSS Feed">
+      <span class="fa fa-rss" aria-hidden="true"></span>
+   </a>
+   <!--sse--><a href="/cdn-cgi/l/email-protection#183e3b2120233e3b29282e233e3b292929233e3b29292c233e3b292928233e3b2e2c233e3b2120233e3b29282e233e3b292929233e3b29292c233e3b292928233e3b292921233e3b292829233e3b2120233e3b2c2e233e3b292928233e3b29282023" title="Contact Me">
+      <span class="fa fa-envelope" aria-hidden="true"></span>
+   </a><!--/sse-->
+   <a href="https://twitter.com/0Xiphorus" title="@0Xiphorus">
+      <span class="fa fa-twitter" aria-hidden="true"></span>
+   </a>
+</div>
+
+</div><!-- .container -->
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"rayId":"6a65cf3cfac761f9","version":"2021.10.0","r":1,"token":"9d66a571a8a24eaf88d9a19d942ffa38","si":100}'></script>
+</body>
+</html>

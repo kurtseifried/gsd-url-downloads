@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag -->
+<title>Yubico libu2f-host Vulnerability - Part Two | invd blog</title>
+<meta name="generator" content="Jekyll" />
+<meta property="og:title" content="Yubico libu2f-host Vulnerability - Part Two" />
+<meta name="author" content="Christian Reitter" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="As described in part one, I discovered in late 2018 through manual code analysis that the Yubico libu2f-host host-side C library contained an out of bounds write vulnerability." />
+<meta property="og:description" content="As described in part one, I discovered in late 2018 through manual code analysis that the Yubico libu2f-host host-side C library contained an out of bounds write vulnerability." />
+<link rel="canonical" href="https://blog.inhq.net/posts/yubico-libu2f-host-vuln-part2/" />
+<meta property="og:url" content="https://blog.inhq.net/posts/yubico-libu2f-host-vuln-part2/" />
+<meta property="og:site_name" content="invd blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2019-11-30T17:30:00+01:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Yubico libu2f-host Vulnerability - Part Two" />
+<script type="application/ld+json">
+{"description":"As described in part one, I discovered in late 2018 through manual code analysis that the Yubico libu2f-host host-side C library contained an out of bounds write vulnerability.","@type":"BlogPosting","datePublished":"2019-11-30T17:30:00+01:00","url":"https://blog.inhq.net/posts/yubico-libu2f-host-vuln-part2/","mainEntityOfPage":{"@type":"WebPage","@id":"https://blog.inhq.net/posts/yubico-libu2f-host-vuln-part2/"},"author":{"@type":"Person","name":"Christian Reitter"},"headline":"Yubico libu2f-host Vulnerability - Part Two","dateModified":"2019-11-30T17:30:00+01:00","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/css/style.css"><link type="application/atom+xml" rel="alternate" href="https://blog.inhq.net/feed.xml" title="invd blog" /><script type="text/javascript">
+  var _paq = window._paq || [];
+  _paq.push(['trackPageView']);
+  _paq.push(['enableLinkTracking']);
+  _paq.push(['setSecureCookie', true]);
+  _paq.push(['setVisitorCookieTimeout', 60 * 60 * 24 * 90]);
+  _paq.push(['setReferralCookieTimeout', 60 * 60 * 24 * 90]);
+  _paq.push(['appendToTrackingUrl', 'bots=1']);
+  (function() {
+    var u="https://mato.inhq.net/";
+    _paq.push(['setTrackerUrl', u+'m']);
+    _paq.push(['setSiteId', '1']);
+    var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+    g.type='text/javascript'; g.async=true; g.defer=true; g.src=u+'mat.js'; s.parentNode.insertBefore(g,s);
+  })();
+  </script></head>
+<body><header class="site-header"><noscript><img src="https://mato.inhq.net/m?rec=1&bots=1&idsite=1" alt="" style="position:absolute; visibility:hidden" /></noscript><div class="wrapper"><a class="site-title" rel="author" href="/">invd blog</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger">
+        <a class="page-link" href="/archive/">Archive</a><a class="page-link" href="/cve/">CVEs</a><a class="page-link" href="/consulting/">Consulting</a><a class="page-link" href="/about/">About</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Yubico libu2f-host Vulnerability - Part Two</h1>
+    <p class="post-meta"><time class="dt-published" datetime="2019-11-30T17:30:00+01:00" itemprop="datePublished">
+        Nov 30, 2019
+      </time>• <span itemprop="author" itemscope itemtype="http://schema.org/Person">
+            <span class="p-author h-card" itemprop="name">Christian Reitter</span></span><br/>ID:
+        
+          
+          <span>CVE-2019-9578</span>
+        <br/>
+      Related articles:
+      <a href="/posts/yubico-libyubihsm-vuln2/">Yubico libyubihsm Vulnerabilities (CVE-2021-27217, CVE-2021-32489)</a>
+          • <a href="/posts/yubico-libyubihsm-vuln/">Yubico libyubihsm Vulnerabilities</a>
+          • <a href="/posts/yubico-libykpiv-vuln/">Yubico libykpiv Vulnerabilities</a>
+          </p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>As described in <a href="/posts/yubico-libu2f-host-vuln-part1/">part one</a>, I discovered in late 2018 through manual code analysis that the Yubico <a href="https://developers.yubico.com/libu2f-host/">libu2f-host</a> host-side C library contained an <strong>out of bounds write vulnerability</strong>.</p>
+
+<p>Shortly after the fix was released in February 2019, I found a second, closely related vulnerability in the same code section which can result in <strong>information disclosure</strong> through leaked memory. MITRE assigned <strong>CVE-2019-9578</strong> for this issue.</p>
+
+<div id="toc-container">
+  <h2 class="no_toc">Contents</h2>
+<ul id="markdown-toc">
+  <li><a href="#consulting" id="markdown-toc-consulting">Consulting</a></li>
+  <li><a href="#the-vulnerability" id="markdown-toc-the-vulnerability">The vulnerability</a>    <ul>
+      <li><a href="#attack-scenario-and-security-implications" id="markdown-toc-attack-scenario-and-security-implications">Attack scenario and security implications</a></li>
+    </ul>
+  </li>
+  <li><a href="#responsible-disclosure" id="markdown-toc-responsible-disclosure">Responsible disclosure</a>    <ul>
+      <li><a href="#relevant-projects" id="markdown-toc-relevant-projects">Relevant projects</a></li>
+      <li><a href="#detailed-timeline" id="markdown-toc-detailed-timeline">Detailed timeline</a></li>
+      <li><a href="#bug-bounty" id="markdown-toc-bug-bounty">Bug bounty</a></li>
+    </ul>
+  </li>
+</ul>
+
+</div>
+
+<h2 id="consulting">Consulting</h2>
+
+<p><i>I’m a freelance Security Consultant and currently available for new projects.
+  If you are looking for assistance to secure your projects or organization, <a href="/consulting">get in touch</a>.</i></p>
+
+<h2 id="the-vulnerability">The vulnerability</h2>
+<p>Please see the previous code descriptions in <a href="/posts/yubico-libu2f-host-vuln-part1/">part one</a> for the relevant background information.</p>
+
+<p>After the 1.1.7 patch, the relevant part of <code>init_device</code> looked like this:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="k">if</span> <span class="p">(</span><span class="n">u2fh_sendrecv</span>
+    <span class="p">(</span><span class="n">devs</span><span class="p">,</span> <span class="n">dev</span><span class="o">-&gt;</span><span class="n">id</span><span class="p">,</span> <span class="n">U2FHID_INIT</span><span class="p">,</span> <span class="n">nonce</span><span class="p">,</span> <span class="k">sizeof</span> <span class="p">(</span><span class="n">nonce</span><span class="p">),</span> <span class="n">resp</span><span class="p">,</span>
+     <span class="o">&amp;</span><span class="n">resplen</span><span class="p">)</span> <span class="o">==</span> <span class="n">U2FH_OK</span><span class="p">)</span>
+  <span class="p">{</span>
+    <span class="n">U2FHID_INIT_RESP</span> <span class="n">initresp</span><span class="p">;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">resplen</span> <span class="o">&gt;</span> <span class="k">sizeof</span> <span class="p">(</span><span class="n">initresp</span><span class="p">))</span>
+    <span class="p">{</span>
+      <span class="k">return</span> <span class="n">U2FH_MEMORY_ERROR</span><span class="p">;</span>
+    <span class="p">}</span>
+    <span class="n">memcpy</span> <span class="p">(</span><span class="o">&amp;</span><span class="n">initresp</span><span class="p">,</span> <span class="n">resp</span><span class="p">,</span> <span class="n">resplen</span><span class="p">);</span>
+    <span class="n">dev</span><span class="o">-&gt;</span><span class="n">cid</span> <span class="o">=</span> <span class="n">initresp</span><span class="p">.</span><span class="n">cid</span><span class="p">;</span>
+    <span class="n">dev</span><span class="o">-&gt;</span><span class="n">versionInterface</span> <span class="o">=</span> <span class="n">initresp</span><span class="p">.</span><span class="n">versionInterface</span><span class="p">;</span>
+    <span class="n">dev</span><span class="o">-&gt;</span><span class="n">versionMajor</span> <span class="o">=</span> <span class="n">initresp</span><span class="p">.</span><span class="n">versionMajor</span><span class="p">;</span>
+    <span class="n">dev</span><span class="o">-&gt;</span><span class="n">versionMinor</span> <span class="o">=</span> <span class="n">initresp</span><span class="p">.</span><span class="n">versionMinor</span><span class="p">;</span>
+    <span class="n">dev</span><span class="o">-&gt;</span><span class="n">capFlags</span> <span class="o">=</span> <span class="n">initresp</span><span class="p">.</span><span class="n">capFlags</span><span class="p">;</span>
+  <span class="p">}</span></code></pre></figure>
+
+<p><a href="https://github.com/Yubico/libu2f-host/blob/4d490bb2c528c351e32837fcdaebd998eb5d3f27/u2f-host/devs.c#L245-L260" class="highlightref">devs.c</a></p>
+
+<p>The <code>if (resplen &gt; sizeof (initresp))</code> guard condition prevents malicious inputs from overflowing the target struct by disallowing larger <code>resplen</code> values. This resolves the buffer overflow.</p>
+
+<p>However, this code still allows a malicious U2F token to specify a <strong>smaller</strong> than expected <code>resplen</code> value.<br />
+If <code>resplen</code> is reported to be <code>0</code> by the token, the <code>memcpy</code> operation does not do anything and the <code>initresp</code> struct is used with it’s <strong>original uninitialized</strong> memory contents. As a consequence, previously discarded stack memory is written to <code>dev-&gt;cid</code> and other fields.</p>
+
+<p>Since the <code>CID</code> is used during the following communication with the U2F token, <strong>four bytes</strong> of discarded stack memory are leaked to the USB bus. Similarly, other userspace programs might be able to obtain up to <strong>four bytes</strong> of leaked information via the version and capability fields exposed by the library.</p>
+
+<h3 id="attack-scenario-and-security-implications">Attack scenario and security implications</h3>
+<p>Similarly to the previous vulnerability, the attack applies to host systems which use of libu2f-host through</p>
+<ul>
+  <li>an authentication module like <strong>pam_u2f.so</strong> (<em>privileged execution</em>)</li>
+  <li>other userspace applications that depend on libu2f-host such as <strong>yubikey-manager</strong></li>
+  <li>the <strong>command-line tool</strong> bundled with libu2f-host</li>
+</ul>
+
+<p>Any malicious USB device which enumerates as a recognized U2F token class can perform this attack (<em>potentially repeatedly</em>) to obtain discarded memory contents. libu2f-host versions before 1.1.7 are affected as well.</p>
+
+<p>It is difficult to assess the exact practical impact of the leaked memory since the relevant memory contents are system- and execution-specific. To my knowledge, the information leak cannot be used to read into currently reserved memory such as the value of stack canaries, so it does not weaken protections that are relevant to the previously reported buffer overflow vulnerability.</p>
+
+<h4 id="cvss-score">CVSS score</h4>
+<p>I would rate this with a <a href="https://nvd.nist.gov/vuln-metrics/cvss/v3-calculator?vector=AV:P/AC:L/PR:N/UI:R/S:U/C:L/I:N/A:N">CVSSv3 score of 2.1</a> via <em>AV:P/AC:L/PR:N/UI:R/S:U/C:L/I:N/A:N</em>.</p>
+
+<h4 id="mitigations">Mitigations</h4>
+<p>Stack canaries and other hardening techniques do not detect information leaks and therefore offer no meaningful protection.
+The use of <a href="https://clang.llvm.org/docs/MemorySanitizer.html">Memory Sanitizer</a> would detect and prevent the leaks, but Memory Sanitizer is not meant to be included as a hardening feature in production binaries.</p>
+
+<h4 id="fingerprinting">Fingerprinting</h4>
+<p>As noted in the previous article, libu2f-host used a fixed “nonce” of <code>{ 0x8, 0x7, 0x6, 0x5, 0x4, 0x3, 0x2, 0x1 }</code> to communicate with tokens, which gave tokens an excellent way to recognize the library. <a href="https://github.com/Yubico/libu2f-host/commit/2892b9c15f7c1c84691013bdcb388001298391b3">The fix</a> briefly missed the 1.1.7 release, so the fingerprinting technique is still relevant for the information leak as well.</p>
+
+<p>The nonce issue was fixed with the 1.1.8 release.</p>
+
+<h2 id="responsible-disclosure">Responsible disclosure</h2>
+<p>I responsibly disclosed the vulnerability to Yubico in February.</p>
+
+<p>Due to the lower severity, they did not issue a second security advisory. They agreed to track it with a second CVE, which I requested from MITRE. MITRE assigned <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-9578">CVE-2019-9578</a> for the issue.</p>
+
+<p>The fix was shipped less than two weeks after the initial disclosure, which is a very decent time for an issue resolution.</p>
+
+<h3 id="relevant-projects">Relevant projects</h3>
+
+<p>See the <a href="/posts/yubico-libu2f-host-vuln-part1/">previous article</a> for the full list of relevant sources.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>product</th>
+      <th>source</th>
+      <th>fix</th>
+      <th>vendor references</th>
+      <th>CVE</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Yubico libu2f-host library</td>
+      <td><a href="https://github.com/Yubico/libu2f-host">Github</a></td>
+      <td>1.1.8 via <a href="https://github.com/Yubico/libu2f-host/commit/e4bb58cc8b6202a421e65f8230217d8ae6e16eb5">1</a></td>
+      <td><a href="https://developers.yubico.com/libu2f-host/Release_Notes.html">Release notes</a></td>
+      <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-9578">CVE-2019-9578</a></td>
+    </tr>
+  </tbody>
+</table>
+
+<p><a href="https://bugs.gentoo.org/679724">Gentoo</a> and <a href="https://lists.fedoraproject.org/archives/list/package-announce@lists.fedoraproject.org/message/S4YCFMSNMXZ7XC4U6WXPQA7JCXC6VOAJ/">Fedora</a> included the fix in their patch releases for the previous vulnerability. <a href="http://lists.suse.com/pipermail/sle-security-updates/2019-July/005663.html">SUSE</a> issued a separate advisory.</p>
+
+<h3 id="detailed-timeline">Detailed timeline</h3>
+
+<p>Please see the timeline of the previous libu2f-host vulnerability article for reference.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>info</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2019-02-20</td>
+      <td>Second vulnerability is disclosed to Yubico</td>
+    </tr>
+    <tr>
+      <td>2019-02-21</td>
+      <td>Yubico confirms the issue</td>
+    </tr>
+    <tr>
+      <td>2019-03-05</td>
+      <td>Patched version 1.1.8 is released</td>
+    </tr>
+    <tr>
+      <td>2019-03-05</td>
+      <td>CVE is assigned by MITRE</td>
+    </tr>
+    <tr>
+      <td>2019-04-09</td>
+      <td>Fedora releases a patch for Fedora30</td>
+    </tr>
+    <tr>
+      <td>2019-05-19</td>
+      <td>Fedora releases a patch for Fedora29</td>
+    </tr>
+    <tr>
+      <td>2019-06-05</td>
+      <td>Gentoo switches to a patched version</td>
+    </tr>
+    <tr>
+      <td>2019-07-19</td>
+      <td>SUSE publishes a security advisory</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3 id="bug-bounty">Bug bounty</h3>
+<p>Yubico provided a number of their hardware products as a bug bounty for this issue.</p>
+
+  </div>
+
+
+  <a class="u-url" href="/posts/yubico-libu2f-host-vuln-part2/" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col one-half"><ul class="contact-list">
+          <li class="p-name">
+            <b>Christian Reitter</b>
+          </li></ul></div>
+
+      <div class="footer-col one-half">
+        <p>Information security and other interests.</p>
+      </div>
+    </div>
+
+    <div class="social-ref"><ul class="social-ref-list"><li><a rel="me" href="https://github.com/invd" title="invd"><svg class="svg-icon grey"><use xlink:href="/assets/minima-icons.svg#github"></use></svg></a></li><li><a href="/feed.xml" title="rss"><svg class="svg-icon grey"><use xlink:href="/assets/minima-icons.svg#rss"></use></svg></a></li></ul>
+</div>
+
+  </div>
+</footer>
+</body>
+
+</html>

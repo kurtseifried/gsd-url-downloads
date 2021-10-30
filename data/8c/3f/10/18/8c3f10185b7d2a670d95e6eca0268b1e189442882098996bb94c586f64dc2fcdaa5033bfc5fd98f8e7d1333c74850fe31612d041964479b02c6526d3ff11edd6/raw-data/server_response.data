@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Arinerron</title>
+
+        <meta property="og:title" content="Arinerron">
+        <meta property="og:locale" content="en_US">
+        <meta property="og:description" content="I'm Aaron (aka: Arinerron), an 18 year old security enthusiast, and a student full-stack web and software developer running Arch Linux.">
+        <link rel="canonical" href="https://aaronesau.com/">
+        <meta property="og:url" content="https://aaronesau.com/">
+        <meta property="og:site_name" content="Arinerron">
+
+        <link href="/css/main.css" rel="stylesheet preload">
+        <link href="/css/dark.css" rel="stylesheet preload">
+        <link href="/css/tango.css" rel="stylesheet preload">
+
+        <link href="/images/icon.png" rel="icon" rel="preload">
+
+        <meta name="description" content="I'm Aaron (aka: Arinerron), an 18 year old security enthusiast, and a student full-stack web and software developer running Arch Linux." />
+        <meta name="keywords" content="Arinerron,Arinerron,Aaron,arin,erron,arinerron,arin erron,arin-erron,aarone,aaron esau,esau,aaronesau,aaron-esau" />
+        <meta name="theme-color" content="#121212">
+        <meta name="msapplication-navbutton-color" content="#121212">
+        <meta name="apple-mobile-web-app-status-bar-style" content="#121212">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+
+        <script src="/scripts/main.js"></script>
+    </head>
+    <body>
+        <div class="center-column">
+            <div class="header">
+                <center class="contact-methods-center">
+                    <div class="contact-methods">
+                        <div><a href="/">Home</a></div>
+                        <div><a href="/about/">About Me</a></div>
+                        <div><a href="/blog/">Blog</a></div>
+                    </div>
+                    <hr>
+                </center>
+            </div>
+            <br>
+            <div class="center-column-content" id="center-column-content">
+                <link href="/css/blog.css" rel="stylesheet">
+
+            <center class="title">
+                <a class="title-text" href="/blog/">Aaron's Blog</a>
+            </center>
+            <p><a rel="nofollow" class="post-title-2" href="/blog/post/6">uftpd - Buffer Overflow and Directory Traversal Writeup</a></p>
+
+<p>This post is a very informal writeup about multiple vulnerabilities in uftpd FTP server, some of which could lead to remote code execution.</p>
+
+<hr />
+
+<h1>Introduction</h1>
+
+<p>I've been wanting to find a binary exploitation-related vulnerability in something that isn't a Capture The Flag challenge for a very long time. I know that I am not nearly as experienced as many people are, so in the past when I've searched, I would quickly begin to doubt that I would find anything and lose motivation.</p>
+
+<p>On August 28, 2019, I sat down, picked an FTP server written in C to target, and told myself that I wouldn't stop and I wouldn't go to sleep until I found something (spoiler: I got to sleep that night).</p>
+
+<ul>
+<li>The section titled "Discovery Process" explains how I found the vulnerabilities and a bit about their root causes.</li>
+<li>If you want a tl;dr of the vulnerabilities I found, skip to the section titled "Summary of Vulnerabilities".</li>
+</ul>
+
+<hr />
+
+<h1>Discovery Process</h1>
+
+<p>In this section I will walk through my thought process as I was discovering these vulnerabilities. I am writing this so that in the future I can look back and read about my first binary exploitation related vulnerability that I found outside of CTF. I'm sure I'll be glad I did it in a few years. :)</p>
+
+<p>I chose the FTP server <a rel="nofollow" href="https://github.com/troglobit/uftpd">uftpd</a> because I understand the FTP protocol very well, it is a plaintext protocol (mostly/usually/sometimes), and it involves a lot of string parsing. So, it seems prone to off-by-one (which could lead to a buffer overflow) or heap corruption-related vulnerabilities.</p>
+
+<p>I wrote a fuzzer and ran it the entire time I was testing, but clearly I did not do a good job of writing it, because the fuzzer did not cause a single crash the entire time.</p>
+
+<p>I started out by looking for uses of inherently vulnerable functions that should absolutely never be used. And wow. How stupid am I? It's modern software compiled with a modern compiler. No <code>gets</code> anywhere.</p>
+
+<p>Then, I began looking for uses of functions that could be used insecurely that involve string manipulation (e.g. <code>strcat</code> / <code>strncat</code>, <code>strcpy</code> / <code>strncpy</code>, etc). Plenty of uses, but all were safe. No dice. I also carefully looked at uses of <code>malloc</code> and <code>free</code>.</p>
+
+<p>Keep in mind, at this point, I was only looking for obvious buffer overflows, use-after-frees, off-by-ones, and format string injection vulnerabilities. After a few dead ends I followed and several hours wasted, I really wished I hadn't committed myself to finding something.</p>
+
+<h2>Buffer Overflow Vulnerability</h2>
+
+<p>For some reason I thought about what <a rel="nofollow" href="https://twitter.com/fharding0">a friend</a> had told me at Defcon about how Go is basically bulletproof as far as SQL injection goes. He told me about some awful code he had seen where the author had basically gone out of the way to make a program vulnerable by constructing the query with <code>sprintf</code> instead of the built-in parameterized library's functions. That made me think to re-check all uses of <code>^[a-z]*printf$</code> in the code.</p>
+
+<p>I eventually came upon the <code>handle_PORT</code> function in <a rel="nofollow" href="https://github.com/troglobit/uftpd/blob/master/src/ftpcmd.c"><code>ftpcmd.c</code></a>:</p>
+
+<p><img src="https://aaronesau.com/blogres/6_uftpd-handle_PORT.png" alt="handle_PORT" /></p>
+
+<p>The buffer size is <code>INET_ADDRSTRLEN</code>? What's that?</p>
+
+<p>A quick search shows that it's the value <code>16</code> (the maximum length of an IPv4 address in <code>###.###.###.###</code> format).</p>
+
+<p>Hold up. That <a rel="nofollow" href="https://github.com/troglobit/uftpd/blob/master/src/ftpcmd.c#L444">sprintf line</a> is using the <code>%d</code> format specifier which takes a signed integer. The string representation of a signed integer is not at most 4 bytes like an (octet + '.' char) is, and it isn't checking the value of each octet to ensure that they are each between 0 and 255 inclusive.</p>
+
+<p>Sick! A buffer overflow vulnerability!</p>
+
+<p><img src="https://aaronesau.com/blogres/6_uftpd-pwned.png" alt="pwned" /></p>
+
+<p>Crap, a stack canary. Right, this isn't a CTF challenge.</p>
+
+<p><img src="https://aaronesau.com/blogres/6_uftpd-canary.png" alt="canary" /></p>
+
+<p>I tried to find a way to leak memory, but other than leaking memory into logs (which maybe you could consider a vulnerability?), I couldn't get anywhere. So an attacker would have to either find a way to leak the stack canary that I couldn't or would have to brute force the canary.</p>
+
+<p>Also, there's another restriction: the address must be constructed out of the characters <code>[0-9\-]</code> because of the <code>%d</code> specifier. Considering I can't bypass the stack canary, I haven't bothered looking into this.</p>
+
+<p>Had the FTP server had written the address and port back to the user without updating it first anywhere in the code, I would've been able to leak memory by crafting a <code>PORT</code> command with not enough integers to satisfy the format.</p>
+
+<p>And even if somehow I leaked memory and somehow I got lucky with ASLR and the addresses were all ASCII numeric, it wouldn't be possible to exploit unless uftpd was compiled without stack canaries since I cannot write a null byte.</p>
+
+<p>To reproduce this, try sending this in:</p>
+
+<pre><code>USER anonymous
+PASS hi
+PORT 13371337,13371337,13371337,13371337,1,1
+</code></pre>
+
+<h2>Multiple Directory Traversal Vulnerabilities (Chroot Bypass)</h2>
+
+<p>Sigh. So that was fun finding that buffer overflow vuln. It is 12am by this point and I could go to sleep now, but why sleep when at peak performance?</p>
+
+<p>I saw this function at the top of <a rel="nofollow" href="https://github.com/troglobit/uftpd/blob/master/src/common.c#L22">common.c</a>.</p>
+
+<p><img src="https://aaronesau.com/blogres/6_uftpd-chroot.png" alt="chroot" /></p>
+
+<p>The <code>compose_abspath</code> function that protects against directory traversal attacks was far too long for me to bother reading (that's not its full source code in the above screenshot). So, just to confirm to myself that it wasn't vulnerable, I pulled up my favorite FTP client, netcat:</p>
+
+<p><img src="https://aaronesau.com/blogres/6_uftpd-verycool.png" alt="verycool" /></p>
+
+<p>Oh my... is it really...</p>
+
+<p><img src="https://aaronesau.com/blogres/6_uftpd-handle_MKD.png" alt="handle_MKD" /></p>
+
+<p>Here is the source code of <code>compose_abspath</code>:</p>
+
+<p><img src="https://aaronesau.com/blogres/6_uftpd-abspath.png" alt="chroot" /></p>
+
+<p>The vulnerability is in the function it calls, <code>compose_path</code>:</p>
+
+<p><img src="https://aaronesau.com/blogres/6_uftpd-abspath2.png" alt="abspath2" /></p>
+
+<p>Then I tested most of the file I/O FTP commands and every command I tested was vulnerable (as they all use the same chroot jailing function <code>compose_abspath</code>).</p>
+
+<p>That's right. Arbitrary file write/read anywhere on the operating system that I have access to. It should be easy to get remote code execution from this if you write a backdoor to a webserver root with CGI enabled. I wrote a <a rel="nofollow" href="https://github.com/Arinerron/uftp_dirtrav/blob/master/uftpd_dirtrav.py">proof of concept</a> to automate that.</p>
+
+<p><img src="https://aaronesau.com/blogres/6_uftpd-passwd.png" alt="passwd" /></p>
+
+<p>To reproduce this, all you have to do is, after setting up a listener with <code>nc -lvp 1258</code>, send in:</p>
+
+<pre><code>USER anonymous
+PASS hi
+PORT 127,0,0,1,1,1002
+RETR ../../../etc/passwd
+</code></pre>
+
+<p>But wait&mdash;it gets even better.</p>
+
+<p>Think you need authentication to exploit any of these so far? Think again! You don't even need to login as the anonymous user to exploit either of those.</p>
+
+<ul>
+<li><strong>buffer overflow without authentication:</strong>
+<img src="https://aaronesau.com/blogres/6_uftpd-ez1.png" alt="no auth1" /></li>
+<li><strong>directory traversal without authentication</strong>
+<img src="https://aaronesau.com/blogres/6_uftpd-ez2.png" alt="no auth2" /></li>
+</ul>
+
+<p>This vulnerability is not exploitable if the FTP server is running as root; when running as root, it uses the "real" <code>chroot</code> instead of the custom (vulnerable) chroot implementation.</p>
+
+<p>This bug was introduced in commit <code>ce1c9234c78eb3b939f465bcb40c19cd5141eab7</code> and fixed in commit <code>455b47d3756aed162d2d0ef7f40b549f3b5b30fe</code>.</p>
+
+<hr />
+
+<h1>Summary of Vulnerabilities</h1>
+
+<h2>Unauthenticated Buffer Overflow Vulnerability in <code>handle_PORT</code> in <code>ftpcmd.c</code></h2>
+
+<ul>
+<li><strong>Product:</strong> uftpd &lt;=2.10</li>
+<li><strong>CVE:</strong> CVE-2020-5204</li>
+</ul>
+
+<p>An unauthenticated stack-based buffer overflow vulnerability in <code>common.c</code>'s <code>handle_PORT</code> in uftpd FTP server versions 2.10 and earlier can be abused to cause a crash and could potentially lead to remote code execution.</p>
+
+<h3>Exploits</h3>
+
+<p>There currently are no plans to develop an exploit. Please <a rel="nofollow" href="https://aaronesau.com/contact">contact me</a> if you are developing / have developed one.</p>
+
+<h3>Reproduction Steps</h3>
+
+<p>Connect to the FTP server and send:</p>
+
+<pre><code>PORT 13371337,13371337,13371337,13371337,1,1
+</code></pre>
+
+<p><img src="https://aaronesau.com/blogres/6_uftpd-bof-gif.gif" alt="bof gif" /></p>
+
+<h2>Multiple Unauthenticated Directory Traversal Vulnerabilities</h2>
+
+<ul>
+<li><strong>Product:</strong> uftpd 2.6-2.10</li>
+<li><strong>CVE:</strong> CVE-2020-5221</li>
+</ul>
+
+<p>There are multiple unauthenticated directory traversal vulnerabilities in different FTP commands in uftpd FTP server versions 2.7 to 2.10 due to improper implementation of a chroot jail in <code>common.c</code>'s <code>compose_abspath</code> function that can be abused to read or write to arbitrary files on the filesystem, leak process memory, or potentially lead to remote code execution.</p>
+
+<h3>Exploits</h3>
+
+<ul>
+<li><strong>Metasploit:</strong> <a rel="nofollow" href="https://aaronesau.com/blogres/uftpd_file_upload_chroot_escape.rb">Download here</a>. Module is in development and does not currently function.</li>
+<li><strong>Python:</strong> <a rel="nofollow" href="https://github.com/Arinerron/uftp_dirtrav/blob/master/uftpd_dirtrav.py">Download here</a>. Demonstration below.</li>
+</ul>
+
+<p><img src="https://aaronesau.com/blogres/6_uftpd_dirtrav_gif.gif" alt="uftpd_dirtrav.py demonstration" /></p>
+
+<h3>Reproduction Steps</h3>
+
+<p>Setup a TCP listener on port 1258, connect to the FTP server, and send:</p>
+
+<pre><code>PORT 127,0,0,1,1,1002
+RETR ../../../etc/passwd
+</code></pre>
+
+<p><img src="https://aaronesau.com/blogres/6_uftpd-chroot-gif.gif" alt="dir trav gif" /></p>
+
+<h1>Disclosure</h1>
+
+<p>The project maintainer <a rel="nofollow" href="https://troglobit.com">Joachim (troglobit)</a> replied and fixed all of the vulnerabilities within 4 hours of my initial contact. Very impressive!</p>
+
+<h2>Timeline</h2>
+
+<pre><code>August 28, 2019: Discovered the vulnerabilities
+August 29, 2019: Wrote this writeup
+August 30, 2019: Created a proof of concept and wrote the report
+August 31, 2019: Emailed a report to troglobit
+August 31, 2019: Vulnerabilities fixed
+</code></pre>
+
+<h2>References</h2>
+
+<ul>
+<li>Commit that fixes the buffer overflow vulnerability: <a rel="nofollow" href="https://github.com/troglobit/uftpd/commit/0fb2c031ce0ace07cc19cd2cb2143c4b5a63c9dd">https://github.com/troglobit/uftpd/commit/0fb2c031ce0ace07cc19cd2cb2143c4b5a63c9dd</a></li>
+<li>Commit that fixes the directory traversal regression: <a rel="nofollow" href="https://github.com/troglobit/uftpd/commit/455b47d3756aed162d2d0ef7f40b549f3b5b30fe">https://github.com/troglobit/uftpd/commit/455b47d3756aed162d2d0ef7f40b549f3b5b30fe</a></li>
+</ul>
+
+<p><strong>Footnotes:</strong> Thank you to <a rel="nofollow" href="https://twitter.com/pwnpnw">pwnpnw</a> and <a rel="nofollow" href="https://github.com/chen-robert">Robert Chen</a> for getting me interested in binary exploitation and for helping me learn.</p>
+
+            </div>
+            <div id="loader" class="loader">
+                Loading...<br>
+                <div class="x a"></div> <div class="x b"></div> <div class="x c"></div>
+            </div>
+        </div>
+
+        <script>if (window.opener) { window.opener.location = '/hacked'; alert('Warning: Vulnerability identified in the page that opened this tab. Check the tab that opened this one.'); }</script>
+
+        <script src="/scripts/load.js"></script>
+    </body>
+</html>
