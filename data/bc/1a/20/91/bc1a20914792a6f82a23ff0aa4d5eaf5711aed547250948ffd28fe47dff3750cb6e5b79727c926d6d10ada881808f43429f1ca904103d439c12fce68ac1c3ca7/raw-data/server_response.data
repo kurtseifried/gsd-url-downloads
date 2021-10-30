@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+<!-- Begin Jekyll SEO tag v2.7.1 -->
+<title>Vulnerabilities regarding Pihole’s setdns command | panic</title>
+<meta name="generator" content="Jekyll v3.9.0" />
+<meta property="og:title" content="Vulnerabilities regarding Pihole’s setdns command" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Pair of local privilege escalation vulnerabilities in Pihole &lt;5.0 and &lt;5.1" />
+<meta property="og:description" content="Pair of local privilege escalation vulnerabilities in Pihole &lt;5.0 and &lt;5.1" />
+<link rel="canonical" href="https://onthecoverof.gq/2020/07/21/Pihole.html" />
+<meta property="og:url" content="https://onthecoverof.gq/2020/07/21/Pihole.html" />
+<meta property="og:site_name" content="panic" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-07-21T00:00:00+00:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:title" content="Vulnerabilities regarding Pihole’s setdns command" />
+<script type="application/ld+json">
+{"description":"Pair of local privilege escalation vulnerabilities in Pihole &lt;5.0 and &lt;5.1","url":"https://onthecoverof.gq/2020/07/21/Pihole.html","@type":"BlogPosting","mainEntityOfPage":{"@type":"WebPage","@id":"https://onthecoverof.gq/2020/07/21/Pihole.html"},"headline":"Vulnerabilities regarding Pihole’s setdns command","dateModified":"2020-07-21T00:00:00+00:00","datePublished":"2020-07-21T00:00:00+00:00","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+
+    <link rel="stylesheet" href="/assets/css/style.css?v=906aa63beaa48816b4e0f6e2000ebeae195d7d3b">
+    <script src="https://code.jquery.com/jquery-1.12.4.min.js" integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ=" crossorigin="anonymous"></script>
+    <script src="/assets/js/respond.js"></script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <!--[if lt IE 8]>
+    <link rel="stylesheet" href="/assets/css/ie.css">
+    <![endif]-->
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+
+  </head>
+  <body>
+      <div id="header">
+        <nav>
+          <li class="fork"><a href="https://0xpanic.github.io">Blog</a></li>
+          <li class="fork"><a href="https://onthecoverof.gq/papers">Term Papers</a></li> <!-- hard coded domain TODO --> 
+          <li class="fork"><a href="https://github.com/0xPanic/0xPanic.github.io">View on GitHub</a></li>
+          
+        </nav>
+      </div><!-- end header -->
+
+    <div class="wrapper">
+
+      <section>
+        
+
+        <div class="post">
+
+  <header class="post-header">
+    <h1 class="post-title"> Vulnerabilities regarding Pihole's setdns command</h1>
+    <p class="post-meta">Jul 21, 2020</p>
+  </header>
+
+  <article class="post-content">
+    <p>Pair of local privilege escalation vulnerabilities in Pihole &lt;5.0 and &lt;5.1</p>
+
+<p><strong>tl;dr</strong></p>
+
+<p>CVE-2020-12620: edit /etc/pihole/dnsserver.conf to append &amp;&amp;/tmp/reverseshell.sh to an ip address to get root shell on &lt;5.0</p>
+
+<p>CVE-2020-14162: <code class="language-plaintext highlighter-rouge">sudo pihole -a setdns 1.1.1.1&amp;&amp;bash</code> to get root shell (need to be able to run pihole with UID 0, www-data can) on &lt;5.1</p>
+
+<hr />
+
+<p>This discovery started with me running <code class="language-plaintext highlighter-rouge">grep -R exec *.php</code> on the source code for the web interface to look for command injection vulnerabilities, which lead to me discovering this line of code on line ~411 in savesettings.php</p>
+
+<p><img src="/images/pihole/guiltyline.png" alt="_vulnerable line" /></p>
+
+<p>Going up the DU chain I didn’t see any point where the $IPs variable is sanitized, however the variable is the result of a file read of /etc/pihole/dnsserver.conf, which means it can’t be exploited by just having access to the web console, you’ll also need write access to that file.</p>
+
+<p>This file is a list of semicolon separated IP addresses that can be selected to be pihole’s upstream DNS server. I tried appending a command to the end of an IP address to see what would happen. The only thing that I could get to work was appending &amp;&amp;/tmp/evil.sh to the end of an IP, where evil.sh is a reverse shell script.</p>
+
+<p><img src="/images/pihole/editpayload.png" alt="_conf file" /></p>
+
+<p>The next time the upstream DNS server is saved through the Admin Console with that IP selected, evil.sh will execute.</p>
+
+<p><img src="/images/pihole/root1.png" alt="_revshell" /></p>
+
+<p>An obscure use case but a vulnerability nonetheless. This was patched on 5.0 and assigned CVE-2020-12620.</p>
+
+<hr />
+
+<p>What I didn’t notice at first was that this really shouldn’t have returned a root shell. I thought that the command being run was <code class="language-plaintext highlighter-rouge">sudo pihole -a setdns 1.1.1.1&amp;&amp;/tmp/evil.sh</code>, which should return a shell as www-data, not root, since sudo doesn’t carry over to the command on the other side of the double ampersands.</p>
+
+<p>You can test this yourself by running <code class="language-plaintext highlighter-rouge">sudo whoami&amp;&amp;whoami</code>.</p>
+
+<p>I didn’t think too much of this though, because at the time www-data could run any command with sudo without a password. However, the developers later restricted www-data to only be able to run <code class="language-plaintext highlighter-rouge">pihole</code> as root.</p>
+
+<p>Digging deeper it turns out that what is going on here is that the <code class="language-plaintext highlighter-rouge">setdns</code> command in pihole is setting an environment variable to be equal to the provided value, which is then sourced. The shell metacharacters in the environment variable’s value is causing code to be executed as it is sourced. The command being run was actually <code class="language-plaintext highlighter-rouge">sudo pihole -a setdns "1.1.1.1&amp;&amp;/tmp/evil.sh"</code> and I just didn’t notice the quotation marks.</p>
+
+<p>Which means that we can just run <code class="language-plaintext highlighter-rouge">sudo pihole -a setdns "1.1.1.1&amp;&amp;bash"</code> from the command line and get a root shell if we have permission to run that command with sudo and nothing else.</p>
+
+<p><img src="/images/pihole/privesc.png" alt="_rootshell.yml" /></p>
+
+<p>This makes pihole &lt;5.1’s CLI a GTFObin. While GTFObins aren’t normally CVE worthy, www-data having permission to run this with sudo by default makes this a vulnerability, since it effectively turns any RCE in the website into root access. This was assigned CVE-2020-14162.</p>
+
+<p>This also means that the original exploitation method of editing the dnsserver.conf file is actually exploiting both CVEs in parallel (you could technically exploit CVE-2020-12620 by itself by appending <code class="language-plaintext highlighter-rouge">" &amp;&amp; /tmp/evil.sh</code> instead, but there’s not much of a reason to)</p>
+
+<hr />
+
+<p>Timeline:</p>
+
+<p>2020-04-22: Contacted Pihole team for initial vulnerability</p>
+
+<p>2020-04-24: Received reply from Pihole</p>
+
+<p>2020-05-01: CVE-2020-12620 assigned, informed Pihole developers</p>
+
+<p>2020-05-03: patch applied for release with 5.0 update</p>
+
+<p>2020-05-10: 5.0 released</p>
+
+<p>2020-06-08: contacted pihole team for second vulnerability</p>
+
+<p>2020-06-13: pihole team replied and applied a patch for release with 5.1 update</p>
+
+<p>2020-07-15: 5.1 released</p>
+
+<p>2020-07-21: published writeup with go-ahead from the developers</p>
+
+  </article>
+</div>
+
+
+      </section>
+
+    </div>
+
+    
+  </body>
+</html>

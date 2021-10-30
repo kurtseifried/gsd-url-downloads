@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html class="t-blue">
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>URI Argument Injection Vulnerability in Bitcoin Core 0.18 and Earlier</title>
+  <meta name="description" content="URI Argument Injection Vulnerability in Bitcoin Core 0.18 and Earlier">
+
+  <link href='https://fonts.googleapis.com/css?family=Roboto:400,400italic,700|Roboto+Mono:400,500' rel='stylesheet' type='text/css'>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="canonical" href="http://achow101.com/2021/02/0.18-uri-vuln">
+  <link rel="alternate" type="application/rss+xml" title="Andrew Chow" href="http://achow101.com/feed.xml">
+</head>
+
+  <body>
+    <nav class="c-navigation is-fixed">
+  <div class="c-navigation__container u-container">
+    <a class="c-navigation__item " href="/">Home</a>
+    <a class="c-navigation__item " href="/articles/">Articles</a>
+    <a class="c-navigation__item " href="/contact/">Contact Me</a>
+  </div>
+</nav>
+
+
+    <article class="c-article">
+  <header class="c-header c-article__header">
+    <div class="u-container">
+      <h1 class="c-header__title">URI Argument Injection Vulnerability in Bitcoin Core 0.18 and Earlier</h1>
+    </div>
+  </header>
+
+  <div class="c-article__main">
+    <h1 id="uri-argument-injection-vulnerability-in-bitcoin-core-018-and-earlier">URI Argument Injection Vulnerability in Bitcoin Core 0.18 and Earlier</h1>
+
+<p>This article describes an URI Argument Injection vulnerability discovered in Bitcoin Core 0.18 and earlier.
+The vulnerability was fixed in Bitcoin Core 0.19.0.
+Bitcoin Core 0.19.0 and later are not vulnerable.
+This vulnerability only affects Windows and Linux.</p>
+
+<h2 id="background">Background</h2>
+
+<p>In 2019, I was browsing the <a href="https://web.archive.org/web/20190808154342/https://pwnies.com/nominations/">pwnie award nominations</a> and found an entry titled “RCE in Qt5-Based GUI Apps.”
+As Bitcoin Core’s GUI (<code class="language-plaintext highlighter-rouge">bitcoin-qt</code>) uses Qt5, this immediately piqued my interest.
+The <a href="https://www.bleepingcomputer.com/news/security/qt5-based-gui-apps-susceptible-to-remote-code-execution/">linked article</a> describes a vulnerability in multiple Qt5 based software could have malicious code executed on a user’s computer after clicking a malicious URI.
+I proceeded to investigate whether this same vulnerability affects and found that it was theoretically possible.
+However it seems that this vulnerability is unlikely to actually be exploited.</p>
+
+<h2 id="uri-handlers">URI Handlers</h2>
+
+<p>Understanding this vulnerability first requires that we understand how URIs are handled.
+Windows and Linux handles this in a similar manner.
+MacOS handles URIs differently so it is not affected by this vulnerability.</p>
+
+<p>In Windows, the operating system executes a pre-registered command with the URI as an argument.
+This command is stored in the Windows registry and contains format specifiers for the location within in the command to insert the URI.
+Windows replaces the format specifier <code class="language-plaintext highlighter-rouge">%1</code> with the URI and then executes the command string.
+For Bitcoin Core, the registry key is</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>HKEY_CLASSES_ROOT\bitcoin\shell\open\command
+</code></pre></div></div>
+
+<p>and the command is</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>"C:\Program Files\Bitcoin\bitcoin-qt.exe" "%1"
+</code></pre></div></div>
+
+<p>In Linux, the desktop environment searches for a <code class="language-plaintext highlighter-rouge">.desktop</code> file which contains a line like <code class="language-plaintext highlighter-rouge">MimeType=x-scheme-handler/bitcoin</code>.
+It then executes the command specified by the <code class="language-plaintext highlighter-rouge">Exec=</code> line.
+A common <code class="language-plaintext highlighter-rouge">.desktop</code> file for Linux has:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Exec=bitcoin-qt %u
+</code></pre></div></div>
+
+<p>This command is, like Windows, a string with format specifiers.
+The desktop environment will replace the format specifier <code class="language-plaintext highlighter-rouge">%u</code> with the URI and execute the command string.</p>
+
+<h2 id="uri-argument-injection">URI Argument Injection</h2>
+
+<p>Since URI handling in both Windows and Linux basically amounts to creating a string containing the URI and then executing it, a maliciously crafted URI could make the string such that it looks like a command with additional command line arguments.
+For example, consider the URI <code class="language-plaintext highlighter-rouge">bitcoin:BC1QXUFYM7NNUSQZW9R2U5G98USKDAT7XQN4VYZ63S" "-argument</code>.
+With the Window’s URI command, the simple string replacement it does would create the command</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>"C:\Program Files\Bitcoin\bitcoin-qt.exe" "bitcoin:BC1QXUFYM7NNUSQZW9R2U5G98USKDAT7XQN4VYZ63S" "-argument"
+</code></pre></div></div>
+
+<p>Notice how this looks like the URI is followed by a command line argument <code class="language-plaintext highlighter-rouge">-argument</code>.
+In fact, it not only looks like that, it is interpreted by the OS that way and <code class="language-plaintext highlighter-rouge">-argument</code> is provided to the software as a separate command line argument instead of as part of the URI as it should be.
+In this way, a malicious URI could cause the software to start with a dangerous command line argument.</p>
+
+<h2 id="injecting-arguments-into-bitcoin-core">Injecting Arguments into Bitcoin Core</h2>
+
+<p>Since URI argument injection is a known issue, software developers have ways to avoid them.
+Bitcoin Core’s argument parser ignores any arguments that follow a URI.
+So it is not possible to use inject Bitcoin Core specific arguments through a URI.
+However, as noted earlier, the problem is with Qt.</p>
+
+<p>The Qt framework specifies a set of Qt specific command line arguments.
+When Qt is initialized, the command line arguments are be passed into Qt in order for those arguments to be processed by Qt.
+This is done before Bitcoin Core processes the command line arguments.
+Qt will look through the argument list, find the arguments it can handle, and remove them from the list as it handle them.
+Then the arguments get passed to Bitcoin Core’s argument parser.
+This processing by Qt does not recognize URIs and will process any arguments regardless of their position in the arguments list.
+Thus it is possible to use a URI to inject Qt specific arguments.</p>
+
+<h2 id="dangerous-command-line-arguments">Dangerous Command Line Arguments</h2>
+
+<p>Most of the Qt arguments are benign and <a href="https://doc.qt.io/qt-5/qguiapplication.html#supported-command-line-options">Qt’s documentation</a> specifies the available arguments.
+These arguments primarily affect the way that the application looks.
+However there is one specific argument that is problematic: <code class="language-plaintext highlighter-rouge">-platformpluginpath</code>.
+<code class="language-plaintext highlighter-rouge">-platformpluginpath</code> loads some plugin from a path and executes it.
+With some other tricks (described in the original “RCE in Qt5” article), it is possible to get a malicious plugin onto the victim’s computer, and once they click a malicious URI that injects <code class="language-plaintext highlighter-rouge">-platformpluginpath</code>, have that plugin be executed.
+As a malicious plugin can be executed, this is classified as a remote code execution vulnerability.</p>
+
+<h2 id="uri-argument-injection-mitigations">URI Argument Injection Mitigations</h2>
+
+<p>Of course, operating systems, browser developers, and software developers do not necessarily do the naive implementation.
+As previously mentioned, Bitcoin Core ignores command line arguments found after a URI.
+So a URI that injects arguments cannot cause Bitcoin Core to start with any additional Bitcoin Core specific command line arguments.
+Additionally, Bitcoin Core specifically registers a URI handler that surrounds the URI with double quotes so that an argument cannot be injected with just spaces.
+The attacker has to make a URI that itself contains double quotes to do the injection.</p>
+
+<p>But browser developers are aware of the double quote trick, so they will sanitize the URI before passing it to the operating system to be handled.
+Browsers will escape the double quotes, and often do other sanitizing such as replacement of spaces, to ensure that the OS treats the entire URI as a single URI argument, not as multiple command line arguments.
+For example, for the URI <code class="language-plaintext highlighter-rouge">bitcoin:BC1QXUFYM7NNUSQZW9R2U5G98USKDAT7XQN4VYZ63S" "-argument</code>, a possible string actually used would be <code class="language-plaintext highlighter-rouge">bitcoin:BC1QXUFYM7NNUSQZW9R2U5G98USKDAT7XQN4VYZ63S\" \"-argument</code> and the final command</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>`"C:\Program Files\Bitcoin\bitcoin-qt.exe" "bitcoin:BC1QXUFYM7NNUSQZW9R2U5G98USKDAT7XQN4VYZ63S\" \"-argument"
+</code></pre></div></div>
+
+<p>Since the double quotes are escaped by being preceded with a backslash (<code class="language-plaintext highlighter-rouge">\</code>), they are not treated as delimiters between arguments but instead as part of a single argument string.
+Another method of sanitizing includes using URL encoding of special characters instead of escaping.</p>
+
+<p>It is important to note that browsers must do this sanitizing in Windows.
+Windows itself does not sanitize the URI, so a browser which does not sanitize the URI would allow for arguments to be injected.
+However most of the browsers in use today will sanitize the URI in some way which prevents this vulnerability from being exploited.</p>
+
+<p>When it comes to Linux, the <code class="language-plaintext highlighter-rouge">%u</code> specifier specifically means that the entire URI is to be treated as a single argument.
+Properly implemented desktop environments will do this correctly and not allow part of the URI to be treated as separate arguments.
+I do not know of any desktop environment that does not do this, so on Linux, the desktop environments prevent this vulnerability from being exploited.</p>
+
+<p>Thus, in practice, argument injection via a URI is almost impossible to execute with Bitcoin Core and modern browsers and desktop environments.
+It is because of these mitigations that I believe that this vulnerability cannot actually be exploited.</p>
+
+<h2 id="bitcoin-cores-fix">Bitcoin Core’s Fix</h2>
+
+<p>Even though I believe that this vulnerability cannot actually be exploited, it is still prudent to fix the issue.
+The fix for this vulnerability is to disallow Qt from processing command line arguments.
+Instead of initializing Qt with the real list of command line arguments, we initialize it with an empty list of arguments.
+This was implemented in <a href="https://github.com/bitcoin/bitcoin/pull/16578">PR #16578</a> which was merged in August 2019.
+While this does fix the problem, it does also have the downside that users who do wish to use Qt’s other command line arguments to customize how it looks will be unable to do so via command line arguments.
+Instead this will need to be done through environment variables.
+A future followup would be to allow only some of Qt’s command line arguments to be used and/or disallow the dangerous ones.</p>
+
+<h2 id="demonstration">Demonstration</h2>
+
+<p><a href="https://www.twitch.tv/videos/897351419">Video on twitch.tv</a></p>
+
+<h2 id="cve">CVE</h2>
+
+<p>This vulnerability has been assigned CVE-2021-3401.</p>
+
+<h2 id="timeline">Timeline</h2>
+
+<ul>
+  <li>2019-08-02: Vulnerability discovered</li>
+  <li>2019-08-03: Vulnerability reported to security@bitcoincore.org</li>
+  <li>2019-08-03 - 2019-08-09: Further vulnerability investigation, disclosure to additional developers, and development of fix</li>
+  <li>2019-08-09: PR #16578 opened</li>
+  <li>2019-08-15: PR #16578 merged</li>
+  <li>2019-11-24: 0.19.0.1 released containing fix</li>
+  <li>2021-02-01: 0.18.0 End of Life</li>
+  <li>2021-02-01: Disclosure published</li>
+</ul>
+
+
+  </div>
+</article>
+
+
+    <footer class="c-footer">
+  <div class="u-container c-footer__container">
+    <p>&copy; Andrew Chow 2021</p>
+    <p>
+      <a href="https://github.com/achow101">Github</a>
+    </p>
+  </div>
+</footer>
+
+  </body>
+</html>

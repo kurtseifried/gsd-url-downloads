@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta name="author" content="Gwendal Le Coguic">
+    <meta name="description" content="Gwendal Le Coguic, web developer and bug hunter">
+    <meta name="keywords" content="development,security,researcher,bugbounty,tools,php,python">
+
+    <meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:image" content="http://10degres.net/assets/img/header-background.jpg"/>
+
+<meta name="twitter:title" content="Unauthenticated SQL injection in Wordpress plugin “gallery-images” by Huge-IT"/>
+<meta name="twitter:description" content="An issue was discovered in the Huge-IT gallery-images plugin before 1.9.0 for WordPress. The headers Client-Ip and X-Forwarded-For are prone to unauthenticated SQL injection. The affected file is gallery-images.php. The affected function is huge_it_image_gallery_ajax_callback().
+
+mitre: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-11018
+
+
+While I was working on a famous bug bounty program, WPScan returns me the list of the plugins configured on the Wordpress install.
+Here is what I found in one of them: Image Gallery by Huge-IT.
+WPScan output, no issues known:
+[&#43;] Name: gallery-images - v1.8.6  
+ |  Location: https://[REDACTED]/wp-content/plugins/gallery-images/  
+ |  Readme: https://[REDACTED]/wp-content/plugins/gallery-images/readme.txt  
+After a fast search on exploit-db.com with no success, I finally decided to download it and read the code to find vulnerabilites by myself.
+Since the readme was available, I was able to confirm the version of the plugin.
+I was looking for two kind of vulnerabilities: file upload and sql injection.
+First thing I did was to locate PHP files, and grepping the result to find Content-Disposition header:
+$ find . -name &#34;*.php*&#34; | xargs grep -i header
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./Front_end/gallery_front_end_view.php:		/*HEIGHT FROM HEADER.PHP*/
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./admin/gallery_func.php:			header(&#39;Location: admin.php?page=gallerys_huge_it_gallery&amp;id=&#39;.$rowsldccs-&gt;id.&#39;&amp;task=apply&#39;);
+./admin/gallery_view.php:	header(&#39;Location: admin.php?page=gallerys_huge_it_gallery&amp;id=&#39;.$row-&gt;id.&#39;&amp;task=apply&#39;);
+./admin/gallery_view.php:	&lt;div id=&#34;gallery-header&#34;&gt;
+"/>
+<meta name="twitter:site" content="@10degres"/>
+<meta name="twitter:creator" content="@gwendallecoguic"/>
+
+    <meta property="og:title" content="Unauthenticated SQL injection in Wordpress plugin “gallery-images” by Huge-IT" />
+<meta property="og:description" content="An issue was discovered in the Huge-IT gallery-images plugin before 1.9.0 for WordPress. The headers Client-Ip and X-Forwarded-For are prone to unauthenticated SQL injection. The affected file is gallery-images.php. The affected function is huge_it_image_gallery_ajax_callback().
+
+mitre: https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-11018
+
+
+While I was working on a famous bug bounty program, WPScan returns me the list of the plugins configured on the Wordpress install.
+Here is what I found in one of them: Image Gallery by Huge-IT.
+WPScan output, no issues known:
+[&#43;] Name: gallery-images - v1.8.6  
+ |  Location: https://[REDACTED]/wp-content/plugins/gallery-images/  
+ |  Readme: https://[REDACTED]/wp-content/plugins/gallery-images/readme.txt  
+After a fast search on exploit-db.com with no success, I finally decided to download it and read the code to find vulnerabilites by myself.
+Since the readme was available, I was able to confirm the version of the plugin.
+I was looking for two kind of vulnerabilities: file upload and sql injection.
+First thing I did was to locate PHP files, and grepping the result to find Content-Disposition header:
+$ find . -name &#34;*.php*&#34; | xargs grep -i header
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./Front_end/gallery_front_end_view.php:		/*HEIGHT FROM HEADER.PHP*/
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./Front_end/gallery_front_end_view.php:							header(&#34;Location:&#34;.$actual_link.&#34;&#34;);
+./admin/gallery_func.php:			header(&#39;Location: admin.php?page=gallerys_huge_it_gallery&amp;id=&#39;.$rowsldccs-&gt;id.&#39;&amp;task=apply&#39;);
+./admin/gallery_view.php:	header(&#39;Location: admin.php?page=gallerys_huge_it_gallery&amp;id=&#39;.$row-&gt;id.&#39;&amp;task=apply&#39;);
+./admin/gallery_view.php:	&lt;div id=&#34;gallery-header&#34;&gt;
+" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="http://10degres.net/cves/cve-2016-11018/" />
+
+<meta property="og:image" content="http://10degres.net/assets/img/header-background.jpg" />
+<meta property="article:published_time" content="2016-05-20T00:00:00+00:00" />
+<meta property="article:modified_time" content="2016-05-20T00:00:00+00:00" /><meta property="og:site_name" content="10degres" />
+
+
+    
+      <base href="http://10degres.net/cves/cve-2016-11018/">
+    
+    <title>
+  CVE-2016-11018 · Unauthenticated SQL injection in Wordpress plugin “gallery-images” by Huge-IT · 10degres
+</title>
+
+    
+      <link rel="canonical" href="http://10degres.net/cves/cve-2016-11018/">
+    
+
+    <link href="https://fonts.googleapis.com/css?family=Lato:400,700%7CMerriweather:300,700%7CSource+Code+Pro:400,700" rel="stylesheet">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.8.1/css/all.css" integrity="sha384-50oBUHEmvpQ+1lW4y57PTFmhCaXp0ML5d60M1M7uH2+nqUivzIebhndOJK28anvf" crossorigin="anonymous" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.1/normalize.min.css" integrity="sha256-l85OmPOjvil/SOvVt3HnSSjzF1TUMyT9eV0c2BzEGzU=" crossorigin="anonymous" />
+
+    
+      
+      
+      <link rel="stylesheet" href="http://10degres.net/assets/css/coder.min.b7c885186d029c262c5580a8cf13937b5dae16dc868972a0c3fdd82752e6cacb.css" integrity="sha256-t8iFGG0CnCYsVYCozxOTe12uFtyGiXKgw/3YJ1Lmyss=" crossorigin="anonymous" media="screen" />
+    
+
+    
+
+    
+
+    
+      <link rel="stylesheet" href="http://10degres.net/assets/css/custom.css" />
+    
+
+    <link rel="icon" type="image/png" href="http://10degres.net/assets/img/favicon-32x32.png" sizes="32x32">
+    <link rel="icon" type="image/png" href="http://10degres.net/assets/img/favicon-16x16.png" sizes="16x16">
+
+    <meta name="generator" content="Hugo 0.83.1" />
+  </head>
+
+  <body class=" ">
+    <main class="wrapper">
+      <nav class="navigation">
+  <section class="container">
+    <a class="navigation-title" href="http://10degres.net/">
+      10degres
+    </a>
+    <input type="checkbox" id="menu-toggle" />
+    <label class="menu-button float-right" for="menu-toggle"><i class="fas fa-bars"></i></label>
+    <ul class="navigation-list">
+      
+        
+          <li class="navigation-item">
+            <a class="navigation-link" href="http://10degres.net/posts/">Blog</a>
+          </li>
+        
+          <li class="navigation-item">
+            <a class="navigation-link" href="http://10degres.net/cves/">CVEs</a>
+          </li>
+        
+          <li class="navigation-item">
+            <a class="navigation-link" href="http://10degres.net/services/">Services</a>
+          </li>
+        
+          <li class="navigation-item">
+            <a class="navigation-link" href="http://10degres.net/press/">Press</a>
+          </li>
+        
+          <li class="navigation-item">
+            <a class="navigation-link" href="http://10degres.net/about/">About</a>
+          </li>
+        
+      
+      
+    </ul>
+  </section>
+</nav>
+
+
+      <div class="content">
+        
+  <section class="container post">
+    <article>
+      <header>
+        <div class="post-title">
+          <h1 class="title">CVE-2016-11018</h1>
+        </div>
+        <div class="post-meta">
+          <div class="date">
+            <span class="posted-on">
+              <i class="fas fa-calendar"></i>
+              <time datetime='2016-05-20T00:00:00Z'>
+                May 20, 2016
+              </time>
+            </span>
+            <span class="reading-time">
+              <i class="fas fa-clock"></i>
+              3 minutes read
+            </span>
+          </div>
+          
+          <div class="tags">
+  <i class="fas fa-tag"></i>
+    <a href="http://10degres.net/tags/wordpress/">wordpress</a>
+      <span class="separator">•</span>
+    <a href="http://10degres.net/tags/sql-injection/">sql injection</a></div>
+
+        </div>
+      </header>
+
+      <div>
+        <p>An issue was discovered in the Huge-IT gallery-images plugin before 1.9.0 for WordPress. The headers <code>Client-Ip</code> and <code>X-Forwarded-For</code> are prone to unauthenticated SQL injection. The affected file is <code>gallery-images.php</code>. The affected function is <code>huge_it_image_gallery_ajax_callback()</code>.</p>
+<ul>
+<li>mitre: <a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-11018">https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-11018</a></li>
+</ul>
+<hr />
+<p>While I was working on a famous bug bounty program, WPScan returns me the list of the plugins configured on the Wordpress install.
+Here is what I found in one of them: <a href="https://wordpress.org/plugins/gallery-images/">Image Gallery by Huge-IT</a>.</p>
+<p>WPScan output, no issues known:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-fallback" data-lang="fallback">[+] Name: gallery-images - v1.8.6  
+ |  Location: https://[REDACTED]/wp-content/plugins/gallery-images/  
+ |  Readme: https://[REDACTED]/wp-content/plugins/gallery-images/readme.txt  
+</code></pre></div><p>After a fast search on <a href="https://www.exploit-db.com/">exploit-db.com</a> with no success, I finally decided to download it and read the code to find vulnerabilites by myself.
+Since the readme was available, I was able to confirm the version of the plugin.</p>
+<p>I was looking for two kind of vulnerabilities: file upload and sql injection.
+First thing I did was to locate PHP files, and grepping the result to find <code>Content-Disposition</code> header:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">$ find . -name <span style="color:#e6db74">&#34;*.php*&#34;</span> | xargs grep -i header
+./Front_end/gallery_front_end_view.php:							header<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;Location:&#34;</span>.$actual_link.<span style="color:#e6db74">&#34;&#34;</span><span style="color:#f92672">)</span>;
+./Front_end/gallery_front_end_view.php:							header<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;Location:&#34;</span>.$actual_link.<span style="color:#e6db74">&#34;&#34;</span><span style="color:#f92672">)</span>;
+./Front_end/gallery_front_end_view.php:							header<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;Location:&#34;</span>.$actual_link.<span style="color:#e6db74">&#34;&#34;</span><span style="color:#f92672">)</span>;
+./Front_end/gallery_front_end_view.php:							header<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;Location:&#34;</span>.$actual_link.<span style="color:#e6db74">&#34;&#34;</span><span style="color:#f92672">)</span>;
+./Front_end/gallery_front_end_view.php:		/*HEIGHT FROM HEADER.PHP*/
+./Front_end/gallery_front_end_view.php:							header<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;Location:&#34;</span>.$actual_link.<span style="color:#e6db74">&#34;&#34;</span><span style="color:#f92672">)</span>;
+./Front_end/gallery_front_end_view.php:							header<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;Location:&#34;</span>.$actual_link.<span style="color:#e6db74">&#34;&#34;</span><span style="color:#f92672">)</span>;
+./Front_end/gallery_front_end_view.php:							header<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;Location:&#34;</span>.$actual_link.<span style="color:#e6db74">&#34;&#34;</span><span style="color:#f92672">)</span>;
+./Front_end/gallery_front_end_view.php:							header<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;Location:&#34;</span>.$actual_link.<span style="color:#e6db74">&#34;&#34;</span><span style="color:#f92672">)</span>;
+./Front_end/gallery_front_end_view.php:							header<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;Location:&#34;</span>.$actual_link.<span style="color:#e6db74">&#34;&#34;</span><span style="color:#f92672">)</span>;
+./Front_end/gallery_front_end_view.php:							header<span style="color:#f92672">(</span><span style="color:#e6db74">&#34;Location:&#34;</span>.$actual_link.<span style="color:#e6db74">&#34;&#34;</span><span style="color:#f92672">)</span>;
+./admin/gallery_func.php:			header<span style="color:#f92672">(</span><span style="color:#e6db74">&#39;Location: admin.php?page=gallerys_huge_it_gallery&amp;id=&#39;</span>.$rowsldccs-&gt;id.<span style="color:#e6db74">&#39;&amp;task=apply&#39;</span><span style="color:#f92672">)</span>;
+./admin/gallery_view.php:	header<span style="color:#f92672">(</span><span style="color:#e6db74">&#39;Location: admin.php?page=gallerys_huge_it_gallery&amp;id=&#39;</span>.$row-&gt;id.<span style="color:#e6db74">&#39;&amp;task=apply&#39;</span><span style="color:#f92672">)</span>;
+./admin/gallery_view.php:	&lt;div id<span style="color:#f92672">=</span><span style="color:#e6db74">&#34;gallery-header&#34;</span>&gt;
+</code></pre></div><p>Nothing interesting here&hellip;</p>
+<p>Then, I noticed that the &ldquo;non admin&rdquo; requests where mainly coded in two files: <code>gallery-images.php</code> and <code>Front_end/gallery_front_end_view.php</code>.
+Luckily I started to read the first one which contains the hole.</p>
+<p>In the function <code>huge_it_image_gallery_ajax_callback</code>, the variable <code>$huge_it_ip</code> is used multiple times in the following form:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-php" data-lang="php">$wpdb<span style="color:#f92672">-&gt;</span><span style="color:#a6e22e">prepare</span>(<span style="color:#e6db74">&#34;SELECT `image_status`,`ip` FROM &#34;</span><span style="color:#f92672">.</span>$wpdb<span style="color:#f92672">-&gt;</span><span style="color:#a6e22e">prefix</span><span style="color:#f92672">.</span><span style="color:#e6db74">&#34;huge_itgallery_like_dislike WHERE image_id = %d AND `ip` = &#39;&#34;</span><span style="color:#f92672">.</span>$huge_it_ip<span style="color:#f92672">.</span><span style="color:#e6db74">&#34;&#39;&#34;</span>,(<span style="color:#a6e22e">int</span>)$row<span style="color:#f92672">-&gt;</span><span style="color:#a6e22e">id</span>);
+</code></pre></div><p>This variable is defined at the top of the file:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-php" data-lang="php"><span style="color:#66d9ef">if</span>(<span style="color:#f92672">!</span><span style="color:#66d9ef">empty</span>($_SERVER[<span style="color:#e6db74">&#39;HTTP_CLIENT_IP&#39;</span>])){
+	$huge_it_ip<span style="color:#f92672">=</span>$_SERVER[<span style="color:#e6db74">&#39;HTTP_CLIENT_IP&#39;</span>];
+}
+<span style="color:#66d9ef">elseif</span>(<span style="color:#f92672">!</span><span style="color:#66d9ef">empty</span>($_SERVER[<span style="color:#e6db74">&#39;HTTP_X_FORWARDED_FOR&#39;</span>])){
+	$huge_it_ip<span style="color:#f92672">=</span>$_SERVER[<span style="color:#e6db74">&#39;HTTP_X_FORWARDED_FOR&#39;</span>];
+}
+<span style="color:#66d9ef">else</span>{
+	$huge_it_ip<span style="color:#f92672">=</span>$_SERVER[<span style="color:#e6db74">&#39;REMOTE_ADDR&#39;</span>];
+}
+</code></pre></div><p>Unfortunately HTTP headers cannot be trusted, even ip address.
+So I started to test the injection in <code>X-Forwarded-For</code> header and it worked perfectly on my local install.
+However the site I was testing seems to had a firewall who drop this header.
+I then tested the injection in <code>Client-Ip</code> header and it passed !</p>
+<p>Note that the plugin must be enabled to be able to exploit the injection.
+Finally here is the full request in Burp Suite:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-http" data-lang="http"><span style="color:#a6e22e">POST</span> /wp-admin/admin-ajax.php <span style="color:#66d9ef">HTTP</span><span style="color:#f92672">/</span><span style="color:#ae81ff">1.1</span>
+Host<span style="color:#f92672">:</span> <span style="color:#ae81ff">local.wordpress.com</span>
+User-Agent<span style="color:#f92672">:</span> <span style="color:#ae81ff">Mozilla/5.0 (X11; Linux x86_64; rv:38.0) Gecko/20100101 Firefox/38.0 Iceweasel/38.8.0</span>
+Accept<span style="color:#f92672">:</span> <span style="color:#ae81ff">*/*</span>
+Accept-Language<span style="color:#f92672">:</span> <span style="color:#ae81ff">en-US,en;q=0.5</span>
+Accept-Encoding<span style="color:#f92672">:</span> <span style="color:#ae81ff">gzip, deflate</span>
+Content-Type<span style="color:#f92672">:</span> <span style="color:#ae81ff">application/x-www-form-urlencoded; charset=UTF-8</span>
+X-Requested-With<span style="color:#f92672">:</span> <span style="color:#ae81ff">XMLHttpRequest</span>
+Referer<span style="color:#f92672">:</span> <span style="color:#ae81ff">http://local.wordpress.com/wp-admin/admin.php?page=gallerys_huge_it_gallery&amp;task=edit_cat&amp;id=1</span>
+Content-Length<span style="color:#f92672">:</span> <span style="color:#ae81ff">89</span>
+Client-Ip<span style="color:#f92672">:</span> <span style="color:#ae81ff">123.123.123.123</span>
+Cookie<span style="color:#f92672">:</span> <span style="color:#ae81ff">wordpress_3e0ed6e299d95d3a38b8516e25f1b1e2=admin%7C1463913228%7CYRWrxl5s69SoSkkXyMBFnXzSt2dSINk63ojC6F0mcWJ%7Cb28be90ae8a75452f047cb21fcc84f42a9a801123af24c1f77bb3f19c880147b; wordpress_test_cookie=WP+Cookie+check; wordpress_logged_in_3e0ed6e299d95d3a38b8516e25f1b1e2=admin%7C1463913228%7CYRWrxl5s69SoSkkXyMBFnXzSt2dSINk63ojC6F0mcWJ%7C243730f21ebdc724e25dd292d6c8d1773510dd572a0a39abc88b379852181f1f; wp-settings-1=libraryContent%3Dbrowse%26editor%3Dtinymce; wp-settings-time-1=1463740430; PHPSESSID=e5a63r274m6mvcfbmblgacrvq0</span>
+Connection<span style="color:#f92672">:</span> <span style="color:#ae81ff">keep-alive</span>
+Pragma<span style="color:#f92672">:</span> <span style="color:#ae81ff">no-cache</span>
+Cache-Control<span style="color:#f92672">:</span> <span style="color:#ae81ff">no-cache</span>
+
+action=huge_it_video_gallery_ajax&amp;task=load_images_content&amp;galleryid=1&amp;page=1&amp;perpage=100
+</code></pre></div><p>The parameter <code>task</code> can be one of the following:<br>
+load_images_content<br>
+load_images_lightbox<br>
+load_image_justified<br>
+load_image_thumbnail<br>
+load_blog_view</p>
+<p>And the result:
+<img src="http://10degres.net/images/image-gallery-sql-injection.png" alt="sqlmap injection"></p>
+<p>A Full Path Disclosure is also available if you call <code>http://www.example.com/wp-content/plugins/gallery-images/gallery-images.php</code></p>
+<p>I sent an email to Huge-IT who released a fix the same day. Fast enough :)</p>
+<h2 id="external-resources">External resources</h2>
+<ul>
+<li><a href="http://huge-it.com/wordpress-gallery/">Huge-IT website</a></li>
+</ul>
+      </div>
+
+      <footer>
+        
+
+
+      </footer>
+    </article>
+
+    
+  </section>
+
+      </div>
+
+      <footer class="footer">
+  <section class="container">
+    
+    
+    
+    
+  </section>
+</footer>
+
+    </main>
+
+    
+<script type="application/javascript">
+var doNotTrack = false;
+if (!doNotTrack) {
+	(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+	(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+	m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+	})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+	ga('create', 'UA-61485350-1', 'auto');
+	
+	ga('send', 'pageview');
+}
+</script>
+
+    
+      <script src="http://10degres.net/assets/js/scripts.js"></script>
+    
+    
+  </body>
+
+</html>

