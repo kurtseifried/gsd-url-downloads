@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='HTTP related Bug #79699 - RDF' href='rss/bug.php?id=79699'>
+        <link rel='alternate' type='application/rss+xml' title='HTTP related Bug #79699 - RSS 2.0' href='rss/bug.php?id=79699&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #79699 :: PHP parses encoded cookie names so malicious `__Host-` cookies can be sent</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=79699">Sec Bug</a>&nbsp;#79699</th>
+            <td id="summary" colspan="5">PHP parses encoded cookie names so malicious `__Host-` cookies can be sent</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2020-06-14 19:37 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2020-09-29 06:12 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>fletchto99 &#x61;&#116; gmail &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=HTTP+related">HTTP related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>7.4.7</td>
+            <th class="details">OS:</th>
+            <td>macOS (but should affect any)</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-7070" target="_blank">2020-7070</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=79699&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=79699&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=79699&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1592163428">&nbsp;</a><strong>[2020-06-14 19:37 UTC] fletchto99 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+Version: 7.4.7 (likely affects all PHP versions)
+
+The PHP cookie parser parses the HTTP_COOKIE string percent decoding the entire string. This allows a malicious attacker to set a second cookie with the name being percent encoded. Typically it would be expected that we cannot trust cookies and in _most_ cases that's true. However in a couple of cases certain expectations are set. Cookies allow for [cookie prefixes](<a href="https://textslashplain.com/2015/10/09/duct-tape-and-baling-wirecookie-prefixes/" rel="nofollow">https://textslashplain.com/2015/10/09/duct-tape-and-baling-wirecookie-prefixes/</a>) on the cookie name to indicate to the browser certain attributes. In this case there are 2 special attributes we care about: `__Secure-` and `__Host-`. When the browser sends these cookies to the server certain [assumptions](<a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#Attributes" rel="nofollow">https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#Attributes</a>) are be made around these cookies:
+
+1. `__Secure-` prefix: Cookies names starting with `__Secure-` (dash is part of the prefix) must be set with the secure flag from a secure page (HTTPS).
+2. `__Host-` prefix: Cookies with names starting with `__Host-` must be set with the secure flag, must be from a secure page (HTTPS), must not have a domain specified (and therefore aren't sent to subdomains) and the path must be `/`
+
+The flaw in PHP allows for a `__%48ost-` or `__%53ecure-` cookie to be set **without** the required attributes (I.e. set without HTTPS, from root domain, or from a secure page). This means a malicious cookie set by an attacker could set a `__%48ost-` cookie from a subdomain knowing that Rack would parse it as `__Host-`. Furthermore, since the browser won't enforce the `HostOnly` attribute to `__%48ost-` cookies an attacker could control the `__Host-` prefixed cookie from a subdomain by setting a wildcard domain on the `__%48ost-` cookie. This is breaking the core trust that __Host- cookies _must_ be set from the root domain &amp; secured and also __Secure- cookies must be set from a secure (https) domain.
+
+It should be noted that while the [cookie spec](<a href="https://tools.ietf.org/html/rfc6265#section-4.1.1" rel="nofollow">https://tools.ietf.org/html/rfc6265#section-4.1.1</a>) recommends encoding for the value of a cookie it doesn't make any suggestions around the encoding of the name of a cookie. However the [mozilla documentation](<a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#Attributes" rel="nofollow">https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#Attributes</a>) does indicate how a browser would expect the cookies to behave in these cases:
+
+&gt; A &lt;cookie-name&gt; can be any US-ASCII characters, except control characters, spaces, or tabs. It also must not contain a separator character like the following: ( ) &lt; &gt; @ , ; : \ &quot; / [ ] ? = { }.
+
+Based on the above an attacker could potentially set the cookie from a malicious script on a subdomain like so, bypassing any expectations around the attributes of the cookie:
+```
+document.cookie = &quot;__%48ost-evil=evil; domain=.example.com&quot;;
+```
+
+Test script:
+---------------
+--TEST--
+Cookies Security Bug
+--INI--
+max_input_vars=1000
+filter.default=unsafe_raw
+--COOKIE--
+__%48ost-evil=evil; __Host-evil=good; %66oo=baz;foo=bar
+--FILE--
+&lt;?php
+var_dump($_COOKIE);
+?&gt;
+--EXPECT--
+array(4) {
+  [&quot;__%48ost-evil=evil&quot;]=&gt;
+  string(4) &quot;evil&quot;
+  [&quot;__Host-evil=good&quot;]=&gt;
+  string(4) &quot;good&quot;
+  [&quot;%66oo&quot;]=&gt;
+  string(3) &quot;baz&quot;
+  [&quot;foo&quot;]=&gt;
+  string(3) &quot;bar&quot;
+}
+
+
+Expected result:
+----------------
+array(4) {
+  [&quot;__%48ost-evil=evil&quot;]=&gt;
+  string(4) &quot;evil&quot;
+  [&quot;__Host-evil=good&quot;]=&gt;
+  string(4) &quot;good&quot;
+  [&quot;%66oo&quot;]=&gt;
+  string(3) &quot;baz&quot;
+  [&quot;foo&quot;]=&gt;
+  string(3) &quot;bar&quot;
+}
+
+
+Actual result:
+--------------
+array(2) {
+  [&quot;__Host-evil&quot;]=&gt;
+  string(4) &quot;evil&quot;
+  [&quot;foo&quot;]=&gt;
+  string(3) &quot;baz&quot;
+}
+
+</pre>
+</div><h2>Patches</h2>
+<a href="patch-display.php?bug_id=79699&amp;patch=fix-urldecode&amp;revision=latest" >fix-urldecode</a>
+(last revision 2020-09-21 01:06 UTC by stas@php.net)
+<br><p><a href='patch-add.php?bug_id=79699'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=79699'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1592163650">&nbsp;</a><strong>[2020-06-14 19:40 UTC] fletchto99 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>I should probably mention, PHP isn't the only language/webserver with this issue. I've been working at filing bugs with the appropriate languages during the weekend. Unfortunately I'm not familiar enough with PHP's codebase to submit a patch, sorry about that!
+</pre>
+</div><div class='comment type_comment' ><a name="1592229791">&nbsp;</a><strong>[2020-06-15 14:03 UTC] <a href="//people.php.net/pollita">pollita@php.net</a></strong>
+<pre class='note'>No including a patch is fine, but what *would* you do to address this?  I hope the answer isn't &quot;Simply don't decode % sequences.&quot; as that's non-trivial from a BC point of view.
+
+The more pragmatic approach may involve detecting when &quot;special&quot; cookies result from decoding and validate that all required attributes for that cookie are applied (rejecting the cookie otherwise), but that smells a bit brittle.
+</pre>
+</div><div class='comment type_comment' ><a name="1592243154">&nbsp;</a><strong>[2020-06-15 17:45 UTC] fletchto99 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>&gt; No[t] including a patch is fine, but what *would* you do to address this?  I hope the answer isn't &quot;Simply don't decode % sequences.&quot; as that's non-trivial from a BC point of view.
+
+I would not percent decode the names of cookies. While the spec doesn't indicate that the value should be decoded or not, many implementations do. This would provide the most compatibility while addressing the vulnerability decoding the cookie names introduces.
+
+See more about cookie name/value decoding on the moz docs: <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#Attributes" rel="nofollow">https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#Attributes</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1592243418">&nbsp;</a><strong>[2020-06-15 17:50 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>I am not sure what's the supposed attack scenario here. Surely I can just connect to HTTP socket and send any HTTP request with any cookie headers I want. Why would one need to bother with percent-encoding cookies in a roundabout way if I can just directly send HTTP request with the same cookies?
+</pre>
+</div><div class='comment type_comment' ><a name="1592244248">&nbsp;</a><strong>[2020-06-15 18:04 UTC] fletchto99 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>&gt; I am not sure what's the supposed attack scenario here.
+
+While likely low severity this allows an attacker to break the contract that the browser defines with `HostOnly` and `Secure` cookies. 
+
+For example: Cookies with names starting with `__Host-` must be set with the secure flag, must be from a secure page (HTTPS), must not have a domain specified (and therefore aren't sent to subdomains) and the path must be `/`.
+
+However a malicious script would be able to abuse this bug to set a `__%48ost-` cookie from a sub-domain which PHP may interpret that as a `__Host-` cookie, thus trusting that it was secure and set via the root domain. Essentially breaking the contract that `__Host-` cookies cannot be set from a subdomain. 
+
+Essentially an attacker can overwrite cookies from a location they should not be able to, and this is because the browser only enforces the attributes for `__Host-` and not `__%48ost-` cookies.
+
+The above is also true for `__Secure-` cookies, where they could potentially be set on an un-secure page (non-https).
+</pre>
+</div><div class='comment type_comment' ><a name="1592247904">&nbsp;</a><strong>[2020-06-15 19:05 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>&gt; While likely low severity this allows an attacker to break the contract that the browser defines with `HostOnly` and `Secure` cookies. 
+
+Not sure what this has to do with browsers. HTTP protocol as far as I know has no concept of &quot;browser&quot; - HTTP request is HTTP request. Of course, browsers exist and have their conventions, but nothing prevents one from composing HTTP requests without use of any browser at all, so I am not sure which &quot;contract&quot; you are talking about - there's absolutely no guarantee that HTTP request contains any particular arrangement of data, beyond HTTP protocol itself.
+
+&gt; For example: Cookies with names starting with `__Host-` must be set with the secure flag, must be from a secure page (HTTPS), must not have a domain specified (and therefore aren't sent to subdomains) and the path must be `/`.
+
+I don't remember such requirement in the HTTP protocol, could you please point to the RFC that defines this? 
+
+If you are talking about browser convention, then this is nice but has little to do with HTTP server and PHP role here is the HTTP server. 
+
+&gt; However a malicious script would be able to abuse this bug to set a `__%48ost-` cookie from a sub-domain which PHP may interpret that as a `__Host-` cookie, thus trusting that it was secure
+
+If your server code thinks that cookie named __Host- is secure just because of the name, this code is trivially broken - I could use any of the thousands of tools to generate HTTP request which has the header with the same name but is not secure. So I am not sure what is the new issue here. 
+
+&gt; The above is also true for `__Secure-` cookies, where they could potentially be set on an un-secure page (non-https).
+
+Again, I could use any tool to generate HTTP request with any `__Secure-` cookie, and there wouldn't even be any &quot;page&quot; - so what? Server code can't rely just on cookie name for anything, because you can create any name you like. 
+
+Am I missing some important point here?
+</pre>
+</div><div class='comment type_comment' ><a name="1592252166">&nbsp;</a><strong>[2020-06-15 20:16 UTC] fletchto99 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>The RFC draft can be found here: <a href="https://tools.ietf.org/html/draft-ietf-httpbis-cookie-prefixes-00" rel="nofollow">https://tools.ietf.org/html/draft-ietf-httpbis-cookie-prefixes-00</a>
+
+Currently cookie prefixes are supported by all browsers excluding IE, see &quot;Cookie Prefixes&quot; in the compatibility table here: <a href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#Browser_compatibility" rel="nofollow">https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie#Browser_compatibility</a>
+
+&gt; Am I missing some important point here?
+
+The attack isn't so much that _I_ can modify my requests but rather that if there was an XSS vulnerability on a subdomain the attacker could make use of that to change the value of the `__Host-` cookie on the root domain, when typically that cookie shouldn't even be accessible from said subdomain:
+
+```
+document.cookie = &quot;__%48ost-evil=evil; domain=.example.com&quot;;
+```
+
+This would allow the attacker to set a cookie with the `__%48ost-` prefix which PHP would interpret at `__Host-`. The whole point of that prefix is so that a subdomain _can't_ set that cookie but because of the non-standard decoding this protection can be bypassed.
+
+This article has a pretty good explanation why cookie prefixes are valuable: <a href="https://www.sjoerdlangkemper.nl/2017/02/09/cookie-prefixes/" rel="nofollow">https://www.sjoerdlangkemper.nl/2017/02/09/cookie-prefixes/</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1592252285">&nbsp;</a><strong>[2020-06-15 20:18 UTC] fletchto99 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>To summarize it bypasses protection mechanisms of `__Host-` prefixed cookies which help in preventing these types of attacks:
+
+- The attacker can write a known value to the session ID. The client logs in and the attacker now has a working session. This works if the application is vulnerable to session fixation.
+- The attacker overwrites the session ID after log in. Alice thinks she is logged in as Alice, but she is actually logged in as the attacker.
+- The application checks the CSRF token in forms against a cookie. By overwriting that cookie, the attacker can perform CSRF requests.
+</pre>
+</div><div class='comment type_comment' ><a name="1592253183">&nbsp;</a><strong>[2020-06-15 20:33 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>&gt; The RFC draft can be found here
+
+This RFC, besides being an expired draft as it seems, seems to describe browser behavior, not server behavior. So I am not sure why it is relevant to HTTP server case. The server takes no part in decision of which cookies to accept and which to reject. 
+
+&gt; The attacker can write a known value to the session ID
+
+Surely, this is session fixation attack, but these are well known and have nothing to do with special cookie names. I am still not sure how prefixing cookie name with __Host- changes anything here.
+
+&gt; This would allow the attacker to set a cookie with the `__%48ost-` prefix which PHP would interpret at `__Host-`.
+
+But why the attacker wouldn't just set cookie with name `__Host-` in the first place? Do you imply the browser would prevent it from being set? Then it should also prevent the `__%48ost-` from being set by the same considerations, or encode the cookie name properly. That seems to be entirely on the browser side, I am still not sure what the server has to do with it.
+</pre>
+</div><div class='comment type_comment' ><a name="1592253981">&nbsp;</a><strong>[2020-06-15 20:46 UTC] fletchto99 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>&gt; But why the attacker wouldn't just set cookie with name `__Host-` in the first place? Do you imply the browser would prevent it from being set?
+
+Yep exactly. The browser wouldn't allow you to set the `__Host-` cookie from a subdomain. However the browser knows nothing about`__%48ost-` cookies so it will not enforce anything regarding that cookie.
+
+For example, let's say an attacker set `__%48ost-session` via XSS on sub.example.com then the user went to login from example.com, they would have the `__%48ost-session` cookie sent to PHP which would be interpreted as `__Host-session`. If the server relied on that cookie and trusts that it had the `__Host-` prefix then it can falsely assume the cookie has the `HostOnly` attribute. However because PHP treats `__%48ost-session` and `__Host-session` as the same it gives the attacker the ability to change that cookie from a subdomain potentially enabling one of the attacks listed earlier.
+
+A few other web frameworks/languages were vulnerable to this attack and are in the process of publishing CVEs &amp; fixes. Once they're published I can forward the links along and perhaps that can offer some more clarity?
+</pre>
+</div><div class='comment type_comment' ><a name="1592260627">&nbsp;</a><strong>[2020-06-15 22:37 UTC] fletchto99 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>The rails / rack team has published their advisory as well as a fix today.
+
+Advisory: <a href="https://groups.google.com/g/rubyonrails-security/c/OWtmozPH9Ak/m/4m00yHPCBAAJ?pli=1" rel="nofollow">https://groups.google.com/g/rubyonrails-security/c/OWtmozPH9Ak/m/4m00yHPCBAAJ?pli=1</a>
+
+Patch: <a href="https://github.com/rack/rack/commit/1f5763de6a9fe515ff84992b343d63c88104654c" rel="nofollow">https://github.com/rack/rack/commit/1f5763de6a9fe515ff84992b343d63c88104654c</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1593117055">&nbsp;</a><strong>[2020-06-25 20:30 UTC] fletchto99 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Hello,
+
+I just wanted to follow up on this submission to see if there's been a consensus regarding the issue? Thanks!
+</pre>
+</div><div class='comment type_comment' ><a name="1596576039">&nbsp;</a><strong>[2020-08-04 21:20 UTC] fletchto99 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Hello,
+
+I figured I'd send one more follow up...
+
+Dotnet is also fixing this vulnerability in their 5.0 release: <a href="https://github.com/dotnet/aspnetcore/pull/24264" rel="nofollow">https://github.com/dotnet/aspnetcore/pull/24264</a>
+
+If the PHP team doesn't believe this is a security issue would it be possible to open this issue as a bug to receive further community feedback? 
+
+Kind Regards
+</pre>
+</div><div class='comment type_log' ><a name="1596576205">&nbsp;</a><strong>[2020-08-04 21:23 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1596576205">&nbsp;</a><strong>[2020-08-04 21:23 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>I am still not 100% convinced it's our responsibility to fix browser not encoding things correctly, but I guess if other server tools standardize on not decoding cookie names it's ok for us to do that too. I'll make a patch for it, but probably not in time for release this Thursday, so it would be in the next one.
+</pre>
+</div><div class='comment type_patch' ><a name="1600650364">&nbsp;</a><strong>[2020-09-21 01:06 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The following patch has been added/updated:
+
+Patch Name: fix-urldecode
+Revision:   1600650364
+URL:        <a href="https://bugs.php.net/patch-display.php?bug=79699&amp;patch=fix-urldecode&amp;revision=1600650364" rel="nofollow">https://bugs.php.net/patch-display.php?bug=79699&amp;patch=fix-urldecode&amp;revision=1600650364</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1600650820">&nbsp;</a><strong>[2020-09-21 01:13 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>I've added the patch but I am not sure whether I should merge it as it fails some tests. This is easy to fix but I wonder if it can't lead to more breakage. I'll raise a question on discussion lists and see what people say.
+</pre>
+</div><div class='comment type_log' ><a name="1601187466">&nbsp;</a><strong>[2020-09-27 06:17 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2020-7070</span>
+</div></div></div><div class='comment type_log' ><a name="1601359971">&nbsp;</a><strong>[2020-09-29 06:12 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_comment' ><a name="1601359971">&nbsp;</a><strong>[2020-09-29 06:12 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The fix for this bug has been committed.
+If you are still experiencing this bug, try to check out latest source from <a href="https://github.com/php/php-src" rel="nofollow">https://github.com/php/php-src</a> and re-test.
+Thank you for the report, and for helping us make PHP better.
+
+
+</pre>
+</div><div class='comment type_related' ><a name="1613733198">&nbsp;</a><strong>[2021-02-19 11:13 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<pre class='note'>Related To: <a href='bug.php?id=80774'>Bug #80774</a>
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

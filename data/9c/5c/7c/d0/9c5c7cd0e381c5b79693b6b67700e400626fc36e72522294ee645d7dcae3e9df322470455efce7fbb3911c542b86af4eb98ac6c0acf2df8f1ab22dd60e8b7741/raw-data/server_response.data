@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='*URL Functions Bug #79465 - RDF' href='rss/bug.php?id=79465'>
+        <link rel='alternate' type='application/rss+xml' title='*URL Functions Bug #79465 - RSS 2.0' href='rss/bug.php?id=79465&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #79465 :: OOB Read in urldecode() </title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=79465">Sec Bug</a>&nbsp;#79465</th>
+            <td id="summary" colspan="5">OOB Read in urldecode() </td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2020-04-10 16:00 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2020-04-14 04:10 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>bigshaq &#x61;&#116; wearehackerone &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td></td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=%2AURL+Functions">*URL Functions</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>Irrelevant</td>
+            <th class="details">OS:</th>
+            <td>Any</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-7067 	" target="_blank">2020-7067 	</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=79465&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=79465&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=79465&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1586534426">&nbsp;</a><strong>[2020-04-10 16:00 UTC] bigshaq &#x61;&#116; wearehackerone &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+If  ``CHARSET_EBCDIC`` is defined (usually, on systems with EBCDIC encoding support), an Out-of-Bounds read can occur using a malformed url-encoded string.
+
+
+[C_SNIPPET]
+PHPAPI size_t php_url_decode(char *str, size_t len)
+{
+	char *dest = str;
+	char *data = str;
+/*...more code...*/
+
+#ifndef CHARSET_EBCDIC
+			*dest = (char) php_htoi(data + 1);
+#else
+			*dest = os_toebcdic[(char) php_htoi(data + 1)]; // &lt;--- here
+#endif
+
+/* ... more code ... */
+[/C_SNIPPET]
+
+* ``os_toebcdic[256]`` is an array(or an &quot;encoding map&quot;, i assume) used for decoding purposes. 
+* To convert the url-encoded string input into actual hex values, PHP uses ``php_htoi()`` and then convert the result into a signed byte(char).
+* This signed number is then provided as an index to the ``os_toebcdic[]`` array. 
+* There will be no OOB Read *after* the buffer because the max value of a byte is 0xff (=256), which is the same size as ``os_toebcdic[]`` 
+* However, the casting (mentioned in the second bullet) is done to a ``char`` type and not an ``unsigned char``, which means that we can insert negative hex values to leak values that are found in the memory BEFORE the array. 
+
+
+
+
+if we run:
+[PHP_SNIPPET]
+&lt;?
+urldecode('%xfd'); //0xfd == -3, It could also be 0x80 for bigger OOB (which is -128 in dec) 
+?&gt;
+[/PHP_SNIPPET]
+
+
+we can look at the casting in dynamic analysis:
+
+[GDB_SNIPPET]
+gdb-peda$ call php_htoi(data+1)
+$42 = 0xfd
+
+gdb-peda$ p/d (char)$42
+$43 = -3
+[/GDB_SNIPPET]
+
+Note: I did not **completely** verify it because CHARSET_EBCDIC is not supported on my system. So I hope the gdb snippet demonstrates the concept well enough. 
+I'm 99% sure that it's a valid bug because: if you look at it, it's pretty straight forward. There's a casting to a signed byte and there are no bounds checking/validations. I usually won't report without a fully working PoC on my system but on this case i still think it's worth looking into it (I tried to enable EBCDIC support in my system but didn't find any info on the internet about how to do it). 
+Please let me know if you can verify. 
+
+Thanks!  
+
+
+Test script:
+---------------
+&lt;?
+urldecode('%xfd'); //0xfd == -3, It could also be 0x80 for bigger OOB (which is -128 in dec) 
+?&gt;
+
+Expected result:
+----------------
+copy the 253rd (unsigned 0xfd) index of os_toebcdic
+
+Actual result:
+--------------
+copy the -3rd (signed 0xfd) byte before os_toebcdic
+
+</pre>
+</div><h2>Patches</h2>
+<a href="patch-display.php?bug_id=79465&amp;patch=CVE-2020-7067&amp;revision=latest" >CVE-2020-7067</a>
+(last revision 2021-03-22 03:42 UTC by 1552630135 &#x61;&#116; qq &#x64;&#111;&#x74; com)
+<br><p><a href='patch-add.php?bug_id=79465'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=79465'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1586535835">&nbsp;</a><strong>[2020-04-10 16:23 UTC] bigshaq &#x61;&#116; wearehackerone &#x64;&#111;&#x74; com</strong>
+<pre class='note'>There's a mistake in my payload/test script, it should be without the 'x' character after the precent(%) character. 
+
+Here's a new one:
+[PHP_SNIPPET]
+&lt;?php
+urldecode('%fd');
+?&gt;
+[/PHP_SNIPPET]
+</pre>
+</div><div class='comment type_comment' ><a name="1586599539">&nbsp;</a><strong>[2020-04-11 10:05 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<pre class='note'>&gt; […] then convert the result into a signed byte(char).
+
+char is not necessarily signed.  Whether it is signed or unsigned
+is actually implementation defined.
+</pre>
+</div><div class='comment type_comment' ><a name="1586605385">&nbsp;</a><strong>[2020-04-11 11:43 UTC] bigshaq &#x61;&#116; wearehackerone &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Hi @cmb, thanks for the quick response.
+Yes, I know that it depends on the implementation...
+
+I wrote that char is signed by default as if it was &quot;obvious&quot; because any common implementation (that respect itself) support both signed and unsigned char by default(x86 GNU/Linux, Microsoft Windows and so on)
+
+Yes, there might be some cases when char is unsigned by default and the OOB-Read won't work but those are edge cases imho.
+</pre>
+</div><div class='comment type_log' ><a name="1586754110">&nbsp;</a><strong>[2020-04-13 05:01 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2020-7067</span>
+</div></div></div><div class='comment type_comment' ><a name="1586837217">&nbsp;</a><strong>[2020-04-14 04:06 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>I have no way to test it and I am not 100% sure it even compiles now, but I guess it doesn't hurt to put unsigned char there...
+</pre>
+</div><div class='comment type_svn' ><a name="1586837416">&nbsp;</a><strong>[2020-04-14 04:10 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=9d6bf8221b05f86ce5875832f0f646c4c1f218be" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=9d6bf8221b05f86ce5875832f0f646c4c1f218be</a>
+Log: Fix <a href='bug.php?id=79465'>bug #79465</a> - use unsigneds as indexes.
+</pre>
+</div><div class='comment type_log' ><a name="1586837416">&nbsp;</a><strong>[2020-04-14 04:10 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Open</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_patch' ><a name="1616384567">&nbsp;</a><strong>[2021-03-22 03:42 UTC] 1552630135 &#x61;&#116; qq &#x64;&#111;&#x74; com</strong>
+<pre class='note'>The following patch has been added/updated:
+
+Patch Name: CVE-2020-7067
+Revision:   1616384567
+URL:        <a href="https://bugs.php.net/patch-display.php?bug=79465&amp;patch=CVE-2020-7067&amp;revision=1616384567" rel="nofollow">https://bugs.php.net/patch-display.php?bug=79465&amp;patch=CVE-2020-7067&amp;revision=1616384567</a>
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

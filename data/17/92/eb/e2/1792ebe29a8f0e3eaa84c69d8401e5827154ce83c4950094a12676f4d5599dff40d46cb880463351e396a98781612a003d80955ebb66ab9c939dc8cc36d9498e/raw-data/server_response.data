@@ -1,0 +1,3052 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en" dir="ltr">
+  <head>
+<base href="https://bugs.launchpad.net/mahara/+bug/1744789/+index" />
+
+    <meta charset="UTF-8" />
+    <title>Bug #1744789 “Avoid relying on TinyMCE code stripping alone” : Bugs : Mahara</title>
+    <link rel="shortcut icon" href="/@@/launchpad.png" />
+    <link rel="canonical" href="https://bugs.launchpad.net/bugs/1744789" />
+    
+      <link rel="alternate" type="application/atom+xml" href="http://feeds.launchpad.net/bugs/1744789/bug.atom" title="Bug 1744789 Feed" />
+    
+
+    
+  
+  <link type="text/css" rel="stylesheet" media="screen, print" href="/+icing/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/combo.css" />
+
+
+    
+
+    
+      <meta name="description" content="TinyMCE will strip bad strings from input, eg &lt;script&gt; tags but we must make sure we don't just rely on that alone. We should also clean up input on the server/php end as one can create their own packet of POST data containing bad content to hit the server with.
+
+This can be seen in the Wall plugin where we can make a wallpost POST package have a bad 'text' value and have it save unaltered." />
+      <meta property="og:description" content="TinyMCE will strip bad strings from input, eg &lt;script&gt; tags but we must make sure we don't just rely on that alone. We should also clean up input on the server/php end as one can create their own packet of POST data containing bad content to hit the server with.
+
+This can be seen in the Wall plugin where we can make a wallpost POST package have a bad 'text' value and have it save unaltered." />
+    
+
+    
+    
+      <meta property="og:title" content="Bug #1744789 “Avoid relying on TinyMCE code stripping alone” : Bugs : Mahara" />
+      <meta property="og:type" content="website" />
+      <meta property="og:image" content="/@@/launchpad.png" />
+      <meta property="og:url" content="https://bugs.launchpad.net/bugs/1744789" />
+      <meta property="og:site_name" content="Launchpad" />
+    
+
+    
+
+    
+  
+
+  
+  
+  <script type="text/javascript">
+    var LP = {
+        cache: {},
+        links: {}
+    };
+  </script>
+
+  
+
+  <script type="text/javascript">var cookie_scope = '; Path=/; Secure; Domain=.launchpad.net';</script>
+
+   <script type="text/javascript" src="/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?yui/yui/yui-min.js&amp;lp/meta.js&amp;yui/loader/loader-min.js"></script>
+   <script type="text/javascript">
+        var raw = null;
+        if (LP.devmode) {
+           raw = 'raw';
+        }
+        YUI.GlobalConfig = {
+            combine: true,
+            comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+            root: 'yui/',
+            filter: raw,
+            debug: false,
+            fetchCSS: false,
+            maxURLLength: 2000,
+            groups: {
+                lp: {
+                    combine: true,
+                    base: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?lp/',
+                    comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+                    root: 'lp/',
+                    // comes from including lp/meta.js
+                    modules: LP_MODULES,
+                    fetchCSS: false
+                }
+            }
+        }</script>
+
+  <script type="text/javascript">
+      // we need this to create a single YUI instance all events and code
+      // talks across. All instances of YUI().use should be based off of
+      // LPJS instead.
+      var LPJS = new YUI();
+  </script>
+
+
+
+    <script id="base-layout-load-scripts" type="text/javascript">
+        //<![CDATA[
+        LPJS.use('base', 'node', 'console', 'event',
+            'oop', 'lp', 'lp.app.foldables','lp.app.sorttable',
+            'lp.app.inlinehelp', 'lp.app.links',
+            'lp.bugs.bugtask_index', 'lp.bugs.subscribers',
+            'lp.app.ellipsis', 'lp.code.branchmergeproposal.diff',
+            'lp.views.global',
+             function(Y) {
+
+            Y.on("domready", function () {
+                var global_view = new Y.lp.views.Global();
+                global_view.render();
+
+                Y.lp.app.sorttable.SortTable.init();
+                Y.lp.app.inlinehelp.init_help();
+                Y.lp.activate_collapsibles();
+                Y.lp.app.foldables.activate();
+                Y.lp.app.links.check_valid_lp_links();
+            });
+
+            Y.on('lp:context:web_link:changed', function(e) {
+                  window.location = e.new_value;
+            });
+        });
+        //]]>
+    </script>
+    <script id="base-helper-functions" type="text/javascript">
+         //<![CDATA[
+        // This code is pulled from lp.js that needs to be available on every
+        // request. Pulling here to get it outside the scope of the YUI block.
+        function setFocusByName(name) {
+            // Focus the first element matching the given name which can be focused.
+            var nodes = document.getElementsByName(name);
+            var i, node;
+            for (i = 0; i < nodes.length; i++) {
+                node = nodes[i];
+                if (node.focus) {
+                    try {
+                        // Trying to focus a hidden element throws an error in IE8.
+                        if (node.offsetHeight !== 0) {
+                            node.focus();
+                        }
+                    } catch (e) {
+                        LPJS.use('console', function(Y) {
+                            Y.log('In setFocusByName(<' +
+                                node.tagName + ' type=' + node.type + '>): ' + e);
+                        });
+                    }
+                    break;
+                }
+            }
+        }
+
+        function selectWidget(widget_name, event) {
+          if (event && (event.keyCode === 9 || event.keyCode === 13)) {
+              // Avoid firing if user is tabbing through or simply pressing
+              // enter to submit the form.
+              return;
+          }
+          document.getElementById(widget_name).checked = true;
+        }
+        //]]>
+    </script>
+
+    
+      
+      <script type="text/javascript" id="available-official-tags-js">var available_official_tags = ["academy", "accessibility", "admin", "assessment", "auth", "behat-dev", "behat-test", "bite-sized", "blog", "bootstrap", "code-cleanup", "collections", "csvupload", "dmllib", "export", "externalfeed", "externalvideo", "feedback", "fileupload", "forums", "front-end", "gallery", "gdpr", "groups", "htmlpurifier", "import", "institutions", "manualupdate", "menus", "messaging", "mnet", "newfeature", "newfeature1.6", "newfeature1.7", "newfeature1.8", "notifications", "passwords", "php54", "plugins", "profileicon", "regression", "resume", "search", "security", "smartevidence", "snack-sized", "tags", "theming", "tinymce", "translations", "usability", "viewaccess", "vieweditor", "webservices"];</script>
+      <script type="text/javascript">
+        LPJS.use('base', 'node', 'oop', 'event', 'lp.bugs.bugtask_index',
+                  'lp.bugs.subscribers', 'lp.code.branchmergeproposal.diff',
+                  'lp.app.comment', 'lp.services.messages.edit', function(Y) {
+            Y.on('domready', function() {
+                Y.lp.code.branchmergeproposal.diff.connect_diff_links();
+                Y.lp.bugs.bugtask_index.setup_bugtask_index();
+                Y.lp.bugs.bugtask_index.setup_bugtask_table();
+                LP.cache.comment_context = LP.cache.bug;
+                var cl = new Y.lp.app.comment.CommentList();
+                cl.render();
+                var sl = new Y.lp.bugs.subscribers.createBugSubscribersLoader({
+                    container_box: '#other-bug-subscribers',
+                    subscribers_details_view:
+                        '/+bug-portlet-subscribers-details',
+                    subscribe_someone_else_link: '.menu-link-addsubscriber'
+                }, window);
+
+                Y.lp.services.messages.edit.setup();
+            });
+         });
+      </script>
+      <style type="text/css">
+        /* Align the 'add comment' link to the right of the comment box. */
+        #add-comment-form textarea { width: 100%; }
+        #add-comment-form { max-width: 60em; padding-bottom: 4em; }
+        #add-comment-form .actions {float: right;}
+        .buglink-summary dd { font-size: 10px; }
+        a#privacy-link:link:hover, a#privacy-link:visited:hover {text-decoration:none;}
+      </style>
+      <style type="text/css">
+        .yui3-overlay .value label  {
+          /* It normally makes sense for form labels to be bold, but since
+          this form consists only of radio buttons, there's nothing but labels
+          so we just get wall-to-wall bold. */
+          font-weight: normal !important;
+        }
+      </style>
+    
+    
+  </head>
+
+  <body id="document" itemscope="" itemtype="http://schema.org/WebPage" class="tab-bugs
+      main_side
+      public
+      yui3-skin-sam">
+          
+          
+    <div class="yui-d0">
+      <div id="locationbar" class="login-logout">
+        
+
+<div id="logincontrol"><a href="https://bugs.launchpad.net/mahara/+bug/1744789/+login">Log in / Register</a></div>
+
+
+
+      </div><!--id="locationbar"-->
+
+      <div id="watermark" class="watermark-apps-portlet">
+        <div>
+          <a href="https://launchpad.net/mahara"><img alt="" width="64" height="64" src="https://launchpadlibrarian.net/302557383/mahara_64x64.png" /></a>
+        </div>
+        <div class="wide">
+          <h2 id="watermark-heading"><a href="https://launchpad.net/mahara">Mahara</a></h2>
+        </div>
+        
+  <!-- Application Menu -->
+  <ul class="facetmenu">
+    
+      
+      <li class="overview"><a href="https://launchpad.net/mahara">Overview</a></li>
+      
+    
+    
+      
+      <li class="branches"><a href="https://code.launchpad.net/mahara">Code</a></li>
+      
+    
+    
+      <li class="bugs active"><a href="https://bugs.launchpad.net/mahara">Bugs</a></li>
+      
+      
+    
+    
+      
+      <li class="specifications"><a href="https://blueprints.launchpad.net/mahara">Blueprints</a></li>
+      
+    
+    
+      
+      <li class="translations"><a href="https://translations.launchpad.net/mahara">Translations</a></li>
+      
+    
+    
+      
+      <li class="answers"><a href="https://answers.launchpad.net/mahara">Answers</a></li>
+      
+    
+  </ul>
+
+      </div>
+
+      <div class="yui-t4">
+        <div id="maincontent" class="yui-main">
+          <div class="yui-b" dir="ltr">
+            <div class="context-publication">
+              
+      <h1 id="edit-title">
+<span class="yui3-editable_text-text ellipsis" style="max-width: 95%;">
+    Avoid relying on TinyMCE code stripping alone
+</span>
+  
+</h1>
+
+
+
+    
+              
+
+              <div id="registration" class="registering">
+                
+      Bug #1744789 reported by
+      <a href="https://launchpad.net/~robertl-9" class="sprite person">Robert Lyon</a>
+      <time title="2018-01-22 19:47:01 UTC" datetime="2018-01-22T19:47:01.974751+00:00">on 2018-01-22</time>
+    
+              </div>
+            </div>
+
+            
+            <div id="request-notifications">
+              
+            </div>
+
+            
+              <div>
+
+      
+
+      <div id="bug-is-duplicate">
+          
+      </div>
+      
+
+      <div style="float: right;">
+        <span><a href="/+help-bugs/bug-heat.html" target="help" class="sprite flame">256</a></span>
+      </div>
+
+      
+
+
+  
+  
+    <div class="actions">
+      <span id="affectsmetoo" style="display: inline">This bug affects 1 person</span>
+    </div>
+  
+
+
+
+    <table id="affected-software" class="listing">
+      <thead>
+        <tr>
+          <th colspan="2">Affects</th>
+          <th>Status</th>
+          <th>Importance</th>
+          <th>Assigned to</th>
+          <th>Milestone</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        
+          
+  <tr class="highlight" id="tasksummary2339951">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/mahara/+bug/1744789/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary2339951">
+        <span class="yui3-activator-data-box">
+            <a class="sprite product" href="https://bugs.launchpad.net/mahara">Mahara</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/mahara/+bug/1744789/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/mahara/+bug/1744789/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2339951">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~robertl-9">Robert Lyon</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/mahara/+milestone/18.04.0">Mahara 18.04.0</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task2339951">
+     <td colspan="7"><form action="/mahara/+bug/1744789/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/mahara">Mahara</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~robertl-9" class="sprite person">Robert Lyon</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2018-01-22 19:47:01 UTC" datetime="2018-01-22T19:47:01.974751+00:00">2018-01-22</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2018-01-22 19:47:01 UTC" datetime="2018-01-22T19:47:01.974751+00:00">2018-01-22</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2018-01-22 19:47:02 UTC" datetime="2018-01-22T19:47:02.408762+00:00">2018-01-22</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2018-01-22 19:47:01 UTC" datetime="2018-01-22T19:47:01.974751+00:00">2018-01-22</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2018-10-25 02:39:31 UTC" datetime="2018-10-25T02:39:31.057816+00:00">2018-10-25</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="mahara.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="mahara.target.option.package" name="mahara.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="mahara.target.distribution" name="mahara.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="mahara.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="mahara.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="mahara.target.package"
+                         name="mahara.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;mahara.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('mahara.target.package');
+              var select_menu = Y.DOM.byId('mahara.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-mahara-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_remove_button": false, "header": "Select a package", "vocabulary_filters": [], "remove_team_text": "Remove team", "remove_person_text": "Remove person", "selected_value_metadata": null, "show_create_team": false, "picker_type": "default", "vocabulary_name": "DistributionPackage", "extra_no_results_message": null, "selected_value": null, "show_assign_me_button": false, "show_widget_id": "show-widget-mahara-target-package", "step_title": "Search by name", "assign_me_text": "Pick me", "input_element": "mahara.target.package"};
+        var show_widget_id = 'show-widget-mahara-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="mahara.target.option.product" name="mahara.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="mahara" id="mahara.target.product"
+                         name="mahara.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;mahara.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('mahara.target.product');
+              var select_menu = Y.DOM.byId('mahara.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-mahara-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_remove_button": false, "header": "Select a project", "vocabulary_filters": [], "remove_team_text": "Remove team", "remove_person_text": "Remove person", "selected_value_metadata": null, "show_create_team": false, "picker_type": "default", "vocabulary_name": "Product", "extra_no_results_message": null, "selected_value": "mahara", "show_assign_me_button": false, "show_widget_id": "show-widget-mahara-target-product", "step_title": "Search", "assign_me_text": "Pick me", "input_element": "mahara.target.product"};
+        var show_widget_id = 'show-widget-mahara-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="mahara.status" name="mahara.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="mahara.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          Mahara 18.04.0
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="mahara.assignee.assign_to_me" name="mahara.assignee.option" value="mahara.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="mahara.assignee.assigned_to" name="mahara.assignee.option" value="mahara.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="mahara.assignee.assigned_to">
+              Robert Lyon (robertl-9)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="mahara.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="mahara.comment_on_change" name="mahara.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary2340330">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/mahara/16.10/+bug/1744789/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/mahara/16.10">16.10</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/mahara/16.10/+bug/1744789/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/mahara/16.10/+bug/1744789/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2340330">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/mahara/+milestone/16.10.9">Mahara 16.10.9</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task2340330">
+     <td colspan="7"><form action="/mahara/16.10/+bug/1744789/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/mahara/16.10">Mahara 16.10</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~robertl-9" class="sprite person">Robert Lyon</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2018-01-23 18:57:59 UTC" datetime="2018-01-23T18:57:59.524629+00:00">2018-01-23</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2018-01-23 19:11:17 UTC" datetime="2018-01-23T19:11:17.503884+00:00">2018-01-23</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2018-04-05 20:20:25 UTC" datetime="2018-04-05T20:20:25.452002+00:00">2018-04-05</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2018-04-05 21:47:26 UTC" datetime="2018-04-05T21:47:26.669888+00:00">2018-04-05</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_16.10.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_16.10.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_16.10.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="mahara_16.10.status" name="mahara_16.10.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="mahara_16.10.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          Mahara 16.10.9
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_16.10.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="mahara_16.10.assignee.assign_to_nobody" name="mahara_16.10.assignee.option" value="mahara_16.10.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_16.10.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="mahara_16.10.assignee.assign_to_me" name="mahara_16.10.assignee.option" value="mahara_16.10.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_16.10.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="mahara_16.10.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="mahara_16.10.comment_on_change" name="mahara_16.10.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary2340332">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/mahara/17.04/+bug/1744789/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/mahara/17.04">17.04</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/mahara/17.04/+bug/1744789/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/mahara/17.04/+bug/1744789/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2340332">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/mahara/+milestone/17.04.7">Mahara 17.04.7</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task2340332">
+     <td colspan="7"><form action="/mahara/17.04/+bug/1744789/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/mahara/17.04">Mahara 17.04</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~robertl-9" class="sprite person">Robert Lyon</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2018-01-23 18:57:59 UTC" datetime="2018-01-23T18:57:59.524629+00:00">2018-01-23</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2018-01-23 19:11:21 UTC" datetime="2018-01-23T19:11:21.645290+00:00">2018-01-23</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2018-04-05 20:20:22 UTC" datetime="2018-04-05T20:20:22.685328+00:00">2018-04-05</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2018-04-05 22:04:53 UTC" datetime="2018-04-05T22:04:53.556205+00:00">2018-04-05</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_17.04.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_17.04.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_17.04.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="mahara_17.04.status" name="mahara_17.04.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="mahara_17.04.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          Mahara 17.04.7
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_17.04.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="mahara_17.04.assignee.assign_to_nobody" name="mahara_17.04.assignee.option" value="mahara_17.04.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_17.04.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="mahara_17.04.assignee.assign_to_me" name="mahara_17.04.assignee.option" value="mahara_17.04.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_17.04.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="mahara_17.04.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="mahara_17.04.comment_on_change" name="mahara_17.04.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary2340333">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/mahara/17.10/+bug/1744789/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/mahara/17.10">17.10</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/mahara/17.10/+bug/1744789/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/mahara/17.10/+bug/1744789/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2340333">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/mahara/+milestone/17.10.4">Mahara 17.10.4</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task2340333">
+     <td colspan="7"><form action="/mahara/17.10/+bug/1744789/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/mahara/17.10">Mahara 17.10</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~robertl-9" class="sprite person">Robert Lyon</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2018-01-23 18:57:59 UTC" datetime="2018-01-23T18:57:59.524629+00:00">2018-01-23</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2018-01-23 19:11:24 UTC" datetime="2018-01-23T19:11:24.659462+00:00">2018-01-23</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2018-04-05 20:20:20 UTC" datetime="2018-04-05T20:20:20.362761+00:00">2018-04-05</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2018-04-05 22:36:14 UTC" datetime="2018-04-05T22:36:14.042648+00:00">2018-04-05</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_17.10.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_17.10.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_17.10.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="mahara_17.10.status" name="mahara_17.10.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="mahara_17.10.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          Mahara 17.10.4
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_17.10.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="mahara_17.10.assignee.assign_to_nobody" name="mahara_17.10.assignee.option" value="mahara_17.10.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_17.10.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="mahara_17.10.assignee.assign_to_me" name="mahara_17.10.assignee.option" value="mahara_17.10.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_17.10.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="mahara_17.10.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="mahara_17.10.comment_on_change" name="mahara_17.10.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary2340331">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/mahara/18.04/+bug/1744789/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/mahara/18.04">18.04</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/mahara/18.04/+bug/1744789/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/mahara/18.04/+bug/1744789/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2340331">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~robertl-9">Robert Lyon</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/mahara/+milestone/18.04.0">Mahara 18.04.0</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task2340331">
+     <td colspan="7"><form action="/mahara/18.04/+bug/1744789/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/mahara/18.04">Mahara 18.04</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~robertl-9" class="sprite person">Robert Lyon</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2018-01-23 18:57:59 UTC" datetime="2018-01-23T18:57:59.524629+00:00">2018-01-23</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2018-01-22 19:47:01 UTC" datetime="2018-01-22T19:47:01.974751+00:00">2018-01-22</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2018-01-22 19:47:02 UTC" datetime="2018-01-22T19:47:02.408762+00:00">2018-01-22</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2018-01-22 19:47:01 UTC" datetime="2018-01-22T19:47:01.974751+00:00">2018-01-22</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2018-04-05 22:04:51 UTC" datetime="2018-04-05T22:04:51.058707+00:00">2018-04-05</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_18.04.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_18.04.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_18.04.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="mahara_18.04.status" name="mahara_18.04.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="mahara_18.04.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          Mahara 18.04.0
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_18.04.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="mahara_18.04.assignee.assign_to_me" name="mahara_18.04.assignee.option" value="mahara_18.04.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_18.04.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="mahara_18.04.assignee.assigned_to" name="mahara_18.04.assignee.option" value="mahara_18.04.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="mahara_18.04.assignee.assigned_to">
+              Robert Lyon (robertl-9)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="mahara_18.04.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="mahara_18.04.comment_on_change" name="mahara_18.04.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary2368766">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/mahara/18.10/+bug/1744789/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/mahara/18.10">18.10</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/mahara/18.10/+bug/1744789/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/mahara/18.10/+bug/1744789/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2368766">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/mahara/+milestone/18.10.0">Mahara 18.10.0</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task2368766">
+     <td colspan="7"><form action="/mahara/18.10/+bug/1744789/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/mahara/18.10">Mahara 18.10</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~robertl-9" class="sprite person">Robert Lyon</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2018-04-05 20:20:32 UTC" datetime="2018-04-05T20:20:32.242096+00:00">2018-04-05</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2018-04-05 20:20:40 UTC" datetime="2018-04-05T20:20:40.534000+00:00">2018-04-05</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2018-04-05 20:20:40 UTC" datetime="2018-04-05T20:20:40.534000+00:00">2018-04-05</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2018-10-25 02:39:31 UTC" datetime="2018-10-25T02:39:31.057816+00:00">2018-10-25</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_18.10.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_18.10.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_18.10.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="mahara_18.10.status" name="mahara_18.10.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="mahara_18.10.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          Mahara 18.10.0
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_18.10.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="mahara_18.10.assignee.assign_to_nobody" name="mahara_18.10.assignee.option" value="mahara_18.10.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_18.10.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="mahara_18.10.assignee.assign_to_me" name="mahara_18.10.assignee.option" value="mahara_18.10.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_18.10.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="mahara_18.10.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="mahara_18.10.comment_on_change" name="mahara_18.10.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+      </tbody>
+
+    </table>
+
+
+
+<div class="actions">
+  
+    <span id="also-affects-product" class="">
+    <a class="menu-link-addupstream sprite add" href="https://bugs.launchpad.net/mahara/+bug/1744789/+choose-affected-product">Also affects project</a>
+        <a href="/+help-bugs/also-affects-project-help.html" target="help" class="sprite maybe action-icon">(?)</a>
+    </span>
+    <span id="also-affects-package" class="">
+    <a class="menu-link-adddistro sprite add" href="https://bugs.launchpad.net/mahara/+bug/1744789/+distrotask">Also affects distribution/package</a>
+    </span>
+    <a class="menu-link-nominate sprite milestone" href="https://bugs.launchpad.net/mahara/+bug/1744789/+nominate">Nominate for series</a>
+    
+  
+
+</div>
+
+
+
+
+      <div id="maincontentsub">
+        <div class="top-portlet">
+
+      <div itemprop="mainContentOfPage" class="report">
+        
+
+        <div>
+  <div class="lazr-multiline-edit" id="edit-description">
+  <div class="clearfix">
+    
+
+    <h3>Bug Description</h3>
+  </div>
+
+  <div class="yui3-editable_text-text"><p>TinyMCE will strip bad strings from input, eg &lt;script&gt; tags but we must make sure we don&#x27;t just rely on that alone. We should also clean up input on the server/php end as one can create their own packet of POST data containing bad content to hit the server with.</p>
+<p>This can be seen in the Wall plugin where we can make a wallpost POST package have a bad &#x27;text&#x27; value and have it save unaltered.</p></div>
+  </div>
+
+  
+</div>
+
+
+        <div style="margin:-10px 0 20px 5px" class="clearfix">
+          
+        </div>
+
+        <div id="bug-tags">
+          <span id="tags-heading">
+            
+          </span>
+          <span id="tag-list">
+          </span>
+          <a href="+edit" title="Add tags" id="tags-trigger" class="sprite add">Add tags</a>
+          
+          <a href="/+help-bugs/tag-help.html" target="help" class="sprite maybe action-icon">Tag help</a>
+        </div>
+
+        <script type="text/javascript">
+          LPJS.use('event', 'node', 'lp.bugs.tags_entry', function(Y) {
+              Y.on('domready',
+                   function(e) {
+                       Y.lp.bugs.tags_entry.setup_tag_entry(
+                           available_official_tags);
+                   },
+                   window);
+          });
+        </script>
+
+        <div class="clearfix"></div>
+      </div>
+
+      <div id="branches-and-cves">
+        <div id="bug-branches-container" style="float: left">
+          
+        </div><!-- bug-branch-container -->
+
+        <div class="cves">
+          <h2>CVE References</h2>
+          <ul>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2018-6182" title="Mahara 16.10 before 16.10.9 and 17.04...">2018-6182</a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="clearfix"></div>
+      </div> <!-- branches and CVEs -->
+
+      </div>
+
+      <div>
+      
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/mahara/+bug/1744789/comments/1" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~robertl-9" class="sprite person">Robert Lyon (robertl-9)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2018-01-22T19:48:27.108475+00:00" title="2018-01-22 19:48:27 UTC">on 2018-01-22</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/mahara/+bug/1744789/comments/1"> #1</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Need to check all the places where the tinymce is used for a form field and make sure it is being saved in a safe way on the php side</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Need to check all the places where the tinymce is used for a form field and make sure it is being saved in a safe way on the php side</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/mahara/+bug/1744789/comments/2" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kris-hoeppner" class="sprite person">Kristina Hoeppner (kris-hoeppner)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2018-01-23T18:42:41.602994+00:00" title="2018-01-23 18:42:41 UTC">on 2018-01-23</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/mahara/+bug/1744789/comments/2"> #2</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Discoverer credit: 陈瑞琦 (Chen Ruiqi)</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Discoverer credit: 陈瑞琦 (Chen Ruiqi)</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/mahara/+bug/1744789/comments/3" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~dev-mahara" class="sprite person">Mahara Bot (dev-mahara)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2018-04-05T20:18:18+00:00" title="2018-04-05 20:18:18 UTC">on 2018-04-05</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/mahara/+bug/1744789/comments/3">
+                <strong>A change has been merged</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/mahara/+bug/1744789/comments/3"> #3</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://reviews.mahara.org/8784">https:/<wbr />/reviews.<wbr />mahara.<wbr />org/8784</a><br />
+Committed: <a rel="nofollow" href="https://git.mahara.org/mahara/mahara/commit/8a8b21e4014137680da34d00af76c608c3f8b222">https:/<wbr />/git.mahara.<wbr />org/mahara/<wbr />mahara/<wbr />commit/<wbr />8a8b21e40141376<wbr />80da34d00af76c6<wbr />08c3f8b222</a><br />
+Submitter: Robert Lyon (&lt;email address hidden&gt;)<br />
+Branch:    18.04_STABLE</p>
+<p>commit 8a8b21e40141376<wbr />80da34d00af76c6<wbr />08c3f8b222<br />
+Author: Robert Lyon &lt;email address hidden&gt;<br />
+Date:   Thu Jan 18 10:43:37 2018 +1300</p>
+<p>Security <a href="/bugs/1744789" class="bug-link">Bug 1744789</a>: Remove bad code from wallpost post</p>
+<p>We currently escape post content before submission<br />
+But we also need to do cleaning on php side incase hacker posts directly</p>
+<p>Also needing to clean up annotations with bad html in their<br />
+descriptions and resume composite fields with bad html in their<br />
+descriptions</p>
+<p>behatnotneeded</p>
+<p>Change-Id: I8c7def1acad7b6<wbr />692a96b2ba065c2<wbr />3abcd69cfb5<br />
+Signed-off-by: Robert Lyon &lt;email address hidden&gt;<br />
+(cherry picked from commit cff112250a5710b<wbr />7a897e0f392a429<wbr />cd29779ecc)</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://reviews.mahara.org/8784
+Committed: https://git.mahara.org/mahara/mahara/commit/8a8b21e4014137680da34d00af76c608c3f8b222
+Submitter: Robert Lyon (robertl@catalyst.net.nz)
+Branch:    18.04_STABLE
+
+commit 8a8b21e4014137680da34d00af76c608c3f8b222
+Author: Robert Lyon &lt;robertl@catalyst.net.nz&gt;
+Date:   Thu Jan 18 10:43:37 2018 +1300
+
+Security Bug 1744789: Remove bad code from wallpost post
+
+We currently escape post content before submission
+But we also need to do cleaning on php side incase hacker posts directly
+
+Also needing to clean up annotations with bad html in their
+descriptions and resume composite fields with bad html in their
+descriptions
+
+behatnotneeded
+
+Change-Id: I8c7def1acad7b6692a96b2ba065c23abcd69cfb5
+Signed-off-by: Robert Lyon &lt;robertl@catalyst.net.nz&gt;
+(cherry picked from commit cff112250a5710b7a897e0f392a429cd29779ecc)
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/mahara/+bug/1744789/comments/4" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~dev-mahara" class="sprite person">Mahara Bot (dev-mahara)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2018-04-05T20:18:24+00:00" title="2018-04-05 20:18:24 UTC">on 2018-04-05</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/mahara/+bug/1744789/comments/4">
+                <strong>A patch has been submitted for review</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/mahara/+bug/1744789/comments/4"> #4</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Patch for &quot;17.10_STABLE&quot; branch: <a rel="nofollow" href="https://reviews.mahara.org/8785">https:/<wbr />/reviews.<wbr />mahara.<wbr />org/8785</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Patch for "17.10_STABLE" branch: https://reviews.mahara.org/8785
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/mahara/+bug/1744789/comments/5" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~dev-mahara" class="sprite person">Mahara Bot (dev-mahara)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2018-04-05T20:18:30+00:00" title="2018-04-05 20:18:30 UTC">on 2018-04-05</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/mahara/+bug/1744789/comments/5"> #5</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Patch for &quot;17.04_STABLE&quot; branch: <a rel="nofollow" href="https://reviews.mahara.org/8786">https:/<wbr />/reviews.<wbr />mahara.<wbr />org/8786</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Patch for "17.04_STABLE" branch: https://reviews.mahara.org/8786
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/mahara/+bug/1744789/comments/6" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~dev-mahara" class="sprite person">Mahara Bot (dev-mahara)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2018-04-05T20:19:14+00:00" title="2018-04-05 20:19:14 UTC">on 2018-04-05</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/mahara/+bug/1744789/comments/6"> #6</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Patch for &quot;16.10_STABLE&quot; branch: <a rel="nofollow" href="https://reviews.mahara.org/8787">https:/<wbr />/reviews.<wbr />mahara.<wbr />org/8787</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Patch for "16.10_STABLE" branch: https://reviews.mahara.org/8787
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/mahara/+bug/1744789/comments/7" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~dev-mahara" class="sprite person">Mahara Bot (dev-mahara)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2018-04-05T20:19:21+00:00" title="2018-04-05 20:19:21 UTC">on 2018-04-05</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/mahara/+bug/1744789/comments/7">
+                <strong>A change has been merged</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/mahara/+bug/1744789/comments/7"> #7</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://reviews.mahara.org/8787">https:/<wbr />/reviews.<wbr />mahara.<wbr />org/8787</a><br />
+Committed: <a rel="nofollow" href="https://git.mahara.org/mahara/mahara/commit/b0bdbc78e23ae0b5905fa50c6faed5803fdba6f4">https:/<wbr />/git.mahara.<wbr />org/mahara/<wbr />mahara/<wbr />commit/<wbr />b0bdbc78e23ae0b<wbr />5905fa50c6faed5<wbr />803fdba6f4</a><br />
+Submitter: Robert Lyon (&lt;email address hidden&gt;)<br />
+Branch:    16.10_STABLE</p>
+<p>commit b0bdbc78e23ae0b<wbr />5905fa50c6faed5<wbr />803fdba6f4<br />
+Author: Robert Lyon &lt;email address hidden&gt;<br />
+Date:   Thu Jan 18 10:43:37 2018 +1300</p>
+<p>Security <a href="/bugs/1744789" class="bug-link">Bug 1744789</a>: Remove bad code from wallpost post</p>
+<p>We currently escape post content before submission<br />
+But we also need to do cleaning on php side incase hacker posts directly</p>
+<p>Also needing to clean up annotations with bad html in their<br />
+descriptions and resume composite fields with bad html in their<br />
+descriptions</p>
+<p>behatnotneeded</p>
+<p>Change-Id: I8c7def1acad7b6<wbr />692a96b2ba065c2<wbr />3abcd69cfb5<br />
+Signed-off-by: Robert Lyon &lt;email address hidden&gt;<br />
+(cherry picked from commit cff112250a5710b<wbr />7a897e0f392a429<wbr />cd29779ecc)<br />
+(cherry picked from commit 8a8b21e40141376<wbr />80da34d00af76c6<wbr />08c3f8b222)</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://reviews.mahara.org/8787
+Committed: https://git.mahara.org/mahara/mahara/commit/b0bdbc78e23ae0b5905fa50c6faed5803fdba6f4
+Submitter: Robert Lyon (robertl@catalyst.net.nz)
+Branch:    16.10_STABLE
+
+commit b0bdbc78e23ae0b5905fa50c6faed5803fdba6f4
+Author: Robert Lyon &lt;robertl@catalyst.net.nz&gt;
+Date:   Thu Jan 18 10:43:37 2018 +1300
+
+Security Bug 1744789: Remove bad code from wallpost post
+
+We currently escape post content before submission
+But we also need to do cleaning on php side incase hacker posts directly
+
+Also needing to clean up annotations with bad html in their
+descriptions and resume composite fields with bad html in their
+descriptions
+
+behatnotneeded
+
+Change-Id: I8c7def1acad7b6692a96b2ba065c23abcd69cfb5
+Signed-off-by: Robert Lyon &lt;robertl@catalyst.net.nz&gt;
+(cherry picked from commit cff112250a5710b7a897e0f392a429cd29779ecc)
+(cherry picked from commit 8a8b21e4014137680da34d00af76c608c3f8b222)
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/mahara/+bug/1744789/comments/8" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~dev-mahara" class="sprite person">Mahara Bot (dev-mahara)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2018-04-05T20:19:36+00:00" title="2018-04-05 20:19:36 UTC">on 2018-04-05</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/mahara/+bug/1744789/comments/8"> #8</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://reviews.mahara.org/8785">https:/<wbr />/reviews.<wbr />mahara.<wbr />org/8785</a><br />
+Committed: <a rel="nofollow" href="https://git.mahara.org/mahara/mahara/commit/bc568169ba3fc7aae348fe8e4b190d1a3d691a74">https:/<wbr />/git.mahara.<wbr />org/mahara/<wbr />mahara/<wbr />commit/<wbr />bc568169ba3fc7a<wbr />ae348fe8e4b190d<wbr />1a3d691a74</a><br />
+Submitter: Robert Lyon (&lt;email address hidden&gt;)<br />
+Branch:    17.10_STABLE</p>
+<p>commit bc568169ba3fc7a<wbr />ae348fe8e4b190d<wbr />1a3d691a74<br />
+Author: Robert Lyon &lt;email address hidden&gt;<br />
+Date:   Thu Jan 18 10:43:37 2018 +1300</p>
+<p>Security <a href="/bugs/1744789" class="bug-link">Bug 1744789</a>: Remove bad code from wallpost post</p>
+<p>We currently escape post content before submission<br />
+But we also need to do cleaning on php side incase hacker posts directly</p>
+<p>Also needing to clean up annotations with bad html in their<br />
+descriptions and resume composite fields with bad html in their<br />
+descriptions</p>
+<p>behatnotneeded</p>
+<p>Change-Id: I8c7def1acad7b6<wbr />692a96b2ba065c2<wbr />3abcd69cfb5<br />
+Signed-off-by: Robert Lyon &lt;email address hidden&gt;<br />
+(cherry picked from commit cff112250a5710b<wbr />7a897e0f392a429<wbr />cd29779ecc)<br />
+(cherry picked from commit 8a8b21e40141376<wbr />80da34d00af76c6<wbr />08c3f8b222)</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://reviews.mahara.org/8785
+Committed: https://git.mahara.org/mahara/mahara/commit/bc568169ba3fc7aae348fe8e4b190d1a3d691a74
+Submitter: Robert Lyon (robertl@catalyst.net.nz)
+Branch:    17.10_STABLE
+
+commit bc568169ba3fc7aae348fe8e4b190d1a3d691a74
+Author: Robert Lyon &lt;robertl@catalyst.net.nz&gt;
+Date:   Thu Jan 18 10:43:37 2018 +1300
+
+Security Bug 1744789: Remove bad code from wallpost post
+
+We currently escape post content before submission
+But we also need to do cleaning on php side incase hacker posts directly
+
+Also needing to clean up annotations with bad html in their
+descriptions and resume composite fields with bad html in their
+descriptions
+
+behatnotneeded
+
+Change-Id: I8c7def1acad7b6692a96b2ba065c23abcd69cfb5
+Signed-off-by: Robert Lyon &lt;robertl@catalyst.net.nz&gt;
+(cherry picked from commit cff112250a5710b7a897e0f392a429cd29779ecc)
+(cherry picked from commit 8a8b21e4014137680da34d00af76c608c3f8b222)
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/mahara/+bug/1744789/comments/9" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~dev-mahara" class="sprite person">Mahara Bot (dev-mahara)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2018-04-05T20:19:54+00:00" title="2018-04-05 20:19:54 UTC">on 2018-04-05</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/mahara/+bug/1744789/comments/9"> #9</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://reviews.mahara.org/8786">https:/<wbr />/reviews.<wbr />mahara.<wbr />org/8786</a><br />
+Committed: <a rel="nofollow" href="https://git.mahara.org/mahara/mahara/commit/4037f9bf730cfb995b89db11fe93d83b06bf6fc8">https:/<wbr />/git.mahara.<wbr />org/mahara/<wbr />mahara/<wbr />commit/<wbr />4037f9bf730cfb9<wbr />95b89db11fe93d8<wbr />3b06bf6fc8</a><br />
+Submitter: Robert Lyon (&lt;email address hidden&gt;)<br />
+Branch:    17.04_STABLE</p>
+<p>commit 4037f9bf730cfb9<wbr />95b89db11fe93d8<wbr />3b06bf6fc8<br />
+Author: Robert Lyon &lt;email address hidden&gt;<br />
+Date:   Thu Jan 18 10:43:37 2018 +1300</p>
+<p>Security <a href="/bugs/1744789" class="bug-link">Bug 1744789</a>: Remove bad code from wallpost post</p>
+<p>We currently escape post content before submission<br />
+But we also need to do cleaning on php side incase hacker posts directly</p>
+<p>Also needing to clean up annotations with bad html in their<br />
+descriptions and resume composite fields with bad html in their<br />
+descriptions</p>
+<p>behatnotneeded</p>
+<p>Change-Id: I8c7def1acad7b6<wbr />692a96b2ba065c2<wbr />3abcd69cfb5<br />
+Signed-off-by: Robert Lyon &lt;email address hidden&gt;<br />
+(cherry picked from commit cff112250a5710b<wbr />7a897e0f392a429<wbr />cd29779ecc)<br />
+(cherry picked from commit 8a8b21e40141376<wbr />80da34d00af76c6<wbr />08c3f8b222)</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://reviews.mahara.org/8786
+Committed: https://git.mahara.org/mahara/mahara/commit/4037f9bf730cfb995b89db11fe93d83b06bf6fc8
+Submitter: Robert Lyon (robertl@catalyst.net.nz)
+Branch:    17.04_STABLE
+
+commit 4037f9bf730cfb995b89db11fe93d83b06bf6fc8
+Author: Robert Lyon &lt;robertl@catalyst.net.nz&gt;
+Date:   Thu Jan 18 10:43:37 2018 +1300
+
+Security Bug 1744789: Remove bad code from wallpost post
+
+We currently escape post content before submission
+But we also need to do cleaning on php side incase hacker posts directly
+
+Also needing to clean up annotations with bad html in their
+descriptions and resume composite fields with bad html in their
+descriptions
+
+behatnotneeded
+
+Change-Id: I8c7def1acad7b6692a96b2ba065c23abcd69cfb5
+Signed-off-by: Robert Lyon &lt;robertl@catalyst.net.nz&gt;
+(cherry picked from commit cff112250a5710b7a897e0f392a429cd29779ecc)
+(cherry picked from commit 8a8b21e4014137680da34d00af76c608c3f8b222)
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~robertl-9" class="sprite person">Robert Lyon (robertl-9)</a>
+    
+    <time title="2018-04-05 20:20:13 UTC" datetime="2018-04-05T20:20:13.178802+00:00">on 2018-04-05</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>information type</b>:
+      </td>
+      <td>
+        Private Security &#8594; Public Security
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~robertl-9" class="sprite person">Robert Lyon (robertl-9)</a>
+    
+    <time title="2018-04-05 23:22:25 UTC" datetime="2018-04-05T23:22:25.012948+00:00">on 2018-04-05</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>summary</b>:
+      </td>
+      <td>
+        - Avoid relying on TinyMCE code stipping alone<br />+ Avoid relying on TinyMCE code stripping alone
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        <div style="float: right;">
+          <a class="menu-link-activitylog" href="https://bugs.launchpad.net/mahara/+bug/1744789/+activity">See full activity log</a>
+        </div>
+        <div class="clearfix"></div>
+
+        
+          
+
+          
+            <div align="center" id="add-comment-login-first">
+              To post a comment you must <a href="+login?comments=all">log in</a>.
+            </div>
+          
+        
+        
+      
+
+      </div><!-- class="top-portlet" -->
+      </div><!--- id="maincontentsub"-->
+      <div>
+        <div id="duplicate-form-container"></div>
+        <div id="privacy-form-container"></div>
+      </div>
+    </div>
+            
+            
+          </div><!-- yui-b -->
+        </div><!-- yui-main -->
+
+        
+          <div id="side-portlets" class="yui-b side">
+            
+      <div id="involvement" class="portlet">
+        <ul class="involvement">
+          <li class="single">
+            <a class="sprite bugs" href="/mahara/+filebug">
+              Report a bug
+            </a>
+          </li>
+        </ul>
+      </div>
+      <div id="privacy" class="first portlet public">
+  <div id="privacy-text">
+     <span id="information-type-summary" class="sprite public">This report contains
+         <strong id="information-type">Public Security</strong>
+         information
+     </span>&nbsp;<a class="sprite edit action-icon" id="privacy-link" href="/mahara/+bug/1744789/+secrecy">Edit</a>
+
+     <div id="information-type-description" style="padding-top: 5px">Everyone can see this security related information.
+</div>
+  </div>
+</div>
+
+      <div id="portlet-actions" class="portlet vertical">
+  <ul id="duplicate-actions">
+    <li class="sprite bug-dupe">
+    <span id="mark-duplicate-text">
+    <a class="menu-link-mark-dupe" href="/mahara/+bug/1744789/+duplicate">Mark as duplicate</a>
+    </span>
+    </li>
+    
+    <li><a class="menu-link-createquestion sprite add" href="https://bugs.launchpad.net/mahara/+bug/1744789/+create-question">Convert to a question</a></li>
+    
+    <li><a class="menu-link-addbranch sprite add" href="https://bugs.launchpad.net/mahara/+bug/1744789/+addbranch">Link a related branch</a></li>
+    <li><a class="menu-link-linktocve sprite add" href="https://bugs.launchpad.net/mahara/+bug/1744789/+linkcve">Link to <abbr title="Common Vulnerabilities and Exposures Index">CVE</abbr></a></li>
+    <li><a class="menu-link-unlinkcve sprite modify remove" href="https://bugs.launchpad.net/mahara/+bug/1744789/+unlinkcve">Remove CVE link</a></li>
+  </ul>
+</div>
+
+      
+
+      <div class="portlet vertical" id="portlet-subscription">
+  <div class="section">
+    <div id="current_user_subscription" class="False">
+      
+        <span>You are</span>
+        
+        <a class="menu-link-subscription sprite modify edit" href="/mahara/+bug/1744789/+subscribe">
+           
+           
+           
+           not directly subscribed to this bug's notifications.
+        </a>
+      
+      
+    </div>
+    <div id="sub-unsub-spinner">Subscribing...</div>
+    <ul>
+      
+      <li><a class="menu-link-editsubscriptions sprite modify edit" href="https://bugs.launchpad.net/mahara/+bug/1744789/+subscriptions" title="View and change your subscriptions to this bug">Edit bug mail</a></li>
+    </ul>
+  </div>
+  <script type="text/javascript">
+    LPJS.use('io-base', 'node',
+            'lp.bugs.bugtask_index.portlets.subscription', function(Y) {
+        Y.on('domready', function() {
+            Y.lp.bugs.bugtask_index.portlets.subscription.initialize();
+        });
+    });
+  </script>
+</div>
+
+      <div class="portlet vertical" id="portlet-subscribers">
+  <h2>Other bug subscribers</h2>
+  <div>
+    <div><a class="menu-link-addsubscriber sprite add" href="https://bugs.launchpad.net/mahara/+bug/1744789/+addsubscriber" title="Launchpad will email that person whenever this bugs changes">Subscribe someone else</a></div>
+  </div>
+  <div id="other-bug-subscribers"></div>
+</div>
+
+      
+
+      
+
+      
+  
+  
+
+
+      
+
+    
+          </div><!-- yui-b side -->
+        
+      </div><!-- yui-t4 -->
+
+      
+  <div id="footer" class="footer">
+    <div class="lp-arcana">
+        <div class="lp-branding">
+          <a href="https://launchpad.net/"><img src="/@@/launchpad-logo-and-name-hierarchy.png" alt="Launchpad" /></a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://launchpad.net/+tour">Take the tour</a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://help.launchpad.net/">Read the guide</a>
+          &nbsp;
+          <form id="globalsearch" method="get" accept-charset="UTF-8" action="https://launchpad.net/+search">
+            <input type="search" id="search-text" name="field.text" />
+            <input type="image" src="/@@/search" style="vertical-align:5%" alt="Search Launchpad" />
+          </form>
+        </div>
+        
+  
+
+    </div>
+
+    <div class="colophon">
+      &copy; 2004-2021
+      <a href="http://canonical.com/">Canonical&nbsp;Ltd.</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://launchpad.net/legal">Terms of use</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://www.ubuntu.com/legal/dataprivacy">Data privacy</a>
+      &nbsp;&bull;&nbsp;
+      <a href="/feedback">Contact Launchpad Support</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="http://blog.launchpad.net/">Blog</a>
+      
+	&nbsp;&bull;&nbsp;
+	<a href="https://canonical.com/careers">Careers</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="https://twitter.com/launchpadstatus">System status</a>
+      <span id="lp-version">
+      &nbsp;&bull;&nbsp;
+        r0d8de2b
+        
+        
+        (<a href="https://dev.launchpad.net/">Get the code!</a>)
+      </span>
+    </div>
+  </div>
+
+    </div><!-- yui-d0-->
+
+    
+  
+  
+  <script id="json-cache-script">LP.cache = {"bug_is_private": false, "bug": {"self_link": "https://bugs.launchpad.net/api/devel/bugs/1744789", "web_link": "https://bugs.launchpad.net/bugs/1744789", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug", "id": 1744789, "private": false, "information_type": "Public Security", "name": null, "title": "Avoid relying on TinyMCE code stripping alone", "description": "TinyMCE will strip bad strings from input, eg \u003cscript\u003e tags but we must make sure we don't just rely on that alone. We should also clean up input on the server/php end as one can create their own packet of POST data containing bad content to hit the server with.\n\nThis can be seen in the Wall plugin where we can make a wallpost POST package have a bad 'text' value and have it save unaltered.", "owner_link": "https://bugs.launchpad.net/api/devel/~robertl-9", "bug_tasks_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1744789/bug_tasks", "duplicate_of_link": null, "date_created": "2018-01-22T19:47:01.974751+00:00", "activity_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1744789/activity", "subscriptions_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1744789/subscriptions", "date_last_updated": "2018-10-25T02:39:31.786597+00:00", "who_made_private_link": null, "date_made_private": null, "heat": 256, "bug_watches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1744789/bug_watches", "cves_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1744789/cves", "duplicates_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1744789/duplicates", "attachments_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1744789/attachments", "security_related": true, "latest_patch_uploaded": null, "tags": [], "date_last_message": "2018-04-05T20:21:22.920939+00:00", "number_of_duplicates": 0, "message_count": 10, "users_affected_count": 1, "users_unaffected_count": 0, "users_affected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1744789/users_affected", "users_unaffected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1744789/users_unaffected", "users_affected_count_with_dupes": 1, "other_users_affected_count_with_dupes": 1, "users_affected_with_dupes_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1744789/users_affected_with_dupes", "messages_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1744789/messages", "linked_branches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1744789/linked_branches", "linked_merge_proposals_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1744789/linked_merge_proposals", "http_etag": "\"0b42be92f31adf88fa2e8575dfeeafb9b2e81e7a-4f8c928ec10d60cb9d54522cb63dab387ecae0bc\""}, "total_comments_and_activity": 48, "related_features": {}, "information_type_data": {"PUBLIC": {"is_private": false, "name": "Public", "order": 0, "description": "Everyone can see this information.\n", "value": "PUBLIC", "description_css_class": "choice-description"}, "PRIVATESECURITY": {"is_private": true, "name": "Private Security", "order": 2, "description": "Only the security group can see this information.\n ", "value": "PRIVATESECURITY", "description_css_class": "choice-description"}, "PUBLICSECURITY": {"is_private": false, "name": "Public Security", "order": 1, "description": "Everyone can see this security related information.\n", "value": "PUBLICSECURITY", "description_css_class": "choice-description"}, "USERDATA": {"is_private": true, "name": "Private", "order": 3, "description": "Only shared with users permitted to see private user information.\n", "value": "USERDATA", "description_css_class": "choice-description"}}, "context": {"self_link": "https://bugs.launchpad.net/api/devel/mahara/+bug/1744789", "web_link": "https://bugs.launchpad.net/mahara/+bug/1744789", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug_task", "bug_link": "https://bugs.launchpad.net/api/devel/bugs/1744789", "milestone_link": "https://bugs.launchpad.net/api/devel/mahara/+milestone/18.04.0", "status": "Fix Released", "importance": "High", "assignee_link": "https://bugs.launchpad.net/api/devel/~robertl-9", "bug_target_display_name": "Mahara", "bug_target_name": "mahara", "bug_watch_link": null, "date_assigned": "2018-01-22T19:47:02.408762+00:00", "date_created": "2018-01-22T19:47:01.974751+00:00", "date_confirmed": "2018-01-22T19:47:01.974751+00:00", "date_incomplete": null, "date_in_progress": "2018-01-22T19:47:01.974751+00:00", "date_closed": "2018-10-25T02:39:31.057816+00:00", "date_left_new": "2018-01-22T19:47:01.974751+00:00", "date_triaged": "2018-01-22T19:47:01.974751+00:00", "date_fix_committed": "2018-04-05T20:20:18.156774+00:00", "date_fix_released": "2018-10-25T02:39:31.057816+00:00", "date_left_closed": null, "owner_link": "https://bugs.launchpad.net/api/devel/~robertl-9", "target_link": "https://bugs.launchpad.net/api/devel/mahara", "title": "Bug #1744789 in Mahara: \"Avoid relying on TinyMCE code stripping alone\"", "related_tasks_collection_link": "https://bugs.launchpad.net/api/devel/mahara/+bug/1744789/related_tasks", "is_complete": true, "http_etag": "\"14e8c1649493fb6f7c89a84c83960ea370c3a3fe-76f370fa88fd46ac86abfba24e8b15fd07242eb1\""}, "bugtask_data": {"2340330": {"delete_link": "https://bugs.launchpad.net/mahara/16.10/+bug/1744789/+delete", "bug_title": "Avoid relying on TinyMCE code stripping alone", "user_can_unassign": false, "importance_value": "High", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary2340330", "target_is_product": false, "user_can_edit_milestone": false, "prefix": "mahara_16.10", "bugtask_path": "/mahara/16.10/+bug/1744789", "id": 2340330, "milestone_value": "https://bugs.launchpad.net/api/devel/mahara/+milestone/16.10.9", "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task2340330", "targetname": "Mahara 16.10", "assignee_is_team": null, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": null, "status_value": "Fix Released"}, "2340331": {"delete_link": "https://bugs.launchpad.net/mahara/18.04/+bug/1744789/+delete", "bug_title": "Avoid relying on TinyMCE code stripping alone", "user_can_unassign": false, "importance_value": "High", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary2340331", "target_is_product": false, "user_can_edit_milestone": false, "prefix": "mahara_18.04", "bugtask_path": "/mahara/18.04/+bug/1744789", "id": 2340331, "milestone_value": "https://bugs.launchpad.net/api/devel/mahara/+milestone/18.04.0", "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task2340331", "targetname": "Mahara 18.04", "assignee_is_team": false, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": "robertl-9", "status_value": "Fix Released"}, "2340332": {"delete_link": "https://bugs.launchpad.net/mahara/17.04/+bug/1744789/+delete", "bug_title": "Avoid relying on TinyMCE code stripping alone", "user_can_unassign": false, "importance_value": "High", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary2340332", "target_is_product": false, "user_can_edit_milestone": false, "prefix": "mahara_17.04", "bugtask_path": "/mahara/17.04/+bug/1744789", "id": 2340332, "milestone_value": "https://bugs.launchpad.net/api/devel/mahara/+milestone/17.04.7", "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task2340332", "targetname": "Mahara 17.04", "assignee_is_team": null, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": null, "status_value": "Fix Released"}, "2340333": {"delete_link": "https://bugs.launchpad.net/mahara/17.10/+bug/1744789/+delete", "bug_title": "Avoid relying on TinyMCE code stripping alone", "user_can_unassign": false, "importance_value": "High", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary2340333", "target_is_product": false, "user_can_edit_milestone": false, "prefix": "mahara_17.10", "bugtask_path": "/mahara/17.10/+bug/1744789", "id": 2340333, "milestone_value": "https://bugs.launchpad.net/api/devel/mahara/+milestone/17.10.4", "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task2340333", "targetname": "Mahara 17.10", "assignee_is_team": null, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": null, "status_value": "Fix Released"}, "2368766": {"delete_link": "https://bugs.launchpad.net/mahara/18.10/+bug/1744789/+delete", "bug_title": "Avoid relying on TinyMCE code stripping alone", "user_can_unassign": false, "importance_value": "High", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary2368766", "target_is_product": false, "user_can_edit_milestone": false, "prefix": "mahara_18.10", "bugtask_path": "/mahara/18.10/+bug/1744789", "id": 2368766, "milestone_value": "https://bugs.launchpad.net/api/devel/mahara/+milestone/18.10.0", "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task2368766", "targetname": "Mahara 18.10", "assignee_is_team": null, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": null, "status_value": "Fix Released"}, "2339951": {"delete_link": "https://bugs.launchpad.net/mahara/+bug/1744789/+delete", "bug_title": "Avoid relying on TinyMCE code stripping alone", "user_can_unassign": false, "importance_value": "High", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary2339951", "target_is_product": true, "user_can_edit_milestone": false, "prefix": "mahara", "bugtask_path": "/mahara/+bug/1744789", "id": 2339951, "milestone_value": "https://bugs.launchpad.net/api/devel/mahara/+milestone/18.04.0", "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task2339951", "targetname": "Mahara", "assignee_is_team": false, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": "robertl-9", "status_value": "Fix Released"}}, "subscribers_portlet_url_data": {"self_link": "https://bugs.launchpad.net/api/devel/bugs/1744789", "web_link": "https://bugs.launchpad.net/bugs/1744789"}, "initial_comment_batch_offset": 41, "first visible_recent_comment": -31};</script>
+
+    
+  
+
+    
+  </body>
+
+
+  <!--
+    Facet name: bugs
+    Page type: main_side
+    Has global search: True
+    Has application tabs: True
+    Has side portlets: True
+
+    At least 64 queries/external actions issued in 0.87 seconds
+
+    Features: {'app.maintenance_message': None, 'hard_timeout': '9000', 'js.yui_version': None, 'app.mainsite_only.canonical_url': None, 'disclosure.dsp_picker.enabled': 'on', 'baselayout.careers_link.disabled': None, 'bugs.affected_count_includes_dupes.disabled': None, 'visible_render_time': None, 'profiling.enabled': None, 'bugs.nominations.bug_supervisors_can_target': 'on'}
+
+    r0d8de2b
+
+    -->
+
+</html>
+

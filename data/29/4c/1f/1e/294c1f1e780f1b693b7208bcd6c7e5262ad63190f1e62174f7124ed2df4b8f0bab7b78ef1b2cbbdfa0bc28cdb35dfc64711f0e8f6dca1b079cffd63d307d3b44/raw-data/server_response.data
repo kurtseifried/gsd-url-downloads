@@ -1,0 +1,4259 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en" dir="ltr">
+  <head>
+<base href="https://bugs.launchpad.net/ossn/+bug/1649333/+index" />
+
+    <meta charset="UTF-8" />
+    <title>Bug #1649333 “Aodh can be used to launder Keystone trusts” : Bugs : OpenStack Security Notes</title>
+    <link rel="shortcut icon" href="/@@/launchpad.png" />
+    <link rel="canonical" href="https://bugs.launchpad.net/bugs/1649333" />
+    
+      <link rel="alternate" type="application/atom+xml" href="http://feeds.launchpad.net/bugs/1649333/bug.atom" title="Bug 1649333 Feed" />
+    
+
+    
+  
+  <link type="text/css" rel="stylesheet" media="screen, print" href="/+icing/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/combo.css" />
+
+
+    
+
+    
+      <meta name="description" content="When adding an alarm action with the scheme trust+http:, Aodh allows the user to provide a trust ID to use to acquire a token with which to make the webhook request. (If no trust ID is provided then Aodh creates a trust internally, in which case there is no issue.) However, Aodh makes no attempt to check that the user creating the alarm is the trustor or has the same rights as the trustor - it doesn't even attempt to check that the trust is for the same project as the alarm.
+
+The nature of th..." />
+      <meta property="og:description" content="When adding an alarm action with the scheme trust+http:, Aodh allows the user to provide a trust ID to use to acquire a token with which to make the webhook request. (If no trust ID is provided then Aodh creates a trust internally, in which case there is no issue.) However, Aodh makes no attempt to check that the user creating the alarm is the trustor or has the same rights as the trustor - it doesn't even attempt to check that the trust is for the same project as the alarm.
+
+The nature of th..." />
+    
+
+    
+    
+      <meta property="og:title" content="Bug #1649333 “Aodh can be used to launder Keystone trusts” : Bugs : OpenStack Security Notes" />
+      <meta property="og:type" content="website" />
+      <meta property="og:image" content="/@@/launchpad.png" />
+      <meta property="og:url" content="https://bugs.launchpad.net/bugs/1649333" />
+      <meta property="og:site_name" content="Launchpad" />
+    
+
+    
+
+    
+  
+
+  
+  
+  <script type="text/javascript">
+    var LP = {
+        cache: {},
+        links: {}
+    };
+  </script>
+
+  
+
+  <script type="text/javascript">var cookie_scope = '; Path=/; Secure; Domain=.launchpad.net';</script>
+
+   <script type="text/javascript" src="/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?yui/yui/yui-min.js&amp;lp/meta.js&amp;yui/loader/loader-min.js"></script>
+   <script type="text/javascript">
+        var raw = null;
+        if (LP.devmode) {
+           raw = 'raw';
+        }
+        YUI.GlobalConfig = {
+            combine: true,
+            comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+            root: 'yui/',
+            filter: raw,
+            debug: false,
+            fetchCSS: false,
+            maxURLLength: 2000,
+            groups: {
+                lp: {
+                    combine: true,
+                    base: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?lp/',
+                    comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+                    root: 'lp/',
+                    // comes from including lp/meta.js
+                    modules: LP_MODULES,
+                    fetchCSS: false
+                }
+            }
+        }</script>
+
+  <script type="text/javascript">
+      // we need this to create a single YUI instance all events and code
+      // talks across. All instances of YUI().use should be based off of
+      // LPJS instead.
+      var LPJS = new YUI();
+  </script>
+
+
+
+    <script id="base-layout-load-scripts" type="text/javascript">
+        //<![CDATA[
+        LPJS.use('base', 'node', 'console', 'event',
+            'oop', 'lp', 'lp.app.foldables','lp.app.sorttable',
+            'lp.app.inlinehelp', 'lp.app.links',
+            'lp.bugs.bugtask_index', 'lp.bugs.subscribers',
+            'lp.app.ellipsis', 'lp.code.branchmergeproposal.diff',
+            'lp.views.global',
+             function(Y) {
+
+            Y.on("domready", function () {
+                var global_view = new Y.lp.views.Global();
+                global_view.render();
+
+                Y.lp.app.sorttable.SortTable.init();
+                Y.lp.app.inlinehelp.init_help();
+                Y.lp.activate_collapsibles();
+                Y.lp.app.foldables.activate();
+                Y.lp.app.links.check_valid_lp_links();
+            });
+
+            Y.on('lp:context:web_link:changed', function(e) {
+                  window.location = e.new_value;
+            });
+        });
+        //]]>
+    </script>
+    <script id="base-helper-functions" type="text/javascript">
+         //<![CDATA[
+        // This code is pulled from lp.js that needs to be available on every
+        // request. Pulling here to get it outside the scope of the YUI block.
+        function setFocusByName(name) {
+            // Focus the first element matching the given name which can be focused.
+            var nodes = document.getElementsByName(name);
+            var i, node;
+            for (i = 0; i < nodes.length; i++) {
+                node = nodes[i];
+                if (node.focus) {
+                    try {
+                        // Trying to focus a hidden element throws an error in IE8.
+                        if (node.offsetHeight !== 0) {
+                            node.focus();
+                        }
+                    } catch (e) {
+                        LPJS.use('console', function(Y) {
+                            Y.log('In setFocusByName(<' +
+                                node.tagName + ' type=' + node.type + '>): ' + e);
+                        });
+                    }
+                    break;
+                }
+            }
+        }
+
+        function selectWidget(widget_name, event) {
+          if (event && (event.keyCode === 9 || event.keyCode === 13)) {
+              // Avoid firing if user is tabbing through or simply pressing
+              // enter to submit the form.
+              return;
+          }
+          document.getElementById(widget_name).checked = true;
+        }
+        //]]>
+    </script>
+
+    
+      
+      <script type="text/javascript" id="available-official-tags-js">var available_official_tags = [];</script>
+      <script type="text/javascript">
+        LPJS.use('base', 'node', 'oop', 'event', 'lp.bugs.bugtask_index',
+                  'lp.bugs.subscribers', 'lp.code.branchmergeproposal.diff',
+                  'lp.app.comment', 'lp.services.messages.edit', function(Y) {
+            Y.on('domready', function() {
+                Y.lp.code.branchmergeproposal.diff.connect_diff_links();
+                Y.lp.bugs.bugtask_index.setup_bugtask_index();
+                Y.lp.bugs.bugtask_index.setup_bugtask_table();
+                LP.cache.comment_context = LP.cache.bug;
+                var cl = new Y.lp.app.comment.CommentList();
+                cl.render();
+                var sl = new Y.lp.bugs.subscribers.createBugSubscribersLoader({
+                    container_box: '#other-bug-subscribers',
+                    subscribers_details_view:
+                        '/+bug-portlet-subscribers-details',
+                    subscribe_someone_else_link: '.menu-link-addsubscriber'
+                }, window);
+
+                Y.lp.services.messages.edit.setup();
+            });
+         });
+      </script>
+      <style type="text/css">
+        /* Align the 'add comment' link to the right of the comment box. */
+        #add-comment-form textarea { width: 100%; }
+        #add-comment-form { max-width: 60em; padding-bottom: 4em; }
+        #add-comment-form .actions {float: right;}
+        .buglink-summary dd { font-size: 10px; }
+        a#privacy-link:link:hover, a#privacy-link:visited:hover {text-decoration:none;}
+      </style>
+      <style type="text/css">
+        .yui3-overlay .value label  {
+          /* It normally makes sense for form labels to be bold, but since
+          this form consists only of radio buttons, there's nothing but labels
+          so we just get wall-to-wall bold. */
+          font-weight: normal !important;
+        }
+      </style>
+    
+    
+  </head>
+
+  <body id="document" itemscope="" itemtype="http://schema.org/WebPage" class="tab-bugs
+      main_side
+      public
+      yui3-skin-sam">
+          
+          
+    <div class="yui-d0">
+      <div id="locationbar" class="login-logout">
+        
+
+<div id="logincontrol"><a href="https://bugs.launchpad.net/ossn/+bug/1649333/+login">Log in / Register</a></div>
+
+
+
+      </div><!--id="locationbar"-->
+
+      <div id="watermark" class="watermark-apps-portlet">
+        <div>
+          <a href="https://launchpad.net/ossn"><img alt="" width="64" height="64" src="/@@/product-logo" /></a>
+        </div>
+        <div class="wide">
+          <h2 id="watermark-heading"><a href="https://launchpad.net/ossn">OpenStack Security Notes</a></h2>
+        </div>
+        
+  <!-- Application Menu -->
+  <ul class="facetmenu">
+    
+      
+      <li class="overview"><a href="https://launchpad.net/ossn">Overview</a></li>
+      
+    
+    
+      
+      <li class="branches"><a href="https://code.launchpad.net/ossn">Code</a></li>
+      
+    
+    
+      <li class="bugs active"><a href="https://bugs.launchpad.net/ossn">Bugs</a></li>
+      
+      
+    
+    
+      
+      <li class="specifications"><a href="https://blueprints.launchpad.net/ossn">Blueprints</a></li>
+      
+    
+    
+      
+      <li class="translations"><a href="https://translations.launchpad.net/ossn">Translations</a></li>
+      
+    
+    
+      
+      <li class="answers"><a href="https://answers.launchpad.net/ossn">Answers</a></li>
+      
+    
+  </ul>
+
+      </div>
+
+      <div class="yui-t4">
+        <div id="maincontent" class="yui-main">
+          <div class="yui-b" dir="ltr">
+            <div class="context-publication">
+              
+      <h1 id="edit-title">
+<span class="yui3-editable_text-text ellipsis" style="max-width: 95%;">
+    Aodh can be used to launder Keystone trusts
+</span>
+  
+</h1>
+
+
+
+    
+              
+
+              <div id="registration" class="registering">
+                
+      Bug #1649333 reported by
+      <a href="https://launchpad.net/~zaneb" class="sprite person">Zane Bitter</a>
+      <time title="2016-12-12 16:46:07 UTC" datetime="2016-12-12T16:46:07.905495+00:00">on 2016-12-12</time>
+    
+              </div>
+            </div>
+
+            
+            <div id="request-notifications">
+              
+            </div>
+
+            
+              <div>
+
+      
+
+      <div id="bug-is-duplicate">
+          
+      </div>
+      
+
+      <div style="float: right;">
+        <span><a href="/+help-bugs/bug-heat.html" target="help" class="sprite flame">18</a></span>
+      </div>
+
+      
+
+
+  
+  
+    <div class="actions">
+      <span id="affectsmetoo" style="display: inline">This bug affects 1 person</span>
+    </div>
+  
+
+
+
+    <table id="affected-software" class="listing">
+      <thead>
+        <tr>
+          <th colspan="2">Affects</th>
+          <th>Status</th>
+          <th>Importance</th>
+          <th>Assigned to</th>
+          <th>Milestone</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        
+          
+  <tr id="tasksummary2177043">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/aodh/+bug/1649333/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary2177043">
+        <span class="yui3-activator-data-box">
+            <a class="sprite product" href="https://bugs.launchpad.net/aodh">Aodh</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/aodh/+bug/1649333/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/aodh/+bug/1649333/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2177043">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~zaneb">Zane Bitter</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task2177043">
+     <td colspan="7"><form action="/aodh/+bug/1649333/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/aodh">Aodh</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~zaneb" class="sprite person">Zane Bitter</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2016-12-12 16:46:07 UTC" datetime="2016-12-12T16:46:07.905495+00:00">2016-12-12</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2017-01-11 20:56:11 UTC" datetime="2017-01-11T20:56:11.294605+00:00">2017-01-11</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2017-01-11 20:56:13 UTC" datetime="2017-01-11T20:56:13.109376+00:00">2017-01-11</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2017-01-11 21:07:08 UTC" datetime="2017-01-11T21:07:08.882092+00:00">2017-01-11</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2017-08-17 11:02:04 UTC" datetime="2017-08-17T11:02:04.921570+00:00">2017-08-17</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="aodh.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="aodh.target.option.package" name="aodh.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="aodh.target.distribution" name="aodh.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="aodh.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="aodh.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="aodh.target.package"
+                         name="aodh.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;aodh.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('aodh.target.package');
+              var select_menu = Y.DOM.byId('aodh.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-aodh-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_remove_button": false, "header": "Select a package", "vocabulary_filters": [], "remove_team_text": "Remove team", "remove_person_text": "Remove person", "selected_value_metadata": null, "show_create_team": false, "picker_type": "default", "vocabulary_name": "DistributionPackage", "extra_no_results_message": null, "selected_value": null, "show_assign_me_button": false, "show_widget_id": "show-widget-aodh-target-package", "step_title": "Search by name", "assign_me_text": "Pick me", "input_element": "aodh.target.package"};
+        var show_widget_id = 'show-widget-aodh-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="aodh.target.option.product" name="aodh.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="aodh" id="aodh.target.product"
+                         name="aodh.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;aodh.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('aodh.target.product');
+              var select_menu = Y.DOM.byId('aodh.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-aodh-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_remove_button": false, "header": "Select a project", "vocabulary_filters": [], "remove_team_text": "Remove team", "remove_person_text": "Remove person", "selected_value_metadata": null, "show_create_team": false, "picker_type": "default", "vocabulary_name": "Product", "extra_no_results_message": null, "selected_value": "aodh", "show_assign_me_button": false, "show_widget_id": "show-widget-aodh-target-product", "step_title": "Search", "assign_me_text": "Pick me", "input_element": "aodh.target.product"};
+        var show_widget_id = 'show-widget-aodh-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="aodh.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="aodh.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="aodh.status" name="aodh.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="aodh.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceUNDECIDED">Undecided</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="aodh.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="aodh.assignee.assign_to_me" name="aodh.assignee.option" value="aodh.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="aodh.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="aodh.assignee.assigned_to" name="aodh.assignee.option" value="aodh.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="aodh.assignee.assigned_to">
+              Zane Bitter (zaneb)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="aodh.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="aodh.comment_on_change" name="aodh.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr class="highlight" id="tasksummary2189205">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ossn/+bug/1649333/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary2189205">
+        <span class="yui3-activator-data-box">
+            <a class="sprite product" href="https://bugs.launchpad.net/ossn">OpenStack Security Notes</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ossn/+bug/1649333/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ossn/+bug/1649333/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary2189205">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~lhinds">Luke Hinds</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task2189205">
+     <td colspan="7"><form action="/ossn/+bug/1649333/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ossn">OpenStack Security Notes</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~robert-clark" class="sprite person">Robert Clark</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2017-01-17 14:20:56 UTC" datetime="2017-01-17T14:20:56.385063+00:00">2017-01-17</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2017-08-17 10:35:38 UTC" datetime="2017-08-17T10:35:38.943351+00:00">2017-08-17</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2017-07-27 19:19:37 UTC" datetime="2017-07-27T19:19:37.593479+00:00">2017-07-27</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2017-08-17 10:35:38 UTC" datetime="2017-08-17T10:35:38.943351+00:00">2017-08-17</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2017-08-17 11:02:09 UTC" datetime="2017-08-17T11:02:09.126568+00:00">2017-08-17</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="ossn.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="ossn.target.option.package" name="ossn.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="ossn.target.distribution" name="ossn.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="ossn.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="ossn.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="ossn.target.package"
+                         name="ossn.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;ossn.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ossn.target.package');
+              var select_menu = Y.DOM.byId('ossn.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ossn-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_remove_button": false, "header": "Select a package", "vocabulary_filters": [], "remove_team_text": "Remove team", "remove_person_text": "Remove person", "selected_value_metadata": null, "show_create_team": false, "picker_type": "default", "vocabulary_name": "DistributionPackage", "extra_no_results_message": null, "selected_value": null, "show_assign_me_button": false, "show_widget_id": "show-widget-ossn-target-package", "step_title": "Search by name", "assign_me_text": "Pick me", "input_element": "ossn.target.package"};
+        var show_widget_id = 'show-widget-ossn-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="ossn.target.option.product" name="ossn.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="ossn" id="ossn.target.product"
+                         name="ossn.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;ossn.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ossn.target.product');
+              var select_menu = Y.DOM.byId('ossn.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ossn-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_remove_button": false, "header": "Select a project", "vocabulary_filters": [], "remove_team_text": "Remove team", "remove_person_text": "Remove person", "selected_value_metadata": null, "show_create_team": false, "picker_type": "default", "vocabulary_name": "Product", "extra_no_results_message": null, "selected_value": "ossn", "show_assign_me_button": false, "show_widget_id": "show-widget-ossn-target-product", "step_title": "Search", "assign_me_text": "Pick me", "input_element": "ossn.target.product"};
+        var show_widget_id = 'show-widget-ossn-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ossn.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ossn.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ossn.status" name="ossn.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ossn.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceUNDECIDED">Undecided</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ossn.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ossn.assignee.assign_to_me" name="ossn.assignee.option" value="ossn.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ossn.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="ossn.assignee.assigned_to" name="ossn.assignee.option" value="ossn.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="ossn.assignee.assigned_to">
+              Luke Hinds (lhinds)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ossn.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ossn.comment_on_change" name="ossn.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+      </tbody>
+
+    </table>
+
+
+
+<div class="actions">
+  
+    <span id="also-affects-product" class="">
+    <a class="menu-link-addupstream sprite add" href="https://bugs.launchpad.net/ossn/+bug/1649333/+choose-affected-product">Also affects project</a>
+        <a href="/+help-bugs/also-affects-project-help.html" target="help" class="sprite maybe action-icon">(?)</a>
+    </span>
+    <span id="also-affects-package" class="">
+    <a class="menu-link-adddistro sprite add" href="https://bugs.launchpad.net/ossn/+bug/1649333/+distrotask">Also affects distribution/package</a>
+    </span>
+    <a class="menu-link-nominate sprite milestone" href="https://bugs.launchpad.net/ossn/+bug/1649333/+nominate">Nominate for series</a>
+    
+  
+
+</div>
+
+
+
+
+      <div id="maincontentsub">
+        <div class="top-portlet">
+
+      <div itemprop="mainContentOfPage" class="report">
+        
+
+        <div>
+  <div class="lazr-multiline-edit" id="edit-description">
+  <div class="clearfix">
+    
+
+    <h3>Bug Description</h3>
+  </div>
+
+  <div class="yui3-editable_text-text"><p>When adding an alarm action with the scheme trust+http:, Aodh allows the user to provide a trust ID to use to acquire a token with which to make the webhook request. (If no trust ID is provided then Aodh creates a trust internally, in which case there is no issue.) However, Aodh makes no attempt to check that the user creating the alarm is the trustor or has the same rights as the trustor - it doesn&#x27;t even attempt to check that the trust is for the same project as the alarm.</p>
+<p>The nature of the trust+http: alarm notifier is that it allows the user to obtain a token given the ID of a trust for which Aodh is the trustee, since the URL is arbitrary and not limited to services in the Keystone catalog.</p>
+<p>It is my understanding (though I&#x27;m open to correction) that trust IDs are not meant to be secret - i.e. that security should rely on the secrecy of the trustee&#x27;s credentials, not of the trust ID.</p>
+<p>The current setup requires that the security posture be equivalent to, or even stronger than, that for a bearer token, since the trust ID can be used to obtain a token and it may never expire. (The vulnerability is limited to Aodh though, since it only applies to trusts where Aodh is the trustee.) In principle this *could* be a valid choice, although I personally would disagree with it. In practice, that is not the current security posture - for example, trust IDs are stored unencrypted in the database and routinely logged unobfuscated.</p>
+<p>The easiest solution would be to simply disallow users supplying their own trust IDs. This may well be feasible - it&#x27;s likely that in most clouds non-admin users will not have the necessary permissions to get the ID of the Aodh service user, which is required to create a trust with that user as the trustee. Heat does not supply a trust ID in its convenience code for setting up an autoscaling alarm. So there are probably no users of this feature in the wild.</p>
+<p>To eliminate the vulnerability without eliminating the feature, I believe Aodh would need to check that the user creating the alarm possesses all of the trust privileges - i.e. their token is for the same project ID and they have all of the roles that the trust does. Or, alternatively, check that the user *is* (i.e. has the same user ID as) the trustor.</p></div>
+  </div>
+
+  
+</div>
+
+
+        <div style="margin:-10px 0 20px 5px" class="clearfix">
+          
+        </div>
+
+        <div id="bug-tags">
+          <span id="tags-heading">
+            Tags:
+          </span>
+          <span id="tag-list">
+            <a class="unofficial-tag" href="/ossn/+bugs?field.tag=in-stable-queens">in-stable-queens</a>
+          </span>
+          
+          <a href="+edit" title="Edit tags" id="tags-trigger" class="sprite edit action-icon">Edit</a>
+          <a href="/+help-bugs/tag-help.html" target="help" class="sprite maybe action-icon">Tag help</a>
+        </div>
+
+        <script type="text/javascript">
+          LPJS.use('event', 'node', 'lp.bugs.tags_entry', function(Y) {
+              Y.on('domready',
+                   function(e) {
+                       Y.lp.bugs.tags_entry.setup_tag_entry(
+                           available_official_tags);
+                   },
+                   window);
+          });
+        </script>
+
+        <div class="clearfix"></div>
+      </div>
+
+      <div id="branches-and-cves">
+        <div id="bug-branches-container" style="float: left">
+          
+        </div><!-- bug-branch-container -->
+
+        
+
+        <div class="clearfix"></div>
+      </div> <!-- branches and CVEs -->
+
+      </div>
+
+      <div>
+      
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/1" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~therve" class="sprite person">Thomas Herve (therve)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2016-12-13T10:41:05.221012+00:00" title="2016-12-13 10:41:05 UTC">on 2016-12-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/1"> #1</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>I introduced the feature back in the day where it was in ceilometer, and we were not sure whether or not the trust ought to be created by ceilometer. I think it&#x27;s safe to always create the trust now; I&#x27;d be shocked if anyone ever tried to pass a pre-created one.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">I introduced the feature back in the day where it was in ceilometer, and we were not sure whether or not the trust ought to be created by ceilometer. I think it's safe to always create the trust now; I'd be shocked if anyone ever tried to pass a pre-created one.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/2" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~zaneb" class="sprite person">Zane Bitter (zaneb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-01-11T20:57:41.048169+00:00" title="2017-01-11 20:57:41 UTC">on 2017-01-11</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/2"> #2</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/ossn/+bug/1649333/+attachment/4803052/+files/bug1649333.patch">bug1649333.patch</a>
+        <a class="sprite edit action-icon" href="/ossn/+bug/1649333/+attachment/4803052">Edit</a>
+        (2.4 KiB,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>I&#x27;m attaching a fix.</p>
+<p>What is the process for fixing security issues in Aodh? Is it managed by the VMT?</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">I'm attaching a fix.
+
+What is the process for fixing security issues in Aodh? Is it managed by the VMT?</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in aodh: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Confirmed
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; Zane Bitter (zaneb)
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~zaneb" class="sprite person">Zane Bitter (zaneb)</a>
+    
+    <time title="2017-01-11 21:07:08 UTC" datetime="2017-01-11T21:07:08.592355+00:00">on 2017-01-11</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in aodh: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Confirmed &#8594; In Progress
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/3" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~jdanjou" class="sprite person">Julien Danjou (jdanjou)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-01-12T09:49:31.513778+00:00" title="2017-01-12 09:49:31 UTC">on 2017-01-12</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/3"> #3</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>That seems fair enough indeed.</p>
+<p>According to <a rel="nofollow" href="https://governance.openstack.org/tc/reference/tags/vulnerability_managed.html">https:/<wbr />/governance.<wbr />openstack.<wbr />org/tc/<wbr />reference/<wbr />tags/vulnerabil<wbr />ity_managed.<wbr />html</a> it&#x27;s not managed by VMT. So I&#x27;m not sure what to do next (other than applying your fix)</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">That seems fair enough indeed.
+
+According to https://governance.openstack.org/tc/reference/tags/vulnerability_managed.html it's not managed by VMT. So I'm not sure what to do next (other than applying your fix)</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/4" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~robert-clark" class="sprite person">Robert Clark (robert-clark)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-01-17T14:20:25.454428+00:00" title="2017-01-17 14:20:25 UTC">on 2017-01-17</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/4"> #4</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>We can create an embargoed OpenStack Security Note <a rel="nofollow" href="https://wiki.openstack.org/wiki/Security#Security_Notes_-_OSSN">https:/<wbr />/wiki.openstack<wbr />.org/wiki/<wbr />Security#<wbr />Security_<wbr />Notes_-<wbr />_OSSN</a> that will serve in place of a Security Advisory (that you&#x27;d get from the VMT if you were security managed).</p>
+<p>The VMT has a list of downstream stakeholders (mainly large OpenStack operators). We can send them the OSSN, along with the patch and then publish both a few days later.</p>
+<p>I&#x27;ll add this to the OSSN queue now, so that it&#x27;s on Luke Hinds&#x27; (Our OSSN manager) radar.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">We can create an embargoed OpenStack Security Note https://wiki.openstack.org/wiki/Security#Security_Notes_-_OSSN that will serve in place of a Security Advisory (that you'd get from the VMT if you were security managed).
+
+The VMT has a list of downstream stakeholders (mainly large OpenStack operators). We can send them the OSSN, along with the patch and then publish both a few days later.
+
+I'll add this to the OSSN queue now, so that it's on Luke Hinds' (Our OSSN manager) radar. </textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/5" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~zaneb" class="sprite person">Zane Bitter (zaneb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-01-17T19:01:58.940892+00:00" title="2017-01-17 19:01:58 UTC">on 2017-01-17</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/5"> #5</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/ossn/+bug/1649333/+attachment/4805478/+files/bug1649333-newton.patch">stable/newton patch</a>
+        <a class="sprite edit action-icon" href="/ossn/+bug/1649333/+attachment/4805478">Edit</a>
+        (1.9 KiB,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Attaching a backport for stable/newton. The same patch also applies to stable/mitaka with a minimum of fuzzing.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Attaching a backport for stable/newton. The same patch also applies to stable/mitaka with a minimum of fuzzing.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/6" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~zaneb" class="sprite person">Zane Bitter (zaneb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-07-25T15:38:33.515075+00:00" title="2017-07-25 15:38:33 UTC">on 2017-07-25</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/6"> #6</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Any progress on the security note? We&#x27;ve released Ocata with the bug since this was last discussed, and we&#x27;re getting close to releasing Pike. I&#x27;d still like to have the OSSN, but at this point I&#x27;d rather have the issue fixed.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Any progress on the security note? We've released Ocata with the bug since this was last discussed, and we're getting close to releasing Pike. I'd still like to have the OSSN, but at this point I'd rather have the issue fixed.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/7" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~robert-clark" class="sprite person">Robert Clark (robert-clark)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-07-27T17:13:03+00:00" title="2017-07-27 17:13:03 UTC">on 2017-07-27</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/ossn/+bug/1649333/comments/7">
+                <strong>Re: [Bug 1649333] Re: Aodh can be used to launder Keystone trusts</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/7"> #7</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  <a href="https://bugs.launchpad.net/ossn/+bug/1649333/comments/7/+download">Download full text</a> (3.3 KiB)
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Sorry for dropping the ball on this one guys, I currently don&#x27;t have LP<br />
+access due to MFA issues!</p>
+<p>Luke Hinds &lt;email address hidden&gt; manages the OSSNs and can get this processed<br />
+for you quickly.</p>
+<p>I haven&#x27;t CC&#x27;d him on this thread as permission should be controlled<br />
+through LP but please add him.</p>
+<p>-Rob</p>
+<p>On Tue, Jul 25, 2017 at 4:38 PM, Zane Bitter &lt;email address hidden&gt; wrote:</p>
+<p><span class="foldable-quoted">&gt; Any progress on the security note? We&#x27;ve released Ocata with the bug<br />
+&gt; since this was last discussed, and we&#x27;re getting close to releasing<br />
+&gt; Pike. I&#x27;d still like to have the OSSN, but at this point I&#x27;d rather have<br />
+&gt; the issue fixed.<br />
+&gt;<br />
+&gt; --<br />
+&gt; You received this bug notification because you are subscribed to the bug<br />
+&gt; report.<br />
+&gt; <a rel="nofollow" href="https://bugs.launchpad.net/bugs/1649333">https:/<wbr />/bugs.launchpad<wbr />.net/bugs/<wbr />1649333</a><br />
+&gt;<br />
+&gt; Title:<br />
+&gt;   Aodh can be used to launder Keystone trusts<br />
+&gt;<br />
+&gt; Status in Aodh:<br />
+&gt;   In Progress<br />
+&gt; Status in OpenStack Security Notes:<br />
+&gt;   New<br />
+&gt;<br />
+&gt; Bug description:<br />
+&gt;   When adding an alarm action with the scheme trust+http:, Aodh allows<br />
+&gt;   the user to provide a trust ID to use to acquire a token with which to<br />
+&gt;   make the webhook request. (If no trust ID is provided then Aodh<br />
+&gt;   creates a trust internally, in which case there is no issue.) However,<br />
+&gt;   Aodh makes no attempt to check that the user creating the alarm is the<br />
+&gt;   trustor or has the same rights as the trustor - it doesn&#x27;t even<br />
+&gt;   attempt to check that the trust is for the same project as the alarm.<br />
+&gt;<br />
+&gt;   The nature of the trust+http: alarm notifier is that it allows the<br />
+&gt;   user to obtain a token given the ID of a trust for which Aodh is the<br />
+&gt;   trustee, since the URL is arbitrary and not limited to services in the<br />
+&gt;   Keystone catalog.<br />
+&gt;<br />
+&gt;   It is my understanding (though I&#x27;m open to correction) that trust IDs<br />
+&gt;   are not meant to be secret - i.e. that security should rely on the<br />
+&gt;   secrecy of the trustee&#x27;s credentials, not of the trust ID.<br />
+&gt;<br />
+&gt;   The current setup requires that the security posture be equivalent to,<br />
+&gt;   or even stronger than, that for a bearer token, since the trust ID can<br />
+&gt;   be used to obtain a token and it may never expire. (The vulnerability<br />
+&gt;   is limited to Aodh though, since it only applies to trusts where Aodh<br />
+&gt;   is the trustee.) In principle this *could* be a valid choice, although<br />
+&gt;   I personally would disagree with it. In practice, that is not the<br />
+&gt;   current security posture - for example, trust IDs are stored<br />
+&gt;   unencrypted in the database and routinely logged unobfuscated.<br />
+&gt;<br />
+&gt;<br />
+&gt;   The easiest solution would be to simply disallow users supplying their<br />
+&gt; own trust IDs. This may well be feasible - it&#x27;s likely that in most clouds<br />
+&gt; non-admin users will not have the necessary permissions to get the ID of<br />
+&gt; the Aodh service user, which is required to create a trust with that user<br />
+&gt; as the trustee. Heat does not supply a trust ID in its convenience code for<br />
+&gt; setting up an autoscaling alarm. So there are probably no users of this<br />
+&gt; feature in the wild.<br />
+&gt;<br />
+&gt;   To eliminate the vulnerability without eliminating the feature, I<br />
+&gt;   believe Aodh would need to check that the user creating the alarm<br />
+&gt;   possesses all of the trust privileges - i.e. their token is for the<br />
+&gt;   same project ID and they have all of the roles that the tr...
+</span></p></div>
+    
+    <p>
+      <a href="/ossn/+bug/1649333/comments/7">Read more...</a>
+    </p>
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Sorry for dropping the ball on this one guys, I currently don't have LP
+access due to MFA issues!
+
+Luke Hinds lhinds@redhat.com manages the OSSNs and can get this processed
+for you quickly.
+
+I haven't CC'd him on this thread as permission should be controlled
+through LP but please add him.
+
+-Rob
+
+
+On Tue, Jul 25, 2017 at 4:38 PM, Zane Bitter &lt;zbitter@redhat.com&gt; wrote:
+
+&gt; Any progress on the security note? We've released Ocata with the bug
+&gt; since this was last discussed, and we're getting close to releasing
+&gt; Pike. I'd still like to have the OSSN, but at this point I'd rather have
+&gt; the issue fixed.
+&gt;
+&gt; --
+&gt; You received this bug notification because you are subscribed to the bug
+&gt; report.
+&gt; https://bugs.launchpad.net/bugs/1649333
+&gt;
+&gt; Title:
+&gt;   Aodh can be used to launder Keystone trusts
+&gt;
+&gt; Status in Aodh:
+&gt;   In Progress
+&gt; Status in OpenStack Security Notes:
+&gt;   New
+&gt;
+&gt; Bug description:
+&gt;   When adding an alarm action with the scheme trust+http:, Aodh allows
+&gt;   the user to provide a trust ID to use to acquire a token with which to
+&gt;   make the webhook request. (If no trust ID is provided then Aodh
+&gt;   creates a trust internally, in which case there is no issue.) However,
+&gt;   Aodh makes no attempt to check that the user creating the alarm is the
+&gt;   trustor or has the same rights as the trustor - it doesn't even
+&gt;   attempt to check that the trust is for the same project as the alarm.
+&gt;
+&gt;   The nature of the trust+http: alarm notifier is that it allows the
+&gt;   user to obtain a token given the ID of a trust for which Aodh is the
+&gt;   trustee, since the URL is arbitrary and not limited to services in the
+&gt;   Keystone catalog.
+&gt;
+&gt;   It is my understanding (though I'm open to correction) that trust IDs
+&gt;   are not meant to be secret - i.e. that security should rely on the
+&gt;   secrecy of the trustee's credentials, not of the trust ID.
+&gt;
+&gt;   The current setup requires that the security posture be equivalent to,
+&gt;   or even stronger than, that for a bearer token, since the trust ID can
+&gt;   be used to obtain a token and it may never expire. (The vulnerability
+&gt;   is limited to Aodh though, since it only applies to trusts where Aodh
+&gt;   is the trustee.) In principle this *could* be a valid choice, although
+&gt;   I personally would disagree with it. In practice, that is not the
+&gt;   current security posture - for example, trust IDs are stored
+&gt;   unencrypted in the database and routinely logged unobfuscated.
+&gt;
+&gt;
+&gt;   The easiest solution would be to simply disallow users supplying their
+&gt; own trust IDs. This may well be feasible - it's likely that in most clouds
+&gt; non-admin users will not have the necessary permissions to get the ID of
+&gt; the Aodh service user, which is required to create a trust with that user
+&gt; as the trustee. Heat does not supply a trust ID in its convenience code for
+&gt; setting up an autoscaling alarm. So there are probably no users of this
+&gt; feature in the wild.
+&gt;
+&gt;   To eliminate the vulnerability without eliminating the feature, I
+&gt;   believe Aodh would need to check that the user creating the alarm
+&gt;   possesses all of the trust privileges - i.e. their token is for the
+&gt;   same project ID and they have all of the roles that the trust does.
+&gt;   Or, alternatively, check that the user *is* (i.e. has the same user ID
+&gt;   as) the trustor.
+&gt;
+&gt; To manage notifications about this bug go to:
+&gt; https://bugs.launchpad.net/aodh/+bug/1649333/+subscriptions
+&gt;
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/8" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~zaneb" class="sprite person">Zane Bitter (zaneb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-07-27T19:01:55.227903+00:00" title="2017-07-27 19:01:55 UTC">on 2017-07-27</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/8"> #8</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Thanks Robert, I just subscribed Luke to this issue.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Thanks Robert, I just subscribed Luke to this issue.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~lhinds" class="sprite person">Luke Hinds (lhinds)</a>
+    
+    <time title="2017-07-27 19:19:37 UTC" datetime="2017-07-27T19:19:37.427544+00:00">on 2017-07-27</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in ossn: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; Luke Hinds (lhinds)
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/9" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~lhinds" class="sprite person">Luke Hinds (lhinds)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-07-27T19:38:28.781837+00:00" title="2017-07-27 19:38:28 UTC">on 2017-07-27</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/9"> #9</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Hi Zane,</p>
+<p>What is the latest you can merge this into pike? As Rob says, we typically give downstream steakholders a few days to patch before going public, so I would like to make it so they get that window, but importantly you have time to get this in for any code freeze there might be for Aodh in pike.</p>
+<p>Also I am not that familiar with aodh, so I will verify the OSSN content in this LP, before sending. Main part where I will need some assistance on applying the patch (possible posix paths, dry runs , args etc).</p>
+<p>Luke</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Hi Zane,
+
+What is the latest you can merge this into pike? As Rob says, we typically give downstream steakholders a few days to patch before going public, so I would like to make it so they get that window, but importantly you have time to get this in for any code freeze there might be for Aodh in pike.
+
+Also I am not that familiar with aodh, so I will verify the OSSN content in this LP, before sending. Main part where I will need some assistance on applying the patch (possible posix paths, dry runs , args etc).
+
+Luke</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/10" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~zaneb" class="sprite person">Zane Bitter (zaneb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-07-27T20:11:46.750118+00:00" title="2017-07-27 20:11:46 UTC">on 2017-07-27</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/10"> #10</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Pike-rc1 is the week of August 11: <a rel="nofollow" href="https://releases.openstack.org/pike/schedule.html">https:/<wbr />/releases.<wbr />openstack.<wbr />org/pike/<wbr />schedule.<wbr />html</a></p>
+<p>There&#x27;s no restriction on when we can commit bug fixes up until the final release, so any time before then is fine I think.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Pike-rc1 is the week of August 11: https://releases.openstack.org/pike/schedule.html
+
+There's no restriction on when we can commit bug fixes up until the final release, so any time before then is fine I think.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/11" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ayoung" class="sprite person">Adam Young (ayoung)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-08-01T02:39:31.177199+00:00" title="2017-08-01 02:39:31 UTC">on 2017-08-01</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/11"> #11</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>It sounds like the fix should be that either Aodh always triggers the trust creation, or that Aodh validates the trust it is given.  I think both are acceptabled.</p>
+<p>To validate the trust, Aodh should immediately activate the trust (use it to get a token) and in the token requests response, check the value of the trustor, confirming it matches the expected user.</p>
+<p>Blindly accepting any Trust ID this way is certainly an error.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">It sounds like the fix should be that either Aodh always triggers the trust creation, or that Aodh validates the trust it is given.  I think both are acceptabled.
+
+To validate the trust, Aodh should immediately activate the trust (use it to get a token) and in the token requests response, check the value of the trustor, confirming it matches the expected user.
+
+Blindly accepting any Trust ID this way is certainly an error.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/12" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~lhinds" class="sprite person">Luke Hinds (lhinds)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-08-01T10:28:44.760327+00:00" title="2017-08-01 10:28:44 UTC">on 2017-08-01</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/12"> #12</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Hi, Please review the note below.</p>
+<p>@Zane, please recommend how specifically an operator should apply your patch, and list any services will need restarting. You can see the sections under &quot;Recommended Actions&quot;.</p>
+<p>~~~~BEGIN~~~~</p>
+<p>This is an advance warning of a potential issue discovered in OpenStack, to give you, as downstream stakeholders, a chance to coordinate a response.</p>
+<p>Please note, this is not an OpenStack Security Advisory (OSSA), but advanced notice of an upcoming OpenStack Security Note (OSSN).</p>
+<p>OSSNs are generally released publicly, but given the nature of this note we&#x27;ve opted to provide advanced notification.</p>
+<p>Please treat the following information as confidential until the proposed public disclosure date, which is 7 days after embargo notice (this email).</p>
+<p>Aodh can be used to launder Keystone trusts<br />
+---</p>
+<p>### Summary ###</p>
+<p>When adding an alarm action with the scheme `trust+http:` Aodh does not verify that the user creating the alarm is the trustor or has the same rights as the trustor, not that the trust is for the same project as the alarm.</p>
+<p>### Affected Services / Software ###</p>
+<p>Aodh is the alarm engine of the Telemetry project.</p>
+<p>### Discussion ###</p>
+<p>When adding an alarm action with the scheme `trust+http:`, Aodh allows the user to provide a trust ID to acquire a token with which to make a webhook request. (If no trust ID is provided then Aodh creates a trust internally, in which case the issue is not present.) However, Aodh makes no attempt to verify that the user creating the alarm is the trustor or has the same rights as the trustor - it also does not attempt to check that the trust is for the same project as the alarm.</p>
+<p>The nature of the `trust+http:` alarm notifier is that it allows the user to obtain a token given the ID of a trust for which Aodh is the trustee, since the URL is arbitrary and not limited to services in the Keystone catalog.</p>
+<p>### Recommended Actions ###</p>
+<p>The patchfile attached to this OSSN when applied, will block use of trust URLs which contain trust ID&#x27;s and log an error message of &quot;trust URL cannot contain a trust ID.&quot;. Any trust action without a trust ID will result in Aodh internally creating a trust ID as before.</p>
+<p>#### Patch file instructions ####</p>
+<p>{patch CLI line and args}</p>
+<p>{Services that require restart}</p>
+<p>### Contacts / References ###<br />
+Author: Luke Hinds, Red Hat<br />
+This OSSN : <a rel="nofollow" href="https://wiki.openstack.org/wiki/OSSN/OSSN-0080">https:/<wbr />/wiki.openstack<wbr />.org/wiki/<wbr />OSSN/OSSN-<wbr />0080</a><br />
+Original LaunchPad Bug : <a rel="nofollow" href="https://bugs.launchpad.net/ossn/+bug/1649333">https:/<wbr />/bugs.launchpad<wbr />.net/ossn/<wbr />+bug/1649333</a><br />
+OpenStack Security Project : <a rel="nofollow" href="https://launchpad.net/~openstack-ossg">https:/<wbr />/launchpad.<wbr />net/~openstack-<wbr />ossg</a></p>
+<p>~~~~END~~~~</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Hi, Please review the note below.
+
+@Zane, please recommend how specifically an operator should apply your patch, and list any services will need restarting. You can see the sections under "Recommended Actions".
+
+~~~~BEGIN~~~~
+
+This is an advance warning of a potential issue discovered in OpenStack, to give you, as downstream stakeholders, a chance to coordinate a response. 
+ 
+Please note, this is not an OpenStack Security Advisory (OSSA), but advanced notice of an upcoming OpenStack Security Note (OSSN).
+
+OSSNs are generally released publicly, but given the nature of this note we've opted to provide advanced notification.
+
+Please treat the following information as confidential until the proposed public disclosure date, which is 7 days after embargo notice (this email).
+
+Aodh can be used to launder Keystone trusts
+---
+
+### Summary ###
+
+When adding an alarm action with the scheme `trust+http:` Aodh does not verify that the user creating the alarm is the trustor or has the same rights as the trustor, not that the trust is for the same project as the alarm. 
+
+### Affected Services / Software ###
+
+Aodh is the alarm engine of the Telemetry project.
+
+### Discussion ###
+
+When adding an alarm action with the scheme `trust+http:`, Aodh allows the user to provide a trust ID to acquire a token with which to make a webhook request. (If no trust ID is provided then Aodh creates a trust internally, in which case the issue is not present.) However, Aodh makes no attempt to verify that the user creating the alarm is the trustor or has the same rights as the trustor - it also does not attempt to check that the trust is for the same project as the alarm.
+
+The nature of the `trust+http:` alarm notifier is that it allows the user to obtain a token given the ID of a trust for which Aodh is the trustee, since the URL is arbitrary and not limited to services in the Keystone catalog.
+
+### Recommended Actions ###
+
+The patchfile attached to this OSSN when applied, will block use of trust URLs which contain trust ID's and log an error message of "trust URL cannot contain a trust ID.". Any trust action without a trust ID will result in Aodh internally creating a trust ID as before.
+
+#### Patch file instructions ####
+
+{patch CLI line and args}
+
+{Services that require restart}
+
+### Contacts / References ###
+Author: Luke Hinds, Red Hat
+This OSSN : https://wiki.openstack.org/wiki/OSSN/OSSN-0080
+Original LaunchPad Bug : https://bugs.launchpad.net/ossn/+bug/1649333
+OpenStack Security Project : https://launchpad.net/~openstack-ossg
+
+
+~~~~END~~~~
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/13" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~lhinds" class="sprite person">Luke Hinds (lhinds)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-08-01T10:31:10.785300+00:00" title="2017-08-01 10:31:10 UTC">on 2017-08-01</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/13"> #13</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Sorry noted my own nits</p>
+<p>&quot;not that the trust is for the same project as the alarm.&quot; = &quot;nor that the trust is for the same project as the alarm.&quot;</p>
+<p>&quot;Aodh is the alarm engine of the Telemetry project.&quot; = &quot;Aodh the alarm engine of the Telemetry project.&quot;</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Sorry noted my own nits 
+
+"not that the trust is for the same project as the alarm." = "nor that the trust is for the same project as the alarm."
+
+"Aodh is the alarm engine of the Telemetry project." = "Aodh the alarm engine of the Telemetry project."</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/14" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~zaneb" class="sprite person">Zane Bitter (zaneb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-08-01T13:44:37.062532+00:00" title="2017-08-01 13:44:37 UTC">on 2017-08-01</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/14"> #14</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>JD, can you provide the info on how to apply the patch and which services to restart? I will probably get it wrong ;)</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">JD, can you provide the info on how to apply the patch and which services to restart? I will probably get it wrong ;)</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/15" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~lhinds" class="sprite person">Luke Hinds (lhinds)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-08-03T10:06:55.874982+00:00" title="2017-08-03 10:06:55 UTC">on 2017-08-03</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/15"> #15</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Second thoughts and in the interest of times, let&#x27;s just list the services that require a bounce (if there are any). We can then supply the patch, and leave it to the distribution / provider to implement that patch in whatever packaging system they use to install / manage openstack.</p>
+<p>I would like to get this out EOB tomorrow, as I will be on leave next week. We can then go public next Friday the 11th and merge into master at the same time.</p>
+<p>I will amend the above message to state 5 working days of embargo.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Second thoughts and in the interest of times, let's just list the services that require a bounce (if there are any). We can then supply the patch, and leave it to the distribution / provider to implement that patch in whatever packaging system they use to install / manage openstack.
+
+I would like to get this out EOB tomorrow, as I will be on leave next week. We can then go public next Friday the 11th and merge into master at the same time. 
+
+I will amend the above message to state 5 working days of embargo. </textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/16" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~zaneb" class="sprite person">Zane Bitter (zaneb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-08-03T10:51:42.111405+00:00" title="2017-08-03 10:51:42 UTC">on 2017-08-03</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/16"> #16</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>IIRC it runs partly under Apache and partly not, and I always guess wrong which part runs which code, so I&#x27;d like an Aodh developer to answer that. Julien is on PTO until 11 August, so I added Pradeep who can hopefully find somebody to answer.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">IIRC it runs partly under Apache and partly not, and I always guess wrong which part runs which code, so I'd like an Aodh developer to answer that. Julien is on PTO until 11 August, so I added Pradeep who can hopefully find somebody to answer.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/17" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~zaneb" class="sprite person">Zane Bitter (zaneb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-08-03T10:57:56.989711+00:00" title="2017-08-03 10:57:56 UTC">on 2017-08-03</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/17"> #17</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Forgot to mention, rest of the note LGTM.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Forgot to mention, rest of the note LGTM.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/18" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~pkilambi" class="sprite person">Pradeep Kilambi (pkilambi)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-08-03T12:08:10.289950+00:00" title="2017-08-03 12:08:10 UTC">on 2017-08-03</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/18"> #18</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>The note looks good to me. As for the services to restart, Aodh api is recommended to be run under  apache. If So, restarting apache should pick up the change. In cases where its still run as eventlet (in older versions) they will need to restart openstack-aodh-api for centos/RHEL/Suse and aodh-api for ubuntu.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">The note looks good to me. As for the services to restart, Aodh api is recommended to be run under  apache. If So, restarting apache should pick up the change. In cases where its still run as eventlet (in older versions) they will need to restart openstack-aodh-api for centos/RHEL/Suse and aodh-api for ubuntu. </textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/19" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~lhinds" class="sprite person">Luke Hinds (lhinds)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-08-17T10:35:19.915445+00:00" title="2017-08-17 10:35:19 UTC">on 2017-08-17</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/19"> #19</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Fix pushed:</p>
+<p>Master: <a rel="nofollow" href="https://review.openstack.org/#/c/493823/">https:/<wbr />/review.<wbr />openstack.<wbr />org/#/c/<wbr />493823/</a><br />
+Ocata: <a rel="nofollow" href="https://review.openstack.org/#/c/493824/">https:/<wbr />/review.<wbr />openstack.<wbr />org/#/c/<wbr />493824/</a><br />
+Newton: <a rel="nofollow" href="https://review.openstack.org/#/c/493826/">https:/<wbr />/review.<wbr />openstack.<wbr />org/#/c/<wbr />493826/</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Fix pushed:
+
+Master: https://review.openstack.org/#/c/493823/
+Ocata: https://review.openstack.org/#/c/493824/
+Newton: https://review.openstack.org/#/c/493826/</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in ossn: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; In Progress
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~lhinds" class="sprite person">Luke Hinds (lhinds)</a>
+    
+    <time title="2017-08-17 10:55:21 UTC" datetime="2017-08-17T10:55:21.796255+00:00">on 2017-08-17</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>information type</b>:
+      </td>
+      <td>
+        Private Security &#8594; Public
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~lhinds" class="sprite person">Luke Hinds (lhinds)</a>
+    
+    <time title="2017-08-17 11:02:04 UTC" datetime="2017-08-17T11:02:04.389585+00:00">on 2017-08-17</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in aodh: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        In Progress &#8594; Fix Released
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in ossn: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        In Progress &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/20" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-08-21T14:36:10.831678+00:00" title="2017-08-21 14:36:10 UTC">on 2017-08-21</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/ossn/+bug/1649333/comments/20">
+                <strong>Fix included in openstack/aodh 5.0.0</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/20"> #20</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This issue was fixed in the openstack/aodh 5.0.0 release.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This issue was fixed in the openstack/aodh 5.0.0 release.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/21" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-08-28T00:05:38.897460+00:00" title="2017-08-28 00:05:38 UTC">on 2017-08-28</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/ossn/+bug/1649333/comments/21">
+                <strong>Fix included in openstack/aodh 3.0.4</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/21"> #21</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This issue was fixed in the openstack/aodh 3.0.4 release.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This issue was fixed in the openstack/aodh 3.0.4 release.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/22" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2017-08-28T00:05:45.854240+00:00" title="2017-08-28 00:05:45 UTC">on 2017-08-28</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/ossn/+bug/1649333/comments/22">
+                <strong>Fix included in openstack/aodh 4.0.2</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/22"> #22</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This issue was fixed in the openstack/aodh 4.0.2 release.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This issue was fixed in the openstack/aodh 4.0.2 release.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/23" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2018-03-22T23:09:10.728226+00:00" title="2018-03-22 23:09:10 UTC">on 2018-03-22</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/ossn/+bug/1649333/comments/23">
+                <strong>Related fix proposed to aodh (master)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/23"> #23</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Related fix proposed to branch: master<br />
+Review: <a rel="nofollow" href="https://review.openstack.org/555500">https:/<wbr />/review.<wbr />openstack.<wbr />org/555500</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Related fix proposed to branch: master
+Review: https://review.openstack.org/555500</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/24" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2018-04-23T13:17:14.586723+00:00" title="2018-04-23 13:17:14 UTC">on 2018-04-23</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/ossn/+bug/1649333/comments/24">
+                <strong>Related fix merged to aodh (master)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/24"> #24</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://review.openstack.org/555500">https:/<wbr />/review.<wbr />openstack.<wbr />org/555500</a><br />
+Committed: <a rel="nofollow" href="https://git.openstack.org/cgit/openstack/aodh/commit/?id=92182de328d1f088c5f5a68326d2b207b21e06ea">https:/<wbr />/git.openstack.<wbr />org/cgit/<wbr />openstack/<wbr />aodh/commit/<wbr />?id=92182de328d<wbr />1f088c5f5a68326<wbr />d2b207b21e06ea</a><br />
+Submitter: Zuul<br />
+Branch:    master</p>
+<p>commit 92182de328d1f08<wbr />8c5f5a68326d2b2<wbr />07b21e06ea<br />
+Author: Zane Bitter &lt;email address hidden&gt;<br />
+Date:   Thu Mar 22 17:12:43 2018 -0400</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Don&#x27;t include trust IDs in Alarm action output</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;It was originally envisaged that we would allow users to specify trust<br />
+&nbsp;&nbsp;&nbsp;&nbsp;IDs in trust+*:// alarm action URLs, and only create trusts internally<br />
+&nbsp;&nbsp;&nbsp;&nbsp;when none was specified. This made storage of trust IDs in the username<br />
+&nbsp;&nbsp;&nbsp;&nbsp;field of the URL part of the API interface, and it made sense that the<br />
+&nbsp;&nbsp;&nbsp;&nbsp;user would have access to the IDs both for trusts they had created<br />
+&nbsp;&nbsp;&nbsp;&nbsp;themselves and those created internally.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;However, this proved to be a security hole that was closed by<br />
+&nbsp;&nbsp;&nbsp;&nbsp;cb90d3ad472<wbr />bba8d648803ca94<wbr />a9196dff97f0e8, and now we forbid users from<br />
+&nbsp;&nbsp;&nbsp;&nbsp;passing in a trust ID. Any trust IDs that appear in the URL were created<br />
+&nbsp;&nbsp;&nbsp;&nbsp;internally.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;This causes issues when updating alarms because aodhclient uses a<br />
+&nbsp;&nbsp;&nbsp;&nbsp;read-<wbr />modify-<wbr />write pattern to do so. The action URLs output from a GET<br />
+&nbsp;&nbsp;&nbsp;&nbsp;may contain trust IDs, while the input to a PUT is forbidden from<br />
+&nbsp;&nbsp;&nbsp;&nbsp;containing them. This means the data is not round-trippable, so updates<br />
+&nbsp;&nbsp;&nbsp;&nbsp;even to unrelated fields fail.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Since storage of the trust ID in action URLs is purely an internal<br />
+&nbsp;&nbsp;&nbsp;&nbsp;implementation detail at this point, scrub it out of data returned by<br />
+&nbsp;&nbsp;&nbsp;&nbsp;the REST API. This means the output of e.g. a GET will match the<br />
+&nbsp;&nbsp;&nbsp;&nbsp;original input data, as the user probably expects, and can be fed back<br />
+&nbsp;&nbsp;&nbsp;&nbsp;into a PUT successfully.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Change-Id: I230c0d80a9440c<wbr />7d002b9a623048e<wbr />f715a9df743<br />
+&nbsp;&nbsp;&nbsp;&nbsp;Closes-Bug: #1737186<br />
+&nbsp;&nbsp;&nbsp;&nbsp;Related-Bug: #1649333</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://review.openstack.org/555500
+Committed: https://git.openstack.org/cgit/openstack/aodh/commit/?id=92182de328d1f088c5f5a68326d2b207b21e06ea
+Submitter: Zuul
+Branch:    master
+
+commit 92182de328d1f088c5f5a68326d2b207b21e06ea
+Author: Zane Bitter &lt;zbitter@redhat.com&gt;
+Date:   Thu Mar 22 17:12:43 2018 -0400
+
+    Don't include trust IDs in Alarm action output
+    
+    It was originally envisaged that we would allow users to specify trust
+    IDs in trust+*:// alarm action URLs, and only create trusts internally
+    when none was specified. This made storage of trust IDs in the username
+    field of the URL part of the API interface, and it made sense that the
+    user would have access to the IDs both for trusts they had created
+    themselves and those created internally.
+    
+    However, this proved to be a security hole that was closed by
+    cb90d3ad472bba8d648803ca94a9196dff97f0e8, and now we forbid users from
+    passing in a trust ID. Any trust IDs that appear in the URL were created
+    internally.
+    
+    This causes issues when updating alarms because aodhclient uses a
+    read-modify-write pattern to do so. The action URLs output from a GET
+    may contain trust IDs, while the input to a PUT is forbidden from
+    containing them. This means the data is not round-trippable, so updates
+    even to unrelated fields fail.
+    
+    Since storage of the trust ID in action URLs is purely an internal
+    implementation detail at this point, scrub it out of data returned by
+    the REST API. This means the output of e.g. a GET will match the
+    original input data, as the user probably expects, and can be fed back
+    into a PUT successfully.
+    
+    Change-Id: I230c0d80a9440c7d002b9a623048ef715a9df743
+    Closes-Bug: #1737186
+    Related-Bug: #1649333
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/25" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2018-04-24T16:17:49.995370+00:00" title="2018-04-24 16:17:49 UTC">on 2018-04-24</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/ossn/+bug/1649333/comments/25">
+                <strong>Related fix proposed to aodh (stable/queens)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/25"> #25</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Related fix proposed to branch: stable/queens<br />
+Review: <a rel="nofollow" href="https://review.openstack.org/564020">https:/<wbr />/review.<wbr />openstack.<wbr />org/564020</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Related fix proposed to branch: stable/queens
+Review: https://review.openstack.org/564020</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ossn/+bug/1649333/comments/26" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2018-04-24T19:08:52.587862+00:00" title="2018-04-24 19:08:52 UTC">on 2018-04-24</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/ossn/+bug/1649333/comments/26">
+                <strong>Related fix merged to aodh (stable/queens)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ossn/+bug/1649333/comments/26"> #26</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://review.openstack.org/564020">https:/<wbr />/review.<wbr />openstack.<wbr />org/564020</a><br />
+Committed: <a rel="nofollow" href="https://git.openstack.org/cgit/openstack/aodh/commit/?id=149d3ad2193b4d17df801f82a0a6be62dba564db">https:/<wbr />/git.openstack.<wbr />org/cgit/<wbr />openstack/<wbr />aodh/commit/<wbr />?id=149d3ad2193<wbr />b4d17df801f82a0<wbr />a6be62dba564db</a><br />
+Submitter: Zuul<br />
+Branch:    stable/queens</p>
+<p>commit 149d3ad2193b4d1<wbr />7df801f82a0a6be<wbr />62dba564db<br />
+Author: Zane Bitter &lt;email address hidden&gt;<br />
+Date:   Thu Mar 22 17:12:43 2018 -0400</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Don&#x27;t include trust IDs in Alarm action output</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;It was originally envisaged that we would allow users to specify trust<br />
+&nbsp;&nbsp;&nbsp;&nbsp;IDs in trust+*:// alarm action URLs, and only create trusts internally<br />
+&nbsp;&nbsp;&nbsp;&nbsp;when none was specified. This made storage of trust IDs in the username<br />
+&nbsp;&nbsp;&nbsp;&nbsp;field of the URL part of the API interface, and it made sense that the<br />
+&nbsp;&nbsp;&nbsp;&nbsp;user would have access to the IDs both for trusts they had created<br />
+&nbsp;&nbsp;&nbsp;&nbsp;themselves and those created internally.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;However, this proved to be a security hole that was closed by<br />
+&nbsp;&nbsp;&nbsp;&nbsp;cb90d3ad472<wbr />bba8d648803ca94<wbr />a9196dff97f0e8, and now we forbid users from<br />
+&nbsp;&nbsp;&nbsp;&nbsp;passing in a trust ID. Any trust IDs that appear in the URL were created<br />
+&nbsp;&nbsp;&nbsp;&nbsp;internally.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;This causes issues when updating alarms because aodhclient uses a<br />
+&nbsp;&nbsp;&nbsp;&nbsp;read-<wbr />modify-<wbr />write pattern to do so. The action URLs output from a GET<br />
+&nbsp;&nbsp;&nbsp;&nbsp;may contain trust IDs, while the input to a PUT is forbidden from<br />
+&nbsp;&nbsp;&nbsp;&nbsp;containing them. This means the data is not round-trippable, so updates<br />
+&nbsp;&nbsp;&nbsp;&nbsp;even to unrelated fields fail.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Since storage of the trust ID in action URLs is purely an internal<br />
+&nbsp;&nbsp;&nbsp;&nbsp;implementation detail at this point, scrub it out of data returned by<br />
+&nbsp;&nbsp;&nbsp;&nbsp;the REST API. This means the output of e.g. a GET will match the<br />
+&nbsp;&nbsp;&nbsp;&nbsp;original input data, as the user probably expects, and can be fed back<br />
+&nbsp;&nbsp;&nbsp;&nbsp;into a PUT successfully.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Change-Id: I230c0d80a9440c<wbr />7d002b9a623048e<wbr />f715a9df743<br />
+&nbsp;&nbsp;&nbsp;&nbsp;Closes-Bug: #1737186<br />
+&nbsp;&nbsp;&nbsp;&nbsp;Related-Bug: #1649333<br />
+&nbsp;&nbsp;&nbsp;&nbsp;(cherry picked from commit 92182de328d1f08<wbr />8c5f5a68326d2b2<wbr />07b21e06ea)</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://review.openstack.org/564020
+Committed: https://git.openstack.org/cgit/openstack/aodh/commit/?id=149d3ad2193b4d17df801f82a0a6be62dba564db
+Submitter: Zuul
+Branch:    stable/queens
+
+commit 149d3ad2193b4d17df801f82a0a6be62dba564db
+Author: Zane Bitter &lt;zbitter@redhat.com&gt;
+Date:   Thu Mar 22 17:12:43 2018 -0400
+
+    Don't include trust IDs in Alarm action output
+    
+    It was originally envisaged that we would allow users to specify trust
+    IDs in trust+*:// alarm action URLs, and only create trusts internally
+    when none was specified. This made storage of trust IDs in the username
+    field of the URL part of the API interface, and it made sense that the
+    user would have access to the IDs both for trusts they had created
+    themselves and those created internally.
+    
+    However, this proved to be a security hole that was closed by
+    cb90d3ad472bba8d648803ca94a9196dff97f0e8, and now we forbid users from
+    passing in a trust ID. Any trust IDs that appear in the URL were created
+    internally.
+    
+    This causes issues when updating alarms because aodhclient uses a
+    read-modify-write pattern to do so. The action URLs output from a GET
+    may contain trust IDs, while the input to a PUT is forbidden from
+    containing them. This means the data is not round-trippable, so updates
+    even to unrelated fields fail.
+    
+    Since storage of the trust ID in action URLs is purely an internal
+    implementation detail at this point, scrub it out of data returned by
+    the REST API. This means the output of e.g. a GET will match the
+    original input data, as the user probably expects, and can be fed back
+    into a PUT successfully.
+    
+    Change-Id: I230c0d80a9440c7d002b9a623048ef715a9df743
+    Closes-Bug: #1737186
+    Related-Bug: #1649333
+    (cherry picked from commit 92182de328d1f088c5f5a68326d2b207b21e06ea)
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>tags</b>:
+      </td>
+      <td>
+        added: in-stable-queens
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        <div style="float: right;">
+          <a class="menu-link-activitylog" href="https://bugs.launchpad.net/ossn/+bug/1649333/+activity">See full activity log</a>
+        </div>
+        <div class="clearfix"></div>
+
+        
+          
+
+          
+            <div align="center" id="add-comment-login-first">
+              To post a comment you must <a href="+login?comments=all">log in</a>.
+            </div>
+          
+        
+        
+      
+
+      </div><!-- class="top-portlet" -->
+      </div><!--- id="maincontentsub"-->
+      <div>
+        <div id="duplicate-form-container"></div>
+        <div id="privacy-form-container"></div>
+      </div>
+    </div>
+            
+            
+          </div><!-- yui-b -->
+        </div><!-- yui-main -->
+
+        
+          <div id="side-portlets" class="yui-b side">
+            
+      <div id="involvement" class="portlet">
+        <ul class="involvement">
+          <li class="single">
+            <a class="sprite bugs" href="/ossn/+filebug">
+              Report a bug
+            </a>
+          </li>
+        </ul>
+      </div>
+      <div id="privacy" class="first portlet public">
+  <div id="privacy-text">
+     <span id="information-type-summary" class="sprite public">This report contains
+         <strong id="information-type">Public</strong>
+         information
+     </span>&nbsp;<a class="sprite edit action-icon" id="privacy-link" href="/ossn/+bug/1649333/+secrecy">Edit</a>
+
+     <div id="information-type-description" style="padding-top: 5px">Everyone can see this information.
+</div>
+  </div>
+</div>
+
+      <div id="portlet-actions" class="portlet vertical">
+  <ul id="duplicate-actions">
+    <li class="sprite bug-dupe">
+    <span id="mark-duplicate-text">
+    <a class="menu-link-mark-dupe" href="/ossn/+bug/1649333/+duplicate">Mark as duplicate</a>
+    </span>
+    </li>
+    
+    <li><a class="menu-link-createquestion sprite add" href="https://bugs.launchpad.net/ossn/+bug/1649333/+create-question">Convert to a question</a></li>
+    
+    <li><a class="menu-link-addbranch sprite add" href="https://bugs.launchpad.net/ossn/+bug/1649333/+addbranch">Link a related branch</a></li>
+    <li><a class="menu-link-linktocve sprite add" href="https://bugs.launchpad.net/ossn/+bug/1649333/+linkcve">Link to <abbr title="Common Vulnerabilities and Exposures Index">CVE</abbr></a></li>
+    
+  </ul>
+</div>
+
+      
+
+      <div class="portlet vertical" id="portlet-subscription">
+  <div class="section">
+    <div id="current_user_subscription" class="False">
+      
+        <span>You are</span>
+        
+        <a class="menu-link-subscription sprite modify edit" href="/ossn/+bug/1649333/+subscribe">
+           
+           
+           
+           not directly subscribed to this bug's notifications.
+        </a>
+      
+      
+    </div>
+    <div id="sub-unsub-spinner">Subscribing...</div>
+    <ul>
+      
+      <li><a class="menu-link-editsubscriptions sprite modify edit" href="https://bugs.launchpad.net/ossn/+bug/1649333/+subscriptions" title="View and change your subscriptions to this bug">Edit bug mail</a></li>
+    </ul>
+  </div>
+  <script type="text/javascript">
+    LPJS.use('io-base', 'node',
+            'lp.bugs.bugtask_index.portlets.subscription', function(Y) {
+        Y.on('domready', function() {
+            Y.lp.bugs.bugtask_index.portlets.subscription.initialize();
+        });
+    });
+  </script>
+</div>
+
+      <div class="portlet vertical" id="portlet-subscribers">
+  <h2>Other bug subscribers</h2>
+  <div>
+    <div><a class="menu-link-addsubscriber sprite add" href="https://bugs.launchpad.net/ossn/+bug/1649333/+addsubscriber" title="Launchpad will email that person whenever this bugs changes">Subscribe someone else</a></div>
+  </div>
+  <div id="other-bug-subscribers"></div>
+</div>
+
+      
+
+      
+
+      
+  <div class="portlet" id="portlet-patches">
+    <h2>Patches</h2>
+    <ul>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/ossn/+bug/1649333/+attachment/4803052/+files/bug1649333.patch">bug1649333.patch</a>
+        <small>
+          (<a href="/ossn/+bug/1649333/+attachment/4803052">edit</a>)
+        </small>
+      </li>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/ossn/+bug/1649333/+attachment/4805478/+files/bug1649333-newton.patch">stable/newton patch</a>
+        <small>
+          (<a href="/ossn/+bug/1649333/+attachment/4805478">edit</a>)
+        </small>
+      </li>
+    </ul>
+    <ul>
+      <li>
+        <a class="sprite add" href="/ossn/+bug/1649333/+addcomment?field.patch=on">Add patch</a>
+      </li>
+    </ul>
+  </div>
+  
+
+
+      
+
+    
+          </div><!-- yui-b side -->
+        
+      </div><!-- yui-t4 -->
+
+      
+  <div id="footer" class="footer">
+    <div class="lp-arcana">
+        <div class="lp-branding">
+          <a href="https://launchpad.net/"><img src="/@@/launchpad-logo-and-name-hierarchy.png" alt="Launchpad" /></a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://launchpad.net/+tour">Take the tour</a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://help.launchpad.net/">Read the guide</a>
+          &nbsp;
+          <form id="globalsearch" method="get" accept-charset="UTF-8" action="https://launchpad.net/+search">
+            <input type="search" id="search-text" name="field.text" />
+            <input type="image" src="/@@/search" style="vertical-align:5%" alt="Search Launchpad" />
+          </form>
+        </div>
+        
+  
+
+    </div>
+
+    <div class="colophon">
+      &copy; 2004-2021
+      <a href="http://canonical.com/">Canonical&nbsp;Ltd.</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://launchpad.net/legal">Terms of use</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://www.ubuntu.com/legal/dataprivacy">Data privacy</a>
+      &nbsp;&bull;&nbsp;
+      <a href="/feedback">Contact Launchpad Support</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="http://blog.launchpad.net/">Blog</a>
+      
+	&nbsp;&bull;&nbsp;
+	<a href="https://canonical.com/careers">Careers</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="https://twitter.com/launchpadstatus">System status</a>
+      <span id="lp-version">
+      &nbsp;&bull;&nbsp;
+        r0d8de2b
+        
+        
+        (<a href="https://dev.launchpad.net/">Get the code!</a>)
+      </span>
+    </div>
+  </div>
+
+    </div><!-- yui-d0-->
+
+    
+  
+  
+  <script id="json-cache-script">LP.cache = {"bug_is_private": false, "bug": {"self_link": "https://bugs.launchpad.net/api/devel/bugs/1649333", "web_link": "https://bugs.launchpad.net/bugs/1649333", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug", "id": 1649333, "private": false, "information_type": "Public", "name": null, "title": "Aodh can be used to launder Keystone trusts", "description": "When adding an alarm action with the scheme trust+http:, Aodh allows the user to provide a trust ID to use to acquire a token with which to make the webhook request. (If no trust ID is provided then Aodh creates a trust internally, in which case there is no issue.) However, Aodh makes no attempt to check that the user creating the alarm is the trustor or has the same rights as the trustor - it doesn't even attempt to check that the trust is for the same project as the alarm.\n\nThe nature of the trust+http: alarm notifier is that it allows the user to obtain a token given the ID of a trust for which Aodh is the trustee, since the URL is arbitrary and not limited to services in the Keystone catalog.\n\nIt is my understanding (though I'm open to correction) that trust IDs are not meant to be secret - i.e. that security should rely on the secrecy of the trustee's credentials, not of the trust ID.\n\nThe current setup requires that the security posture be equivalent to, or even stronger than, that for a bearer token, since the trust ID can be used to obtain a token and it may never expire. (The vulnerability is limited to Aodh though, since it only applies to trusts where Aodh is the trustee.) In principle this *could* be a valid choice, although I personally would disagree with it. In practice, that is not the current security posture - for example, trust IDs are stored unencrypted in the database and routinely logged unobfuscated.\n\n\nThe easiest solution would be to simply disallow users supplying their own trust IDs. This may well be feasible - it's likely that in most clouds non-admin users will not have the necessary permissions to get the ID of the Aodh service user, which is required to create a trust with that user as the trustee. Heat does not supply a trust ID in its convenience code for setting up an autoscaling alarm. So there are probably no users of this feature in the wild.\n\nTo eliminate the vulnerability without eliminating the feature, I believe Aodh would need to check that the user creating the alarm possesses all of the trust privileges - i.e. their token is for the same project ID and they have all of the roles that the trust does. Or, alternatively, check that the user *is* (i.e. has the same user ID as) the trustor.", "owner_link": "https://bugs.launchpad.net/api/devel/~zaneb", "bug_tasks_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1649333/bug_tasks", "duplicate_of_link": null, "date_created": "2016-12-12T16:46:07.905495+00:00", "activity_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1649333/activity", "subscriptions_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1649333/subscriptions", "date_last_updated": "2018-04-24T19:08:53.090088+00:00", "who_made_private_link": null, "date_made_private": null, "heat": 18, "bug_watches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1649333/bug_watches", "cves_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1649333/cves", "duplicates_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1649333/duplicates", "attachments_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1649333/attachments", "security_related": false, "latest_patch_uploaded": "2017-01-17T19:01:58.940892+00:00", "tags": ["in-stable-queens"], "date_last_message": "2018-04-24T19:08:52.587862+00:00", "number_of_duplicates": 0, "message_count": 27, "users_affected_count": 1, "users_unaffected_count": 0, "users_affected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1649333/users_affected", "users_unaffected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1649333/users_unaffected", "users_affected_count_with_dupes": 1, "other_users_affected_count_with_dupes": 1, "users_affected_with_dupes_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1649333/users_affected_with_dupes", "messages_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1649333/messages", "linked_branches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1649333/linked_branches", "linked_merge_proposals_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1649333/linked_merge_proposals", "http_etag": "\"a9d61b79fb82988125d4fa03e3cd51998a681525-7652466c4ff7760fb81bf06201890514afc9abab\""}, "total_comments_and_activity": 44, "related_features": {}, "information_type_data": {"PUBLIC": {"is_private": false, "name": "Public", "order": 0, "description": "Everyone can see this information.\n", "value": "PUBLIC", "description_css_class": "choice-description"}, "PRIVATESECURITY": {"is_private": true, "name": "Private Security", "order": 2, "description": "Only the security group can see this information.\n ", "value": "PRIVATESECURITY", "description_css_class": "choice-description"}, "PUBLICSECURITY": {"is_private": false, "name": "Public Security", "order": 1, "description": "Everyone can see this security related information.\n", "value": "PUBLICSECURITY", "description_css_class": "choice-description"}, "USERDATA": {"is_private": true, "name": "Private", "order": 3, "description": "Only shared with users permitted to see private user information.\n", "value": "USERDATA", "description_css_class": "choice-description"}}, "context": {"self_link": "https://bugs.launchpad.net/api/devel/ossn/+bug/1649333", "web_link": "https://bugs.launchpad.net/ossn/+bug/1649333", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug_task", "bug_link": "https://bugs.launchpad.net/api/devel/bugs/1649333", "milestone_link": null, "status": "Fix Released", "importance": "Undecided", "assignee_link": "https://bugs.launchpad.net/api/devel/~lhinds", "bug_target_display_name": "OpenStack Security Notes", "bug_target_name": "ossn", "bug_watch_link": null, "date_assigned": "2017-07-27T19:19:37.593479+00:00", "date_created": "2017-01-17T14:20:56.385063+00:00", "date_confirmed": "2017-08-17T10:35:38.943351+00:00", "date_incomplete": null, "date_in_progress": "2017-08-17T10:35:38.943351+00:00", "date_closed": "2017-08-17T11:02:09.126568+00:00", "date_left_new": "2017-08-17T10:35:38.943351+00:00", "date_triaged": "2017-08-17T10:35:38.943351+00:00", "date_fix_committed": "2017-08-17T11:02:09.126568+00:00", "date_fix_released": "2017-08-17T11:02:09.126568+00:00", "date_left_closed": null, "owner_link": "https://bugs.launchpad.net/api/devel/~robert-clark", "target_link": "https://bugs.launchpad.net/api/devel/ossn", "title": "Bug #1649333 in OpenStack Security Notes: \"Aodh can be used to launder Keystone trusts\"", "related_tasks_collection_link": "https://bugs.launchpad.net/api/devel/ossn/+bug/1649333/related_tasks", "is_complete": true, "http_etag": "\"1afddd2387c1570ccf55d07952a988a6df05b960-5cdc901c8ace24d76ac153b5bec273bb696eb060\""}, "bugtask_data": {"2177043": {"delete_link": "https://bugs.launchpad.net/aodh/+bug/1649333/+delete", "bug_title": "Aodh can be used to launder Keystone trusts", "user_can_unassign": false, "importance_value": "Undecided", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary2177043", "target_is_product": true, "user_can_edit_milestone": false, "prefix": "aodh", "bugtask_path": "/aodh/+bug/1649333", "id": 2177043, "milestone_value": null, "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task2177043", "targetname": "Aodh", "assignee_is_team": false, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": "zaneb", "status_value": "Fix Released"}, "2189205": {"delete_link": "https://bugs.launchpad.net/ossn/+bug/1649333/+delete", "bug_title": "Aodh can be used to launder Keystone trusts", "user_can_unassign": false, "importance_value": "Undecided", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary2189205", "target_is_product": true, "user_can_edit_milestone": false, "prefix": "ossn", "bugtask_path": "/ossn/+bug/1649333", "id": 2189205, "milestone_value": null, "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task2189205", "targetname": "OpenStack Security Notes", "assignee_is_team": false, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": "lhinds", "status_value": "Fix Released"}}, "subscribers_portlet_url_data": {"self_link": "https://bugs.launchpad.net/api/devel/bugs/1649333", "web_link": "https://bugs.launchpad.net/bugs/1649333"}, "initial_comment_batch_offset": 41, "first visible_recent_comment": -14};</script>
+
+    
+  
+
+    
+  </body>
+
+
+  <!--
+    Facet name: bugs
+    Page type: main_side
+    Has global search: True
+    Has application tabs: True
+    Has side portlets: True
+
+    At least 55 queries/external actions issued in 0.72 seconds
+
+    Features: {'app.maintenance_message': None, 'hard_timeout': '9000', 'js.yui_version': None, 'app.mainsite_only.canonical_url': None, 'disclosure.dsp_picker.enabled': 'on', 'baselayout.careers_link.disabled': None, 'bugs.affected_count_includes_dupes.disabled': None, 'visible_render_time': None, 'profiling.enabled': None, 'bugs.nominations.bug_supervisors_can_target': 'on'}
+
+    r0d8de2b
+
+    -->
+
+</html>
+

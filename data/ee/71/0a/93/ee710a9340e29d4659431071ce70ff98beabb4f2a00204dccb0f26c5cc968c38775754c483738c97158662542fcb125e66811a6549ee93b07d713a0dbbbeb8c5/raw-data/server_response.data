@@ -1,0 +1,2747 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en" dir="ltr">
+  <head>
+<base href="https://bugs.launchpad.net/mahara/+bug/1429647/+index" />
+
+    <meta charset="UTF-8" />
+    <title>Bug #1429647 “Watchlist lets you watch and receive notifications...” : Bugs : Mahara</title>
+    <link rel="shortcut icon" href="/@@/launchpad.png" />
+    <link rel="canonical" href="https://bugs.launchpad.net/bugs/1429647" />
+    
+      <link rel="alternate" type="application/atom+xml" href="http://feeds.launchpad.net/bugs/1429647/bug.atom" title="Bug 1429647 Feed" />
+    
+
+    
+  
+  <link type="text/css" rel="stylesheet" media="screen, print" href="/+icing/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/combo.css" />
+
+
+    
+
+    
+      <meta name="description" content="In analyzing watchlist bug 1429505 (pages stay on your watchlist even if you lose access to them) I noticed a couple of things in the code:
+
+1. You apparently still can receive watchlist notifications about pages on your watchlist which you don't have access to.
+
+2. There are no access control checks in togglewatchlist.json.php, so it is apparently possible to add a page to your watchlist even if you don't have access to it.
+
+Together, these bugs mean that a user could watch private pages, an..." />
+      <meta property="og:description" content="In analyzing watchlist bug 1429505 (pages stay on your watchlist even if you lose access to them) I noticed a couple of things in the code:
+
+1. You apparently still can receive watchlist notifications about pages on your watchlist which you don't have access to.
+
+2. There are no access control checks in togglewatchlist.json.php, so it is apparently possible to add a page to your watchlist even if you don't have access to it.
+
+Together, these bugs mean that a user could watch private pages, an..." />
+    
+
+    
+    
+      <meta property="og:title" content="Bug #1429647 “Watchlist lets you watch and receive notifications...” : Bugs : Mahara" />
+      <meta property="og:type" content="website" />
+      <meta property="og:image" content="/@@/launchpad.png" />
+      <meta property="og:url" content="https://bugs.launchpad.net/bugs/1429647" />
+      <meta property="og:site_name" content="Launchpad" />
+    
+
+    
+
+    
+  
+
+  
+  
+  <script type="text/javascript">
+    var LP = {
+        cache: {},
+        links: {}
+    };
+  </script>
+
+  
+
+  <script type="text/javascript">var cookie_scope = '; Path=/; Secure; Domain=.launchpad.net';</script>
+
+   <script type="text/javascript" src="/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?yui/yui/yui-min.js&amp;lp/meta.js&amp;yui/loader/loader-min.js"></script>
+   <script type="text/javascript">
+        var raw = null;
+        if (LP.devmode) {
+           raw = 'raw';
+        }
+        YUI.GlobalConfig = {
+            combine: true,
+            comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+            root: 'yui/',
+            filter: raw,
+            debug: false,
+            fetchCSS: false,
+            maxURLLength: 2000,
+            groups: {
+                lp: {
+                    combine: true,
+                    base: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?lp/',
+                    comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+                    root: 'lp/',
+                    // comes from including lp/meta.js
+                    modules: LP_MODULES,
+                    fetchCSS: false
+                }
+            }
+        }</script>
+
+  <script type="text/javascript">
+      // we need this to create a single YUI instance all events and code
+      // talks across. All instances of YUI().use should be based off of
+      // LPJS instead.
+      var LPJS = new YUI();
+  </script>
+
+
+
+    <script id="base-layout-load-scripts" type="text/javascript">
+        //<![CDATA[
+        LPJS.use('base', 'node', 'console', 'event',
+            'oop', 'lp', 'lp.app.foldables','lp.app.sorttable',
+            'lp.app.inlinehelp', 'lp.app.links',
+            'lp.bugs.bugtask_index', 'lp.bugs.subscribers',
+            'lp.app.ellipsis', 'lp.code.branchmergeproposal.diff',
+            'lp.views.global',
+             function(Y) {
+
+            Y.on("domready", function () {
+                var global_view = new Y.lp.views.Global();
+                global_view.render();
+
+                Y.lp.app.sorttable.SortTable.init();
+                Y.lp.app.inlinehelp.init_help();
+                Y.lp.activate_collapsibles();
+                Y.lp.app.foldables.activate();
+                Y.lp.app.links.check_valid_lp_links();
+            });
+
+            Y.on('lp:context:web_link:changed', function(e) {
+                  window.location = e.new_value;
+            });
+        });
+        //]]>
+    </script>
+    <script id="base-helper-functions" type="text/javascript">
+         //<![CDATA[
+        // This code is pulled from lp.js that needs to be available on every
+        // request. Pulling here to get it outside the scope of the YUI block.
+        function setFocusByName(name) {
+            // Focus the first element matching the given name which can be focused.
+            var nodes = document.getElementsByName(name);
+            var i, node;
+            for (i = 0; i < nodes.length; i++) {
+                node = nodes[i];
+                if (node.focus) {
+                    try {
+                        // Trying to focus a hidden element throws an error in IE8.
+                        if (node.offsetHeight !== 0) {
+                            node.focus();
+                        }
+                    } catch (e) {
+                        LPJS.use('console', function(Y) {
+                            Y.log('In setFocusByName(<' +
+                                node.tagName + ' type=' + node.type + '>): ' + e);
+                        });
+                    }
+                    break;
+                }
+            }
+        }
+
+        function selectWidget(widget_name, event) {
+          if (event && (event.keyCode === 9 || event.keyCode === 13)) {
+              // Avoid firing if user is tabbing through or simply pressing
+              // enter to submit the form.
+              return;
+          }
+          document.getElementById(widget_name).checked = true;
+        }
+        //]]>
+    </script>
+
+    
+      
+      <script type="text/javascript" id="available-official-tags-js">var available_official_tags = ["academy", "accessibility", "admin", "assessment", "auth", "behat-dev", "behat-test", "bite-sized", "blog", "bootstrap", "code-cleanup", "collections", "csvupload", "dmllib", "export", "externalfeed", "externalvideo", "feedback", "fileupload", "forums", "front-end", "gallery", "gdpr", "groups", "htmlpurifier", "import", "institutions", "manualupdate", "menus", "messaging", "mnet", "newfeature", "newfeature1.6", "newfeature1.7", "newfeature1.8", "notifications", "passwords", "php54", "plugins", "profileicon", "regression", "resume", "search", "security", "smartevidence", "snack-sized", "tags", "theming", "tinymce", "translations", "usability", "viewaccess", "vieweditor", "webservices"];</script>
+      <script type="text/javascript">
+        LPJS.use('base', 'node', 'oop', 'event', 'lp.bugs.bugtask_index',
+                  'lp.bugs.subscribers', 'lp.code.branchmergeproposal.diff',
+                  'lp.app.comment', 'lp.services.messages.edit', function(Y) {
+            Y.on('domready', function() {
+                Y.lp.code.branchmergeproposal.diff.connect_diff_links();
+                Y.lp.bugs.bugtask_index.setup_bugtask_index();
+                Y.lp.bugs.bugtask_index.setup_bugtask_table();
+                LP.cache.comment_context = LP.cache.bug;
+                var cl = new Y.lp.app.comment.CommentList();
+                cl.render();
+                var sl = new Y.lp.bugs.subscribers.createBugSubscribersLoader({
+                    container_box: '#other-bug-subscribers',
+                    subscribers_details_view:
+                        '/+bug-portlet-subscribers-details',
+                    subscribe_someone_else_link: '.menu-link-addsubscriber'
+                }, window);
+
+                Y.lp.services.messages.edit.setup();
+            });
+         });
+      </script>
+      <style type="text/css">
+        /* Align the 'add comment' link to the right of the comment box. */
+        #add-comment-form textarea { width: 100%; }
+        #add-comment-form { max-width: 60em; padding-bottom: 4em; }
+        #add-comment-form .actions {float: right;}
+        .buglink-summary dd { font-size: 10px; }
+        a#privacy-link:link:hover, a#privacy-link:visited:hover {text-decoration:none;}
+      </style>
+      <style type="text/css">
+        .yui3-overlay .value label  {
+          /* It normally makes sense for form labels to be bold, but since
+          this form consists only of radio buttons, there's nothing but labels
+          so we just get wall-to-wall bold. */
+          font-weight: normal !important;
+        }
+      </style>
+    
+    
+  </head>
+
+  <body id="document" itemscope="" itemtype="http://schema.org/WebPage" class="tab-bugs
+      main_side
+      public
+      yui3-skin-sam">
+          
+          
+    <div class="yui-d0">
+      <div id="locationbar" class="login-logout">
+        
+
+<div id="logincontrol"><a href="https://bugs.launchpad.net/mahara/+bug/1429647/+login">Log in / Register</a></div>
+
+
+
+      </div><!--id="locationbar"-->
+
+      <div id="watermark" class="watermark-apps-portlet">
+        <div>
+          <a href="https://launchpad.net/mahara"><img alt="" width="64" height="64" src="https://launchpadlibrarian.net/302557383/mahara_64x64.png" /></a>
+        </div>
+        <div class="wide">
+          <h2 id="watermark-heading"><a href="https://launchpad.net/mahara">Mahara</a></h2>
+        </div>
+        
+  <!-- Application Menu -->
+  <ul class="facetmenu">
+    
+      
+      <li class="overview"><a href="https://launchpad.net/mahara">Overview</a></li>
+      
+    
+    
+      
+      <li class="branches"><a href="https://code.launchpad.net/mahara">Code</a></li>
+      
+    
+    
+      <li class="bugs active"><a href="https://bugs.launchpad.net/mahara">Bugs</a></li>
+      
+      
+    
+    
+      
+      <li class="specifications"><a href="https://blueprints.launchpad.net/mahara">Blueprints</a></li>
+      
+    
+    
+      
+      <li class="translations"><a href="https://translations.launchpad.net/mahara">Translations</a></li>
+      
+    
+    
+      
+      <li class="answers"><a href="https://answers.launchpad.net/mahara">Answers</a></li>
+      
+    
+  </ul>
+
+      </div>
+
+      <div class="yui-t4">
+        <div id="maincontent" class="yui-main">
+          <div class="yui-b" dir="ltr">
+            <div class="context-publication">
+              
+      <h1 id="edit-title">
+<span class="yui3-editable_text-text ellipsis" style="max-width: 95%;">
+    Watchlist lets you watch and receive notifications about pages you don't have view access to
+</span>
+  
+</h1>
+
+
+
+    
+              
+
+              <div id="registration" class="registering">
+                
+      Bug #1429647 reported by
+      <a href="https://launchpad.net/~u-aaronw" class="sprite person">Aaron Wells</a>
+      <time title="2015-03-08 20:53:28 UTC" datetime="2015-03-08T20:53:28.610091+00:00">on 2015-03-08</time>
+    
+              </div>
+            </div>
+
+            
+            <div id="request-notifications">
+              
+            </div>
+
+            
+              <div>
+
+      
+
+      <div id="bug-is-duplicate">
+          
+      </div>
+      
+
+      <div style="float: right;">
+        <span><a href="/+help-bugs/bug-heat.html" target="help" class="sprite flame">256</a></span>
+      </div>
+
+      
+
+
+  
+  
+    <div class="actions">
+      <span id="affectsmetoo" style="display: inline">This bug affects 1 person</span>
+    </div>
+  
+
+
+
+    <table id="affected-software" class="listing">
+      <thead>
+        <tr>
+          <th colspan="2">Affects</th>
+          <th>Status</th>
+          <th>Importance</th>
+          <th>Assigned to</th>
+          <th>Milestone</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        
+          
+  <tr class="highlight" id="tasksummary1787655">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/mahara/+bug/1429647/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary1787655">
+        <span class="yui3-activator-data-box">
+            <a class="sprite product" href="https://bugs.launchpad.net/mahara">Mahara</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/mahara/+bug/1429647/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/mahara/+bug/1429647/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceMEDIUM">Medium</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1787655">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/mahara/+milestone/15.04.0">Mahara 15.04.0</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1787655">
+     <td colspan="7"><form action="/mahara/+bug/1429647/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/mahara">Mahara</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~u-aaronw" class="sprite person">Aaron Wells</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2015-03-08 20:53:28 UTC" datetime="2015-03-08T20:53:28.610091+00:00">2015-03-08</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2015-03-08 20:53:28 UTC" datetime="2015-03-08T20:53:28.610091+00:00">2015-03-08</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2015-04-13 20:56:10 UTC" datetime="2015-04-13T20:56:10.341997+00:00">2015-04-13</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2015-04-17 02:06:11 UTC" datetime="2015-04-17T02:06:11.863633+00:00">2015-04-17</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="mahara.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="mahara.target.option.package" name="mahara.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="mahara.target.distribution" name="mahara.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="mahara.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="mahara.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="mahara.target.package"
+                         name="mahara.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;mahara.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('mahara.target.package');
+              var select_menu = Y.DOM.byId('mahara.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-mahara-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_remove_button": false, "header": "Select a package", "vocabulary_filters": [], "remove_team_text": "Remove team", "remove_person_text": "Remove person", "selected_value_metadata": null, "show_create_team": false, "picker_type": "default", "vocabulary_name": "DistributionPackage", "extra_no_results_message": null, "selected_value": null, "show_assign_me_button": false, "show_widget_id": "show-widget-mahara-target-package", "step_title": "Search by name", "assign_me_text": "Pick me", "input_element": "mahara.target.package"};
+        var show_widget_id = 'show-widget-mahara-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="mahara.target.option.product" name="mahara.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="mahara" id="mahara.target.product"
+                         name="mahara.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;mahara.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('mahara.target.product');
+              var select_menu = Y.DOM.byId('mahara.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-mahara-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_remove_button": false, "header": "Select a project", "vocabulary_filters": [], "remove_team_text": "Remove team", "remove_person_text": "Remove person", "selected_value_metadata": null, "show_create_team": false, "picker_type": "default", "vocabulary_name": "Product", "extra_no_results_message": null, "selected_value": "mahara", "show_assign_me_button": false, "show_widget_id": "show-widget-mahara-target-product", "step_title": "Search", "assign_me_text": "Pick me", "input_element": "mahara.target.product"};
+        var show_widget_id = 'show-widget-mahara-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="mahara.status" name="mahara.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="mahara.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceMEDIUM">Medium</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          Mahara 15.04.0
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="mahara.assignee.assign_to_nobody" name="mahara.assignee.option" value="mahara.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="mahara.assignee.assign_to_me" name="mahara.assignee.option" value="mahara.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="mahara.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="mahara.comment_on_change" name="mahara.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1787658">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/mahara/1.10/+bug/1429647/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/mahara/1.10">1.10</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/mahara/1.10/+bug/1429647/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/mahara/1.10/+bug/1429647/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceMEDIUM">Medium</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1787658">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/mahara/+milestone/1.10.3">Mahara 1.10.3</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1787658">
+     <td colspan="7"><form action="/mahara/1.10/+bug/1429647/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/mahara/1.10">Mahara 1.10</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~u-aaronw" class="sprite person">Aaron Wells</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2015-03-08 20:54:56 UTC" datetime="2015-03-08T20:54:56.127358+00:00">2015-03-08</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2015-03-08 20:55:14 UTC" datetime="2015-03-08T20:55:14.925207+00:00">2015-03-08</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2015-04-13 20:56:11 UTC" datetime="2015-04-13T20:56:11.668596+00:00">2015-04-13</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2015-04-19 22:15:32 UTC" datetime="2015-04-19T22:15:32.104391+00:00">2015-04-19</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_1.10.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_1.10.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_1.10.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="mahara_1.10.status" name="mahara_1.10.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="mahara_1.10.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceMEDIUM">Medium</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          Mahara 1.10.3
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_1.10.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="mahara_1.10.assignee.assign_to_nobody" name="mahara_1.10.assignee.option" value="mahara_1.10.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_1.10.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="mahara_1.10.assignee.assign_to_me" name="mahara_1.10.assignee.option" value="mahara_1.10.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_1.10.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="mahara_1.10.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="mahara_1.10.comment_on_change" name="mahara_1.10.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1787656">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/mahara/1.8/+bug/1429647/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/mahara/1.8">1.8</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/mahara/1.8/+bug/1429647/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/mahara/1.8/+bug/1429647/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceMEDIUM">Medium</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1787656">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/mahara/+milestone/1.8.7">Mahara 1.8.7</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1787656">
+     <td colspan="7"><form action="/mahara/1.8/+bug/1429647/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/mahara/1.8">Mahara 1.8</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~u-aaronw" class="sprite person">Aaron Wells</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2015-03-08 20:54:56 UTC" datetime="2015-03-08T20:54:56.127358+00:00">2015-03-08</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2015-03-08 20:55:12 UTC" datetime="2015-03-08T20:55:12.102666+00:00">2015-03-08</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2015-04-13 20:57:06 UTC" datetime="2015-04-13T20:57:06.315295+00:00">2015-04-13</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2015-04-20 05:37:54 UTC" datetime="2015-04-20T05:37:54.883093+00:00">2015-04-20</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_1.8.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_1.8.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_1.8.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="mahara_1.8.status" name="mahara_1.8.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="mahara_1.8.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceMEDIUM">Medium</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          Mahara 1.8.7
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_1.8.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="mahara_1.8.assignee.assign_to_nobody" name="mahara_1.8.assignee.option" value="mahara_1.8.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_1.8.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="mahara_1.8.assignee.assign_to_me" name="mahara_1.8.assignee.option" value="mahara_1.8.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_1.8.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="mahara_1.8.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="mahara_1.8.comment_on_change" name="mahara_1.8.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1787660">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/mahara/1.9/+bug/1429647/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/mahara/1.9">1.9</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/mahara/1.9/+bug/1429647/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/mahara/1.9/+bug/1429647/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceMEDIUM">Medium</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1787660">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/mahara/+milestone/1.9.5">Mahara 1.9.5</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1787660">
+     <td colspan="7"><form action="/mahara/1.9/+bug/1429647/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/mahara/1.9">Mahara 1.9</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~u-aaronw" class="sprite person">Aaron Wells</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2015-03-08 20:54:56 UTC" datetime="2015-03-08T20:54:56.127358+00:00">2015-03-08</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2015-03-08 20:55:05 UTC" datetime="2015-03-08T20:55:05.794175+00:00">2015-03-08</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2015-04-13 20:57:08 UTC" datetime="2015-04-13T20:57:08.376617+00:00">2015-04-13</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2015-04-20 10:56:29 UTC" datetime="2015-04-20T10:56:29.289127+00:00">2015-04-20</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_1.9.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_1.9.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_1.9.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="mahara_1.9.status" name="mahara_1.9.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="mahara_1.9.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceMEDIUM">Medium</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          Mahara 1.9.5
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_1.9.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="mahara_1.9.assignee.assign_to_nobody" name="mahara_1.9.assignee.option" value="mahara_1.9.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_1.9.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="mahara_1.9.assignee.assign_to_me" name="mahara_1.9.assignee.option" value="mahara_1.9.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_1.9.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="mahara_1.9.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="mahara_1.9.comment_on_change" name="mahara_1.9.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1787657">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/mahara/15.04/+bug/1429647/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/mahara/15.04">15.04</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/mahara/15.04/+bug/1429647/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/mahara/15.04/+bug/1429647/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceMEDIUM">Medium</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1787657">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/mahara/+milestone/15.04.0">Mahara 15.04.0</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1787657">
+     <td colspan="7"><form action="/mahara/15.04/+bug/1429647/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/mahara/15.04">Mahara 15.04</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~u-aaronw" class="sprite person">Aaron Wells</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2015-03-08 20:54:56 UTC" datetime="2015-03-08T20:54:56.127358+00:00">2015-03-08</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2015-03-08 20:53:28 UTC" datetime="2015-03-08T20:53:28.610091+00:00">2015-03-08</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2015-04-13 20:56:10 UTC" datetime="2015-04-13T20:56:10.341997+00:00">2015-04-13</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2015-04-17 02:06:11 UTC" datetime="2015-04-17T02:06:11.863633+00:00">2015-04-17</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_15.04.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_15.04.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_15.04.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="mahara_15.04.status" name="mahara_15.04.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="mahara_15.04.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceMEDIUM">Medium</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          Mahara 15.04.0
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_15.04.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="mahara_15.04.assignee.assign_to_nobody" name="mahara_15.04.assignee.option" value="mahara_15.04.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_15.04.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="mahara_15.04.assignee.assign_to_me" name="mahara_15.04.assignee.option" value="mahara_15.04.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_15.04.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="mahara_15.04.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="mahara_15.04.comment_on_change" name="mahara_15.04.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1787659">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/mahara/15.10/+bug/1429647/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/mahara/15.10">15.10</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/mahara/15.10/+bug/1429647/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/mahara/15.10/+bug/1429647/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceMEDIUM">Medium</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1787659">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/mahara/+milestone/15.10.0">Mahara 15.10.0</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1787659">
+     <td colspan="7"><form action="/mahara/15.10/+bug/1429647/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/mahara/15.10">Mahara 15.10</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~u-aaronw" class="sprite person">Aaron Wells</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2015-03-08 20:54:56 UTC" datetime="2015-03-08T20:54:56.127358+00:00">2015-03-08</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2015-03-08 20:55:08 UTC" datetime="2015-03-08T20:55:08.376269+00:00">2015-03-08</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2015-04-13 05:56:28 UTC" datetime="2015-04-13T05:56:28.824796+00:00">2015-04-13</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2015-10-23 06:14:19 UTC" datetime="2015-10-23T06:14:19.363517+00:00">2015-10-23</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_15.10.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_15.10.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="mahara_15.10.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="mahara_15.10.status" name="mahara_15.10.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="mahara_15.10.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceMEDIUM">Medium</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          Mahara 15.10.0
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="mahara_15.10.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="mahara_15.10.assignee.assign_to_nobody" name="mahara_15.10.assignee.option" value="mahara_15.10.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_15.10.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="mahara_15.10.assignee.assign_to_me" name="mahara_15.10.assignee.option" value="mahara_15.10.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="mahara_15.10.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="mahara_15.10.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="mahara_15.10.comment_on_change" name="mahara_15.10.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+      </tbody>
+
+    </table>
+
+
+
+<div class="actions">
+  
+    <span id="also-affects-product" class="">
+    <a class="menu-link-addupstream sprite add" href="https://bugs.launchpad.net/mahara/+bug/1429647/+choose-affected-product">Also affects project</a>
+        <a href="/+help-bugs/also-affects-project-help.html" target="help" class="sprite maybe action-icon">(?)</a>
+    </span>
+    <span id="also-affects-package" class="">
+    <a class="menu-link-adddistro sprite add" href="https://bugs.launchpad.net/mahara/+bug/1429647/+distrotask">Also affects distribution/package</a>
+    </span>
+    <a class="menu-link-nominate sprite milestone" href="https://bugs.launchpad.net/mahara/+bug/1429647/+nominate">Nominate for series</a>
+    
+  
+
+</div>
+
+
+
+
+      <div id="maincontentsub">
+        <div class="top-portlet">
+
+      <div itemprop="mainContentOfPage" class="report">
+        
+
+        <div>
+  <div class="lazr-multiline-edit" id="edit-description">
+  <div class="clearfix">
+    
+
+    <h3>Bug Description</h3>
+  </div>
+
+  <div class="yui3-editable_text-text"><p>In analyzing watchlist <a href="/bugs/1429505" class="bug-link">bug 1429505</a> (pages stay on your watchlist even if you lose access to them) I noticed a couple of things in the code:</p>
+<p>1. You apparently still can receive watchlist notifications about pages on your watchlist which you don&#x27;t have access to.</p>
+<p>2. There are no access control checks in togglewatchlist<wbr />.json.php, so it is apparently possible to add a page to your watchlist even if you don&#x27;t have access to it.</p>
+<p>Together, these bugs mean that a user could watch private pages, and receive notifications about changes to those pages. While these notifications would not contain the actual page content, they would contain the title of the page and the names of blocks and/or artefacts changed in the page.</p></div>
+  </div>
+
+  
+</div>
+
+
+        <div style="margin:-10px 0 20px 5px" class="clearfix">
+          
+        </div>
+
+        <div id="bug-tags">
+          <span id="tags-heading">
+            Tags:
+          </span>
+          <span id="tag-list">
+            <a class="official-tag" href="/mahara/+bugs?field.tag=security">security</a>
+            <a class="official-tag" href="/mahara/+bugs?field.tag=viewaccess">viewaccess</a>
+            <a class="unofficial-tag" href="/mahara/+bugs?field.tag=behat">behat</a>
+            <a class="unofficial-tag" href="/mahara/+bugs?field.tag=behat-needed">behat-needed</a>
+            <a class="unofficial-tag" href="/mahara/+bugs?field.tag=watchlist">watchlist</a>
+          </span>
+          
+          <a href="+edit" title="Edit tags" id="tags-trigger" class="sprite edit action-icon">Edit</a>
+          <a href="/+help-bugs/tag-help.html" target="help" class="sprite maybe action-icon">Tag help</a>
+        </div>
+
+        <script type="text/javascript">
+          LPJS.use('event', 'node', 'lp.bugs.tags_entry', function(Y) {
+              Y.on('domready',
+                   function(e) {
+                       Y.lp.bugs.tags_entry.setup_tag_entry(
+                           available_official_tags);
+                   },
+                   window);
+          });
+        </script>
+
+        <div class="clearfix"></div>
+      </div>
+
+      <div id="branches-and-cves">
+        <div id="bug-branches-container" style="float: left">
+          
+        </div><!-- bug-branch-container -->
+
+        <div class="cves">
+          <h2>CVE References</h2>
+          <ul>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2017-1000143" title="Mahara 1.8 before 1.8.7 and 1.9 befor...">2017-1000143</a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="clearfix"></div>
+      </div> <!-- branches and CVEs -->
+
+      </div>
+
+      <div>
+      
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/mahara/+bug/1429647/comments/1" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~u-aaronw" class="sprite person">Aaron Wells (u-aaronw)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-03-08T20:54:23.793566+00:00" title="2015-03-08 20:54:23 UTC">on 2015-03-08</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/mahara/+bug/1429647/comments/1"> #1</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This bug report is based mostly on looking at the code. I still have to actually run some tests to determine whether the code behaves as I think it does...</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This bug report is based mostly on looking at the code. I still have to actually run some tests to determine whether the code behaves as I think it does...</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>information type</b>:
+      </td>
+      <td>
+        Public &#8594; Private Security
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/mahara/+bug/1429647/comments/2" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~robertl-9" class="sprite person">Robert Lyon (robertl-9)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-04-01T21:52:57.632348+00:00" title="2015-04-01 21:52:57 UTC">on 2015-04-01</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/mahara/+bug/1429647/comments/2"> #2</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>I&#x27;ve added a patch for this to doublecheck the view id</p>
+<p>To test:</p>
+<p>1) make a page and share it with your friends</p>
+<p>2) log in as a user who is a friend and watch the page</p>
+<p>3) look in db for the entry in usr_watchlist_view - make note of the view id</p>
+<p>4) log in as a user that is not a friend - go to any view page they can see and manually manipulate things<br />
+- if using firebug on the HTML tab view the &lt;head&gt; and scroll down until you see</p>
+<p>&lt;script type=&quot;applicati<wbr />on/javascript&quot;<wbr />&gt;<br />
+&lt;link href=&quot;<a rel="nofollow" href="http://mahara-devel/theme/raw/static/style/tinymceskin.css?v=3651">http://<wbr />mahara-<wbr />devel/theme/<wbr />raw/static/<wbr />style/tinymcesk<wbr />in.css?<wbr />v=3651</a>&quot; type=&quot;text/css&quot; rel=&quot;stylesheet&quot;&gt;</p>
+<p>Expand the script one and you should see</p>
+<p>&nbsp;var viewid =</p>
+<p>Click the &#x27;edit this HTML&#x27; button in firebug and change the id to the one in step 3 and click the &#x27;edit this HHTML&#x27; button again</p>
+<p>5) now click the &#x27;Add page to watchlist&#x27; link in mahara</p>
+<p>If all done right you will see the page has been added to the usr_watchlist_view table if the patch is not in place.<br />
+If the patch is present then you should see an error message on screen</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">I've added a patch for this to doublecheck the view id
+
+To test:
+
+1) make a page and share it with your friends
+
+2) log in as a user who is a friend and watch the page
+
+3) look in db for the entry in usr_watchlist_view - make note of the view id
+
+4) log in as a user that is not a friend - go to any view page they can see and manually manipulate things
+- if using firebug on the HTML tab view the &lt;head&gt; and scroll down until you see 
+
+&lt;script type="application/javascript"&gt;
+&lt;link href="http://mahara-devel/theme/raw/static/style/tinymceskin.css?v=3651" type="text/css" rel="stylesheet"&gt;
+
+Expand the script one and you should see 
+
+ var viewid =  
+
+Click the 'edit this HTML' button in firebug and change the id to the one in step 3 and click the 'edit this HHTML' button again
+
+5) now click the 'Add page to watchlist' link in mahara
+
+
+If all done right you will see the page has been added to the usr_watchlist_view table if the patch is not in place.
+If the patch is present then you should see an error message on screen
+
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/mahara/+bug/1429647/comments/3" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~robertl-9" class="sprite person">Robert Lyon (robertl-9)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-04-01T21:55:39.289598+00:00" title="2015-04-01 21:55:39 UTC">on 2015-04-01</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/mahara/+bug/1429647/comments/3"> #3</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Patch for this bug <a rel="nofollow" href="https://reviews.mahara.org/#/c/4576/">https:/<wbr />/reviews.<wbr />mahara.<wbr />org/#/c/<wbr />4576/</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Patch for this bug https://reviews.mahara.org/#/c/4576/</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/mahara/+bug/1429647/comments/4" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~jinelleb" class="sprite person">Jinelle Foley-Barnes (jinelleb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-04-01T22:05:10.888309+00:00" title="2015-04-01 22:05:10 UTC">on 2015-04-01</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/mahara/+bug/1429647/comments/4"> #4</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Hi Rob,</p>
+<p>Thanks for the test instructions.</p>
+<p>Cheers,<br />
+Jinelle</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Hi Rob,
+
+Thanks for the test instructions.
+
+Cheers,
+Jinelle</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/mahara/+bug/1429647/comments/6" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kris-hoeppner" class="sprite person">Kristina Hoeppner (kris-hoeppner)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-04-15T10:27:18.105255+00:00" title="2015-04-15 10:27:18 UTC">on 2015-04-15</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/mahara/+bug/1429647/comments/6"> #6</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Aaron, how can someone remove an item from somebody else&#x27;s watchlist? Is that a new feature?</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Aaron, how can someone remove an item from somebody else's watchlist? Is that a new feature?</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/mahara/+bug/1429647/comments/7" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~u-aaronw" class="sprite person">Aaron Wells (u-aaronw)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-04-15T23:00:27.765349+00:00" title="2015-04-15 23:00:27 UTC">on 2015-04-15</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/mahara/+bug/1429647/comments/7"> #7</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Kristina,</p>
+<p>Sorry, I misspoke. I meant to say &quot;it means that if you add a page to your watchlist, and the page owner then revokes your view access to that page&quot;.</p>
+<p>Since I can&#x27;t edit Launchpad comments, I&#x27;ll just repost it with the correction, so it&#x27;ll be clearer:</p>
+<p>So, on further investigation, the watchlist activity has code in it which checks that each person has permission to view the item, and removes it from their watchlist if they don&#x27;t.</p>
+<p>This is a little strange, because it means that if you add a page to your watchlist and the page owner then removes your view access to the page, it remains on your watchlist until they make a change to the page&#x27;s contents. It also doesn&#x27;t support the new feedback-watchlist notifications... because I didn&#x27;t add code for that when I was writing it. :)</p>
+<p>We should probably just make a cron task to clear away invalid watchlist items.</p>
+<p>But this patch is still good, to prevent people from manipulating their watchlist in order to find out page titles and such.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Kristina,
+
+Sorry, I misspoke. I meant to say "it means that if you add a page to your watchlist, and the page owner then revokes your view access to that page".
+
+Since I can't edit Launchpad comments, I'll just repost it with the correction, so it'll be clearer:
+
+
+
+So, on further investigation, the watchlist activity has code in it which checks that each person has permission to view the item, and removes it from their watchlist if they don't.
+
+This is a little strange, because it means that if you add a page to your watchlist and the page owner then removes your view access to the page, it remains on your watchlist until they make a change to the page's contents. It also doesn't support the new feedback-watchlist notifications... because I didn't add code for that when I was writing it. :)
+
+We should probably just make a cron task to clear away invalid watchlist items.
+
+But this patch is still good, to prevent people from manipulating their watchlist in order to find out page titles and such.
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~robertl-9" class="sprite person">Robert Lyon (robertl-9)</a>
+    
+    <time title="2015-04-16 23:32:02 UTC" datetime="2015-04-16T23:32:02.033352+00:00">on 2015-04-16</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>information type</b>:
+      </td>
+      <td>
+        Private Security &#8594; Public Security
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~robertl-9" class="sprite person">Robert Lyon (robertl-9)</a>
+    
+    <time title="2015-04-17 02:03:20 UTC" datetime="2015-04-17T02:03:20.185136+00:00">on 2015-04-17</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in mahara: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Fix Committed &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~jinelleb" class="sprite person">Jinelle Foley-Barnes (jinelleb)</a>
+    
+    <time title="2015-04-20 23:19:55 UTC" datetime="2015-04-20T23:19:55.228636+00:00">on 2015-04-20</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>tags</b>:
+      </td>
+      <td>
+        added: behat behat-needed
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        <div style="float: right;">
+          <a class="menu-link-activitylog" href="https://bugs.launchpad.net/mahara/+bug/1429647/+activity">See full activity log</a>
+        </div>
+        <div class="clearfix"></div>
+
+        
+          
+
+          
+            <div align="center" id="add-comment-login-first">
+              To post a comment you must <a href="+login?comments=all">log in</a>.
+            </div>
+          
+        
+        
+      
+
+      </div><!-- class="top-portlet" -->
+      </div><!--- id="maincontentsub"-->
+      <div>
+        <div id="duplicate-form-container"></div>
+        <div id="privacy-form-container"></div>
+      </div>
+    </div>
+            
+            
+          </div><!-- yui-b -->
+        </div><!-- yui-main -->
+
+        
+          <div id="side-portlets" class="yui-b side">
+            
+      <div id="involvement" class="portlet">
+        <ul class="involvement">
+          <li class="single">
+            <a class="sprite bugs" href="/mahara/+filebug">
+              Report a bug
+            </a>
+          </li>
+        </ul>
+      </div>
+      <div id="privacy" class="first portlet public">
+  <div id="privacy-text">
+     <span id="information-type-summary" class="sprite public">This report contains
+         <strong id="information-type">Public Security</strong>
+         information
+     </span>&nbsp;<a class="sprite edit action-icon" id="privacy-link" href="/mahara/+bug/1429647/+secrecy">Edit</a>
+
+     <div id="information-type-description" style="padding-top: 5px">Everyone can see this security related information.
+</div>
+  </div>
+</div>
+
+      <div id="portlet-actions" class="portlet vertical">
+  <ul id="duplicate-actions">
+    <li class="sprite bug-dupe">
+    <span id="mark-duplicate-text">
+    <a class="menu-link-mark-dupe" href="/mahara/+bug/1429647/+duplicate">Mark as duplicate</a>
+    </span>
+    </li>
+    
+    <li><a class="menu-link-createquestion sprite add" href="https://bugs.launchpad.net/mahara/+bug/1429647/+create-question">Convert to a question</a></li>
+    
+    <li><a class="menu-link-addbranch sprite add" href="https://bugs.launchpad.net/mahara/+bug/1429647/+addbranch">Link a related branch</a></li>
+    <li><a class="menu-link-linktocve sprite add" href="https://bugs.launchpad.net/mahara/+bug/1429647/+linkcve">Link to <abbr title="Common Vulnerabilities and Exposures Index">CVE</abbr></a></li>
+    <li><a class="menu-link-unlinkcve sprite modify remove" href="https://bugs.launchpad.net/mahara/+bug/1429647/+unlinkcve">Remove CVE link</a></li>
+  </ul>
+</div>
+
+      
+
+      <div class="portlet vertical" id="portlet-subscription">
+  <div class="section">
+    <div id="current_user_subscription" class="False">
+      
+        <span>You are</span>
+        
+        <a class="menu-link-subscription sprite modify edit" href="/mahara/+bug/1429647/+subscribe">
+           
+           
+           
+           not directly subscribed to this bug's notifications.
+        </a>
+      
+      
+    </div>
+    <div id="sub-unsub-spinner">Subscribing...</div>
+    <ul>
+      
+      <li><a class="menu-link-editsubscriptions sprite modify edit" href="https://bugs.launchpad.net/mahara/+bug/1429647/+subscriptions" title="View and change your subscriptions to this bug">Edit bug mail</a></li>
+    </ul>
+  </div>
+  <script type="text/javascript">
+    LPJS.use('io-base', 'node',
+            'lp.bugs.bugtask_index.portlets.subscription', function(Y) {
+        Y.on('domready', function() {
+            Y.lp.bugs.bugtask_index.portlets.subscription.initialize();
+        });
+    });
+  </script>
+</div>
+
+      <div class="portlet vertical" id="portlet-subscribers">
+  <h2>Other bug subscribers</h2>
+  <div>
+    <div><a class="menu-link-addsubscriber sprite add" href="https://bugs.launchpad.net/mahara/+bug/1429647/+addsubscriber" title="Launchpad will email that person whenever this bugs changes">Subscribe someone else</a></div>
+  </div>
+  <div id="other-bug-subscribers"></div>
+</div>
+
+      
+
+      
+
+      
+  
+  
+
+
+      
+
+    
+          </div><!-- yui-b side -->
+        
+      </div><!-- yui-t4 -->
+
+      
+  <div id="footer" class="footer">
+    <div class="lp-arcana">
+        <div class="lp-branding">
+          <a href="https://launchpad.net/"><img src="/@@/launchpad-logo-and-name-hierarchy.png" alt="Launchpad" /></a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://launchpad.net/+tour">Take the tour</a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://help.launchpad.net/">Read the guide</a>
+          &nbsp;
+          <form id="globalsearch" method="get" accept-charset="UTF-8" action="https://launchpad.net/+search">
+            <input type="search" id="search-text" name="field.text" />
+            <input type="image" src="/@@/search" style="vertical-align:5%" alt="Search Launchpad" />
+          </form>
+        </div>
+        
+  
+
+    </div>
+
+    <div class="colophon">
+      &copy; 2004-2021
+      <a href="http://canonical.com/">Canonical&nbsp;Ltd.</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://launchpad.net/legal">Terms of use</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://www.ubuntu.com/legal/dataprivacy">Data privacy</a>
+      &nbsp;&bull;&nbsp;
+      <a href="/feedback">Contact Launchpad Support</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="http://blog.launchpad.net/">Blog</a>
+      
+	&nbsp;&bull;&nbsp;
+	<a href="https://canonical.com/careers">Careers</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="https://twitter.com/launchpadstatus">System status</a>
+      <span id="lp-version">
+      &nbsp;&bull;&nbsp;
+        r0d8de2b
+        
+        
+        (<a href="https://dev.launchpad.net/">Get the code!</a>)
+      </span>
+    </div>
+  </div>
+
+    </div><!-- yui-d0-->
+
+    
+  
+  
+  <script id="json-cache-script">LP.cache = {"bug_is_private": false, "bug": {"self_link": "https://bugs.launchpad.net/api/devel/bugs/1429647", "web_link": "https://bugs.launchpad.net/bugs/1429647", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug", "id": 1429647, "private": false, "information_type": "Public Security", "name": null, "title": "Watchlist lets you watch and receive notifications about pages you don't have view access to", "description": "In analyzing watchlist bug 1429505 (pages stay on your watchlist even if you lose access to them) I noticed a couple of things in the code:\n\n1. You apparently still can receive watchlist notifications about pages on your watchlist which you don't have access to.\n\n2. There are no access control checks in togglewatchlist.json.php, so it is apparently possible to add a page to your watchlist even if you don't have access to it.\n\nTogether, these bugs mean that a user could watch private pages, and receive notifications about changes to those pages. While these notifications would not contain the actual page content, they would contain the title of the page and the names of blocks and/or artefacts changed in the page.", "owner_link": "https://bugs.launchpad.net/api/devel/~u-aaronw", "bug_tasks_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1429647/bug_tasks", "duplicate_of_link": null, "date_created": "2015-03-08T20:53:28.610091+00:00", "activity_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1429647/activity", "subscriptions_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1429647/subscriptions", "date_last_updated": "2017-11-08T03:33:37.133117+00:00", "who_made_private_link": null, "date_made_private": null, "heat": 256, "bug_watches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1429647/bug_watches", "cves_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1429647/cves", "duplicates_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1429647/duplicates", "attachments_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1429647/attachments", "security_related": true, "latest_patch_uploaded": null, "tags": ["behat", "behat-needed", "security", "viewaccess", "watchlist"], "date_last_message": "2015-04-15T23:00:27.765349+00:00", "number_of_duplicates": 0, "message_count": 8, "users_affected_count": 1, "users_unaffected_count": 0, "users_affected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1429647/users_affected", "users_unaffected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1429647/users_unaffected", "users_affected_count_with_dupes": 1, "other_users_affected_count_with_dupes": 1, "users_affected_with_dupes_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1429647/users_affected_with_dupes", "messages_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1429647/messages", "linked_branches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1429647/linked_branches", "linked_merge_proposals_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1429647/linked_merge_proposals", "http_etag": "\"413e4d31e759493e20f84468fa9f3e8a7a222334-de7f9e616bdb2db7998e16074c7ad7c9fefe43b2\""}, "total_comments_and_activity": 47, "related_features": {}, "information_type_data": {"PUBLIC": {"is_private": false, "name": "Public", "order": 0, "description": "Everyone can see this information.\n", "value": "PUBLIC", "description_css_class": "choice-description"}, "PRIVATESECURITY": {"is_private": true, "name": "Private Security", "order": 2, "description": "Only the security group can see this information.\n ", "value": "PRIVATESECURITY", "description_css_class": "choice-description"}, "PUBLICSECURITY": {"is_private": false, "name": "Public Security", "order": 1, "description": "Everyone can see this security related information.\n", "value": "PUBLICSECURITY", "description_css_class": "choice-description"}, "USERDATA": {"is_private": true, "name": "Private", "order": 3, "description": "Only shared with users permitted to see private user information.\n", "value": "USERDATA", "description_css_class": "choice-description"}}, "context": {"self_link": "https://bugs.launchpad.net/api/devel/mahara/+bug/1429647", "web_link": "https://bugs.launchpad.net/mahara/+bug/1429647", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug_task", "bug_link": "https://bugs.launchpad.net/api/devel/bugs/1429647", "milestone_link": "https://bugs.launchpad.net/api/devel/mahara/+milestone/15.04.0", "status": "Fix Released", "importance": "Medium", "assignee_link": null, "bug_target_display_name": "Mahara", "bug_target_name": "mahara", "bug_watch_link": null, "date_assigned": null, "date_created": "2015-03-08T20:53:28.610091+00:00", "date_confirmed": "2015-03-08T20:53:28.610091+00:00", "date_incomplete": null, "date_in_progress": "2015-04-13T20:56:10.341997+00:00", "date_closed": "2015-04-17T02:06:11.863633+00:00", "date_left_new": "2015-03-08T20:53:28.610091+00:00", "date_triaged": "2015-03-08T20:53:28.610091+00:00", "date_fix_committed": "2015-04-16T23:02:26.620485+00:00", "date_fix_released": "2015-04-17T02:06:11.863633+00:00", "date_left_closed": null, "owner_link": "https://bugs.launchpad.net/api/devel/~u-aaronw", "target_link": "https://bugs.launchpad.net/api/devel/mahara", "title": "Bug #1429647 in Mahara: \"Watchlist lets you watch and receive notifications about pages you don't have view access to\"", "related_tasks_collection_link": "https://bugs.launchpad.net/api/devel/mahara/+bug/1429647/related_tasks", "is_complete": true, "http_etag": "\"c81cfcb20d593bd9e4f374679eb246d5277df887-615e5c15ed98d34efa6034941d73648657e1815a\""}, "bugtask_data": {"1787655": {"delete_link": "https://bugs.launchpad.net/mahara/+bug/1429647/+delete", "bug_title": "Watchlist lets you watch and receive notifications about pages you don't have view access to", "user_can_unassign": false, "importance_value": "Medium", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary1787655", "target_is_product": true, "user_can_edit_milestone": false, "prefix": "mahara", "bugtask_path": "/mahara/+bug/1429647", "id": 1787655, "milestone_value": "https://bugs.launchpad.net/api/devel/mahara/+milestone/15.04.0", "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task1787655", "targetname": "Mahara", "assignee_is_team": null, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": null, "status_value": "Fix Released"}, "1787656": {"delete_link": "https://bugs.launchpad.net/mahara/1.8/+bug/1429647/+delete", "bug_title": "Watchlist lets you watch and receive notifications about pages you don't have view access to", "user_can_unassign": false, "importance_value": "Medium", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary1787656", "target_is_product": false, "user_can_edit_milestone": false, "prefix": "mahara_1.8", "bugtask_path": "/mahara/1.8/+bug/1429647", "id": 1787656, "milestone_value": "https://bugs.launchpad.net/api/devel/mahara/+milestone/1.8.7", "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task1787656", "targetname": "Mahara 1.8", "assignee_is_team": null, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": null, "status_value": "Fix Released"}, "1787657": {"delete_link": "https://bugs.launchpad.net/mahara/15.04/+bug/1429647/+delete", "bug_title": "Watchlist lets you watch and receive notifications about pages you don't have view access to", "user_can_unassign": false, "importance_value": "Medium", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary1787657", "target_is_product": false, "user_can_edit_milestone": false, "prefix": "mahara_15.04", "bugtask_path": "/mahara/15.04/+bug/1429647", "id": 1787657, "milestone_value": "https://bugs.launchpad.net/api/devel/mahara/+milestone/15.04.0", "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task1787657", "targetname": "Mahara 15.04", "assignee_is_team": null, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": null, "status_value": "Fix Released"}, "1787658": {"delete_link": "https://bugs.launchpad.net/mahara/1.10/+bug/1429647/+delete", "bug_title": "Watchlist lets you watch and receive notifications about pages you don't have view access to", "user_can_unassign": false, "importance_value": "Medium", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary1787658", "target_is_product": false, "user_can_edit_milestone": false, "prefix": "mahara_1.10", "bugtask_path": "/mahara/1.10/+bug/1429647", "id": 1787658, "milestone_value": "https://bugs.launchpad.net/api/devel/mahara/+milestone/1.10.3", "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task1787658", "targetname": "Mahara 1.10", "assignee_is_team": null, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": null, "status_value": "Fix Released"}, "1787659": {"delete_link": "https://bugs.launchpad.net/mahara/15.10/+bug/1429647/+delete", "bug_title": "Watchlist lets you watch and receive notifications about pages you don't have view access to", "user_can_unassign": false, "importance_value": "Medium", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary1787659", "target_is_product": false, "user_can_edit_milestone": false, "prefix": "mahara_15.10", "bugtask_path": "/mahara/15.10/+bug/1429647", "id": 1787659, "milestone_value": "https://bugs.launchpad.net/api/devel/mahara/+milestone/15.10.0", "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task1787659", "targetname": "Mahara 15.10", "assignee_is_team": null, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": null, "status_value": "Fix Released"}, "1787660": {"delete_link": "https://bugs.launchpad.net/mahara/1.9/+bug/1429647/+delete", "bug_title": "Watchlist lets you watch and receive notifications about pages you don't have view access to", "user_can_unassign": false, "importance_value": "Medium", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary1787660", "target_is_product": false, "user_can_edit_milestone": false, "prefix": "mahara_1.9", "bugtask_path": "/mahara/1.9/+bug/1429647", "id": 1787660, "milestone_value": "https://bugs.launchpad.net/api/devel/mahara/+milestone/1.9.5", "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task1787660", "targetname": "Mahara 1.9", "assignee_is_team": null, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": null, "status_value": "Fix Released"}}, "subscribers_portlet_url_data": {"self_link": "https://bugs.launchpad.net/api/devel/bugs/1429647", "web_link": "https://bugs.launchpad.net/bugs/1429647"}, "initial_comment_batch_offset": 41, "first visible_recent_comment": -33};</script>
+
+    
+  
+
+    
+  </body>
+
+
+  <!--
+    Facet name: bugs
+    Page type: main_side
+    Has global search: True
+    Has application tabs: True
+    Has side portlets: True
+
+    At least 64 queries/external actions issued in 0.91 seconds
+
+    Features: {'app.maintenance_message': None, 'hard_timeout': '9000', 'js.yui_version': None, 'app.mainsite_only.canonical_url': None, 'disclosure.dsp_picker.enabled': 'on', 'baselayout.careers_link.disabled': None, 'bugs.affected_count_includes_dupes.disabled': None, 'visible_render_time': None, 'profiling.enabled': None, 'bugs.nominations.bug_supervisors_can_target': 'on'}
+
+    r0d8de2b
+
+    -->
+
+</html>
+

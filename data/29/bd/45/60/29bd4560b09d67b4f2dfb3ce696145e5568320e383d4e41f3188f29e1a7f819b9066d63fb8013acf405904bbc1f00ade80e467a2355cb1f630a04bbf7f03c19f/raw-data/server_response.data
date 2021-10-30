@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='PHAR related Bug #72928 - RDF' href='rss/bug.php?id=72928'>
+        <link rel='alternate' type='application/rss+xml' title='PHAR related Bug #72928 - RSS 2.0' href='rss/bug.php?id=72928&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #72928 :: Out of bound when verify signature of zip phar in phar_parse_zipfile </title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=72928">Sec Bug</a>&nbsp;#72928</th>
+            <td id="summary" colspan="5">Out of bound when verify signature of zip phar in phar_parse_zipfile </td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-08-23 07:53 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-09-16 13:39 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>nguyenvuhoang199321 &#x61;&#116; gmail &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=PHAR+related">PHAR related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.6.25</td>
+            <th class="details">OS:</th>
+            <td>ALL</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-7414" target="_blank">2016-7414</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=72928&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=72928&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=72928&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1471938782">&nbsp;</a><strong>[2016-08-23 07:53 UTC] nguyenvuhoang199321 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+There was a security code in phar_parse_zipfile
+```
+sig = (char *) emalloc(entry.uncompressed_filesize);
+read = php_stream_read(fp, sig, entry.uncompressed_filesize);
+if (read != entry.uncompressed_filesize) {
+	php_stream_close(sigfile);
+	efree(sig);
+	PHAR_ZIP_FAIL(&quot;signature cannot be read&quot;);
+}
+mydata-&gt;sig_flags = PHAR_GET_32(sig);
+if (FAILURE == phar_verify_signature(sigfile,
+	php_stream_tell(sigfile),
+	mydata-&gt;sig_flags,
+	sig + 8,
+	entry.uncompressed_filesize - 8,
+	fname,
+	&amp;mydata-&gt;signature,
+	&amp;mydata-&gt;sig_len,
+	error)
+	) {
+```
+There are no checking *entry.uncompressed_filesize* attacker can create a signature.bin with size less than 8 and then this value is passed to *phar_verify_signature* as sig_len as you can see `entry.uncompressed_filesize - 8` as result sig_len is overflow.
+And the third param is sig buffer as you can see `sig + 8`, because *entry.uncompressed_filesize* is less than 8 by default emalloc will return 16 bytes this result may lead to heap out of bound.
+
+phar zip file : <a href="https://drive.google.com/file/d/0B0D1DYQpkA9Ud3I2OFlfeFRqbEU/view?usp=sharing" rel="nofollow">https://drive.google.com/file/d/0B0D1DYQpkA9Ud3I2OFlfeFRqbEU/view?usp=sharing</a>
+
+Test script:
+---------------
+&lt;?php
+	$phar = new PharData('phars/signature.zip');
+	var_dump($phar);
+?&gt;
+
+Actual result:
+--------------
+This debug step i will show the malicious parse phar zip.
+Set breakpoint at line 419 in zip.c
+
+[----------------------------------registers-----------------------------------]
+RAX: 0x4
+RBX: 0x13
+RCX: 0x0
+RDX: 0x1a3
+RSI: 0xf2cc38 (&quot;/home/vagrant/Sources_Ext/audit/src/php7.0-7.0.8/ext/phar/zip.c&quot;)
+RDI: 0x4
+RBP: 0x7fffffffa870 --&gt; 0x7fffffffadb0 --&gt; 0x7fffffffae50 --&gt; 0x7fffffffaec0 --&gt; 0x7fffffffaf50 --&gt; 0x7fffffffb040 --&gt; 0x7fffffffb090 --&gt; 0x7fffffffb0c0 --&gt; 0x7fffffffb100 --&gt; 0x7fffffffb210 --&gt; 0x7fffffffd510 --&gt; 0x7fffffffe890 --&gt; 0x7fffffffe9e0 --&gt; 0xa1a0a0 (&lt;__libc_csu_init&gt;:	push   r15)
+RSP: 0x7ffffffea600 --&gt; 0x7fffffffafa0 --&gt; 0x0
+RIP: 0x6ed786 (&lt;phar_parse_zipfile+7788&gt;:	call   0x911568 &lt;_emalloc&gt;)
+R8 : 0x0
+R9 : 0xf2cc38 (&quot;/home/vagrant/Sources_Ext/audit/src/php7.0-7.0.8/ext/phar/zip.c&quot;)
+R10: 0x5
+R11: 0x206
+R12: 0x42c280 (&lt;_start&gt;:	xor    ebp,ebp)
+R13: 0x7fffffffeac0 --&gt; 0x2
+R14: 0x7ffff3e14030 --&gt; 0x7ffff3e7e040 --&gt; 0x9a66aa (&lt;ZEND_DO_FCALL_SPEC_HANDLER&gt;:	push   rbp)
+R15: 0x7ffff3e7e040 --&gt; 0x9a66aa (&lt;ZEND_DO_FCALL_SPEC_HANDLER&gt;:	push   rbp)
+EFLAGS: 0x246 (carry PARITY adjust ZERO sign trap INTERRUPT direction overflow)
+[-------------------------------------code-------------------------------------]
+   0x6ed777 &lt;phar_parse_zipfile+7773&gt;:	mov    edx,0x1a3
+   0x6ed77c &lt;phar_parse_zipfile+7778&gt;:	lea    rsi,[rip+0x83f4b5]        # 0xf2cc38
+   0x6ed783 &lt;phar_parse_zipfile+7785&gt;:	mov    rdi,rax
+=&gt; 0x6ed786 &lt;phar_parse_zipfile+7788&gt;:	call   0x911568 &lt;_emalloc&gt;
+   0x6ed78b &lt;phar_parse_zipfile+7793&gt;:	mov    QWORD PTR [rbp-0x101d0],rax
+   0x6ed792 &lt;phar_parse_zipfile+7800&gt;:	mov    eax,DWORD PTR [rbp-0x10170]
+   0x6ed798 &lt;phar_parse_zipfile+7806&gt;:	mov    edx,eax
+   0x6ed79a &lt;phar_parse_zipfile+7808&gt;:	mov    rcx,QWORD PTR [rbp-0x101d0]
+Guessed arguments:
+arg[0]: 0x4
+arg[1]: 0xf2cc38 (&quot;/home/vagrant/Sources_Ext/audit/src/php7.0-7.0.8/ext/phar/zip.c&quot;)
+arg[2]: 0x1a3
+arg[3]: 0x0
+arg[4]: 0x0
+[------------------------------------stack-------------------------------------]
+0000| 0x7ffffffea600 --&gt; 0x7fffffffafa0 --&gt; 0x0
+0008| 0x7ffffffea608 --&gt; 0x7fffffffaeb0 --&gt; 0x0
+0016| 0x7ffffffea610 --&gt; 0x0
+0024| 0x7ffffffea618 --&gt; 0x2900000000 ('')
+0032| 0x7ffffffea620 --&gt; 0x7ffff3e70088 (&quot;/vagrant_extend/audit/phars/signature.zip&quot;)
+0040| 0x7ffffffea628 --&gt; 0x7ffff3e5fa00 --&gt; 0x12bf720 --&gt; 0x8d6fc6 (&lt;php_stdiop_write&gt;:	push   rbp)
+0048| 0x7ffffffea630 --&gt; 0x0
+0056| 0x7ffffffea638 --&gt; 0x0
+[------------------------------------------------------------------------------]
+Legend: code, data, rodata, value
+0x00000000006ed786	419				sig = (char *) emalloc(entry.uncompressed_filesize);
+gdb-peda$ p entry.uncompressed_filesize
+$20 = 0x4
+
+I create signature.bin with size is 4, after that i will step to phar_verify_signature and you will see param is passed to phar_verify_signature.
+
+[----------------------------------registers-----------------------------------]
+RAX: 0x7fffffffafa0 --&gt; 0x0
+RBX: 0x10
+RCX: 0x7ffff3e710a8 --&gt; 0x4
+RDX: 0x10
+RSI: 0x0
+RDI: 0x7ffff3e5fb40 --&gt; 0x12bf720 --&gt; 0x8d6fc6 (&lt;php_stdiop_write&gt;:	push   rbp)
+RBP: 0x7ffffffea5d0 --&gt; 0x7fffffffa870 --&gt; 0x7fffffffadb0 --&gt; 0x7fffffffae50 --&gt; 0x7fffffffaec0 --&gt; 0x7fffffffaf50 --&gt; 0x7fffffffb040 --&gt; 0x7fffffffb090 --&gt; 0x7fffffffb0c0 --&gt; 0x7fffffffb100 --&gt; 0x7fffffffb210 --&gt; 0x7fffffffd510 --&gt; 0x7fffffffe890 --&gt; 0x7fffffffe9e0 --&gt; 0xa1a0a0 (&lt;__libc_csu_init&gt;:	push   r15)
+RSP: 0x7ffffffea000 --&gt; 0x7fffffffafa0 --&gt; 0x0
+RIP: 0x6e3c77 (&lt;phar_verify_signature+85&gt;:	mov    rax,QWORD PTR fs:0x28)
+R8 : 0xfffffffc
+R9 : 0x7ffff3e70088 (&quot;/vagrant_extend/audit/phars/signature.zip&quot;)
+R10: 0x4
+R11: 0x246
+R12: 0x7ffff3e710a8 --&gt; 0x4
+R13: 0x7ffff3e79120 --&gt; 0x0
+R14: 0x7ffff3e79118 --&gt; 0x0
+R15: 0xfffffffc
+EFLAGS: 0x206 (carry PARITY adjust zero sign trap INTERRUPT direction overflow)
+[-------------------------------------code-------------------------------------]
+   0x6e3c65 &lt;phar_verify_signature+67&gt;:	mov    QWORD PTR [rbp-0x5c8],rax
+   0x6e3c6c &lt;phar_verify_signature+74&gt;:	mov    rax,QWORD PTR [rbp+0x20]
+   0x6e3c70 &lt;phar_verify_signature+78&gt;:	mov    QWORD PTR [rbp-0x5d0],rax
+=&gt; 0x6e3c77 &lt;phar_verify_signature+85&gt;:	mov    rax,QWORD PTR fs:0x28
+   0x6e3c80 &lt;phar_verify_signature+94&gt;:	mov    QWORD PTR [rbp-0x8],rax
+   0x6e3c84 &lt;phar_verify_signature+98&gt;:	xor    eax,eax
+   0x6e3c86 &lt;phar_verify_signature+100&gt;:	mov    rax,QWORD PTR [rbp-0x598]
+   0x6e3c8d &lt;phar_verify_signature+107&gt;:	mov    edx,0x0
+[------------------------------------stack-------------------------------------]
+0000| 0x7ffffffea000 --&gt; 0x7fffffffafa0 --&gt; 0x0
+0008| 0x7ffffffea008 --&gt; 0x7ffff3e79118 --&gt; 0x0
+0016| 0x7ffffffea010 --&gt; 0x7ffff3e79120 --&gt; 0x0
+0024| 0x7ffffffea018 --&gt; 0x7ffff3e70088 (&quot;/vagrant_extend/audit/phars/signature.zip&quot;)
+0032| 0x7ffffffea020 --&gt; 0x7ffff3e710a8 --&gt; 0x4
+0040| 0x7ffffffea028 --&gt; 0x10fffffffc
+0048| 0x7ffffffea030 --&gt; 0x0
+0056| 0x7ffffffea038 --&gt; 0x7ffff3e5fb40 --&gt; 0x12bf720 --&gt; 0x8d6fc6 (&lt;php_stdiop_write&gt;:	push   rbp)
+[------------------------------------------------------------------------------]
+Legend: code, data, rodata, value
+
+Breakpoint 11, phar_verify_signature (fp=0x7ffff3e5fb40, end_of_phar=0x0,
+    sig_type=0x10, sig=0x7ffff3e710a8 &quot;\004&quot;, sig_len=0xfffffffc,
+    fname=0x7ffff3e70088 &quot;/vagrant_extend/audit/phars/signature.zip&quot;,
+    signature=0x7ffff3e79120, signature_len=0x7ffff3e79118, error=0x7fffffffafa0)
+    at /home/vagrant/Sources_Ext/audit/src/php7.0-7.0.8/ext/phar/util.c:1484
+1484	{
+
+As you can see both value sig and sig_len may lead to heap out of bound
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=72928'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=72928'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1473052278">&nbsp;</a><strong>[2016-09-05 05:11 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1473052278">&nbsp;</a><strong>[2016-09-05 05:11 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The fix is in security repo as 19484ab77466f99c78fc0e677f7e03da0584d6a2 and in <a href="https://gist.github.com/e091b2255c6d071e7be49828a5e39944" rel="nofollow">https://gist.github.com/e091b2255c6d071e7be49828a5e39944</a>
+
+please verify
+</pre>
+</div><div class='comment type_comment' ><a name="1473058256">&nbsp;</a><strong>[2016-09-05 06:50 UTC] nguyenvuhoang199321 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>well this bug is fixed
+</pre>
+</div><div class='comment type_log' ><a name="1473120674">&nbsp;</a><strong>[2016-09-06 00:11 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: needed</span>
+</div></div></div><div class='comment type_log' ><a name="1473666536">&nbsp;</a><strong>[2016-09-12 07:48 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 7.0Git-2016-08-23 (Git)</span>
+<span class="added">+PHP Version: 5.6.25</span>
+</div></div></div><div class='comment type_svn' ><a name="1473739483">&nbsp;</a><strong>[2016-09-13 04:04 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=223266e4e46b9188353db93771369078c2e94353" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=223266e4e46b9188353db93771369078c2e94353</a>
+Log: Fix <a href='bug.php?id=72928'>bug #72928</a> - Out of bound when verify signature of zip phar in phar_parse_zipfile
+</pre>
+</div><div class='comment type_log' ><a name="1473739483">&nbsp;</a><strong>[2016-09-13 04:04 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1473739605">&nbsp;</a><strong>[2016-09-13 04:06 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=0bfb970f43acd1e81d11be1154805f86655f15d5" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=0bfb970f43acd1e81d11be1154805f86655f15d5</a>
+Log: Fix <a href='bug.php?id=72928'>bug #72928</a> - Out of bound when verify signature of zip phar in phar_parse_zipfile
+</pre>
+</div><div class='comment type_svn' ><a name="1473739788">&nbsp;</a><strong>[2016-09-13 04:09 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=0bfb970f43acd1e81d11be1154805f86655f15d5" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=0bfb970f43acd1e81d11be1154805f86655f15d5</a>
+Log: Fix <a href='bug.php?id=72928'>bug #72928</a> - Out of bound when verify signature of zip phar in phar_parse_zipfile
+</pre>
+</div><div class='comment type_svn' ><a name="1473739884">&nbsp;</a><strong>[2016-09-13 04:11 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=0bfb970f43acd1e81d11be1154805f86655f15d5" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=0bfb970f43acd1e81d11be1154805f86655f15d5</a>
+Log: Fix <a href='bug.php?id=72928'>bug #72928</a> - Out of bound when verify signature of zip phar in phar_parse_zipfile
+</pre>
+</div><div class='comment type_svn' ><a name="1473757378">&nbsp;</a><strong>[2016-09-13 09:02 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=223266e4e46b9188353db93771369078c2e94353" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=223266e4e46b9188353db93771369078c2e94353</a>
+Log: Fix <a href='bug.php?id=72928'>bug #72928</a> - Out of bound when verify signature of zip phar in phar_parse_zipfile
+</pre>
+</div><div class='comment type_svn' ><a name="1473931849">&nbsp;</a><strong>[2016-09-15 09:30 UTC] <a href="//people.php.net/tyrael">tyrael@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=dd69327ad783ea93f1e0a9e358974c7b098f29cc" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=dd69327ad783ea93f1e0a9e358974c7b098f29cc</a>
+Log: Fix <a href='bug.php?id=72928'>bug #72928</a> - Out of bound when verify signature of zip phar in phar_parse_zipfile
+</pre>
+</div><div class='comment type_log' ><a name="1474033190">&nbsp;</a><strong>[2016-09-16 13:39 UTC] <a href="//people.php.net/kaplan">kaplan@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID: needed</span>
+<span class="added">+CVE-ID: 2016-7414</span>
+</div></div></div><div class='comment type_svn' ><a name="1476698900">&nbsp;</a><strong>[2016-10-17 10:08 UTC] <a href="//people.php.net/bwoebi">bwoebi@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=223266e4e46b9188353db93771369078c2e94353" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=223266e4e46b9188353db93771369078c2e94353</a>
+Log: Fix <a href='bug.php?id=72928'>bug #72928</a> - Out of bound when verify signature of zip phar in phar_parse_zipfile
+</pre>
+</div><div class='comment type_svn' ><a name="1476698907">&nbsp;</a><strong>[2016-10-17 10:08 UTC] <a href="//people.php.net/bwoebi">bwoebi@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=0bfb970f43acd1e81d11be1154805f86655f15d5" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=0bfb970f43acd1e81d11be1154805f86655f15d5</a>
+Log: Fix <a href='bug.php?id=72928'>bug #72928</a> - Out of bound when verify signature of zip phar in phar_parse_zipfile
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

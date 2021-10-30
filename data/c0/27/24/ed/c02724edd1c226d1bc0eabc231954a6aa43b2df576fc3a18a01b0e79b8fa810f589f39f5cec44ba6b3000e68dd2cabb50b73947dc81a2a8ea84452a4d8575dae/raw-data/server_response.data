@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='SPL related Bug #78863 - RDF' href='rss/bug.php?id=78863'>
+        <link rel='alternate' type='application/rss+xml' title='SPL related Bug #78863 - RSS 2.0' href='rss/bug.php?id=78863&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #78863 :: DirectoryIterator class silently truncates after a null byte</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=78863">Sec Bug</a>&nbsp;#78863</th>
+            <td id="summary" colspan="5">DirectoryIterator class silently truncates after a null byte</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2019-11-23 10:01 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2019-12-16 19:01 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>ryat@php.net</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=SPL+related">SPL related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>7.3.12</td>
+            <th class="details">OS:</th>
+            <td>*</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-11045" target="_blank">2019-11045</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=78863&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=78863&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=78863&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1574503316">&nbsp;</a><strong>[2019-11-23 10:01 UTC] <a href="//people.php.net/ryat">ryat@php.net</a></strong>
+<pre class='note'>Description:
+------------
+ext/spl/spl_directory.c:
+```
+void spl_filesystem_object_construct(INTERNAL_FUNCTION_PARAMETERS, zend_long ctor_flags) /* {{{ */
+{
+    ...
+	if (SPL_HAS_FLAG(ctor_flags, DIT_CTOR_FLAGS)) {
+		flags = SPL_FILE_DIR_KEY_AS_PATHNAME|SPL_FILE_DIR_CURRENT_AS_FILEINFO;
+		parsed = zend_parse_parameters(ZEND_NUM_ARGS(), &quot;s|l&quot;, &amp;path, &amp;len, &amp;flags);
+	} else {
+		flags = SPL_FILE_DIR_KEY_AS_PATHNAME|SPL_FILE_DIR_CURRENT_AS_SELF;
+		parsed = zend_parse_parameters(ZEND_NUM_ARGS(), &quot;s&quot;, &amp;path, &amp;len);
+	}
+```
+
+PoC:
+```
+&lt;?php
+
+$dir = new DirectoryIterator(&quot;../../ryat\x00/php&quot;);
+foreach ($dir as $fileinfo) {
+    if (!$fileinfo-&gt;isDot()) {
+        var_dump($fileinfo-&gt;getFilename());
+    }
+}
+
+?&gt;
+```
+
+Fix:
+```
+	if (SPL_HAS_FLAG(ctor_flags, DIT_CTOR_FLAGS)) {
+		flags = SPL_FILE_DIR_KEY_AS_PATHNAME|SPL_FILE_DIR_CURRENT_AS_FILEINFO;
+		parsed = zend_parse_parameters(ZEND_NUM_ARGS(), &quot;p|l&quot;, &amp;path, &amp;len, &amp;flags);
+	} else {
+		flags = SPL_FILE_DIR_KEY_AS_PATHNAME|SPL_FILE_DIR_CURRENT_AS_SELF;
+		parsed = zend_parse_parameters(ZEND_NUM_ARGS(), &quot;p&quot;, &amp;path, &amp;len);
+	}
+```
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=78863'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=78863'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1574698145">&nbsp;</a><strong>[2019-11-25 16:09 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status:      Open</span>
+<span class="added">+Status:      Verified</span>
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1574698145">&nbsp;</a><strong>[2019-11-25 16:09 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<pre class='note'>Suggested patch:
+&lt;<a href="https://gist.github.com/cmb69/3a00d5ddfd762f08406bc43f626f64f3" rel="nofollow">https://gist.github.com/cmb69/3a00d5ddfd762f08406bc43f626f64f3</a>&gt;.
+For master `UnexpectedValueException` needs to be replaced by
+`TypeError` in the PHPT.
+
+Stas, can you please handle it?  Note that the fix has to be
+postponed to 7.4.1, to be in sync with 7.1/7.2/7.3.
+</pre>
+</div><div class='comment type_comment' ><a name="1574932125">&nbsp;</a><strong>[2019-11-28 09:08 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Will do. Not sure whether it needs a CVE?
+</pre>
+</div><div class='comment type_log' ><a name="1575001865">&nbsp;</a><strong>[2019-11-29 04:31 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2019-11044</span>
+</div></div></div><div class='comment type_log' ><a name="1575151595">&nbsp;</a><strong>[2019-11-30 22:06 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID: 2019-11044</span>
+<span class="added">+CVE-ID: 2019-11045</span>
+</div></div></div><div class='comment type_svn' ><a name="1576522923">&nbsp;</a><strong>[2019-12-16 19:02 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of cmbecker69@gmx.de
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=a5a15965da23c8e97657278fc8dfbf1dfb20c016" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=a5a15965da23c8e97657278fc8dfbf1dfb20c016</a>
+Log: Fix #78863: DirectoryIterator class silently truncates after a null byte
+</pre>
+</div><div class='comment type_log' ><a name="1576522923">&nbsp;</a><strong>[2019-12-16 19:02 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Verified</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1576522958">&nbsp;</a><strong>[2019-12-16 19:02 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of cmbecker69@gmx.de
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=a5a15965da23c8e97657278fc8dfbf1dfb20c016" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=a5a15965da23c8e97657278fc8dfbf1dfb20c016</a>
+Log: Fix #78863: DirectoryIterator class silently truncates after a null byte
+</pre>
+</div><div class='comment type_svn' ><a name="1576584876">&nbsp;</a><strong>[2019-12-17 12:14 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of cmbecker69@gmx.de
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=d74907b8575e6edb83b728c2a94df434c23e1f79" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=d74907b8575e6edb83b728c2a94df434c23e1f79</a>
+Log: Fix #78863: DirectoryIterator class silently truncates after a null byte
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='PHAR related Bug #69324 - RDF' href='rss/bug.php?id=69324'>
+        <link rel='alternate' type='application/rss+xml' title='PHAR related Bug #69324 - RSS 2.0' href='rss/bug.php?id=69324&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #69324 :: Buffer Over-read in unserialize when parsing Phar</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=69324">Sec Bug</a>&nbsp;#69324</th>
+            <td id="summary" colspan="5">Buffer Over-read in unserialize when parsing Phar</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2015-03-29 03:24 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2015-04-14 07:28 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=PHAR+related">PHAR related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.6.7</td>
+            <th class="details">OS:</th>
+            <td>*</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2015-2783" target="_blank">2015-2783</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=69324&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=69324&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=69324&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1427599441">&nbsp;</a><strong>[2015-03-29 03:24 UTC] emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+The nature of this vulnerability is CWE-126: Buffer Over-read. 
+It is possible to read beyond a buffer.
+
+The vulnerability can be triggered when parsing a PHAR file at phar.c:623
+
+		if (!php_var_unserialize(metadata, &amp;p, p + buf_len, &amp;var_hash TSRMLS_CC)) {
+
+
+&quot;buf_len&quot; is obtained from the phar file and passed into php_var_unserialize() as the max argument.
+
+Under normal php_var_unserialize() circumstances, YYCURSOR will always be &lt;= max. This however can be bypassed when processing a malform phar with a buf_len that is shorter then the string to be unserialized.
+
+
+It should be noted that YYCURSOR &gt;max should never happen due to lines like var_unserializer.c:893 
+	if ((YYLIMIT - YYCURSOR) &lt; 2) YYFILL(2);
+However since YYFILL() does nothing, it is optimized away by the compiler and thus never called. This is also a weakness in itself even though the vulnerable point is trigger via phar parsing.
+
+Thus by carefully crafting the string to be unserialize, we can produce a condition where YYCURSOR&gt;max 
+
+When YYCURSOR &gt; max, a buffer over-read conditions occurs and the php_var_unserialize() is in a unstable and vulnerable state. For example var_unserializer.c:906 leads to an integer underflow(or wrap around):
+	maxlen = max - YYCURSOR;
+
+
+I've created a POC that triggers the buffer over-read condition resulting in a memory info leak. This was done by unserializing a &quot;s:&lt;len&gt;:&lt;data&gt;&quot; string object. 
+
+Using other serialized objects might lead to other possible attacks.I'm still in the process of analysing those.
+
+Test script:
+---------------
+I've created a POC that leaks chunks of memory ala heart-bleed style. 
+
+<a href="https://www.dropbox.com/s/tl0o9ekjpsn4s1u/php-buffer-over_read-poc.zip?dl=0" rel="nofollow">https://www.dropbox.com/s/tl0o9ekjpsn4s1u/php-buffer-over_read-poc.zip?dl=0</a>
+
+$php POC.php
+
+!!!!!!!!!!!!!!!!!!!! MEM LEAK Found !!!!!!!!!!!!!!!!
+
+     0 : 00 00 00 4d 45 54 41 44 41 54 41 5f 31 32 33 34 [...METADATA_1234]
+    10 : 35 36 37 38 39 30 31 32 33 34 35 36 37 38 22 30 [56789012345678&quot;0]
+    20 : 31 32 33 22 3b 0b 00 00 00 a5 61 13 55 0b 00 00 [123&quot;;.....a.U...]
+    30 : 00 82 b7 29 4b b6 01 00 00 00 00 00 00 00 81 01 [...)K...........]
+    40 : 00 00 00 00 00 00 79 00 00 00 00 00 00 00 00 24 [......y........$]
+.............
+
+  2CA0 : d9 01 01 00 00 00 00 00 01 00 00 00 00 00 49 00 [..............I.]
+  2CB0 : 00 00 00 00 00 00 59 00 00 00 00 00 00 00 48 c3 [......Y.......H.]
+  2CC0 : 5c 02 01 00 00 00 08 09 0a 0b 0c 0d 0e 0f 10 11 [\...............]
+  2CD0 : 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f 20 21 [.............. !]
+####### Mem info leak found(11488 bytes leaked). Continuing to find more...... ######
+
+Actual result:
+--------------
+Backtrace from parsing the phar file to php_var_unserialize
+
+#0  0x00000000007342db in php_var_unserialize (rval=0x7ffff7fc02a0, p=0x7fffffff9f78, max=0x7ffff7fc001e &quot;77777:\&quot;MY_METADATA_\&quot;;\b&quot;, var_hash=0x7fffffff9f68)
+    at /home/elaw/php-5.6.7/ext/standard/var_unserializer.c:914
+#1  0x000000000062ccac in phar_parse_metadata (buffer=0x7fffffffa128, metadata=0x7ffff7fc02a0, zip_metadata_len=0x0) at /home/elaw/php-5.6.7/ext/phar/phar.c:622
+#2  0x000000000062ddcf in phar_parse_pharfile (fp=0x7ffff7fc0a38, fname=0x7ffff7fc0f40 &quot;/home/elaw/php-5.6.6-afl-asan/sapi/cli/Phar4-Crash-0.phar&quot;, fname_len=0x39, alias=0x0,
+    alias_len=0x0, halt_offset=0x1f, pphar=0x7fffffffa868, compression=0x0, error=0x7fffffffa8a8) at /home/elaw/php-5.6.7/ext/phar/phar.c:1038
+#3  0x0000000000630c11 in phar_open_from_fp (fp=0x7ffff7fc0a38, fname=0x7ffff7fc0f40 &quot;/home/elaw/php-5.6.6-afl-asan/sapi/cli/Phar4-Crash-0.phar&quot;, fname_len=0x39, alias=0x0,
+    alias_len=0x0, options=0x8, pphar=0x7fffffffa868, is_data=0x0, error=0x7fffffffa8a8) at /home/elaw/php-5.6.7/ext/phar/phar.c:1716
+#4  0x000000000062f8a2 in phar_create_or_parse_filename (fname=0x7ffff7fc0f40 &quot;/home/elaw/php-5.6.6-afl-asan/sapi/cli/Phar4-Crash-0.phar&quot;, fname_len=0x39, alias=0x0,
+    alias_len=0x0, is_data=0x0, options=0x8, pphar=0x7fffffffa868, error=0x7fffffffa8a8) at /home/elaw/php-5.6.7/ext/phar/phar.c:1346
+#5  0x000000000062f7b0 in phar_open_or_create_filename (fname=0x7ffff7fc1c78 &quot;Phar4-Crash-0.phar&quot;, fname_len=0x12, alias=0x0, alias_len=0x0, is_data=0x0, options=0x8,
+    pphar=0x7fffffffa868, error=0x7fffffffa8a8) at /home/elaw/php-5.6.7/ext/phar/phar.c:1315
+#6  0x000000000063b5e6 in zim_Phar___construct (ht=0x2, return_value=0x7ffff7fbe3b0, return_value_ptr=0x7ffff7f874b8, this_ptr=0x7ffff7fbe4a0, return_value_used=0x0)
+    at /home/elaw/php-5.6.7/ext/phar/phar_object.c:1189
+
+
+
+</pre>
+</div><h2>Patches</h2>
+<a href="patch-display.php?bug_id=69324&amp;patch=phar69324.diff&amp;revision=latest" >phar69324.diff</a>
+(last revision 2015-04-05 22:11 UTC by stas@php.net)
+<br><p><a href='patch-add.php?bug_id=69324'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=69324'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1427600054">&nbsp;</a><strong>[2015-03-29 03:34 UTC] emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Also note that execution of Phar file is not required. All you need is to open one.
+</pre>
+</div><div class='comment type_comment' ><a name="1427871286">&nbsp;</a><strong>[2015-04-01 06:54 UTC] emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Please use CVE-2015-2783 for this. Thanks
+</pre>
+</div><div class='comment type_log' ><a name="1427871571">&nbsp;</a><strong>[2015-04-01 06:59 UTC] <a href="//people.php.net/kaplan">kaplan@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2015-2783</span>
+</div></div></div><div class='comment type_comment' ><a name="1428221792">&nbsp;</a><strong>[2015-04-05 08:16 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>I'm not sure how cursor can become more than max. YYFILL has nothing to do with it, these checks are not supposed to do anything. Could you provide string which when you pass it to unserialize() makes cursor more than max? 
+
+In your stack trace I see p=0x7fffffff9f78, max=0x7ffff7fc001e which means max is actually less than p, so it looks like it has nothing to do with unserialize. I may be missing something of course so please clarify.
+</pre>
+</div><div class='comment type_comment' ><a name="1428224036">&nbsp;</a><strong>[2015-04-05 08:53 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The problem seems to be that while the code in phar_parse_pharfile() checks if the buffer has enough data for lengths, etc. it doesn't seem to check that the buffer has enough data for unserialized data itself. Which results in junk being read as unserialized data.
+</pre>
+</div><div class='comment type_comment' ><a name="1428224044">&nbsp;</a><strong>[2015-04-05 08:54 UTC] emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Hope the following makes it clearer:
+
+1)you CANNOT trigger this via the normal unserial
+ize() function in php. It needs to be triggered via phar_parse_metadata () -&gt; php_var_unserialize()
+
+2) When php_var_unserialize(metadata, &amp;p, p + buf_len, &amp;var_hash TSRMLS_CC)() is called  on phar.c:623, max= p +buf_len &lt;&lt; in this case buf_len is obtained via a field in the phar file and is thus controllable.
+
+
+3) As an example to trigger this, make buf_len = 10 and the metadata string to be unserialized be s:000000000008:&quot;whatever&quot; and you will have a buffer-over-read. Remember that this needs to be fed in via a phar file and not the normal unserialize() method.
+
+
+4) I've a POC exploit that leaks memory info via the buffer over-read here:
+<a href="https://www.dropbox.com/s/tl0o9ekjpsn4s1u/php-buffer-over_read-poc.zip?dl=0" rel="nofollow">https://www.dropbox.com/s/tl0o9ekjpsn4s1u/php-buffer-over_read-poc.zip?dl=0</a>
+
+5)Here's a better stack tract that exemplifies when cursor &gt; max
+
+gdb-peda$ frame
+#0  php_var_unserialize (rval=0x7ffff7fc2f50, p=0x7fffffff9f58, max=0x7ffff7fbf1c9 &quot;\&quot;&quot;, var_hash=0x7fffffff9f48) at /home/elaw/php-5.6.7/ext/standard/var_unserializer.c:904
+904             maxlen = max - YYCURSOR;
+gdb-peda$ p max
+$4 = (const unsigned char *) 0x7ffff7fbf1c9 &quot;\&quot;&quot;
+gdb-peda$ p cursor
+$5 = (const unsigned char *) 0x7ffff7fbf1ca &quot;&quot;
+gdb-peda$ p max-cursor
+$6 = 0xffffffffffffffff   &lt;&lt;&lt;&lt; note the integer underflow here
+gdb-peda$ bt
+#0  php_var_unserialize (rval=0x7ffff7fc2f50, p=0x7fffffff9f58, max=0x7ffff7fbf1c9 &quot;\&quot;&quot;, var_hash=0x7fffffff9f48) at /home/elaw/php-5.6.7/ext/standard/var_unserializer.c:904
+#1  0x000000000062ccac in phar_parse_metadata (buffer=0x7fffffffa108, metadata=0x7ffff7fc2f50, zip_metadata_len=0x0) at /home/elaw/php-5.6.7/ext/phar/phar.c:622
+#2  0x000000000062ddcf in phar_parse_pharfile (fp=0x7ffff7fbdce8, fname=0x7ffff7fbe798 &quot;/home/elaw/php-5.6.6-afl-asan/sapi/cli/newphar_metaonly_hexedited_extended_PHP_POC.phar&quot;,
+    fname_len=0x57, alias=0x0, alias_len=0x0, halt_offset=0x1c, pphar=0x7fffffffa848, compression=0x0, error=0x7fffffffa888) at /home/elaw/php-5.6.7/ext/phar/phar.c:1038
+#3  0x0000000000630c11 in phar_open_from_fp (fp=0x7ffff7fbdce8, fname=0x7ffff7fbe798 &quot;/home/elaw/php-5.6.6-afl-asan/sapi/cli/newphar_metaonly_hexedited_extended_PHP_POC.phar&quot;,
+    fname_len=0x57, alias=0x0, alias_len=0x0, options=0x8, pphar=0x7fffffffa848, is_data=0x0, error=0x7fffffffa888) at /home/elaw/php-5.6.7/ext/phar/phar.c:1716
+#4  0x000000000062f8a2 in phar_create_or_parse_filename (fname=0x7ffff7fbe798 &quot;/home/elaw/php-5.6.6-afl-asan/sapi/cli/newphar_metaonly_hexedited_extended_PHP_POC.phar&quot;,
+    fname_len=0x57, alias=0x0, alias_len=0x0, is_data=0x0, options=0x8, pphar=0x7fffffffa848, error=0x7fffffffa888) at /home/elaw/php-5.6.7/ext/phar/phar.c:1346
+#5  0x000000000062f7b0 in phar_open_or_create_filename (fname=0x7ffff7fbf090 &quot;newphar_metaonly_hexedited_extended_PHP_POC.phar&quot;, fname_len=0x30, alias=0x0, alias_len=0x0,
+    is_data=0x0, options=0x8, pphar=0x7fffffffa848, error=0x7fffffffa888) at /home/elaw/php-5.6.7/ext/phar/phar.c:1315
+#6  0x000000000063b5e6 in zim_Phar___construct (ht=0x2, return_value=0x7ffff7fbc348, return_value_ptr=0x7ffff7f852a0, this_ptr=0x7ffff7fbc438, return_value_used=0x0)
+    at /home/elaw/php-5.6.7/ext/phar/phar_object.c:1189
+#7  0x000000000084c1b6 in zend_do_fcall_common_helper_SPEC (execute_data=0x7ffff7f85338) at /home/elaw/php-5.6.7/Zend/zend_vm_execute.h:558
+#8  0x000000000084c98d in ZEND_DO_FCALL_BY_NAME_SPEC_HANDLER (execute_data=0x7ffff7f85338) at /home/elaw/php-5.6.7/Zend/zend_vm_execute.h:693
+#9  0x000000000084b81f in execute_ex (execute_data=0x7ffff7f85338) at /home/elaw/php-5.6.7/Zend/zend_vm_execute.h:363
+#10 0x000000000084b8a8 in zend_execute (op_array=0x7ffff7fbd248) at /home/elaw/php-5.6.7/Zend/zend_vm_execute.h:388
+#11 0x0000000000808067 in zend_execute_scripts (type=0x8, retval=0x0, file_count=0x3) at /home/elaw/php-5.6.7/Zend/zend.c:1341
+#12 0x0000000000773643 in php_execute_script (primary_file=0x7fffffffdf60) at /home/elaw/php-5.6.7/main/main.c:2597
+#13 0x00000000008b9643 in do_cli (argc=0x3, argv=0xf92f10) at /home/elaw/php-5.6.7/sapi/cli/php_cli.c:994
+#14 0x00000000008ba750 in main (argc=0x3, argv=0xf92f10) at /home/elaw/php-5.6.7/sapi/cli/php_cli.c:1378
+#15 0x00007ffff624eb45 in __libc_start_main (main=0x8ba0b0 &lt;main&gt;, argc=0x3, argv=0x7fffffffe2e8, init=&lt;optimized out&gt;, fini=&lt;optimized out&gt;, rtld_fini=&lt;optimized out&gt;,
+    stack_end=0x7fffffffe2d8) at libc-start.c:287
+#16 0x00000000004216d9 in _start ()
+</pre>
+</div><div class='comment type_comment' ><a name="1428224820">&nbsp;</a><strong>[2015-04-05 09:07 UTC] emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>&quot;it doesn't seem to check that the buffer has enough data for unserialized data itselfWhich results in junk being read as unserialized data.&quot; 
+
+&lt;&lt; Exactly! and this is exploitable.
+
+Note that YYFILL() would have prevented something like this from being exploitable. But it currently is just an empty loop and is optimised away by the compiler. Maybe you want to consider fixing this too as I think it is a weakness that could potentially be exploited by future vulnerabilities like this.
+</pre>
+</div><div class='comment type_comment' ><a name="1428267247">&nbsp;</a><strong>[2015-04-05 20:54 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Again, YYFILL is not supposed to do anything. It's supposed to be empty loop. YYFILL is needed when we're reading from stream, etc. but we are not. See <a href="http://re2c.org/manual.html" rel="nofollow">http://re2c.org/manual.html</a>. In the case of unserializing, buffer does not need filling - it's already full. Of course, putting max beyond the end of the actual data is a problem - but it's not unserialize problem, it's phar problem.
+</pre>
+</div><div class='comment type_patch' ><a name="1428267328">&nbsp;</a><strong>[2015-04-05 20:55 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The following patch has been added/updated:
+
+Patch Name: phar69324.diff
+Revision:   1428267328
+URL:        <a href="https://bugs.php.net/patch-display.php?bug=69324&amp;patch=phar69324.diff&amp;revision=1428267328" rel="nofollow">https://bugs.php.net/patch-display.php?bug=69324&amp;patch=phar69324.diff&amp;revision=1428267328</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1428267376">&nbsp;</a><strong>[2015-04-05 20:56 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Please try this patch, it should fix the issue: <a href="https://gist.github.com/smalyshev/f362a4cb87c01400df00" rel="nofollow">https://gist.github.com/smalyshev/f362a4cb87c01400df00</a>
+</pre>
+</div><div class='comment type_patch' ><a name="1428271874">&nbsp;</a><strong>[2015-04-05 22:11 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The following patch has been added/updated:
+
+Patch Name: phar69324.diff
+Revision:   1428271874
+URL:        <a href="https://bugs.php.net/patch-display.php?bug=69324&amp;patch=phar69324.diff&amp;revision=1428271874" rel="nofollow">https://bugs.php.net/patch-display.php?bug=69324&amp;patch=phar69324.diff&amp;revision=1428271874</a>
+</pre>
+</div><div class='comment type_log' ><a name="1428297655">&nbsp;</a><strong>[2015-04-06 05:20 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1428318876">&nbsp;</a><strong>[2015-04-06 11:14 UTC] emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>I dont have access to  <a href="https://bugs.php.net/patch-display.php?bug=69324&amp;patch=phar69324.diff&amp;revision=1428271874" rel="nofollow">https://bugs.php.net/patch-display.php?bug=69324&amp;patch=phar69324.diff&amp;revision=1428271874</a>
+
+But <a href="https://gist.github.com/smalyshev/f362a4cb87c01400df00" rel="nofollow">https://gist.github.com/smalyshev/f362a4cb87c01400df00</a> does not solve the problem. If you want to share &quot;Revision:1428271874&quot; with me, I could take a look.
+
+IMHO, the patch seems to be overly complicated.  Here's my 2 cents of worth of pseudo code. 
+
+
+1) Instead of passing the phar buffer( p in this case) directly to php_var_unserialize(), we would allocate a new buffer containing the metadata string to be unserialised.
+
+
+2) Read in Metadata len from phar file. Ensure that len is smaller the (endbuffer - current buffer). This seems to be what you have already done.
+
+3)Create a new buffer for the metadata string to be unserialized. EG: MetaData_to_beunserialized = estrndup(buffer, len)  &lt;&lt;&lt;estrndup is important because it adds a nullbyte to the end of the string. This is really the crux of the fix. It makes it impossible to pass in a malform string that unserialized properly when YYCURSOR &gt; YYMAX
+
+3) Call your the unserialized function as per normal but use the new buffer instead. EG:
+php_var_unserialize(metadata, &amp;MetaData_to_beunserialized, p + buf_len, &amp;var_hash TSRMLS_CC)
+
+
+It's mid-night here.. so I hope I'm making sense?
+</pre>
+</div><div class='comment type_comment' ><a name="1428333976">&nbsp;</a><strong>[2015-04-06 15:26 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Could you please explain what do you mean by &quot;does not solve the problem&quot;? I can not reproduce the problem with either your code or my tests anymore with this patch, but if you have some other reproduction, please provide it. If it's the same reproduction, could you please share on which system you reproduced it, as it does not reproduce on any system I have access to.
+
+As for copying the buffers around, I don't think it is a good solution. I don't see how it adds anything to the solution and it is expensive performance-wise.
+</pre>
+</div><div class='comment type_comment' ><a name="1428334878">&nbsp;</a><strong>[2015-04-06 15:41 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>After looking at the code mode I think I understand what additional problem may be - unserialize does not check the max boundary when inside parsing the number. So if the number string is long it can overrun the max. Usually the php strings end in \0 so it would stop there but in this case since it's a phar buffer it isn't null-terminated. I'll see what is the best solution for the problem.
+</pre>
+</div><div class='comment type_comment' ><a name="1428371668">&nbsp;</a><strong>[2015-04-07 01:54 UTC] emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Precisely. I think we are on the same page now. Apologies if I didn't explain it clearly enough.
+</pre>
+</div><div class='comment type_related' ><a name="1428795574">&nbsp;</a><strong>[2015-04-11 23:39 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Related To: <a href='bug.php?id=69429'>Bug #69429</a>
+</pre>
+</div><div class='comment type_svn' ><a name="1428996549">&nbsp;</a><strong>[2015-04-14 07:29 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=9faaee66fa493372c7340b1ab05f8fd115131a42" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=9faaee66fa493372c7340b1ab05f8fd115131a42</a>
+Log: Fixed <a href='bug.php?id=69324'>bug #69324</a> (Buffer Over-read in unserialize when parsing Phar)
+</pre>
+</div><div class='comment type_log' ><a name="1428996549">&nbsp;</a><strong>[2015-04-14 07:29 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1429000297">&nbsp;</a><strong>[2015-04-14 08:31 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=9faaee66fa493372c7340b1ab05f8fd115131a42" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=9faaee66fa493372c7340b1ab05f8fd115131a42</a>
+Log: Fixed <a href='bug.php?id=69324'>bug #69324</a> (Buffer Over-read in unserialize when parsing Phar)
+</pre>
+</div><div class='comment type_svn' ><a name="1429087435">&nbsp;</a><strong>[2015-04-15 08:43 UTC] <a href="//people.php.net/jpauli">jpauli@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=17cbd0b5b78a7500f185b3781a2149881bfff8ae" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=17cbd0b5b78a7500f185b3781a2149881bfff8ae</a>
+Log: Fixed <a href='bug.php?id=69324'>bug #69324</a> (Buffer Over-read in unserialize when parsing Phar)
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

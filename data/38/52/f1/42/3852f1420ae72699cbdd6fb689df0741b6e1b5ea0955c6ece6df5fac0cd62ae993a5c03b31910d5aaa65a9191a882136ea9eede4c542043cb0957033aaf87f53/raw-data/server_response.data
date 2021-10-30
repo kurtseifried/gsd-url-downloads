@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='Unknown/Other Function Bug #71323 - RDF' href='rss/bug.php?id=71323'>
+        <link rel='alternate' type='application/rss+xml' title='Unknown/Other Function Bug #71323 - RSS 2.0' href='rss/bug.php?id=71323&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #71323 :: Output of stream_get_meta_data can be falsified by its input</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=71323">Sec Bug</a>&nbsp;#71323</th>
+            <td id="summary" colspan="5">Output of stream_get_meta_data can be falsified by its input</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-01-10 02:44 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-02-02 03:17 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>leo &#x61;&#116; gaspard &#x64;&#111;&#x74; io</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=Unknown%2FOther+Function">Unknown/Other Function</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.5.31</td>
+            <th class="details">OS:</th>
+            <td>Any</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><em>None</em></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=71323&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=71323&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=71323&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1452393882">&nbsp;</a><strong>[2016-01-10 02:44 UTC] leo &#x61;&#116; gaspard &#x64;&#111;&#x74; io</strong>
+<pre class='note'>Description:
+------------
+Hello,
+
+Here is the text I put in the commit message of the patch I will attach to this bug report, given I don't find any better way to put it:
+
+==========8&lt;==========8&lt;==========
+
+At the moment, the return value of stream_get_meta_data is composed of
+some fields that have a defined value, and some other fields that are
+populated with php_stream_populate_meta_data.
+
+This would not be a problem, if php_stream_populate_meta_data was
+restricted to writing in fields that are not already set. However, it
+turns out, in particular, that a php_stream with ops set to
+php_stream_temp_ops fills the metadata with whatever the user supplies.
+
+As a consequence, if we assume $file is attacker-controlled, a program
+such as
+
+    $uri = stream_get_meta_data(fopen($file, &quot;r&quot;))['uri'];
+
+will yield attacker-controlled data in $uri, and not, as one would
+expect, sane PHP-provided data. For instance, $uri will be set to
+&quot;eviluri&quot; when $file is set to
+
+    data:text/plain;uri=eviluri,
+
+The change to ext/standard/streamsfuncs.c fixes the aforementioned issue
+by first filling metadata, and only then filling fields that PHP knows
+about. This way, the standardized (and documented) fields will not be
+attacker-controlled.
+
+The change made to main/streams/memory.c protects the &quot;mediatype&quot;
+variable against the same tampering:
+
+    data:text/plain,mediatype=text/x-php,
+
+would set the official mediatype to text/plain, but PHP would interpret
+it as text/x-php. This could confuse IDS, IPS or any other application
+that reads the same data but does not use the same parser, as these
+would not understand the same mediatype as the PHP application does.
+
+
+==========&gt;8==========&gt;8==========
+
+Hoping this helps,
+
+Leo Gaspard
+
+Test script:
+---------------
+echo stream_get_meta_data(fopen(&quot;data:text/plain;uri=eviluri,&quot;, &quot;r&quot;))['uri'];
+echo stream_get_meta_data(fopen(&quot;data:real/evil;mediatype=text/plain,&quot;, &quot;r&quot;))['mediatype'];
+
+Expected result:
+----------------
+data:text/plain;uri=eviluri,
+real/evil
+
+Actual result:
+--------------
+eviluri
+text/plain
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=71323'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=71323'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1452394380">&nbsp;</a><strong>[2016-01-10 02:53 UTC] leo &#x61;&#116; gaspard &#x64;&#111;&#x74; io</strong>
+<pre class='note'>Given it looks like the patch was not attached and I can't attach a patch now (clicking the &quot;Add a Patch&quot; button sends me to a &quot;This bug-report is private&quot;-like page -- maybe this would deserve its own bug report), here is a paste of the entire patch, as generated by git format-patch and applicable by git am -- sorry again for the inconvenience.
+
+==========8&lt;==========8&lt;==========
+
+From 1da9a5b048a31f815574a417bb45a813d69875b3 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?L=C3=A9o=20Gaspard?= &lt;leo@gaspard.io&gt;
+Date: Tue, 29 Dec 2015 01:15:13 +0100
+Subject: [PATCH] Mitigate return tampering in stream_get_meta_data
+
+At the moment, the return value of stream_get_meta_data is composed of
+some fields that have a defined value, and some other fields that are
+populated with php_stream_populate_meta_data.
+
+This would not be a problem, if php_stream_populate_meta_data was
+restricted to writing in fields that are not already set. However, it
+turns out, in particular, that a php_stream with ops set to
+php_stream_temp_ops fills the metadata with whatever the user supplies.
+
+As a consequence, if we assume $file is attacker-controlled, a program
+such as
+
+    $uri = stream_get_meta_data(fopen($file, &quot;r&quot;))['uri'];
+
+will yield attacker-controlled data in $uri, and not, as one would
+expect, sane PHP-provided data. For instance, $uri will be set to
+&quot;eviluri&quot; when $file is set to
+
+    data:text/plain;uri=eviluri,
+
+The change to ext/standard/streamsfuncs.c fixes the aforementioned issue
+by first filling metadata, and only then filling fields that PHP knows
+about. This way, the standardized (and documented) fields will not be
+attacker-controlled.
+
+The change made to main/streams/memory.c protects the &quot;mediatype&quot;
+variable against the same tampering:
+
+    data:text/plain,mediatype=text/x-php,
+
+would set the official mediatype to text/plain, but PHP would interpret
+it as text/x-php. This could confuse IDS, IPS or any other application
+that reads the same data but does not use the same parser, as these
+would not understand the same mediatype as the PHP application does.
+---
+ ext/standard/streamsfuncs.c | 12 ++++++------
+ main/streams/memory.c       |  4 +++-
+ 2 files changed, 9 insertions(+), 7 deletions(-)
+
+diff --git a/ext/standard/streamsfuncs.c b/ext/standard/streamsfuncs.c
+index de0f016..496b990 100644
+--- a/ext/standard/streamsfuncs.c
++++ b/ext/standard/streamsfuncs.c
+@@ -507,6 +507,12 @@ PHP_FUNCTION(stream_get_meta_data)
+
+        array_init(return_value);
+
++       if (!php_stream_populate_meta_data(stream, return_value)) {
++               add_assoc_bool(return_value, &quot;timed_out&quot;, 0);
++               add_assoc_bool(return_value, &quot;blocked&quot;, 1);
++               add_assoc_bool(return_value, &quot;eof&quot;, php_stream_eof(stream));
++       }
++
+        if (!Z_ISUNDEF(stream-&gt;wrapperdata)) {
+                Z_ADDREF_P(&amp;stream-&gt;wrapperdata);
+                add_assoc_zval(return_value, &quot;wrapper_data&quot;, &amp;stream-&gt;wrapperdata);
+@@ -539,12 +545,6 @@ PHP_FUNCTION(stream_get_meta_data)
+        if (stream-&gt;orig_path) {
+                add_assoc_string(return_value, &quot;uri&quot;, stream-&gt;orig_path);
+        }
+-
+-       if (!php_stream_populate_meta_data(stream, return_value)) {
+-               add_assoc_bool(return_value, &quot;timed_out&quot;, 0);
+-               add_assoc_bool(return_value, &quot;blocked&quot;, 1);
+-               add_assoc_bool(return_value, &quot;eof&quot;, php_stream_eof(stream));
+-       }
+ }
+ /* }}} */
+
+diff --git a/main/streams/memory.c b/main/streams/memory.c
+index e2695ff..e36835a 100644
+--- a/main/streams/memory.c
++++ b/main/streams/memory.c
+@@ -697,7 +697,9 @@ static php_stream * php_stream_url_wrap_rfc2397(php_stream_wrapper *wrapper, con
+                        plen = sep - path;
+                        vlen = (semi ? semi - sep : mlen - plen) - 1 /* '=' */;
+                        key = estrndup(path, plen);
+-                       add_assoc_stringl_ex(&amp;meta, key, plen, sep + 1, vlen);
++                       if (memcmp(key, &quot;mediatype&quot;, sizeof(&quot;mediatype&quot;)-1)) {
++                               add_assoc_stringl_ex(&amp;meta, key, plen, sep + 1, vlen);
++                       }
+                        efree(key);
+                        plen += vlen + 1;
+                        mlen -= plen;
+--
+2.6.4
+</pre>
+</div><div class='comment type_comment' ><a name="1452397066">&nbsp;</a><strong>[2016-01-10 03:37 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>You can also use gist.github.com (choose &quot;Secret gist&quot;) to make private patches.
+</pre>
+</div><div class='comment type_log' ><a name="1453011157">&nbsp;</a><strong>[2016-01-17 06:12 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1453011157">&nbsp;</a><strong>[2016-01-17 06:12 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Fixed in 6297a117d77fa3a0df2e21ca926a92c231819cd5 in security repo and <a href="https://gist.github.com/smalyshev/9609440fd5eab148623a" rel="nofollow">https://gist.github.com/smalyshev/9609440fd5eab148623a</a>
+</pre>
+</div><div class='comment type_log' ><a name="1453011169">&nbsp;</a><strong>[2016-01-17 06:12 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 7.0Git-2016-01-10 (Git)</span>
+<span class="added">+PHP Version: 5.5.31</span>
+</div></div></div><div class='comment type_svn' ><a name="1454383165">&nbsp;</a><strong>[2016-02-02 03:19 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=6297a117d77fa3a0df2e21ca926a92c231819cd5" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=6297a117d77fa3a0df2e21ca926a92c231819cd5</a>
+Log: Fixed <a href='bug.php?id=71323'>bug #71323</a> - Output of stream_get_meta_data can be falsified by its input
+</pre>
+</div><div class='comment type_log' ><a name="1454383166">&nbsp;</a><strong>[2016-02-02 03:19 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1454384184">&nbsp;</a><strong>[2016-02-02 03:36 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=6297a117d77fa3a0df2e21ca926a92c231819cd5" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=6297a117d77fa3a0df2e21ca926a92c231819cd5</a>
+Log: Fixed <a href='bug.php?id=71323'>bug #71323</a> - Output of stream_get_meta_data can be falsified by its input
+</pre>
+</div><div class='comment type_svn' ><a name="1454388395">&nbsp;</a><strong>[2016-02-02 04:46 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=6297a117d77fa3a0df2e21ca926a92c231819cd5" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=6297a117d77fa3a0df2e21ca926a92c231819cd5</a>
+Log: Fixed <a href='bug.php?id=71323'>bug #71323</a> - Output of stream_get_meta_data can be falsified by its input
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

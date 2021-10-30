@@ -1,0 +1,3887 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en" dir="ltr">
+  <head>
+<base href="https://bugs.launchpad.net/httplib2/+bug/1175272/+index" />
+
+    <meta charset="UTF-8" />
+    <title>Bug #1175272 “requests permitted after invalid certificate is re...” : Bugs : httplib2</title>
+    <link rel="shortcut icon" href="/@@/launchpad.png" />
+    <link rel="canonical" href="https://bugs.launchpad.net/bugs/1175272" />
+    
+      <link rel="alternate" type="application/atom+xml" href="http://feeds.launchpad.net/bugs/1175272/bug.atom" title="Bug 1175272 Feed" />
+    
+
+    
+  
+  <link type="text/css" rel="stylesheet" media="screen, print" href="/+icing/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/combo.css" />
+
+
+    
+
+    
+      <meta name="description" content="After httplib2 has found a certificate to be invalid it will permit future requests on the same https connection. Future requests will be performed without validating the certificate.
+
+The attached program attempts two requests on a single https connection. One request receives a httplib2.CertificateHostnameMismatch exception, the other receives a HTTP 200 success code.
+
+An invalid certificate should be treated as a connection error, and future requests should attempt to establish a new https..." />
+      <meta property="og:description" content="After httplib2 has found a certificate to be invalid it will permit future requests on the same https connection. Future requests will be performed without validating the certificate.
+
+The attached program attempts two requests on a single https connection. One request receives a httplib2.CertificateHostnameMismatch exception, the other receives a HTTP 200 success code.
+
+An invalid certificate should be treated as a connection error, and future requests should attempt to establish a new https..." />
+    
+
+    
+    
+      <meta property="og:title" content="Bug #1175272 “requests permitted after invalid certificate is re...” : Bugs : httplib2" />
+      <meta property="og:type" content="website" />
+      <meta property="og:image" content="/@@/launchpad.png" />
+      <meta property="og:url" content="https://bugs.launchpad.net/bugs/1175272" />
+      <meta property="og:site_name" content="Launchpad" />
+    
+
+    
+
+    
+  
+
+  
+  
+  <script type="text/javascript">
+    var LP = {
+        cache: {},
+        links: {}
+    };
+  </script>
+
+  
+
+  <script type="text/javascript">var cookie_scope = '; Path=/; Secure; Domain=.launchpad.net';</script>
+
+   <script type="text/javascript" src="/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?yui/yui/yui-min.js&amp;lp/meta.js&amp;yui/loader/loader-min.js"></script>
+   <script type="text/javascript">
+        var raw = null;
+        if (LP.devmode) {
+           raw = 'raw';
+        }
+        YUI.GlobalConfig = {
+            combine: true,
+            comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+            root: 'yui/',
+            filter: raw,
+            debug: false,
+            fetchCSS: false,
+            maxURLLength: 2000,
+            groups: {
+                lp: {
+                    combine: true,
+                    base: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?lp/',
+                    comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+                    root: 'lp/',
+                    // comes from including lp/meta.js
+                    modules: LP_MODULES,
+                    fetchCSS: false
+                }
+            }
+        }</script>
+
+  <script type="text/javascript">
+      // we need this to create a single YUI instance all events and code
+      // talks across. All instances of YUI().use should be based off of
+      // LPJS instead.
+      var LPJS = new YUI();
+  </script>
+
+
+
+    <script id="base-layout-load-scripts" type="text/javascript">
+        //<![CDATA[
+        LPJS.use('base', 'node', 'console', 'event',
+            'oop', 'lp', 'lp.app.foldables','lp.app.sorttable',
+            'lp.app.inlinehelp', 'lp.app.links',
+            'lp.bugs.bugtask_index', 'lp.bugs.subscribers',
+            'lp.app.ellipsis', 'lp.code.branchmergeproposal.diff',
+            'lp.views.global',
+             function(Y) {
+
+            Y.on("domready", function () {
+                var global_view = new Y.lp.views.Global();
+                global_view.render();
+
+                Y.lp.app.sorttable.SortTable.init();
+                Y.lp.app.inlinehelp.init_help();
+                Y.lp.activate_collapsibles();
+                Y.lp.app.foldables.activate();
+                Y.lp.app.links.check_valid_lp_links();
+            });
+
+            Y.on('lp:context:web_link:changed', function(e) {
+                  window.location = e.new_value;
+            });
+        });
+        //]]>
+    </script>
+    <script id="base-helper-functions" type="text/javascript">
+         //<![CDATA[
+        // This code is pulled from lp.js that needs to be available on every
+        // request. Pulling here to get it outside the scope of the YUI block.
+        function setFocusByName(name) {
+            // Focus the first element matching the given name which can be focused.
+            var nodes = document.getElementsByName(name);
+            var i, node;
+            for (i = 0; i < nodes.length; i++) {
+                node = nodes[i];
+                if (node.focus) {
+                    try {
+                        // Trying to focus a hidden element throws an error in IE8.
+                        if (node.offsetHeight !== 0) {
+                            node.focus();
+                        }
+                    } catch (e) {
+                        LPJS.use('console', function(Y) {
+                            Y.log('In setFocusByName(<' +
+                                node.tagName + ' type=' + node.type + '>): ' + e);
+                        });
+                    }
+                    break;
+                }
+            }
+        }
+
+        function selectWidget(widget_name, event) {
+          if (event && (event.keyCode === 9 || event.keyCode === 13)) {
+              // Avoid firing if user is tabbing through or simply pressing
+              // enter to submit the form.
+              return;
+          }
+          document.getElementById(widget_name).checked = true;
+        }
+        //]]>
+    </script>
+
+    
+      
+      <script type="text/javascript" id="available-official-tags-js">var available_official_tags = ["a11y", "appstream", "bionic", "bisect-done", "bitesize", "cherry-pick", "community-security", "desktop-file", "disco", "dist-upgrade", "focal", "ftbfs", "groovy", "hirsute", "hw-specific", "impish", "jammy", "kernel-bug", "manpage", "metabug", "multiarch", "needs-bisect", "needs-design", "needs-packaging", "needs-reassignment", "package-conflict", "packaging", "patch", "patch-accepted-debian", "patch-accepted-upstream", "patch-forwarded-debian", "patch-forwarded-upstream", "patch-needswork", "patch-rejected", "patch-rejected-debian", "patch-rejected-upstream", "performing-bisect", "py2-removal", "qt4-removal", "regression-proposed", "regression-release", "regression-update", "string-fix", "suspend-resume", "systemd-boot", "testcase", "touch", "unmetdeps", "upgrade-software-version", "verification-done-bionic", "verification-done-focal", "verification-done-groovy", "verification-done-hirsute", "verification-done-impish", "verification-done-xenial", "verification-failed-bionic", "verification-failed-groovy", "verification-failed-impish", "verification-failed-xenial", "verification-needed-bionic", "verification-needed-focal", "verification-needed-groovy", "verification-needed-hirsute", "verification-needed-impish", "verification-needed-trusty", "verification-needed-xenial", "wayland", "xenial"];</script>
+      <script type="text/javascript">
+        LPJS.use('base', 'node', 'oop', 'event', 'lp.bugs.bugtask_index',
+                  'lp.bugs.subscribers', 'lp.code.branchmergeproposal.diff',
+                  'lp.app.comment', 'lp.services.messages.edit', function(Y) {
+            Y.on('domready', function() {
+                Y.lp.code.branchmergeproposal.diff.connect_diff_links();
+                Y.lp.bugs.bugtask_index.setup_bugtask_index();
+                Y.lp.bugs.bugtask_index.setup_bugtask_table();
+                LP.cache.comment_context = LP.cache.bug;
+                var cl = new Y.lp.app.comment.CommentList();
+                cl.render();
+                var sl = new Y.lp.bugs.subscribers.createBugSubscribersLoader({
+                    container_box: '#other-bug-subscribers',
+                    subscribers_details_view:
+                        '/+bug-portlet-subscribers-details',
+                    subscribe_someone_else_link: '.menu-link-addsubscriber'
+                }, window);
+
+                Y.lp.services.messages.edit.setup();
+            });
+         });
+      </script>
+      <style type="text/css">
+        /* Align the 'add comment' link to the right of the comment box. */
+        #add-comment-form textarea { width: 100%; }
+        #add-comment-form { max-width: 60em; padding-bottom: 4em; }
+        #add-comment-form .actions {float: right;}
+        .buglink-summary dd { font-size: 10px; }
+        a#privacy-link:link:hover, a#privacy-link:visited:hover {text-decoration:none;}
+      </style>
+      <style type="text/css">
+        .yui3-overlay .value label  {
+          /* It normally makes sense for form labels to be bold, but since
+          this form consists only of radio buttons, there's nothing but labels
+          so we just get wall-to-wall bold. */
+          font-weight: normal !important;
+        }
+      </style>
+    
+    
+  </head>
+
+  <body id="document" itemscope="" itemtype="http://schema.org/WebPage" class="tab-bugs
+      main_side
+      public
+      yui3-skin-sam">
+          
+          
+    <div class="yui-d0">
+      <div id="locationbar" class="login-logout">
+        
+
+<div id="logincontrol"><a href="https://bugs.launchpad.net/httplib2/+bug/1175272/+login">Log in / Register</a></div>
+
+
+
+      </div><!--id="locationbar"-->
+
+      <div id="watermark" class="watermark-apps-portlet">
+        <div>
+          <a href="https://launchpad.net/httplib2"><img alt="" width="64" height="64" src="/@@/product-logo" /></a>
+        </div>
+        <div class="wide">
+          <h2 id="watermark-heading"><a href="https://launchpad.net/httplib2">httplib2</a></h2>
+        </div>
+        
+  <!-- Application Menu -->
+  <ul class="facetmenu">
+    
+      
+      <li class="overview"><a href="https://launchpad.net/httplib2">Overview</a></li>
+      
+    
+    
+      
+      <li class="branches"><a href="https://code.launchpad.net/httplib2">Code</a></li>
+      
+    
+    
+      <li class="bugs active"><a href="https://bugs.launchpad.net/httplib2">Bugs</a></li>
+      
+      
+    
+    
+      
+      <li class="specifications"><a href="https://blueprints.launchpad.net/httplib2">Blueprints</a></li>
+      
+    
+    
+      
+      <li class="translations"><a href="https://translations.launchpad.net/httplib2">Translations</a></li>
+      
+    
+    
+      
+      <li class="answers"><a href="https://answers.launchpad.net/httplib2">Answers</a></li>
+      
+    
+  </ul>
+
+      </div>
+
+      <div class="yui-t4">
+        <div id="maincontent" class="yui-main">
+          <div class="yui-b" dir="ltr">
+            <div class="context-publication">
+              
+      <h1 id="edit-title">
+<span class="yui3-editable_text-text ellipsis" style="max-width: 95%;">
+    requests permitted after invalid certificate is received
+</span>
+  
+</h1>
+
+
+
+    
+              
+
+              <div id="registration" class="registering">
+                
+      Bug #1175272 reported by
+      <a href="https://launchpad.net/~ubuntu-launchpad-feb" class="sprite person">Kasper Dupont</a>
+      <time title="2013-05-01 18:12:49 UTC" datetime="2013-05-01T18:12:49.634895+00:00">on 2013-05-01</time>
+    
+              </div>
+            </div>
+
+            
+            <div id="request-notifications">
+              
+            </div>
+
+            
+              <div>
+
+      
+
+      <div id="bug-is-duplicate">
+          
+      </div>
+      
+
+      <div style="float: right;">
+        <span><a href="/+help-bugs/bug-heat.html" target="help" class="sprite flame">258</a></span>
+      </div>
+
+      
+
+
+  
+  
+    <div class="actions">
+      <span id="affectsmetoo" style="display: inline">This bug affects 1 person</span>
+    </div>
+  
+
+
+
+    <table id="affected-software" class="listing">
+      <thead>
+        <tr>
+          <th colspan="2">Affects</th>
+          <th>Status</th>
+          <th>Importance</th>
+          <th>Assigned to</th>
+          <th>Milestone</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        
+          
+  <tr class="highlight" id="tasksummary1396278">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/httplib2/+bug/1175272/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary1396278">
+        <span class="yui3-activator-data-box">
+            <a class="sprite product" href="https://bugs.launchpad.net/httplib2">httplib2</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        <span style="float: left" class="value statusUNKNOWN">Unknown</span>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNKNOWN">Unknown</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+        <div style="text-decoration: none; padding: 0.25em">
+          
+            
+              
+              <a target="help" class="icon help" href="https://bugs.launchpad.net/bugs/1175272/+watch/105034/+error-help#UNSUPPORTED_BUG_TRACKER">
+                <span class="sprite warning-icon" id="bugwatch-error-sprite" title="Launchpad doesn't support importing bugs from Google Code bug trackers."></span>
+              </a>
+            
+          
+          
+          <a class="link-external" href="http://code.google.com/p/httplib2/issues/detail?id=282">auto-code.google.com-18 #282</a>
+        </div>
+      
+
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1396278">
+     <td colspan="7"><form action="/httplib2/+bug/1175272/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+    
+      <p class="error message">
+        
+          Launchpad doesn't support importing bugs from Google Code bug trackers.<br />
+          <a target="help" class="help" href="https://bugs.launchpad.net/bugs/1175272/+watch/105034/+error-help#UNSUPPORTED_BUG_TRACKER">(what does this mean?)</a>
+        
+      </p>
+    
+    
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/httplib2">httplib2</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2013-05-01 23:08:39 UTC" datetime="2013-05-01T23:08:39.865130+00:00">2013-05-01</time>
+      </td>
+    </tr>
+    
+    
+    
+    
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="httplib2.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="httplib2.target.option.package" name="httplib2.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="httplib2.target.distribution" name="httplib2.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="httplib2.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="httplib2.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="httplib2.target.package"
+                         name="httplib2.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;httplib2.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('httplib2.target.package');
+              var select_menu = Y.DOM.byId('httplib2.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-httplib2-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a package", "vocabulary_filters": [], "input_element": "httplib2.target.package", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search by name", "show_widget_id": "show-widget-httplib2-target-package", "selected_value": null, "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "DistributionPackage"};
+        var show_widget_id = 'show-widget-httplib2-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="httplib2.target.option.product" name="httplib2.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="httplib2" id="httplib2.target.product"
+                         name="httplib2.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;httplib2.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('httplib2.target.product');
+              var select_menu = Y.DOM.byId('httplib2.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-httplib2-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a project", "vocabulary_filters": [], "input_element": "httplib2.target.product", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search", "show_widget_id": "show-widget-httplib2-target-product", "selected_value": "httplib2", "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "Product"};
+        var show_widget_id = 'show-widget-httplib2-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="httplib2.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="httplib2.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><span class="statusUNKNOWN">Unknown</span></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceUNKNOWN">Unknown</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="httplib2.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap"><i>unknown</i></td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="white-space: nowrap" for="httplib2.bugwatch">Remote Watch</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap"><table><tr>
+
+  <td style="padding: 0px" valign="top"><input class="radioType" id="httplib2.bugwatch.None" name="httplib2.bugwatch" type="radio" value="" /></td>
+  <td style="padding: 0px">
+    <label style="font-weight: normal" for="httplib2.bugwatch.None">
+      None, the status of the bug is updated manually.
+    </label>
+  </td>
+
+</tr>
+
+<tr>
+
+  <td style="padding: 0px" valign="top"><input class="radioType" id="httplib2.bugwatch.0" name="httplib2.bugwatch" type="radio" value="" /></td>
+  <td style="padding: 0px">
+    <label style="font-weight: normal" for="httplib2.bugwatch.0">
+      None, the status of the bug is updated manually.
+    </label>
+  </td>
+
+</tr>
+
+<tr>
+
+  <td style="padding: 0px" valign="top"><input class="radioType" checked="checked" id="httplib2.bugwatch.1" name="httplib2.bugwatch" type="radio" value="105034" /></td>
+  <td style="padding: 0px">
+    <label style="font-weight: normal" for="httplib2.bugwatch.1">
+      code.google.com/p/httplib2/issues <a href="http://code.google.com/p/httplib2/issues/detail?id=282">#282</a>
+    </label>
+  </td>
+
+</tr>
+
+<tr>
+
+  <td style="padding: 0px" valign="top"><input class="radioType" id="httplib2.bugwatch.NEW" name="httplib2.bugwatch" type="radio" value="NEW" /></td>
+  <td style="padding: 0px">
+    <label style="font-weight: normal" for="httplib2.bugwatch.NEW">
+      <div>URL: <input class="urlTextType textType" id="httplib2.url" name="httplib2.url" size="44" type="text" value="" onKeyPress="selectWidget('httplib2.bugwatch.NEW', event)" /></div>
+    </label>
+  </td>
+
+</tr>
+</table>
+<input name="httplib2.bugwatch-empty-marker" type="hidden" value="1" /></td>
+      </tr>
+      <tr>
+        <td class="formHelp" colspan="2">
+        The information about this bug in Launchpad is
+        automatically pulled daily from the remote bug.
+        
+          
+              This information was last pulled
+              <b><time title="2021-10-30 13:01:00 UTC" datetime="2021-10-30T13:01:00.782547+00:00">5 hours ago</time></b>.
+          
+          
+        
+        </td>
+      </tr>
+    </table>
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="httplib2.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="httplib2.comment_on_change" name="httplib2.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1396140">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/debian/+source/python-httplib2/+bug/1175272/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary1396140">
+        <span class="yui3-activator-data-box">
+            <a class="sprite package-source" href="https://bugs.launchpad.net/debian/+source/python-httplib2" title="Latest release: 0.18.1-3, uploaded to main on 2021-01-31 10:35:48.279058+00:00 by Debian Python Team (team+python), maintained by Debian Python Team (team+python)">python-httplib2 (Debian)</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        <span style="float: left" class="value statusNEW">New</span>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1396140">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1396140">
+     <td colspan="7"><form action="/debian/+source/python-httplib2/+bug/1175272/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/debian/+source/python-httplib2">python-httplib2 (Debian)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~ubuntu-launchpad-feb" class="sprite person">Kasper Dupont</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2013-05-01 18:31:18 UTC" datetime="2013-05-01T18:31:18.751610+00:00">2013-05-01</time>
+      </td>
+    </tr>
+    
+    
+    
+    
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="debian_python-httplib2.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="debian_python-httplib2.target.option.package" name="debian_python-httplib2.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="debian_python-httplib2.target.distribution" name="debian_python-httplib2.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option selected="selected" value="debian">Debian</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="debian_python-httplib2.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="debian_python-httplib2.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="python-httplib2" id="debian_python-httplib2.target.package"
+                         name="debian_python-httplib2.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;debian_python-httplib2.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('debian_python-httplib2.target.package');
+              var select_menu = Y.DOM.byId('debian_python-httplib2.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-debian_python-httplib2-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a package", "vocabulary_filters": [], "input_element": "debian_python-httplib2.target.package", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search by name", "show_widget_id": "show-widget-debian_python-httplib2-target-package", "selected_value": "python-httplib2", "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "DistributionPackage"};
+        var show_widget_id = 'show-widget-debian_python-httplib2-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="debian_python-httplib2.target.option.product" name="debian_python-httplib2.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="debian_python-httplib2.target.product"
+                         name="debian_python-httplib2.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;debian_python-httplib2.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('debian_python-httplib2.target.product');
+              var select_menu = Y.DOM.byId('debian_python-httplib2.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-debian_python-httplib2-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a project", "vocabulary_filters": [], "input_element": "debian_python-httplib2.target.product", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search", "show_widget_id": "show-widget-debian_python-httplib2-target-product", "selected_value": null, "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "Product"};
+        var show_widget_id = 'show-widget-debian_python-httplib2-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="debian_python-httplib2.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="debian_python-httplib2.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="debian_python-httplib2.status" name="debian_python-httplib2.status" size="1" >
+<option selected="selected" value="New">New</option>
+</select>
+</div>
+<input name="debian_python-httplib2.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceUNDECIDED">Undecided</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="debian_python-httplib2.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="debian_python-httplib2.assignee.assign_to_nobody" name="debian_python-httplib2.assignee.option" value="debian_python-httplib2.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="debian_python-httplib2.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="debian_python-httplib2.assignee.assign_to_me" name="debian_python-httplib2.assignee.option" value="debian_python-httplib2.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="debian_python-httplib2.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="white-space: nowrap" for="debian_python-httplib2.bugwatch">Remote Watch</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap"><table><tr>
+
+  <td style="padding: 0px" valign="top"><input class="radioType" checked="checked" id="debian_python-httplib2.bugwatch.None" name="debian_python-httplib2.bugwatch" type="radio" value="" /></td>
+  <td style="padding: 0px">
+    <label style="font-weight: normal" for="debian_python-httplib2.bugwatch.None">
+      None, the status of the bug is updated manually.
+    </label>
+  </td>
+
+</tr>
+
+<tr>
+
+  <td style="padding: 0px" valign="top"><input class="radioType" id="debian_python-httplib2.bugwatch.0" name="debian_python-httplib2.bugwatch" type="radio" value="" /></td>
+  <td style="padding: 0px">
+    <label style="font-weight: normal" for="debian_python-httplib2.bugwatch.0">
+      None, the status of the bug is updated manually.
+    </label>
+  </td>
+
+</tr>
+
+<tr>
+
+  <td style="padding: 0px" valign="top"><input class="radioType" id="debian_python-httplib2.bugwatch.1" name="debian_python-httplib2.bugwatch" type="radio" value="105034" /></td>
+  <td style="padding: 0px">
+    <label style="font-weight: normal" for="debian_python-httplib2.bugwatch.1">
+      code.google.com/p/httplib2/issues <a href="http://code.google.com/p/httplib2/issues/detail?id=282">#282</a>
+    </label>
+  </td>
+
+</tr>
+
+<tr>
+
+  <td style="padding: 0px" valign="top"><input class="radioType" id="debian_python-httplib2.bugwatch.NEW" name="debian_python-httplib2.bugwatch" type="radio" value="NEW" /></td>
+  <td style="padding: 0px">
+    <label style="font-weight: normal" for="debian_python-httplib2.bugwatch.NEW">
+      <div>URL: <input class="urlTextType textType" id="debian_python-httplib2.url" name="debian_python-httplib2.url" size="44" type="text" value="" onKeyPress="selectWidget('debian_python-httplib2.bugwatch.NEW', event)" /></div>
+    </label>
+  </td>
+
+</tr>
+</table>
+<input name="debian_python-httplib2.bugwatch-empty-marker" type="hidden" value="1" /></td>
+      </tr>
+      <tr>
+        <td class="formHelp" colspan="2">
+        The information about this bug in Launchpad is
+        automatically pulled daily from the remote bug.
+        
+        </td>
+      </tr>
+    </table>
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="debian_python-httplib2.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="debian_python-httplib2.comment_on_change" name="debian_python-httplib2.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1396135">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/+source/python-httplib2/+bug/1175272/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary1396135">
+        <span class="yui3-activator-data-box">
+            <a class="sprite package-source" href="https://bugs.launchpad.net/ubuntu/+source/python-httplib2" title="Latest release: 0.18.1-3ubuntu1, uploaded to main on 2021-08-11 13:22:09.507648+00:00 by Graham Inggs (ginggs), maintained by Ubuntu Developers (ubuntu-devel-discuss-lists)">python-httplib2 (Ubuntu)</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/+source/python-httplib2/+bug/1175272/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/+source/python-httplib2/+bug/1175272/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1396135">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1396135">
+     <td colspan="7"><form action="/ubuntu/+source/python-httplib2/+bug/1175272/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/+source/python-httplib2">python-httplib2 (Ubuntu)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~ubuntu-launchpad-feb" class="sprite person">Kasper Dupont</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2013-05-01 18:12:49 UTC" datetime="2013-05-01T18:12:49.634895+00:00">2013-05-01</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2013-05-01 23:16:39 UTC" datetime="2013-05-01T23:16:39.849309+00:00">2013-05-01</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2013-09-09 13:11:23 UTC" datetime="2013-09-09T13:11:23.593776+00:00">2013-09-09</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2013-09-09 13:11:23 UTC" datetime="2013-09-09T13:11:23.593776+00:00">2013-09-09</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_python-httplib2.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="ubuntu_python-httplib2.target.option.package" name="ubuntu_python-httplib2.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="ubuntu_python-httplib2.target.distribution" name="ubuntu_python-httplib2.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="ubuntu_python-httplib2.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="ubuntu_python-httplib2.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="python-httplib2" id="ubuntu_python-httplib2.target.package"
+                         name="ubuntu_python-httplib2.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;ubuntu_python-httplib2.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_python-httplib2.target.package');
+              var select_menu = Y.DOM.byId('ubuntu_python-httplib2.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_python-httplib2-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a package", "vocabulary_filters": [], "input_element": "ubuntu_python-httplib2.target.package", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search by name", "show_widget_id": "show-widget-ubuntu_python-httplib2-target-package", "selected_value": "python-httplib2", "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "DistributionPackage"};
+        var show_widget_id = 'show-widget-ubuntu_python-httplib2-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="ubuntu_python-httplib2.target.option.product" name="ubuntu_python-httplib2.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="ubuntu_python-httplib2.target.product"
+                         name="ubuntu_python-httplib2.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;ubuntu_python-httplib2.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_python-httplib2.target.product');
+              var select_menu = Y.DOM.byId('ubuntu_python-httplib2.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_python-httplib2-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a project", "vocabulary_filters": [], "input_element": "ubuntu_python-httplib2.target.product", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search", "show_widget_id": "show-widget-ubuntu_python-httplib2-target-product", "selected_value": null, "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "Product"};
+        var show_widget_id = 'show-widget-ubuntu_python-httplib2-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_python-httplib2.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_python-httplib2.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_python-httplib2.status" name="ubuntu_python-httplib2.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_python-httplib2.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceUNDECIDED">Undecided</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_python-httplib2.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="ubuntu_python-httplib2.assignee.assign_to_nobody" name="ubuntu_python-httplib2.assignee.option" value="ubuntu_python-httplib2.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_python-httplib2.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_python-httplib2.assignee.assign_to_me" name="ubuntu_python-httplib2.assignee.option" value="ubuntu_python-httplib2.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_python-httplib2.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_python-httplib2.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_python-httplib2.comment_on_change" name="ubuntu_python-httplib2.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1396281">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/lucid/+source/python-httplib2/+bug/1175272/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/lucid/+source/python-httplib2">Lucid</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/lucid/+source/python-httplib2/+bug/1175272/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/lucid/+source/python-httplib2/+bug/1175272/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1396281">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1396281">
+     <td colspan="7"><form action="/ubuntu/lucid/+source/python-httplib2/+bug/1175272/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/lucid/+source/python-httplib2">python-httplib2 (Ubuntu Lucid)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2013-05-01 23:16:16 UTC" datetime="2013-05-01T23:16:16.449725+00:00">2013-05-01</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2013-05-01 23:16:27 UTC" datetime="2013-05-01T23:16:27.530122+00:00">2013-05-01</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2013-09-09 12:55:24 UTC" datetime="2013-09-09T12:55:24.558040+00:00">2013-09-09</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2013-09-09 12:55:24 UTC" datetime="2013-09-09T12:55:24.558040+00:00">2013-09-09</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_lucid_python-httplib2.sourcepackagename">Package</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          
+
+
+    <input type="text" value="python-httplib2" id="ubuntu_lucid_python-httplib2.sourcepackagename"
+                         name="ubuntu_lucid_python-httplib2.sourcepackagename" size="20"
+                         maxlength=""
+                         onKeyPress="" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_lucid_python-httplib2.sourcepackagename');
+              var select_menu = Y.DOM.byId('ubuntu_lucid_python-httplib2.sourcepackagename-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_lucid_python-httplib2-sourcepackagename" href="#">Find&hellip;</a>)</span>
+    <script>
+  LPJS.use('node', 'lp.app.picker', function(Y) {
+      var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a package", "vocabulary_filters": [], "input_element": "ubuntu_lucid_python-httplib2.sourcepackagename", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search by name", "show_widget_id": "show-widget-ubuntu_lucid_python-httplib2-sourcepackagename", "selected_value": "python-httplib2", "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "DistributionSourcePackage"};
+      var distribution_name = '';
+      var distribution_id = '';
+      var distroseries_id = '';
+      if (distribution_name !== '') {
+          config.getContextPath = function() {
+              return '/' + distribution_name;
+          }
+      } else if (distribution_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distribution_id).value;
+          };
+      } else if (distroseries_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distroseries_id).value.split('/', 2)[0];
+          };
+      }
+      var show_widget_id = 'show-widget-ubuntu_lucid_python-httplib2-sourcepackagename';
+      Y.on('domready', function(e) {
+          Y.lp.app.picker.addPicker(config, show_widget_id);
+      });
+  });
+  </script>
+  
+
+
+
+          
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_lucid_python-httplib2.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_lucid_python-httplib2.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_lucid_python-httplib2.status" name="ubuntu_lucid_python-httplib2.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_lucid_python-httplib2.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceUNDECIDED">Undecided</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_lucid_python-httplib2.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="ubuntu_lucid_python-httplib2.assignee.assign_to_nobody" name="ubuntu_lucid_python-httplib2.assignee.option" value="ubuntu_lucid_python-httplib2.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_lucid_python-httplib2.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_lucid_python-httplib2.assignee.assign_to_me" name="ubuntu_lucid_python-httplib2.assignee.option" value="ubuntu_lucid_python-httplib2.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_lucid_python-httplib2.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_lucid_python-httplib2.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_lucid_python-httplib2.comment_on_change" name="ubuntu_lucid_python-httplib2.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1396282">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/precise/+source/python-httplib2/+bug/1175272/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/precise/+source/python-httplib2">Precise</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/precise/+source/python-httplib2/+bug/1175272/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/precise/+source/python-httplib2/+bug/1175272/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1396282">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1396282">
+     <td colspan="7"><form action="/ubuntu/precise/+source/python-httplib2/+bug/1175272/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/precise/+source/python-httplib2">python-httplib2 (Ubuntu Precise)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2013-05-01 23:16:16 UTC" datetime="2013-05-01T23:16:16.449725+00:00">2013-05-01</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2013-05-01 23:16:30 UTC" datetime="2013-05-01T23:16:30.191484+00:00">2013-05-01</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2013-09-09 12:49:23 UTC" datetime="2013-09-09T12:49:23.206880+00:00">2013-09-09</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2013-09-09 12:49:23 UTC" datetime="2013-09-09T12:49:23.206880+00:00">2013-09-09</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_precise_python-httplib2.sourcepackagename">Package</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          
+
+
+    <input type="text" value="python-httplib2" id="ubuntu_precise_python-httplib2.sourcepackagename"
+                         name="ubuntu_precise_python-httplib2.sourcepackagename" size="20"
+                         maxlength=""
+                         onKeyPress="" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_precise_python-httplib2.sourcepackagename');
+              var select_menu = Y.DOM.byId('ubuntu_precise_python-httplib2.sourcepackagename-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_precise_python-httplib2-sourcepackagename" href="#">Find&hellip;</a>)</span>
+    <script>
+  LPJS.use('node', 'lp.app.picker', function(Y) {
+      var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a package", "vocabulary_filters": [], "input_element": "ubuntu_precise_python-httplib2.sourcepackagename", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search by name", "show_widget_id": "show-widget-ubuntu_precise_python-httplib2-sourcepackagename", "selected_value": "python-httplib2", "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "DistributionSourcePackage"};
+      var distribution_name = '';
+      var distribution_id = '';
+      var distroseries_id = '';
+      if (distribution_name !== '') {
+          config.getContextPath = function() {
+              return '/' + distribution_name;
+          }
+      } else if (distribution_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distribution_id).value;
+          };
+      } else if (distroseries_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distroseries_id).value.split('/', 2)[0];
+          };
+      }
+      var show_widget_id = 'show-widget-ubuntu_precise_python-httplib2-sourcepackagename';
+      Y.on('domready', function(e) {
+          Y.lp.app.picker.addPicker(config, show_widget_id);
+      });
+  });
+  </script>
+  
+
+
+
+          
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_precise_python-httplib2.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_precise_python-httplib2.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_precise_python-httplib2.status" name="ubuntu_precise_python-httplib2.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_precise_python-httplib2.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceUNDECIDED">Undecided</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_precise_python-httplib2.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="ubuntu_precise_python-httplib2.assignee.assign_to_nobody" name="ubuntu_precise_python-httplib2.assignee.option" value="ubuntu_precise_python-httplib2.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_precise_python-httplib2.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_precise_python-httplib2.assignee.assign_to_me" name="ubuntu_precise_python-httplib2.assignee.option" value="ubuntu_precise_python-httplib2.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_precise_python-httplib2.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_precise_python-httplib2.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_precise_python-httplib2.comment_on_change" name="ubuntu_precise_python-httplib2.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1396285">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/quantal/+source/python-httplib2/+bug/1175272/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/quantal/+source/python-httplib2">Quantal</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/quantal/+source/python-httplib2/+bug/1175272/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/quantal/+source/python-httplib2/+bug/1175272/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1396285">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1396285">
+     <td colspan="7"><form action="/ubuntu/quantal/+source/python-httplib2/+bug/1175272/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/quantal/+source/python-httplib2">python-httplib2 (Ubuntu Quantal)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2013-05-01 23:16:16 UTC" datetime="2013-05-01T23:16:16.449725+00:00">2013-05-01</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2013-05-01 23:16:32 UTC" datetime="2013-05-01T23:16:32.543078+00:00">2013-05-01</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2013-09-09 12:55:28 UTC" datetime="2013-09-09T12:55:28.699803+00:00">2013-09-09</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2013-09-09 12:55:28 UTC" datetime="2013-09-09T12:55:28.699803+00:00">2013-09-09</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_quantal_python-httplib2.sourcepackagename">Package</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          
+
+
+    <input type="text" value="python-httplib2" id="ubuntu_quantal_python-httplib2.sourcepackagename"
+                         name="ubuntu_quantal_python-httplib2.sourcepackagename" size="20"
+                         maxlength=""
+                         onKeyPress="" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_quantal_python-httplib2.sourcepackagename');
+              var select_menu = Y.DOM.byId('ubuntu_quantal_python-httplib2.sourcepackagename-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_quantal_python-httplib2-sourcepackagename" href="#">Find&hellip;</a>)</span>
+    <script>
+  LPJS.use('node', 'lp.app.picker', function(Y) {
+      var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a package", "vocabulary_filters": [], "input_element": "ubuntu_quantal_python-httplib2.sourcepackagename", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search by name", "show_widget_id": "show-widget-ubuntu_quantal_python-httplib2-sourcepackagename", "selected_value": "python-httplib2", "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "DistributionSourcePackage"};
+      var distribution_name = '';
+      var distribution_id = '';
+      var distroseries_id = '';
+      if (distribution_name !== '') {
+          config.getContextPath = function() {
+              return '/' + distribution_name;
+          }
+      } else if (distribution_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distribution_id).value;
+          };
+      } else if (distroseries_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distroseries_id).value.split('/', 2)[0];
+          };
+      }
+      var show_widget_id = 'show-widget-ubuntu_quantal_python-httplib2-sourcepackagename';
+      Y.on('domready', function(e) {
+          Y.lp.app.picker.addPicker(config, show_widget_id);
+      });
+  });
+  </script>
+  
+
+
+
+          
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_quantal_python-httplib2.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_quantal_python-httplib2.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_quantal_python-httplib2.status" name="ubuntu_quantal_python-httplib2.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_quantal_python-httplib2.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceUNDECIDED">Undecided</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_quantal_python-httplib2.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="ubuntu_quantal_python-httplib2.assignee.assign_to_nobody" name="ubuntu_quantal_python-httplib2.assignee.option" value="ubuntu_quantal_python-httplib2.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_quantal_python-httplib2.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_quantal_python-httplib2.assignee.assign_to_me" name="ubuntu_quantal_python-httplib2.assignee.option" value="ubuntu_quantal_python-httplib2.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_quantal_python-httplib2.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_quantal_python-httplib2.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_quantal_python-httplib2.comment_on_change" name="ubuntu_quantal_python-httplib2.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1396283">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/raring/+source/python-httplib2/+bug/1175272/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/raring/+source/python-httplib2">Raring</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/raring/+source/python-httplib2/+bug/1175272/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/raring/+source/python-httplib2/+bug/1175272/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1396283">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1396283">
+     <td colspan="7"><form action="/ubuntu/raring/+source/python-httplib2/+bug/1175272/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/raring/+source/python-httplib2">python-httplib2 (Ubuntu Raring)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2013-05-01 23:16:16 UTC" datetime="2013-05-01T23:16:16.449725+00:00">2013-05-01</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2013-05-01 23:16:35 UTC" datetime="2013-05-01T23:16:35.193822+00:00">2013-05-01</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2013-09-09 12:49:27 UTC" datetime="2013-09-09T12:49:27.405914+00:00">2013-09-09</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2013-09-09 12:49:27 UTC" datetime="2013-09-09T12:49:27.405914+00:00">2013-09-09</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_raring_python-httplib2.sourcepackagename">Package</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          
+
+
+    <input type="text" value="python-httplib2" id="ubuntu_raring_python-httplib2.sourcepackagename"
+                         name="ubuntu_raring_python-httplib2.sourcepackagename" size="20"
+                         maxlength=""
+                         onKeyPress="" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_raring_python-httplib2.sourcepackagename');
+              var select_menu = Y.DOM.byId('ubuntu_raring_python-httplib2.sourcepackagename-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_raring_python-httplib2-sourcepackagename" href="#">Find&hellip;</a>)</span>
+    <script>
+  LPJS.use('node', 'lp.app.picker', function(Y) {
+      var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a package", "vocabulary_filters": [], "input_element": "ubuntu_raring_python-httplib2.sourcepackagename", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search by name", "show_widget_id": "show-widget-ubuntu_raring_python-httplib2-sourcepackagename", "selected_value": "python-httplib2", "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "DistributionSourcePackage"};
+      var distribution_name = '';
+      var distribution_id = '';
+      var distroseries_id = '';
+      if (distribution_name !== '') {
+          config.getContextPath = function() {
+              return '/' + distribution_name;
+          }
+      } else if (distribution_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distribution_id).value;
+          };
+      } else if (distroseries_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distroseries_id).value.split('/', 2)[0];
+          };
+      }
+      var show_widget_id = 'show-widget-ubuntu_raring_python-httplib2-sourcepackagename';
+      Y.on('domready', function(e) {
+          Y.lp.app.picker.addPicker(config, show_widget_id);
+      });
+  });
+  </script>
+  
+
+
+
+          
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_raring_python-httplib2.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_raring_python-httplib2.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_raring_python-httplib2.status" name="ubuntu_raring_python-httplib2.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_raring_python-httplib2.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceUNDECIDED">Undecided</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_raring_python-httplib2.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="ubuntu_raring_python-httplib2.assignee.assign_to_nobody" name="ubuntu_raring_python-httplib2.assignee.option" value="ubuntu_raring_python-httplib2.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_raring_python-httplib2.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_raring_python-httplib2.assignee.assign_to_me" name="ubuntu_raring_python-httplib2.assignee.option" value="ubuntu_raring_python-httplib2.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_raring_python-httplib2.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_raring_python-httplib2.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_raring_python-httplib2.comment_on_change" name="ubuntu_raring_python-httplib2.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1396284">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/saucy/+source/python-httplib2/+bug/1175272/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/saucy/+source/python-httplib2">Saucy</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/saucy/+source/python-httplib2/+bug/1175272/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/saucy/+source/python-httplib2/+bug/1175272/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1396284">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1396284">
+     <td colspan="7"><form action="/ubuntu/saucy/+source/python-httplib2/+bug/1175272/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/saucy/+source/python-httplib2">python-httplib2 (Ubuntu Saucy)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2013-05-01 23:16:16 UTC" datetime="2013-05-01T23:16:16.449725+00:00">2013-05-01</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2013-05-01 23:16:39 UTC" datetime="2013-05-01T23:16:39.849309+00:00">2013-05-01</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2013-09-09 13:11:23 UTC" datetime="2013-09-09T13:11:23.593776+00:00">2013-09-09</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2013-09-09 13:11:23 UTC" datetime="2013-09-09T13:11:23.593776+00:00">2013-09-09</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_saucy_python-httplib2.sourcepackagename">Package</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          
+
+
+    <input type="text" value="python-httplib2" id="ubuntu_saucy_python-httplib2.sourcepackagename"
+                         name="ubuntu_saucy_python-httplib2.sourcepackagename" size="20"
+                         maxlength=""
+                         onKeyPress="" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_saucy_python-httplib2.sourcepackagename');
+              var select_menu = Y.DOM.byId('ubuntu_saucy_python-httplib2.sourcepackagename-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_saucy_python-httplib2-sourcepackagename" href="#">Find&hellip;</a>)</span>
+    <script>
+  LPJS.use('node', 'lp.app.picker', function(Y) {
+      var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a package", "vocabulary_filters": [], "input_element": "ubuntu_saucy_python-httplib2.sourcepackagename", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search by name", "show_widget_id": "show-widget-ubuntu_saucy_python-httplib2-sourcepackagename", "selected_value": "python-httplib2", "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "DistributionSourcePackage"};
+      var distribution_name = '';
+      var distribution_id = '';
+      var distroseries_id = '';
+      if (distribution_name !== '') {
+          config.getContextPath = function() {
+              return '/' + distribution_name;
+          }
+      } else if (distribution_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distribution_id).value;
+          };
+      } else if (distroseries_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distroseries_id).value.split('/', 2)[0];
+          };
+      }
+      var show_widget_id = 'show-widget-ubuntu_saucy_python-httplib2-sourcepackagename';
+      Y.on('domready', function(e) {
+          Y.lp.app.picker.addPicker(config, show_widget_id);
+      });
+  });
+  </script>
+  
+
+
+
+          
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_saucy_python-httplib2.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_saucy_python-httplib2.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_saucy_python-httplib2.status" name="ubuntu_saucy_python-httplib2.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_saucy_python-httplib2.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceUNDECIDED">Undecided</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_saucy_python-httplib2.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="ubuntu_saucy_python-httplib2.assignee.assign_to_nobody" name="ubuntu_saucy_python-httplib2.assignee.option" value="ubuntu_saucy_python-httplib2.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_saucy_python-httplib2.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_saucy_python-httplib2.assignee.assign_to_me" name="ubuntu_saucy_python-httplib2.assignee.option" value="ubuntu_saucy_python-httplib2.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_saucy_python-httplib2.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_saucy_python-httplib2.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_saucy_python-httplib2.comment_on_change" name="ubuntu_saucy_python-httplib2.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+      </tbody>
+
+    </table>
+
+
+
+<div class="actions">
+  
+    <span id="also-affects-product" class="">
+    <a class="menu-link-addupstream sprite add" href="https://bugs.launchpad.net/httplib2/+bug/1175272/+choose-affected-product">Also affects project</a>
+        <a href="/+help-bugs/also-affects-project-help.html" target="help" class="sprite maybe action-icon">(?)</a>
+    </span>
+    <span id="also-affects-package" class="">
+    <a class="menu-link-adddistro sprite add" href="https://bugs.launchpad.net/httplib2/+bug/1175272/+distrotask">Also affects distribution/package</a>
+    </span>
+    <a class="menu-link-nominate sprite milestone" href="https://bugs.launchpad.net/httplib2/+bug/1175272/+nominate">Nominate for series</a>
+    
+  
+
+</div>
+
+
+
+
+      <div id="maincontentsub">
+        <div class="top-portlet">
+
+      <div itemprop="mainContentOfPage" class="report">
+        
+
+        <div>
+  <div class="lazr-multiline-edit" id="edit-description">
+  <div class="clearfix">
+    
+
+    <h3>Bug Description</h3>
+  </div>
+
+  <div class="yui3-editable_text-text"><p>After httplib2 has found a certificate to be invalid it will permit future requests on the same https connection. Future requests will be performed without validating the certificate.</p>
+<p>The attached program attempts two requests on a single https connection. One request receives a httplib2.<wbr />CertificateHost<wbr />nameMismatch exception, the other receives a HTTP 200 success code.</p>
+<p>An invalid certificate should be treated as a connection error, and future requests should attempt to establish a new https connection to the server.</p>
+<p>ProblemType: Bug<br />
+DistroRelease: Ubuntu 12.04<br />
+Package: python-httplib2 0.7.2-1ubuntu2<br />
+ProcVersionSign<wbr />ature: Ubuntu 3.2.0-40.64-generic 3.2.40<br />
+Uname: Linux 3.2.0-40-generic i686<br />
+NonfreeKernelMo<wbr />dules: nvidia<br />
+ApportVersion: 2.0.1-0ubuntu17.2<br />
+Architecture: i386<br />
+Date: Wed May  1 19:48:16 2013<br />
+EcryptfsInUse: Yes<br />
+InstallationMedia: Ubuntu 11.04 &quot;Natty Narwhal&quot; - Release i386 (20110427.1)<br />
+MarkForUpload: True<br />
+PackageArchitec<wbr />ture: all<br />
+SourcePackage: python-httplib2<br />
+UpgradeStatus: Upgraded to precise on 2012-05-08 (357 days ago)</p></div>
+  </div>
+
+  
+</div>
+
+
+        <div style="margin:-10px 0 20px 5px" class="clearfix">
+          
+        </div>
+
+        <div id="bug-tags">
+          <span id="tags-heading">
+            Tags:
+          </span>
+          <span id="tag-list">
+            <a class="unofficial-tag" href="/httplib2/+bugs?field.tag=apport-bug">apport-bug</a>
+            <a class="unofficial-tag" href="/httplib2/+bugs?field.tag=i386">i386</a>
+            <a class="unofficial-tag" href="/httplib2/+bugs?field.tag=precise">precise</a>
+          </span>
+          
+          <a href="+edit" title="Edit tags" id="tags-trigger" class="sprite edit action-icon">Edit</a>
+          <a href="/+help-bugs/tag-help.html" target="help" class="sprite maybe action-icon">Tag help</a>
+        </div>
+
+        <script type="text/javascript">
+          LPJS.use('event', 'node', 'lp.bugs.tags_entry', function(Y) {
+              Y.on('domready',
+                   function(e) {
+                       Y.lp.bugs.tags_entry.setup_tag_entry(
+                           available_official_tags);
+                   },
+                   window);
+          });
+        </script>
+
+        <div class="clearfix"></div>
+      </div>
+
+      <div id="branches-and-cves">
+        <div id="bug-branches-container" style="float: left">
+          
+
+            <div id="bug-branches">
+              <h2>Related branches</h2>
+
+              
+                
+
+ 
+
+ <div class="buglink-summary">
+
+  <a href="https://code.launchpad.net/~ubuntu-branches/ubuntu/lucid/python-httplib2/lucid-security" class="sprite branch">lp:ubuntu/lucid-security/python-httplib2</a>
+  
+  
+</div>
+
+
+
+              
+              
+                
+
+ 
+
+ <div class="buglink-summary">
+
+  <a href="https://code.launchpad.net/~ubuntu-branches/ubuntu/raring/python-httplib2/raring-security" class="sprite branch">lp:ubuntu/raring-security/python-httplib2</a>
+  
+  
+</div>
+
+
+
+              
+              
+                
+
+ 
+
+ <div class="buglink-summary">
+
+  <a href="https://code.launchpad.net/~ubuntu-branches/ubuntu/precise/python-httplib2/precise-security" class="sprite branch">lp:ubuntu/precise-security/python-httplib2</a>
+  
+  
+</div>
+
+
+
+              
+              
+                
+
+ 
+
+ <div class="buglink-summary">
+
+  <a href="https://code.launchpad.net/~ubuntu-branches/ubuntu/quantal/python-httplib2/quantal-security" class="sprite branch">lp:ubuntu/quantal-security/python-httplib2</a>
+  
+  
+</div>
+
+
+
+              
+            </div>
+          
+        </div><!-- bug-branch-container -->
+
+        
+
+        <div class="clearfix"></div>
+      </div> <!-- branches and CVEs -->
+
+      </div>
+
+      <div>
+      
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/httplib2/+bug/1175272/comments/1" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ubuntu-launchpad-feb" class="sprite person">Kasper Dupont (ubuntu-launchpad-feb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-05-01T18:12:49.634895+00:00" title="2013-05-01 18:12:49 UTC">on 2013-05-01</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/httplib2/+bug/1175272/comments/1"> #1</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite download-icon" href="https://bugs.launchpad.net/httplib2/+bug/1175272/+attachment/3661698/+files/httplib2-bug.py">Program demonstrating the bug</a>
+        <a class="sprite edit action-icon" href="/httplib2/+bug/1175272/+attachment/3661698">Edit</a>
+        (265 bytes,
+        text/x-python)
+      </li>
+      <li class="download-attachment">
+        <a class="sprite download-icon" href="https://bugs.launchpad.net/httplib2/+bug/1175272/+attachment/3661699/+files/Dependencies.txt">Dependencies.txt</a>
+        <a class="sprite edit action-icon" href="/httplib2/+bug/1175272/+attachment/3661699">Edit</a>
+        (855 bytes,
+        text/plain; charset="utf-8")
+      </li>
+      <li class="download-attachment">
+        <a class="sprite download-icon" href="https://bugs.launchpad.net/httplib2/+bug/1175272/+attachment/3661700/+files/ProcEnviron.txt">ProcEnviron.txt</a>
+        <a class="sprite edit action-icon" href="/httplib2/+bug/1175272/+attachment/3661700">Edit</a>
+        (297 bytes,
+        text/plain; charset="utf-8")
+      </li>
+    </ul>
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10"></textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+    
+    <time title="2013-05-01 23:09:20 UTC" datetime="2013-05-01T23:09:20.490768+00:00">on 2013-05-01</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>information type</b>:
+      </td>
+      <td>
+        Private Security &#8594; Public Security
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+    
+    <time title="2013-05-01 23:16:27 UTC" datetime="2013-05-01T23:16:27.031755+00:00">on 2013-05-01</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in python-httplib2 (Ubuntu Lucid): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Confirmed
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in python-httplib2 (Ubuntu Precise): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Confirmed
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in python-httplib2 (Ubuntu Quantal): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Confirmed
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in python-httplib2 (Ubuntu Raring): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Confirmed
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in python-httplib2 (Ubuntu Saucy): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Confirmed
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/httplib2/+bug/1175272/comments/2" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~janitor" class="sprite person-inactive">Launchpad Janitor (janitor)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-09-09T12:49:21.498272+00:00" title="2013-09-09 12:49:21 UTC">on 2013-09-09</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/httplib2/+bug/1175272/comments/2"> #2</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This bug was fixed in the package python-httplib2 - 0.7.2-1ubuntu2.1</p>
+<p>---------------<br />
+python-httplib2 (0.7.2-1ubuntu2.1) precise-security; urgency=low</p>
+<p>&nbsp;&nbsp;* SECURITY UPDATE: Incorrect SSL certificate checking with multiple<br />
+&nbsp;&nbsp;&nbsp;&nbsp;requests (LP: <a href="/bugs/1175272" class="bug-link">#1175272</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- debian/<wbr />patches/<wbr />CVE-2013-<wbr />2037.patch: close connection on cert mismatch<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;in python2/<wbr />httplib2/<wbr />__init_<wbr />_.py.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2013-2037<br />
+&nbsp;-- Marc Deslauriers &lt;email address hidden&gt;   Fri, 06 Sep 2013 10:02:56 -0400</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This bug was fixed in the package python-httplib2 - 0.7.2-1ubuntu2.1
+
+---------------
+python-httplib2 (0.7.2-1ubuntu2.1) precise-security; urgency=low
+
+  * SECURITY UPDATE: Incorrect SSL certificate checking with multiple
+    requests (LP: #1175272)
+    - debian/patches/CVE-2013-2037.patch: close connection on cert mismatch
+      in python2/httplib2/__init__.py.
+    - CVE-2013-2037
+ -- Marc Deslauriers &lt;marc.deslauriers@ubuntu.com&gt;   Fri, 06 Sep 2013 10:02:56 -0400</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in python-httplib2 (Ubuntu Precise): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Confirmed &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/httplib2/+bug/1175272/comments/3" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~janitor" class="sprite person-inactive">Launchpad Janitor (janitor)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-09-09T12:49:26.418129+00:00" title="2013-09-09 12:49:26 UTC">on 2013-09-09</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/httplib2/+bug/1175272/comments/3"> #3</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This bug was fixed in the package python-httplib2 - 0.7.7-1ubuntu0.1</p>
+<p>---------------<br />
+python-httplib2 (0.7.7-1ubuntu0.1) raring-security; urgency=low</p>
+<p>&nbsp;&nbsp;* SECURITY UPDATE: Incorrect SSL certificate checking with multiple<br />
+&nbsp;&nbsp;&nbsp;&nbsp;requests (LP: <a href="/bugs/1175272" class="bug-link">#1175272</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- debian/<wbr />patches/<wbr />CVE-2013-<wbr />2037.patch: close connection on cert mismatch<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;in python2/<wbr />httplib2/<wbr />__init_<wbr />_.py.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2013-2037<br />
+&nbsp;-- Marc Deslauriers &lt;email address hidden&gt;   Fri, 06 Sep 2013 09:54:11 -0400</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This bug was fixed in the package python-httplib2 - 0.7.7-1ubuntu0.1
+
+---------------
+python-httplib2 (0.7.7-1ubuntu0.1) raring-security; urgency=low
+
+  * SECURITY UPDATE: Incorrect SSL certificate checking with multiple
+    requests (LP: #1175272)
+    - debian/patches/CVE-2013-2037.patch: close connection on cert mismatch
+      in python2/httplib2/__init__.py.
+    - CVE-2013-2037
+ -- Marc Deslauriers &lt;marc.deslauriers@ubuntu.com&gt;   Fri, 06 Sep 2013 09:54:11 -0400</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in python-httplib2 (Ubuntu Raring): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Confirmed &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/httplib2/+bug/1175272/comments/4" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~janitor" class="sprite person-inactive">Launchpad Janitor (janitor)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-09-09T12:55:23.713088+00:00" title="2013-09-09 12:55:23 UTC">on 2013-09-09</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/httplib2/+bug/1175272/comments/4"> #4</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This bug was fixed in the package python-httplib2 - 0.7.2-1ubuntu2~<wbr />0.10.04.<wbr />2</p>
+<p>---------------<br />
+python-httplib2 (0.7.2-<wbr />1ubuntu2~<wbr />0.10.04.<wbr />2) lucid-security; urgency=low</p>
+<p>&nbsp;&nbsp;* SECURITY UPDATE: Incorrect SSL certificate checking with multiple<br />
+&nbsp;&nbsp;&nbsp;&nbsp;requests (LP: <a href="/bugs/1175272" class="bug-link">#1175272</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- debian/<wbr />patches/<wbr />CVE-2013-<wbr />2037.patch: close connection on cert mismatch<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;in python2/<wbr />httplib2/<wbr />__init_<wbr />_.py.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2013-2037<br />
+&nbsp;-- Marc Deslauriers &lt;email address hidden&gt;   Fri, 06 Sep 2013 10:03:40 -0400</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This bug was fixed in the package python-httplib2 - 0.7.2-1ubuntu2~0.10.04.2
+
+---------------
+python-httplib2 (0.7.2-1ubuntu2~0.10.04.2) lucid-security; urgency=low
+
+  * SECURITY UPDATE: Incorrect SSL certificate checking with multiple
+    requests (LP: #1175272)
+    - debian/patches/CVE-2013-2037.patch: close connection on cert mismatch
+      in python2/httplib2/__init__.py.
+    - CVE-2013-2037
+ -- Marc Deslauriers &lt;marc.deslauriers@ubuntu.com&gt;   Fri, 06 Sep 2013 10:03:40 -0400</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in python-httplib2 (Ubuntu Lucid): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Confirmed &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/httplib2/+bug/1175272/comments/5" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~janitor" class="sprite person-inactive">Launchpad Janitor (janitor)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-09-09T12:55:27.805534+00:00" title="2013-09-09 12:55:27 UTC">on 2013-09-09</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/httplib2/+bug/1175272/comments/5"> #5</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This bug was fixed in the package python-httplib2 - 0.7.4-2ubuntu0.1</p>
+<p>---------------<br />
+python-httplib2 (0.7.4-2ubuntu0.1) quantal-security; urgency=low</p>
+<p>&nbsp;&nbsp;* SECURITY UPDATE: Incorrect SSL certificate checking with multiple<br />
+&nbsp;&nbsp;&nbsp;&nbsp;requests (LP: <a href="/bugs/1175272" class="bug-link">#1175272</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- debian/<wbr />patches/<wbr />CVE-2013-<wbr />2037.patch: close connection on cert mismatch<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;in python2/<wbr />httplib2/<wbr />__init_<wbr />_.py.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2013-2037<br />
+&nbsp;-- Marc Deslauriers &lt;email address hidden&gt;   Fri, 06 Sep 2013 10:01:59 -0400</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This bug was fixed in the package python-httplib2 - 0.7.4-2ubuntu0.1
+
+---------------
+python-httplib2 (0.7.4-2ubuntu0.1) quantal-security; urgency=low
+
+  * SECURITY UPDATE: Incorrect SSL certificate checking with multiple
+    requests (LP: #1175272)
+    - debian/patches/CVE-2013-2037.patch: close connection on cert mismatch
+      in python2/httplib2/__init__.py.
+    - CVE-2013-2037
+ -- Marc Deslauriers &lt;marc.deslauriers@ubuntu.com&gt;   Fri, 06 Sep 2013 10:01:59 -0400</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in python-httplib2 (Ubuntu Quantal): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Confirmed &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+    
+    <time title="2013-09-09 13:11:23 UTC" datetime="2013-09-09T13:11:23.136370+00:00">on 2013-09-09</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in python-httplib2 (Ubuntu Saucy): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Confirmed &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        <div style="float: right;">
+          <a class="menu-link-activitylog" href="https://bugs.launchpad.net/httplib2/+bug/1175272/+activity">See full activity log</a>
+        </div>
+        <div class="clearfix"></div>
+
+        
+          
+
+          
+            <div align="center" id="add-comment-login-first">
+              To post a comment you must <a href="+login?comments=all">log in</a>.
+            </div>
+          
+        
+        
+      
+
+      </div><!-- class="top-portlet" -->
+      </div><!--- id="maincontentsub"-->
+      <div>
+        <div id="duplicate-form-container"></div>
+        <div id="privacy-form-container"></div>
+      </div>
+    </div>
+            
+            
+          </div><!-- yui-b -->
+        </div><!-- yui-main -->
+
+        
+          <div id="side-portlets" class="yui-b side">
+            
+      <div id="involvement" class="portlet">
+        <ul class="involvement">
+          <li class="single">
+            <a class="sprite bugs" href="/httplib2/+filebug">
+              Report a bug
+            </a>
+          </li>
+        </ul>
+      </div>
+      <div id="privacy" class="first portlet public">
+  <div id="privacy-text">
+     <span id="information-type-summary" class="sprite public">This report contains
+         <strong id="information-type">Public Security</strong>
+         information
+     </span>&nbsp;<a class="sprite edit action-icon" id="privacy-link" href="/httplib2/+bug/1175272/+secrecy">Edit</a>
+
+     <div id="information-type-description" style="padding-top: 5px">Everyone can see this security related information.
+</div>
+  </div>
+</div>
+
+      <div id="portlet-actions" class="portlet vertical">
+  <ul id="duplicate-actions">
+    <li class="sprite bug-dupe">
+    <span id="mark-duplicate-text">
+    <a class="menu-link-mark-dupe" href="/httplib2/+bug/1175272/+duplicate">Mark as duplicate</a>
+    </span>
+    </li>
+    
+    <li><a class="menu-link-createquestion sprite add" href="https://bugs.launchpad.net/httplib2/+bug/1175272/+create-question">Convert to a question</a></li>
+    
+    <li><a class="menu-link-addbranch sprite add" href="https://bugs.launchpad.net/httplib2/+bug/1175272/+addbranch">Link a related branch</a></li>
+    <li><a class="menu-link-linktocve sprite add" href="https://bugs.launchpad.net/httplib2/+bug/1175272/+linkcve">Link to <abbr title="Common Vulnerabilities and Exposures Index">CVE</abbr></a></li>
+    
+  </ul>
+</div>
+
+      
+
+      <div class="portlet vertical" id="portlet-subscription">
+  <div class="section">
+    <div id="current_user_subscription" class="False">
+      
+        <span>You are</span>
+        
+        <a class="menu-link-subscription sprite modify edit" href="/httplib2/+bug/1175272/+subscribe">
+           
+           
+           
+           not directly subscribed to this bug's notifications.
+        </a>
+      
+      
+    </div>
+    <div id="sub-unsub-spinner">Subscribing...</div>
+    <ul>
+      
+      <li><a class="menu-link-editsubscriptions sprite modify edit" href="https://bugs.launchpad.net/httplib2/+bug/1175272/+subscriptions" title="View and change your subscriptions to this bug">Edit bug mail</a></li>
+    </ul>
+  </div>
+  <script type="text/javascript">
+    LPJS.use('io-base', 'node',
+            'lp.bugs.bugtask_index.portlets.subscription', function(Y) {
+        Y.on('domready', function() {
+            Y.lp.bugs.bugtask_index.portlets.subscription.initialize();
+        });
+    });
+  </script>
+</div>
+
+      <div class="portlet vertical" id="portlet-subscribers">
+  <h2>Other bug subscribers</h2>
+  <div>
+    <div><a class="menu-link-addsubscriber sprite add" href="https://bugs.launchpad.net/httplib2/+bug/1175272/+addsubscriber" title="Launchpad will email that person whenever this bugs changes">Subscribe someone else</a></div>
+  </div>
+  <div id="other-bug-subscribers"></div>
+</div>
+
+      
+
+      
+
+      
+  
+  <div class="portlet" id="portlet-attachments">
+    <h2>Bug attachments</h2>
+    <ul>
+      <li class="download-attachment">
+        <a class="sprite download-icon" href="https://bugs.launchpad.net/httplib2/+bug/1175272/+attachment/3661698/+files/httplib2-bug.py">Program demonstrating the bug</a>
+        <small>
+          (<a href="/httplib2/+bug/1175272/+attachment/3661698">edit</a>)
+        </small>
+      </li>
+      <li class="download-attachment">
+        <a class="sprite download-icon" href="https://bugs.launchpad.net/httplib2/+bug/1175272/+attachment/3661699/+files/Dependencies.txt">Dependencies.txt</a>
+        <small>
+          (<a href="/httplib2/+bug/1175272/+attachment/3661699">edit</a>)
+        </small>
+      </li>
+      <li class="download-attachment">
+        <a class="sprite download-icon" href="https://bugs.launchpad.net/httplib2/+bug/1175272/+attachment/3661700/+files/ProcEnviron.txt">ProcEnviron.txt</a>
+        <small>
+          (<a href="/httplib2/+bug/1175272/+attachment/3661700">edit</a>)
+        </small>
+      </li>
+    </ul>
+    <ul>
+      <li>
+        <a class="sprite add" href="/httplib2/+bug/1175272/+addcomment">Add attachment</a>
+      </li>
+    </ul>
+  </div>
+
+
+      <div class="portlet" id="portlet-watches">
+  <h2>Remote bug watches</h2>
+  <ul>
+    <li>
+      <span class="sprite bug-remote"></span>
+      <a class="link-external" href="http://code.google.com/p/httplib2/issues/detail?id=282">auto-code.google.com-18 #282</a>
+      <a class="sprite edit action-icon" title="Change watch details" href="/bugs/1175272/+watch/105034">Edit</a>
+    </li>
+  </ul>
+  <p>Bug watches keep track of this bug in other bug trackers.</p>
+</div>
+
+    
+          </div><!-- yui-b side -->
+        
+      </div><!-- yui-t4 -->
+
+      
+  <div id="footer" class="footer">
+    <div class="lp-arcana">
+        <div class="lp-branding">
+          <a href="https://launchpad.net/"><img src="/@@/launchpad-logo-and-name-hierarchy.png" alt="Launchpad" /></a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://launchpad.net/+tour">Take the tour</a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://help.launchpad.net/">Read the guide</a>
+          &nbsp;
+          <form id="globalsearch" method="get" accept-charset="UTF-8" action="https://launchpad.net/+search">
+            <input type="search" id="search-text" name="field.text" />
+            <input type="image" src="/@@/search" style="vertical-align:5%" alt="Search Launchpad" />
+          </form>
+        </div>
+        
+  
+
+    </div>
+
+    <div class="colophon">
+      &copy; 2004-2021
+      <a href="http://canonical.com/">Canonical&nbsp;Ltd.</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://launchpad.net/legal">Terms of use</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://www.ubuntu.com/legal/dataprivacy">Data privacy</a>
+      &nbsp;&bull;&nbsp;
+      <a href="/feedback">Contact Launchpad Support</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="http://blog.launchpad.net/">Blog</a>
+      
+	&nbsp;&bull;&nbsp;
+	<a href="https://canonical.com/careers">Careers</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="https://twitter.com/launchpadstatus">System status</a>
+      <span id="lp-version">
+      &nbsp;&bull;&nbsp;
+        r0d8de2b
+        
+        
+        (<a href="https://dev.launchpad.net/">Get the code!</a>)
+      </span>
+    </div>
+  </div>
+
+    </div><!-- yui-d0-->
+
+    
+  
+  
+  <script id="json-cache-script">LP.cache = {"bug_is_private": false, "information_type_data": {"PUBLICSECURITY": {"name": "Public Security", "description_css_class": "choice-description", "is_private": false, "value": "PUBLICSECURITY", "description": "Everyone can see this security related information.\n", "order": 1}, "PRIVATESECURITY": {"name": "Private Security", "description_css_class": "choice-description", "is_private": true, "value": "PRIVATESECURITY", "description": "Only the security group can see this information.\n ", "order": 2}, "PUBLIC": {"name": "Public", "description_css_class": "choice-description", "is_private": false, "value": "PUBLIC", "description": "Everyone can see this information.\n", "order": 0}, "USERDATA": {"name": "Private", "description_css_class": "choice-description", "is_private": true, "value": "USERDATA", "description": "Only shared with users permitted to see private user information.\n", "order": 3}}, "initial_comment_batch_offset": 41, "subscribers_portlet_url_data": {"web_link": "https://bugs.launchpad.net/bugs/1175272", "self_link": "https://bugs.launchpad.net/api/devel/bugs/1175272"}, "first visible_recent_comment": -35, "bug": {"self_link": "https://bugs.launchpad.net/api/devel/bugs/1175272", "web_link": "https://bugs.launchpad.net/bugs/1175272", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug", "id": 1175272, "private": false, "information_type": "Public Security", "name": null, "title": "requests permitted after invalid certificate is received", "description": "After httplib2 has found a certificate to be invalid it will permit future requests on the same https connection. Future requests will be performed without validating the certificate.\n\nThe attached program attempts two requests on a single https connection. One request receives a httplib2.CertificateHostnameMismatch exception, the other receives a HTTP 200 success code.\n\nAn invalid certificate should be treated as a connection error, and future requests should attempt to establish a new https connection to the server.\n\nProblemType: Bug\nDistroRelease: Ubuntu 12.04\nPackage: python-httplib2 0.7.2-1ubuntu2\nProcVersionSignature: Ubuntu 3.2.0-40.64-generic 3.2.40\nUname: Linux 3.2.0-40-generic i686\nNonfreeKernelModules: nvidia\nApportVersion: 2.0.1-0ubuntu17.2\nArchitecture: i386\nDate: Wed May  1 19:48:16 2013\nEcryptfsInUse: Yes\nInstallationMedia: Ubuntu 11.04 \"Natty Narwhal\" - Release i386 (20110427.1)\nMarkForUpload: True\nPackageArchitecture: all\nSourcePackage: python-httplib2\nUpgradeStatus: Upgraded to precise on 2012-05-08 (357 days ago)", "owner_link": "https://bugs.launchpad.net/api/devel/~ubuntu-launchpad-feb", "bug_tasks_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1175272/bug_tasks", "duplicate_of_link": null, "date_created": "2013-05-01T18:12:49.634895+00:00", "activity_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1175272/activity", "subscriptions_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1175272/subscriptions", "date_last_updated": "2013-09-09T13:11:24.473544+00:00", "who_made_private_link": null, "date_made_private": null, "heat": 258, "bug_watches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1175272/bug_watches", "cves_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1175272/cves", "duplicates_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1175272/duplicates", "attachments_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1175272/attachments", "security_related": true, "latest_patch_uploaded": null, "tags": ["apport-bug", "i386", "precise"], "date_last_message": "2013-09-09T12:55:27.805534+00:00", "number_of_duplicates": 0, "message_count": 6, "users_affected_count": 1, "users_unaffected_count": 0, "users_affected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1175272/users_affected", "users_unaffected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1175272/users_unaffected", "users_affected_count_with_dupes": 1, "other_users_affected_count_with_dupes": 1, "users_affected_with_dupes_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1175272/users_affected_with_dupes", "messages_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1175272/messages", "linked_branches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1175272/linked_branches", "linked_merge_proposals_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1175272/linked_merge_proposals", "http_etag": "\"a18a6c3a956c721cfe7f7177150e00e67daa4e38-025638055d1a0077cb2a3fc9fc990adda5ecbc06\""}, "total_comments_and_activity": 37, "related_features": {}, "context": {"self_link": "https://bugs.launchpad.net/api/devel/httplib2/+bug/1175272", "web_link": "https://bugs.launchpad.net/httplib2/+bug/1175272", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug_task", "bug_link": "https://bugs.launchpad.net/api/devel/bugs/1175272", "milestone_link": null, "status": "Unknown", "importance": "Unknown", "assignee_link": null, "bug_target_display_name": "httplib2", "bug_target_name": "httplib2", "bug_watch_link": "https://bugs.launchpad.net/api/devel/bugs/1175272/+watch/105034", "date_assigned": null, "date_created": "2013-05-01T23:08:39.865130+00:00", "date_confirmed": null, "date_incomplete": null, "date_in_progress": null, "date_closed": null, "date_left_new": null, "date_triaged": null, "date_fix_committed": null, "date_fix_released": null, "date_left_closed": null, "owner_link": "https://bugs.launchpad.net/api/devel/~mdeslaur", "target_link": "https://bugs.launchpad.net/api/devel/httplib2", "title": "Bug #1175272 in httplib2: \"requests permitted after invalid certificate is received\"", "related_tasks_collection_link": "https://bugs.launchpad.net/api/devel/httplib2/+bug/1175272/related_tasks", "is_complete": false, "http_etag": "\"579db10335630f3393471439dc07466d2bf13c66-c58d6bd77768a3f2771cd0a5e27a97495d294a70\""}, "bugtask_data": {"1396278": {"bugtask_path": "/httplib2/+bug/1175272", "bug_title": "requests permitted after invalid certificate is received", "user_can_delete": false, "milestone_value": null, "milestone_widget_items": "[]", "importance_widget_items": "[]", "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_assignee": false, "targetname": "httplib2", "hide_assignee_team_selection": true, "assignee_is_team": null, "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/httplib2/+bug/1175272/+delete", "row_id": "tasksummary1396278", "target_is_product": true, "id": 1396278, "form_row_id": "task1396278", "assignee_vocabulary_filters": [], "prefix": "httplib2", "importance_value": "Unknown", "status_value": "Unknown", "assignee_value": null, "user_can_edit_milestone": false, "user_can_unassign": false, "user_can_edit_status": false, "user_can_edit_importance": false}, "1396135": {"bugtask_path": "/ubuntu/+source/python-httplib2/+bug/1175272", "bug_title": "requests permitted after invalid certificate is received", "user_can_delete": false, "milestone_value": null, "milestone_widget_items": "[]", "importance_widget_items": "[]", "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_assignee": false, "targetname": "python-httplib2 (Ubuntu)", "hide_assignee_team_selection": true, "assignee_is_team": null, "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ubuntu/+source/python-httplib2/+bug/1175272/+delete", "row_id": "tasksummary1396135", "target_is_product": false, "id": 1396135, "form_row_id": "task1396135", "assignee_vocabulary_filters": [], "prefix": "ubuntu_python-httplib2", "importance_value": "Undecided", "status_value": "Fix Released", "assignee_value": null, "user_can_edit_milestone": false, "user_can_unassign": false, "user_can_edit_status": true, "user_can_edit_importance": false}, "1396281": {"bugtask_path": "/ubuntu/lucid/+source/python-httplib2/+bug/1175272", "bug_title": "requests permitted after invalid certificate is received", "user_can_delete": false, "milestone_value": null, "milestone_widget_items": "[]", "importance_widget_items": "[]", "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_assignee": false, "targetname": "python-httplib2 (Ubuntu Lucid)", "hide_assignee_team_selection": true, "assignee_is_team": null, "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ubuntu/lucid/+source/python-httplib2/+bug/1175272/+delete", "row_id": "tasksummary1396281", "target_is_product": false, "id": 1396281, "form_row_id": "task1396281", "assignee_vocabulary_filters": [], "prefix": "ubuntu_lucid_python-httplib2", "importance_value": "Undecided", "status_value": "Fix Released", "assignee_value": null, "user_can_edit_milestone": false, "user_can_unassign": false, "user_can_edit_status": true, "user_can_edit_importance": false}, "1396282": {"bugtask_path": "/ubuntu/precise/+source/python-httplib2/+bug/1175272", "bug_title": "requests permitted after invalid certificate is received", "user_can_delete": false, "milestone_value": null, "milestone_widget_items": "[]", "importance_widget_items": "[]", "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_assignee": false, "targetname": "python-httplib2 (Ubuntu Precise)", "hide_assignee_team_selection": true, "assignee_is_team": null, "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ubuntu/precise/+source/python-httplib2/+bug/1175272/+delete", "row_id": "tasksummary1396282", "target_is_product": false, "id": 1396282, "form_row_id": "task1396282", "assignee_vocabulary_filters": [], "prefix": "ubuntu_precise_python-httplib2", "importance_value": "Undecided", "status_value": "Fix Released", "assignee_value": null, "user_can_edit_milestone": false, "user_can_unassign": false, "user_can_edit_status": true, "user_can_edit_importance": false}, "1396283": {"bugtask_path": "/ubuntu/raring/+source/python-httplib2/+bug/1175272", "bug_title": "requests permitted after invalid certificate is received", "user_can_delete": false, "milestone_value": null, "milestone_widget_items": "[]", "importance_widget_items": "[]", "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_assignee": false, "targetname": "python-httplib2 (Ubuntu Raring)", "hide_assignee_team_selection": true, "assignee_is_team": null, "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ubuntu/raring/+source/python-httplib2/+bug/1175272/+delete", "row_id": "tasksummary1396283", "target_is_product": false, "id": 1396283, "form_row_id": "task1396283", "assignee_vocabulary_filters": [], "prefix": "ubuntu_raring_python-httplib2", "importance_value": "Undecided", "status_value": "Fix Released", "assignee_value": null, "user_can_edit_milestone": false, "user_can_unassign": false, "user_can_edit_status": true, "user_can_edit_importance": false}, "1396140": {"bugtask_path": "/debian/+source/python-httplib2/+bug/1175272", "bug_title": "requests permitted after invalid certificate is received", "user_can_delete": false, "milestone_value": null, "milestone_widget_items": "[]", "importance_widget_items": "[]", "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_assignee": false, "targetname": "python-httplib2 (Debian)", "hide_assignee_team_selection": true, "assignee_is_team": null, "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/debian/+source/python-httplib2/+bug/1175272/+delete", "row_id": "tasksummary1396140", "target_is_product": false, "id": 1396140, "form_row_id": "task1396140", "assignee_vocabulary_filters": [], "prefix": "debian_python-httplib2", "importance_value": "Undecided", "status_value": "New", "assignee_value": null, "user_can_edit_milestone": false, "user_can_unassign": false, "user_can_edit_status": null, "user_can_edit_importance": false}, "1396285": {"bugtask_path": "/ubuntu/quantal/+source/python-httplib2/+bug/1175272", "bug_title": "requests permitted after invalid certificate is received", "user_can_delete": false, "milestone_value": null, "milestone_widget_items": "[]", "importance_widget_items": "[]", "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_assignee": false, "targetname": "python-httplib2 (Ubuntu Quantal)", "hide_assignee_team_selection": true, "assignee_is_team": null, "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ubuntu/quantal/+source/python-httplib2/+bug/1175272/+delete", "row_id": "tasksummary1396285", "target_is_product": false, "id": 1396285, "form_row_id": "task1396285", "assignee_vocabulary_filters": [], "prefix": "ubuntu_quantal_python-httplib2", "importance_value": "Undecided", "status_value": "Fix Released", "assignee_value": null, "user_can_edit_milestone": false, "user_can_unassign": false, "user_can_edit_status": true, "user_can_edit_importance": false}, "1396284": {"bugtask_path": "/ubuntu/saucy/+source/python-httplib2/+bug/1175272", "bug_title": "requests permitted after invalid certificate is received", "user_can_delete": false, "milestone_value": null, "milestone_widget_items": "[]", "importance_widget_items": "[]", "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_assignee": false, "targetname": "python-httplib2 (Ubuntu Saucy)", "hide_assignee_team_selection": true, "assignee_is_team": null, "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ubuntu/saucy/+source/python-httplib2/+bug/1175272/+delete", "row_id": "tasksummary1396284", "target_is_product": false, "id": 1396284, "form_row_id": "task1396284", "assignee_vocabulary_filters": [], "prefix": "ubuntu_saucy_python-httplib2", "importance_value": "Undecided", "status_value": "Fix Released", "assignee_value": null, "user_can_edit_milestone": false, "user_can_unassign": false, "user_can_edit_status": true, "user_can_edit_importance": false}}};</script>
+
+    
+  
+
+    
+  </body>
+
+
+  <!--
+    Facet name: bugs
+    Page type: main_side
+    Has global search: True
+    Has application tabs: True
+    Has side portlets: True
+
+    At least 94 queries/external actions issued in 1.02 seconds
+
+    Features: {'app.mainsite_only.canonical_url': None, 'disclosure.dsp_picker.enabled': 'on', 'bugs.affected_count_includes_dupes.disabled': None, 'baselayout.careers_link.disabled': None, 'js.yui_version': None, 'profiling.enabled': None, 'visible_render_time': None, 'hard_timeout': '9000', 'bugs.nominations.bug_supervisors_can_target': 'on', 'app.maintenance_message': None}
+
+    r0d8de2b
+
+    -->
+
+</html>
+

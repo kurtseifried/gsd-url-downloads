@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+
+<html class="no-js" lang="en-US">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy-Report-Only" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://serverfault.com; script-src 'self' https://cdnjs.cloudflare.com; block-all-mixed-content; report-uri https://pennocktech.report-uri.io/r/default/csp/reportOnly">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <base href="/">
+  <meta name="copyright" content="Copyright &#xA9; 2010-2020 Phil Pennock.  All Rights Reserved.">
+  <meta property="og:title" content="Golang SSH Security">
+  <meta property="og:url" content="https://bridge.grumpy-troll.org/2017/04/golang-ssh-security/">
+  <meta property="og:type" content="article">
+  <meta property="og:site_name" content="The Grumpy Troll">
+  <meta property="og:locale" content="en_US">
+  <meta name="twitter:site" content="@philpennock">
+  <meta name="twitter:creator" content="@philpennock">
+  <meta name="twitter:title" content="Golang SSH Security">
+  <meta name="generator" content="http://hugo.spf13.com/">
+  <title>Golang SSH Security : The Grumpy Troll</title>
+  <link rel="canonical" href="https://bridge.grumpy-troll.org/2017/04/golang-ssh-security/">
+  <link rel="shortcut icon" type="image/x-icon" href="/troll1.ico">
+  <link rel="author" href="https://twitter.com/philpennock">
+  <link rel="author" href="https://github.com/philpennock">
+  <link rel="author" href="https://www.linkedin.com/in/philpennock/">
+  <link rel="stylesheet" href="/css/troll.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/modernizr/2.8.3/modernizr.min.js"
+          integrity="sha256-0rguYS0qgS6L4qVzANq4kjxPLtvnp5nn2nB5G1lWRv4="
+          defer referrerpolicy="no-referrer" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/foundation/5.1.1/js/foundation.min.js"
+          integrity="sha256-L0bv0bJ/UeO0I2bwcgAgKgq+lYK+oZwLO65v2rKiZmY="
+          defer referrerpolicy="no-referrer" crossorigin="anonymous"></script>
+  <script src="/js/troll.start.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.5.1/jquery.min.js"
+          integrity="sha256-9/aliU8dGd2tb6OSsuzixeV4y/faTqgFtohetphbbj0="
+          referrerpolicy="no-referrer" crossorigin="anonymous"></script>
+</head>
+<body lang="en">
+
+<nav class="breadcrumbs">
+  <a href="/">Blog</a>
+  <a href="/2017/">2017</a>
+  <a class="current" href="/2017/04/golang-ssh-security/">Golang SSH Security</a>
+</nav>
+<div class="row"><div class="large-12 columns">
+<header role="banner"><hgroup>
+  <h1><a href="https://bridge.grumpy-troll.org/" title="Homepage">The Grumpy Troll</a></h1>
+  <h2>Ramblings of a grumpy troll.</h2>
+</hgroup></header>
+</div></div>
+<div class="row">
+
+<div class="large-9 columns">
+  <div class="row">
+    <main>
+      <article itemscope itemtype="http://schema.org/BlogPosting">
+        <header>
+          <h1 itemprop="headline">Golang SSH Security</h1>
+          <time itemprop="datePublished" datetime="2017-04-02">April 2, 2017</time>
+        </header>
+        <p>This is a tale of two attitudes.</p>
+<p>Working on a project for a client recently, I needed to speak the SSH protocol
+in <a href="https://golang.org/" title="The Go Programming Language">Golang</a> code.  So I started with the <a href="https://godoc.org/golang.org/x/crypto/ssh" title="package ssh">x/crypto/ssh</a> package, part of
+the suite of libraries from the Golang developers which is not part of the
+standard library and not part of their usual compatibility guarantees, but
+more along the lines of &ldquo;useful stuff which might graduate to the standard
+library&rdquo;.</p>
+<p>There I am, happy with a great API with clean representations of the
+underlying concepts and generally clean use, until I get to &ldquo;okay, we need to
+verify the remote server's hostkey &hellip; how do I do that?&rdquo; and I quickly
+realized that this seemed to involve some grotty work at a lower level of
+abstraction than the rest of the API seemed to require of the programmer.</p>
+<p>Rather than reinvent the wheel, I turned to my favorite search engine to see
+how other projects managed this and started reading the results.  Then
+panicking a little and searching other projects.  I then turned to the
+projects of a well-known vendor of Golang-based tooling in the DevOps space
+and checked them, and panicked a little more.</p>
+<p>I've yet to find a project which actually bothered implementing hostkey
+verification in SSH client code.  None.</p>
+<p>I sent off two bug-reports.  Both PGP encrypted messages, one to the vendor of
+the tooling whose products were dangerously buggy and one to the Golang
+maintainers.</p>
+<h3 id="the-tooling-vendor">The Tooling Vendor</h3>
+<p>The tooling vendor decided that this is <strong>Not A Bug</strong>.  They're updating their
+documentation to reflect this:</p>
+<blockquote>
+<p>To clarify this for our users, we will be updating our documentation to
+reflect our recommendations to securely operate our tools, as well as
+explicitly highlighting that we do not support SSH Host Key checking at
+this time.</p>
+</blockquote>
+<p>Other responses included that they got into console parsing (to extract
+host-keys from those printed by <code>cloud-init</code> at startup) with a previous
+product and it was too hard, so they don't want to ever do it again, and that
+the benefits of TOFU (Trust On First Use) for them are minimal.  Also that the
+exploitability of the trust paths is low.</p>
+<p>To me, this is deeply concerning.  They're saying that people should securely
+operate their tools, at the same time as making it hard to securely operate
+their tools.  They're not warning people to not invoke the tools talking
+across the open Internet.  They've shown that they're unaware of tools such as
+<code>mitmproxy</code> which perform <em>exactly</em> this sort of attack, while purveying tools
+designed to improve security and, oh yes, manage SSH keys on hosts too.</p>
+<p>The only way to securely use such tools is to absolutely trust the network
+between the machine invoking the tool and the resources being talked to.  At
+which point, why bother with cryptography at all?</p>
+<p>Sure, TOFU doesn't help if you <em>never</em> cache the results, so that <em>every</em>
+use is effectively &ldquo;<em>first</em>&rdquo; use.
+That's not TOFU, that's trust on every use.  Unverified.
+Further, when their tooling is creating resources and seeing them soon after
+boot, they're in a good position to see logged hostkeys.  They can be
+compatible-by-default with the most common tooling and decline to work without
+override if people try to work without making those keys available for
+verification.</p>
+<p>The parsing is pretty easy to do with systems such as AWS EC2, I've done it:
+use <code>ec2:GetConsoleOutput</code>, look for the markers, extract the hostkeys between
+them.  This can be written in such a way as to be extensible to other output
+formats.  But it's incredibly immature to decide &ldquo;it's too hard and too much
+work, so we won't bother and we'll leave people vulnerable and tell them it's
+their fault if they use our tool in the way that most guides and documentation
+suggests&rdquo;.</p>
+<p>So they could verify hostkey identity absolutely; with less work, they could
+just get the usual TOFU semantics by caching the observed SSH hostkeys.
+Instead, they have no verification and the tools are thus unfit to use when
+they connect via SSH across the public Internet.</p>
+<p>I used to respect this vendor and recommend their tools to others.  I am
+having to rethink this a lot.  I am no longer happy to recommend Hashicorp
+products to others.</p>
+<h3 id="the-language-maintainers">The Language Maintainers</h3>
+<p>I am bemused by an approach to accepting security reports which is to go
+through the motions of having PGP public keys available for people to use to
+report issues but upon receiving such a request ask for it to be submitted
+without PGP because digging out the keys is too much of a hassle.</p>
+<p>Mind, we are overdue for some nice convenient tooling to have a
+PGP-decrypting-and-reencrypt-to-subscribers mailing-list software tool for use
+for such public contact points.  I can see the point, even as I face-palm at
+the attitude and the cargo-cult approach to public contact points for security
+reports.</p>
+<p>(Thus last week was a little depressing for looking at the state of the
+industry).</p>
+<p>But things got much better after that.</p>
+<p><a href="https://golang.org/issue/19767" title="x/crypto/ssh: make ClientConfig HostKeyCallback non-permissive by default">Golang issue 19767</a> was filed; the Golang maintainers decided to go public
+immediately.  They decided to make a breaking change to their API, as they
+allow themselves to do for packages in the <code>golang.org/x/</code> namespace.</p>
+<p>They quickly fixed the library such that leaving the <code>HostKeyCallback</code> field
+of client configs unset would result in all calls failing.  They provided a
+<code>InsecureIgnoreHostKey</code> function which could be explicitly assigned to get the
+old behavior and <code>FixedHostKey</code> to verify against one key, then provided an
+example function which comes closer to classic SSH behavior by providing a
+simplistic parse of the <code>known_hosts</code> file (first match only, ignoring
+algorithm in selection, etc) &ndash; it works.</p>
+<p>Despite breaking changes being <em>allowed</em> here, they're still discouraged and
+fairly rare.  They did take the opportunity to be very explicit in the package
+documentation, adding:</p>
+<blockquote>
+<p>This package does not fall under the stability promise of the Go language
+itself, so its API may be changed when pressing needs arise.</p>
+</blockquote>
+<h3 id="the-future">The Future</h3>
+<p>Every software package using <a href="https://godoc.org/golang.org/x/crypto/ssh" title="package ssh">x/crypto/ssh</a> for implementing an SSH client
+which is not already doing hostkey verification will need to be updated to
+handle this.</p>
+<p>Anyone who complains and says &ldquo;this is why we need to vendor library
+dependencies&rdquo; should need to explain why it would be better for their product
+to keep a security flaw in it and not be pressed to update.  A bunch of Google
+engineers recently volunteered a large amount of time and work to fixing a
+similar issue which turned out to be vendored deeply into the Java ecosystem,
+in the “Mad Gadget” vulnerability fix.  Vendoring protects engineering time at
+the expense of embedding vulnerabilities deeper and making it harder to fix
+them all.</p>
+<p>Anyone using SSH as a client in Golang who wants to keep being insecure will
+need to explicitly mark it as such in their codebase and face public ridicule.</p>
+<p><a href="http://www.cve.mitre.org/cgi-bin/cvename.cgi?name=2017-3204"><code>CVE-2017-3204</code></a></p>
+<hr>
+<p>PS: I ran a Twitter poll about what most vendors would do, poll lasting one
+week:<br>
+<a href="https://twitter.com/philpennock/status/849420403508432902"><img src="/postimage/2017/twitter-golang-ssh-pollresults.png" alt="Poll results"></a><br>
+Across 185 votes, only 27% felt that software vendors would actually fix the
+security problems in their software.</p>
+<p>Whether this cynicism is undue, or merely resigned realism, I leave to your
+analysis.  Fortunately, time will give us real answers: we can revisit this a
+year from now and see what has changed.</p>
+<hr>
+<p>PPS: <a href="/2017/04/golang-ssh-redux/">Follow-up post: Golang SSH Redux</a></p>
+
+        <footer class="article-categories">Categories:
+  <span class="category-tag">golang</span> <span class="category-tag">ssh</span> <span class="category-tag">identity</span> <span class="category-tag">CVE</span> 
+        </footer>
+      </article>
+    </main>
+  </div>
+  <div class="row">
+    <div class="forwardback">
+      <div class="large-4 columns"><a href="/2017/03/docking-compute/" rel="prev" title="Previous post" class="postfoot-nav-back">« Docking Compute</a></div>
+      <div class="large-4 columns"><a href="/2017/04/golang-ssh-redux/" rel="next" title="Next post" class="postfoot-nav-forward">Golang SSH Redux »</a></div>
+    </div>
+  </div>
+</div>
+<aside class="large-3 columns sidebar">
+<nav class="recent panel">
+  <h4>Recent Posts</h4>
+  <ul>
+    <li><a href="/2020/07/small-mailserver-bcp/">Small Mailserver Best Current Practices</a></li>
+    <li><a href="/2020/07/shell-locality/">Shell Locality</a></li>
+    <li><a href="/2019/12/slack-tax/">Slack Tax</a></li>
+    <li><a href="/2018/07/git-aliases-shell/">Git Aliases &amp; Shell</a></li>
+    <li><a href="/2018/03/alpine-arm/">Alpine Linux on ARM (Turris Router)</a></li>
+  </ul>
+</nav>
+
+<section class="socialmedia unselectable">
+<span class="twitter">
+<a href="https://twitter.com/philpennock" rel="author">
+<img src="/images/twitter.png" width="48" height="41" title="Twitter: philpennock" alt="Twitter">
+</a></span>
+<span class="github">
+<a href="https://github.com/philpennock" rel="author">
+<img src="/images/GitHub-Mark-32px.png" width="32" height="32" title="GitHub: philpennock" alt="GitHub">
+</a></span>
+<span class="linkedin">
+<a href="https://www.linkedin.com/in/philpennock/" rel="author">
+<img src="/images/InBug-30px-R.png" width="39" height="30" title="LinkedIn: philpennock" alt="LinkedIn">
+</a></span>
+<span class="homepage">
+
+<a href="https://people.spodhuis.org/phil.pennock/" rel="author" alt="Homepage">Home</a>
+</span>
+</section>
+
+
+<section class="blurb panel">
+ <h4>About</h4>
+ <div>
+  We're more than any labels, or our jobs, or our passions, but I offer
+  some labels which provide a glimpse.
+ </div>
+ <div>
+  British-American Unix systems programmer, system administrator,
+  Site Reliability Engineer, whatever the current in vogue term is.
+  Think of the stereotype and you have a decent first approximation,
+  beard (normally) and all.
+ </div>
+ <div>
+  ISP background, RFC-reading, protocol-loving but committees-loathing guy.
+  Security sometimes a bit of a strength, more often than it's a weakness.
+ </div>
+
+ <div class="pgpkeys">
+   PGP Keys: 
+   <a href="https://www.security.spodhuis.org/PGP/keys/key2013-rsa.asc"><code>0x4D1E900E14C1CC04</code></a>
+   <a href="https://www.security.spodhuis.org/PGP/keys/key2020-cv25519.asc"><code>0x1DA3E68F41CEECAC</code></a>
+ </div>
+
+ <div>
+  I do have a sense of humor. It's often dry or quirky. Various expeditions
+  have so far failed to prove the existence of this alleged sense of humor,
+  but equally, they haven't <em>disproven</em> its existence, so I'm still in
+  the game.
+ </div>
+</section>
+
+<section class="panel">
+ <h4 class="disclaimer">Employer Disclaimer</h4>
+ <div>
+  This is my personal blog. The views expressed on these pages are mine alone
+  and I am not speaking on behalf of any employer, past or present. It is not
+  safe to infer that any such employer either agrees or disagrees with me. When
+  self-employed, I still don't agree with me.
+ </div>
+</section>
+
+<section class="mugshot"><div class="aside mugshot">
+<a href="http://research.swtch.com/qart"><img src="/images/qart-pdp1-sm.png" alt="QR-code with embedded picture"></a>
+</div></section>
+
+<section class="panel history calendar"><dl class="accordion" data-accordion>
+<dd>
+    <a href="#history-year-2020" class="jsyear">2020</a>
+    <noscript><a href="/2020/">Archives for 2020</a></noscript>
+    <div id="history-year-2020" class="content">
+      <ul>
+<li>2020-07:<ul>
+<li><a href="/2020/07/small-mailserver-bcp/">Small Mailserver Best Current Practices</a></li>
+<li><a href="/2020/07/shell-locality/">Shell Locality</a></li>
+</ul></li>
+</ul>
+    </div>
+  </dd>
+<dd>
+    <a href="#history-year-2019" class="jsyear">2019</a>
+    <noscript><a href="/2019/">Archives for 2019</a></noscript>
+    <div id="history-year-2019" class="content">
+      <ul>
+<li>2019-12:<ul>
+<li><a href="/2019/12/slack-tax/">Slack Tax</a></li>
+</ul></li>
+</ul>
+    </div>
+  </dd>
+<dd>
+    <a href="#history-year-2018" class="jsyear">2018</a>
+    <noscript><a href="/2018/">Archives for 2018</a></noscript>
+    <div id="history-year-2018" class="content">
+      <ul>
+<li>2018-07:<ul>
+<li><a href="/2018/07/git-aliases-shell/">Git Aliases &amp; Shell</a></li>
+</ul></li>
+<li>2018-03:<ul>
+<li><a href="/2018/03/alpine-arm/">Alpine Linux on ARM (Turris Router)</a></li>
+</ul></li>
+</ul>
+    </div>
+  </dd>
+<dd>
+    <a href="#history-year-2017" class="jsyear">2017</a>
+    <noscript><a href="/2017/">Archives for 2017</a></noscript>
+    <div id="history-year-2017" class="content">
+      <ul>
+<li>2017-11:<ul>
+<li><a href="/2017/11/boot2docker-xhyve-dns/">boot2docker xhyve DNS</a></li>
+</ul></li>
+<li>2017-04:<ul>
+<li><a href="/2017/04/golang-ssh-redux/">Golang SSH Redux</a></li>
+<li><a href="/2017/04/golang-ssh-security/">Golang SSH Security</a></li>
+</ul></li>
+<li>2017-03:<ul>
+<li><a href="/2017/03/docking-compute/">Docking Compute</a></li>
+<li><a href="/2017/03/ocsp-oops/">OCSP Oops!</a></li>
+</ul></li>
+<li>2017-02:<ul>
+<li><a href="/2017/02/jitsi-certificates/">Jitsi &amp; Certificates</a></li>
+<li><a href="/2017/02/im-back/">I&#39;m Back</a></li>
+</ul></li>
+</ul>
+    </div>
+  </dd>
+<dd>
+    <a href="#history-year-2016" class="jsyear">2016</a>
+    <noscript><a href="/2016/">Archives for 2016</a></noscript>
+    <div id="history-year-2016" class="content">
+      <ul>
+<li>2016-08:<ul>
+<li><a href="/2016/08/keybase-unwedging/">Keybase unwedging</a></li>
+</ul></li>
+<li>2016-02:<ul>
+<li><a href="/2016/02/onwards-unto-tomorrow/">Onwards Unto Tomorrow</a></li>
+</ul></li>
+</ul>
+    </div>
+  </dd>
+<dd>
+    <a href="#history-year-2015" class="jsyear">2015</a>
+    <noscript><a href="/2015/">Archives for 2015</a></noscript>
+    <div id="history-year-2015" class="content">
+      <ul>
+<li>2015-05:<ul>
+<li><a href="/2015/05/komments/">Komments</a></li>
+</ul></li>
+<li>2015-03:<ul>
+<li><a href="/2015/03/mum/">Mum</a></li>
+</ul></li>
+</ul>
+    </div>
+  </dd>
+<dd>
+    <a href="#history-year-2014" class="jsyear">2014</a>
+    <noscript><a href="/2014/">Archives for 2014</a></noscript>
+    <div id="history-year-2014" class="content">
+      <ul>
+<li>2014-11:<ul>
+<li><a href="/2014/11/synology-nas-rsync/">Synology NAS &amp; rsync</a></li>
+</ul></li>
+<li>2014-09:<ul>
+<li><a href="/2014/09/pgp-tls-updates/">PGP &amp; TLS updates</a></li>
+</ul></li>
+<li>2014-06:<ul>
+<li><a href="/2014/06/four-miscellaneous-things/">Four miscellaneous things</a></li>
+</ul></li>
+<li>2014-05:<ul>
+<li><a href="/2014/05/xmpp-dane-with-prosody/">XMPP &amp; DANE with Prosody</a></li>
+<li><a href="/2014/05/golang-tls-comodo/">Golang, TLS &amp; Comodo</a></li>
+</ul></li>
+<li>2014-04:<ul>
+<li><a href="/2014/04/dmarc-stance/">DMARC Stance</a></li>
+</ul></li>
+<li>2014-03:<ul>
+<li><a href="/2014/03/lxc-routed-on-ubuntu/">LXC Routed on Ubuntu</a></li>
+<li><a href="/2014/03/cacert/">CACert</a></li>
+</ul></li>
+<li>2014-01:<ul>
+<li><a href="/2014/01/bitcoin/">Bitcoin</a></li>
+</ul></li>
+</ul>
+    </div>
+  </dd>
+<dd>
+    <a href="#history-year-2013" class="jsyear">2013</a>
+    <noscript><a href="/2013/">Archives for 2013</a></noscript>
+    <div id="history-year-2013" class="content">
+      <ul>
+<li>2013-12:<ul>
+<li><a href="/2013/12/blog-moved/">Blog moved</a></li>
+<li><a href="/2013/12/tcp-fastopen-security/">TCP FastOpen Security</a></li>
+</ul></li>
+<li>2013-09:<ul>
+<li><a href="/2013/09/forthcoming-blog-move/">Forthcoming blog move</a></li>
+</ul></li>
+<li>2013-04:<ul>
+<li><a href="/2013/04/mysql-ssltls-and-ubuntu/">MySQL, SSL/TLS and Ubuntu</a></li>
+<li><a href="/2013/04/administrivia-comment-system-google-plus/">Administrivia: comment system &amp; Google (Plus)</a></li>
+</ul></li>
+<li>2013-03:<ul>
+<li><a href="/2013/03/isp-liability-and-bcp-38/">ISP liability and BCP 38</a></li>
+<li><a href="/2013/03/arms-control-in-civil-society/">Arms control in civil society</a></li>
+<li><a href="/2013/03/household-infrastructure/">Household Infrastructure</a></li>
+</ul></li>
+</ul>
+    </div>
+  </dd>
+<dd>
+    <a href="#history-year-2012" class="jsyear">2012</a>
+    <noscript><a href="/2012/">Archives for 2012</a></noscript>
+    <div id="history-year-2012" class="content">
+      <ul>
+<li>2012-09:<ul>
+<li><a href="/2012/09/tls-crime-beast-and-you-the-programmer/">TLS, CRIME, BEAST and you the programmer</a></li>
+<li><a href="/2012/09/go-error-construction-loop/">Go error construction loop</a></li>
+</ul></li>
+<li>2012-08:<ul>
+<li><a href="/2012/08/spam-abatement/">Spam abatement</a></li>
+<li><a href="/2012/08/musings-on-in-game-paid-consumables/">Musings on in-game paid consumables</a></li>
+</ul></li>
+<li>2012-07:<ul>
+<li><a href="/2012/07/mailing-list-recipient-disclosures-with-dmarc-redux/">Mailing-list recipient disclosures with DMARC, redux</a></li>
+</ul></li>
+<li>2012-06:<ul>
+<li><a href="/2012/06/google-io-thoughts/">Google I/O Thoughts</a></li>
+<li><a href="/2012/06/chrome-profiles/">Chrome Profiles</a></li>
+<li><a href="/2012/06/macosx-launchd-macvim-chrome-editwithemacs/">MacOSX launchd, MacVim, Chrome &amp; EditWithEmacs</a></li>
+<li><a href="/2012/06/tabletphone-wowing-step-1/">Tablet/phone wowing: step 1</a></li>
+<li><a href="/2012/06/apcera/">Apcera</a></li>
+</ul></li>
+<li>2012-05:<ul>
+<li><a href="/2012/05/the-path-to-exim-4.80/">The path to Exim 4.80</a></li>
+<li><a href="/2012/05/pangolin-update/">Pangolin update</a></li>
+</ul></li>
+<li>2012-04:<ul>
+<li><a href="/2012/04/favicon/">Favicon</a></li>
+<li><a href="/2012/04/social-medianetworking-sites/">Social Media/Networking Sites</a></li>
+</ul></li>
+<li>2012-03:<ul>
+<li><a href="/2012/03/porting-python-wsgi-app-to-nginxuwsgi/">Porting Python WSGI app to nginx/uWSGI</a></li>
+<li><a href="/2012/03/cryptographic-algorithms-uncomfortable-thoughts/">Cryptographic algorithms: uncomfortable thoughts</a></li>
+</ul></li>
+<li>2012-02:<ul>
+<li><a href="/2012/02/back-up-your-books/">Back Up Your Books</a></li>
+<li><a href="/2012/02/calendar-event-scheduling/">Calendar event scheduling</a></li>
+<li><a href="/2012/02/ssh-and-zeroconf/">SSH and Zeroconf</a></li>
+<li><a href="/2012/02/how-private-is-your-mailing-list-subscriber-list/">How private is your mailing-list subscriber list?</a></li>
+</ul></li>
+<li>2012-01:<ul>
+<li><a href="/2012/01/sign-up-to-google-mailing-list-with-external-address/">Sign up to Google mailing-list with external address</a></li>
+<li><a href="/2012/01/goodbye-nook-color/">Goodbye, Nook Color</a></li>
+<li><a href="/2012/01/timelessness/">Timelessness</a></li>
+</ul></li>
+</ul>
+    </div>
+  </dd>
+<dd>
+    <a href="#history-year-2011" class="jsyear">2011</a>
+    <noscript><a href="/2011/">Archives for 2011</a></noscript>
+    <div id="history-year-2011" class="content">
+      <ul>
+<li>2011-12:<ul>
+<li><a href="/2011/12/new-years-resolution-2012/">New Year&#39;s Resolution 2012</a></li>
+</ul></li>
+<li>2011-09:<ul>
+<li><a href="/2011/09/medicine-future/">Medicine future</a></li>
+<li><a href="/2011/09/trust-x509-pki-dnssec-and-associated/">Trust, X.509 PKI, DNSSEC and associated ramblings</a></li>
+</ul></li>
+<li>2011-08:<ul>
+<li><a href="/2011/08/a-tablet-that-wows/">A tablet that wows</a></li>
+<li><a href="/2011/08/the-purpose-of-life/">The purpose of life?</a></li>
+</ul></li>
+<li>2011-07:<ul>
+<li><a href="/2011/07/niche/">Niche</a></li>
+<li><a href="/2011/07/diversion-into-macosx-launchd-ssh-agent/">Diversion into MacOSX launchd &amp; ssh-agent</a></li>
+<li><a href="/2011/07/rpm-version-labelling/">RPM version labelling</a></li>
+</ul></li>
+<li>2011-06:<ul>
+<li><a href="/2011/06/counter-incentives-to-buying-legitimately/">Counter-incentives to buying legitimately</a></li>
+</ul></li>
+<li>2011-05:<ul>
+<li><a href="/2011/05/ecdsa-ssh-redux-server-key-compromise-attack-may-exist/">ECDSA SSH redux: server key compromise attack may exist</a></li>
+<li><a href="/2011/05/standards-and-time-passing/">Standards and time passing</a></li>
+</ul></li>
+<li>2011-03:<ul>
+<li><a href="/2011/03/standard-components/">Standard components</a></li>
+<li><a href="/2011/03/employment-change/">Employment change</a></li>
+<li><a href="/2011/03/computers-and-sleep/">Computers and sleep</a></li>
+</ul></li>
+<li>2011-02:<ul>
+<li><a href="/2011/02/why-deploy-ecc-in-ssh/">Why deploy ECC in SSH?</a></li>
+<li><a href="/2011/02/unit-of-measurement-for-idiocy/">Unit of measurement for idiocy</a></li>
+<li><a href="/2011/02/previewing-font-contents/">Previewing font contents</a></li>
+<li><a href="/2011/02/the-dns-root-zone-international-governance-icann-and-dnssec/">The DNS root zone, international governance, ICANN and DNSSEC</a></li>
+<li><a href="/2011/02/dns-dont-implement-edns0-to-bypass-implementing-tcp-fallback/">DNS: don&#39;t implement EDNS0 to bypass implementing TCP fallback</a></li>
+<li><a href="/2011/02/i-was-wrong-about-wikileaks-cablegate/">I was wrong about wikileaks cablegate</a></li>
+<li><a href="/2011/02/importance-of-checking-return-values/">Importance of checking return values</a></li>
+<li><a href="/2011/02/2011-nobel-peace-prize/">2011 Nobel Peace Prize</a></li>
+<li><a href="/2011/02/tying-oneself-in-pythonic-knots/">Tying oneself in Pythonic knots</a></li>
+</ul></li>
+<li>2011-01:<ul>
+<li><a href="/2011/01/exim-novel-experiences/">Exim: novel experiences</a></li>
+<li><a href="/2011/01/how-long-is-a-piece-of-string/">How long is a piece of string?</a></li>
+<li><a href="/2011/01/idn-python-perl-and-my-woes/">IDN, Python, Perl and my woes</a></li>
+<li><a href="/2011/01/openssh/">OpenSSH</a></li>
+<li><a href="/2011/01/re-pairing-apple-magic-mouse-after-battery-swap/">Re-pairing Apple Magic Mouse after battery swap</a></li>
+<li><a href="/2011/01/macos-x-changing-argv-the-troll-erred/">MacOS X: changing argv -- the troll erred</a></li>
+<li><a href="/2011/01/snowblower/">♥ snowblower</a></li>
+<li><a href="/2011/01/macos-x-changing-argv-for-launched-apps/">MacOS X: changing argv for launched apps</a></li>
+</ul></li>
+</ul>
+    </div>
+  </dd>
+<dd>
+    <a href="#history-year-2010" class="jsyear">2010</a>
+    <noscript><a href="/2010/">Archives for 2010</a></noscript>
+    <div id="history-year-2010" class="content">
+      <ul>
+<li>2010-12:<ul>
+<li><a href="/2010/12/pgp-keyserver-interface/">PGP keyserver interface</a></li>
+<li><a href="/2010/12/verizon-fios-dns-redirectionhijackingsp/">Verizon FiOS DNS redirection/hijacking/spoofing</a></li>
+</ul></li>
+<li>2010-11:<ul>
+<li><a href="/2010/11/shell-anti-pattern-security-hole/">Shell anti-pattern security hole</a></li>
+<li><a href="/2010/11/happiness/">Happiness</a></li>
+<li><a href="/2010/11/scratch-the-notion-ink-adam-off-the-wishlist/">Scratch the Notion Ink Adam off the wishlist</a></li>
+</ul></li>
+<li>2010-09:<ul>
+<li><a href="/2010/09/ipv6-troubles/">IPv6 troubles</a></li>
+</ul></li>
+<li>2010-08:<ul>
+<li><a href="/2010/08/the-wikileaks-afghanistan-documents/">The wikileaks Afghanistan documents</a></li>
+</ul></li>
+<li>2010-07:<ul>
+<li><a href="/2010/07/latitude/">Latitude</a></li>
+<li><a href="/2010/07/a-brief-parting-of-ways/">A brief parting of ways</a></li>
+</ul></li>
+<li>2010-06:<ul>
+<li><a href="/2010/06/who-benefits-from-referendums/">Who benefits from referendums?</a></li>
+<li><a href="/2010/06/firewall-features/">Firewall features</a></li>
+</ul></li>
+<li>2010-05:<ul>
+<li><a href="/2010/05/pseudo-intellectual-latin/">Pseudo-intellectual Latin</a></li>
+<li><a href="/2010/05/the-value-of-paying/">The value of paying?</a></li>
+</ul></li>
+<li>2010-04:<ul>
+<li><a href="/2010/04/email-address-validity/">Email address validity</a></li>
+<li><a href="/2010/04/mysql-security/">MySQL Security</a></li>
+<li><a href="/2010/04/email-cooperation/">Email Cooperation</a></li>
+<li><a href="/2010/04/typing-weird-stuff/">Typing Weird Stuff</a></li>
+<li><a href="/2010/04/the-troll-awakens/">The Troll Awakens</a></li>
+</ul></li>
+</ul>
+    </div>
+  </dd>
+</dl></section>
+
+</aside>
+
+</div>
+<footer class="row copyright">
+<div class="large-12 columns"><span class="large-6 columns"><span class="gitinfo">Page latest change ref: 3768d8a 2017-04-25</span></span>
+  <span class="large-6 columns"><span class="copyright">Copyright &#xA9; 2010-2020 Phil Pennock.  All Rights Reserved.</span></span>
+</div>
+</footer>
+</body>
+</html>
+

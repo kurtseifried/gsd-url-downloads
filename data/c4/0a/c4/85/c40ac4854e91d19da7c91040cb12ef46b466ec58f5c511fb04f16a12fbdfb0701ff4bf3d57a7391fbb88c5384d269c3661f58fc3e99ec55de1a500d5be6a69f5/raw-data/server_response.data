@@ -1,0 +1,422 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  
+  
+
+  
+
+
+  <head>
+    <title>
+      #15284 (XSS Vulnerability on text options of jQuery UI datepicker)
+     – jQuery UI
+    </title>
+      <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+      <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <!--[if IE]><script type="text/javascript">
+      if (/^#__msie303:/.test(window.location.hash))
+        window.location.replace(window.location.hash.replace(/^#__msie303:/, '#'));
+    </script><![endif]-->
+    <style id="trac-noscript" type="text/css">.trac-noscript { display: none !important }</style>
+    <script type="text/javascript">
+      var auto_preview_timeout=2.0;
+      var form_token="8ff5ddc59f40e804c7c601be";
+      var jquery_ui={"ampm":true,"date_format":"M d, yy","day_names":{"abbreviated":["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],"narrow":["S","M","T","W","T","F","S"],"wide":["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]},"default_timezone":null,"first_week_day":0,"month_names":{"abbreviated":["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],"wide":["January","February","March","April","May","June","July","August","September","October","November","December"]},"period_names":{"am":["AM","AM"],"pm":["PM","PM"]},"show_timezone":false,"time_format":"h:mm:ss TT","timepicker_separator":", ","timezone_iso8601":false,"timezone_list":null};
+      var comments_prefs={"comments_order":"oldest","show_comments":"true","show_prop_changes":"true"};
+    </script>
+      <script type="text/javascript" charset="utf-8" src="/chrome/common/js/jquery.js"></script>
+      <script type="text/javascript" charset="utf-8" src="/chrome/common/js/babel.js"></script>
+      <script type="text/javascript" charset="utf-8" src="/chrome/common/js/trac.js"></script>
+      <script type="text/javascript" charset="utf-8" src="/chrome/common/js/search.js"></script>
+      <script type="text/javascript" charset="utf-8" src="/chrome/common/js/folding.js"></script>
+      <script type="text/javascript" charset="utf-8" src="/chrome/common/js/wikitoolbar.js"></script>
+      <script type="text/javascript" charset="utf-8" src="/chrome/common/js/resizer.js"></script>
+      <script type="text/javascript" charset="utf-8" src="/chrome/common/js/auto_preview.js"></script>
+      <script type="text/javascript" charset="utf-8" src="/chrome/common/js/jquery-ui.js"></script>
+      <script type="text/javascript" charset="utf-8" src="/chrome/common/js/jquery-ui-addons.js"></script>
+      <script type="text/javascript" charset="utf-8" src="/chrome/common/js/jquery-ui-i18n.js"></script>
+    <script type="text/javascript">
+      jQuery("#trac-noscript").remove();
+      jQuery(document).ready(function($) {
+        $(".trac-autofocus").focus();
+        $(".trac-target-new").attr("target", "_blank");
+        if ($.ui) { /* is jquery-ui added? */
+          $(".trac-datepicker:not([readonly])").prop("autocomplete", "off").datepicker();
+          $(".trac-datetimepicker:not([readonly])").prop("autocomplete", "off").datetimepicker();
+          $("#main").addClass("trac-nodatetimehint");
+        }
+        $(".trac-disable").disableSubmit(".trac-disable-determinant");
+        setTimeout(function() { $(".trac-scroll").scrollToTop() }, 1);
+        $(".trac-disable-on-submit").disableOnSubmit();
+      });
+    </script>
+    <script type="text/javascript" src="/chrome/common/js/threaded_comments.js"></script>
+    <script type="text/javascript">
+      jQuery(document).ready(function($) {
+        $("div.description").find("h1,h2,h3,h4,h5,h6").addAnchor(_("Link to this section"));
+        $(".foldable").enableFolding(false, true);
+      /*<![CDATA[*/
+        $("#attachments").toggleClass("collapsed");
+        $("#trac-up-attachments").click(function () {
+          $("#attachments").removeClass("collapsed");
+          return true;
+        });
+        $("#modify").parent().toggleClass("collapsed");
+        $(".trac-topnav a").click(function() { $("#modify").parent().removeClass("collapsed"); });
+        function setRevertHandler() {
+          $("button.trac-revert").click(function() {
+            var div = $("div", this);
+            var field_name = div[0].id.substr(7);
+            var field_value = div.text();
+            var input = $("#propertyform *[name=field_" + field_name + "]");
+            if (input.length > 0) {
+              if (input.filter("input[type=radio]").length > 0) {
+                input.val([field_value]);
+              } else if (input.filter("input[type=checkbox]").length > 0) {
+                input.val(field_value == "1" ? [field_value] : []);
+              } else {
+                input.val(field_value);
+              }
+            } else { // Special case for CC checkbox
+              input = $("#propertyform input[name=cc_update]").val([]);
+            }
+            input.change();
+            // Remove the revert button
+            if ($(this).closest("tbody").children("tr").length === 1)
+              $(this).closest(".trac-change-panel").remove();
+            else
+              $(this).closest("tr").remove();
+            return false;
+          });
+        }
+        setRevertHandler();
+        var comment_focused = false;
+        $("#comment").focus(function() { comment_focused = true; })
+                     .blur(function() { comment_focused = false; });
+        $("#propertyform").autoSubmit({preview: '1'}, function(data, reply) {
+          var items = $(reply);
+          // Update ticket box
+          $("#ticket").replaceWith(items.filter('#ticket'));
+          // Replaces content of #changelog, without recreating it
+          $("#changelog").empty().append(items.filter("#changelog").contents());
+          // Apply comments order and "Show" preferences
+          applyCommentsOrder(
+            $('#prefs input[name="trac-comments-order"]:checked').val());
+          // Show warning
+          var new_changes = $("#changelog .trac-new");
+          $("#trac-edit-warning").toggle(new_changes.length != 0);
+          if (new_changes.length != 0)
+            $("#changelog").parent().show().removeClass("collapsed");
+          // Update view time
+          $("#propertyform input[name='view_time']").replaceWith(items.filter("input[name='view_time']"));
+          // Update preview
+          var preview = $("#ticketchange").html(items.filter('#preview').children());
+          var show_preview = preview.children().length != 0;
+          $("#ticketchange").toggle(show_preview);
+          setRevertHandler();
+          // Execute scripts to load stylesheets
+          items.filter("script").appendTo("head");
+        }, "#ticketchange .trac-loading");
+        $("#trac-comment-editor").autoSubmit({preview_comment: '1'}, function(data, reply) {
+          var comment = $("#trac-comment-editor").next("div.comment").html(reply);
+          comment.toggle(comment.children().length != 0);
+        }, "#changelog .trac-loading");
+        /*]]>*/
+      });
+    </script>
+	<link rel="shortcut icon" href="/chrome/common/trac.ico" type="image/x-icon" />
+	<link rel="search" href="/search" /><link rel="prev" href="/ticket/15283" title="Ticket #15283" /><link rel="last" href="/ticket/15409" title="Ticket #15409" /><link rel="help" href="/wiki/TracGuide" /><link rel="alternate" href="/ticket/15284?format=rss" type="application/rss+xml" class="rss" title="RSS Feed" /><link rel="alternate" href="/ticket/15284?format=csv" type="text/csv" class="csv" title="Comma-delimited Text" /><link rel="alternate" href="/ticket/15284?format=tab" type="text/tab-separated-values" class="tab" title="Tab-delimited Text" /><link rel="next" href="/ticket/15285" title="Ticket #15285" /><link rel="start" href="/wiki" /><link rel="stylesheet" href="/chrome/common/css/trac.css" type="text/css" /><link rel="stylesheet" href="/chrome/common/css/ticket.css" type="text/css" /><link rel="stylesheet" href="/chrome/common/css/jquery-ui/jquery-ui.css" type="text/css" /><link rel="stylesheet" href="/chrome/common/css/jquery-ui-addons.css" type="text/css" /><link rel="stylesheet" href="/chrome/ticketguidelinesplugin/main.css" type="text/css" /><link rel="first" href="/ticket/1547" title="Ticket #1547" /><link type="application/opensearchdescription+xml" rel="search" href="/search/opensearch" title="Search jQuery UI" />
+	<link rel="stylesheet" type="text/css" href="/chrome/site/css/site.css" />
+</head>
+  <body id="trac">
+	<div id="wrapper">
+		<div id="banner">
+			<h1 class="logo">
+				<a href="https://jqueryui.com" title="jQuery UI"><span>jQuery UI</span></a>
+			</h1>
+			<div id="dock">
+				<div class="left"></div>
+				<ul>
+					<li class="jq-jquery"><a href="https://jquery.com/" title="jQuery Home">jQuery</a></li>
+					<li class="jq-plugins"><a href="https://plugins.jquery.com/" title="jQuery Plugins">Plugins</a></li>
+					<li class="jq-ui selected"><a href="https://jqueryui.com/" title="jQuery UI">UI</a></li>
+					<li class="jq-meetup"><a href="https://meetups.jquery.com/" title="jQuery Meetups">Meetups</a></li>
+					<li class="jq-forum"><a href="https://forum.jquery.com/" title="jQuery Forum">Forum</a></li>
+					<li class="jq-blog"><a href="https://blog.jqueryui.com/" title="jQuery UI Blog">Blog</a></li>
+					<li class="jq-about"><a href="https://jquery.org/about" title="About jQuery">About</a></li>
+					<li class="jq-donate"><a href="https://jquery.org/donate" title="Donate to jQuery">Donate</a></li>
+				</ul>
+				<div class="right"></div>
+			</div>
+			<div id="navigation">
+				<div class="left"></div>
+				<ul>
+					<li><a href="https://jqueryui.com/download">Download</a></li>
+					<li><a href="https://jqueryui.com/demos">Demos &amp; Documentation</a></li>
+					<li><a href="https://jqueryui.com/themeroller">Themes</a></li>
+					<li class="selected"><a href="https://jqueryui.com/development">Development</a></li>
+					<li class="last"><a href="https://jqueryui.com/support">Support</a></li>
+				</ul>
+				<div class="right"></div>
+			</div>
+		</div>
+		<div id="content-wrapper">
+			<div id="trac-content">
+				<div id="trac-banner">
+					<form id="search" action="/search" method="get">
+        <div>
+          <label for="proj-search">Search:</label>
+          <input type="text" id="proj-search" name="q" size="18" value="" />
+          <input type="submit" value="Search" />
+        </div>
+      </form><div id="metanav" class="nav">
+    <ul>
+      <li class="first"><a href="/login">GitHub Login</a></li><li class="last"><a href="/prefs">Preferences</a></li>
+    </ul>
+  </div>
+				</div>
+    <div id="mainnav" class="nav">
+    <ul>
+      <li class="first"><a href="/newticket">New Ticket</a></li><li class="active"><a href="/report">View Tickets</a></li><li><a href="/ticketgraph">Ticket Graph</a></li><li><a href="/roadmap">Roadmap</a></li><li class="last"><a href="/timeline">Recent Changes</a></li>
+    </ul>
+  </div>
+    <div id="main">
+      <div id="ctxtnav" class="nav">
+        <h2>Context Navigation</h2>
+        <ul>
+          <li class="first"><span>&larr; <a class="prev" href="/ticket/15283" title="Ticket #15283">Previous Ticket</a></span></li><li class="last"><span><a class="next" href="/ticket/15285" title="Ticket #15285">Next Ticket</a> &rarr;</span></li>
+        </ul>
+        <hr />
+      </div>
+    <div id="content" class="ticket">
+        <div id="ticket" class="trac-content ">
+  <div class="date">
+    <p>Opened <a class="timeline" href="/timeline?from=2018-03-23T11%3A11%3A08-04%3A00&amp;precision=second" title="See timeline at Mar 23, 2018, 11:11:08 AM">4 years ago</a></p>
+    <p>Closed <a class="timeline" href="/timeline?from=2021-05-25T04%3A58%3A08-04%3A00&amp;precision=second" title="See timeline at May 25, 2021, 4:58:08 AM">5 months ago</a></p>
+  </div>
+  <h2>
+    <a href="/ticket/15284" class="trac-id">#15284</a>
+    <span class="trac-status">
+      <a href="/query?status=closed">closed</a>
+    </span>
+    <span class="trac-type">
+      <a href="/query?status=!closed&amp;type=bug">bug</a>
+    </span>
+    <span class="trac-resolution">
+      (<a href="/query?status=closed&amp;resolution=fixed">fixed</a>)
+    </span>
+  </h2>
+  <h1 id="trac-ticket-title" class="searchable">
+    <span class="summary">XSS Vulnerability on text options of jQuery UI datepicker</span>
+  </h1>
+  <table class="properties">
+    <tr>
+      <th id="h_reporter">Reported by:</th>
+      <td headers="h_reporter" class="searchable"><a class="trac-author" href="/query?status=!closed&amp;reporter=andycyork">andycyork</a></td>
+      <th id="h_owner" class="missing">Owned by:</th>
+      <td headers="h_owner"></td>
+    </tr>
+    <tr>
+        <th id="h_priority">
+          Priority:
+        </th>
+        <td headers="h_priority">
+              <a href="/query?status=!closed&amp;priority=minor">minor</a>
+        </td>
+        <th id="h_milestone">
+          Milestone:
+        </th>
+        <td headers="h_milestone">
+              <a class="milestone" href="/milestone/none" title="No date set">none</a>
+        </td>
+    </tr><tr>
+        <th id="h_component">
+          Component:
+        </th>
+        <td headers="h_component">
+              <a href="/query?status=!closed&amp;component=ui.datepicker">ui.datepicker</a>
+        </td>
+        <th id="h_version">
+          Version:
+        </th>
+        <td headers="h_version">
+              <a href="/query?status=!closed&amp;version=1.12.1">1.12.1</a>
+        </td>
+    </tr><tr>
+        <th id="h_keywords" class="missing">
+          Keywords:
+        </th>
+        <td headers="h_keywords" class="searchable">
+        </td>
+        <th id="h_cc" class="missing">
+          Cc:
+        </th>
+        <td headers="h_cc" class="searchable">
+        </td>
+    </tr><tr>
+        <th id="h_blockedby" class="missing">
+          Blocked by:
+        </th>
+        <td headers="h_blockedby">
+        </td>
+        <th id="h_blocking" class="missing">
+          Blocking:
+        </th>
+        <td headers="h_blocking">
+        </td>
+    </tr>
+  </table>
+  <div class="description">
+    <h3 id="comment:description">
+      Description
+    </h3>
+    <div class="searchable">
+      <p>
+similar to <a class="ext-link" href="https://github.com/jquery/api.jqueryui.com/issues/281"><span class="icon">​</span>https://github.com/jquery/api.jqueryui.com/issues/281</a> but applies to the datepicker<br />
+</p>
+<p>
+<strong>to recreate</strong><br />
+</p>
+<p>
+Create a new HTML page.<br />
+</p>
+<p>
+Inject this content into new page:<br />
+</p>
+<pre class="wiki">&lt;!DOCTYPE html&gt;
+&lt;html xmlns="http://www.w3.org/1999/xhtml"&gt;
+&lt;head&gt;
+  &lt;title&gt;XSS in  options of datepicker&lt;/title&gt;
+
+  &lt;script src="https://code.jquery.com/jquery-3.3.1.js"&gt;&lt;/script&gt;
+  &lt;script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"&gt;&lt;/script&gt;
+  &lt;link rel="stylesheet" type="text/css" href="http://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css"&gt;
+  &lt;script&gt;
+		$(document).ready(function () {
+			$( "#datepicker" ).datepicker({
+				showButtonPanel: true,
+				showOn: "both",
+				closeText: '&lt;script&gt;alert("closeText XSS")&lt;\/script&gt;', 
+				currentText: '&lt;script&gt;alert("currentText XSS")&lt;\/script&gt;',
+				prevText: '&lt;script&gt;alert("prevText XSS")&lt;\/script&gt;',	
+				nextText: '&lt;script&gt;alert("nextText XSS")&lt;\/script&gt;',
+				buttonText: '&lt;script&gt;alert("buttonText XSS")&lt;\/script&gt;',
+				appendText: '&lt;script&gt;alert("appendText XSS")&lt;\/script&gt;'
+			});
+    });
+    &lt;/script&gt;
+&lt;/head&gt;
+&lt;body&gt;
+	&lt;p&gt;Date: &lt;input type="text" id="datepicker"&gt;&lt;/p&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</pre><p>
+<br />
+on load, alerts are shown for appendText &amp; buttonText<br />
+after clicking the input control, alerts are shown for closeText, currentText, prevText &amp; nextText<br />
+<br />
+The scripted alerts should not be shown - an attacker can take advantage of injecting malicious XSS content into website.
+</p>
+
+    </div>
+  </div>
+</div>
+          
+
+        <div>
+          <div class="trac-noscript" style="position: relative">
+            <form id="prefs" method="get" action="/prefs" style="position: absolute; right: 0">
+              <div id="trac-comments-order">
+                <input type="radio" id="trac-comments-oldest" name="trac-comments-order" value="oldest" checked="checked" />
+                <label for="trac-comments-oldest">Oldest first</label>
+                <input type="radio" id="trac-comments-newest" name="trac-comments-order" value="newest" />
+                <label for="trac-comments-newest">Newest first</label>
+                <span id="trac-threaded-toggle" style="display: none">
+                  <input type="radio" id="trac-comments-threaded" name="trac-comments-order" value="threaded" />
+                  <label for="trac-comments-threaded">Threaded</label>
+                </span>
+              </div>
+              <div>
+                <input id="trac-show-comments-toggle" type="checkbox" checked="checked" />
+                <label for="trac-show-comments-toggle">Show comments</label>
+                <input id="trac-show-property-changes-toggle" type="checkbox" />
+                <label for="trac-show-property-changes-toggle">Show property changes</label>
+              </div>
+            </form>
+          </div>
+          <h3 class="foldable">Change History <span class="trac-count">(1)</span></h3>
+          <div id="changelog">
+              <div class="change" id="trac-change-1-1621933088951046">
+                
+  <h3 class="change" id="comment:1">
+    <span class="threading">
+      <span class="cnum">
+    <a href="#comment:1">comment:1</a>
+  </span>
+    </span>
+        Changed <a class="timeline" href="/timeline?from=2021-05-25T04%3A58%3A08-04%3A00&amp;precision=second" title="See timeline at May 25, 2021, 4:58:08 AM">5 months ago</a> by <span class="trac-author">Felix Nagel</span>
+  </h3>
+  <div class="trac-change-panel">
+    <div class="trac-ticket-buttons">
+    </div>
+    <table class="changes">
+      <tr class="trac-field-resolution">
+        <th class="trac-field-resolution">Resolution:</th>
+        <td>
+            → <span class="trac-field-new">fixed</span>
+        </td>
+      </tr><tr class="trac-field-status">
+        <th class="trac-field-status">Status:</th>
+        <td>
+            <span class="trac-field-old">new</span> →
+            <span class="trac-field-new">closed</span>
+        </td>
+      </tr>
+    </table>
+  </div>
+    <div class="comment searchable">
+      <p>
+Fixed in <a class="ext-link" href="https://github.com/jquery/jquery-ui/pull/1953"><span class="icon">​</span>https://github.com/jquery/jquery-ui/pull/1953</a>
+</p>
+
+    </div>
+
+              </div>
+          </div>
+        </div>
+      <div id="help"><strong>Note:</strong> See
+        <a href="/wiki/TracTickets">TracTickets</a> for help on using
+        tickets.</div>
+    </div>
+    <div id="altlinks">
+      <h3>Download in other formats:</h3>
+      <ul>
+        <li class="first">
+          <a rel="nofollow" href="/ticket/15284?format=rss" class="rss">RSS Feed</a>
+        </li><li>
+          <a rel="nofollow" href="/ticket/15284?format=csv" class="csv">Comma-delimited Text</a>
+        </li><li class="last">
+          <a rel="nofollow" href="/ticket/15284?format=tab" class="tab">Tab-delimited Text</a>
+        </li>
+      </ul>
+    </div>
+    </div>
+			</div>
+		</div>
+		<div id="footer">
+			<div class="bg"></div>
+			<div class="inner" style="padding-left: 2em;">
+				<p>Copyright 2013 <a href="https://jquery.org/">The jQuery Foundation</a></p>
+				<p>Hosting provided by <a href="https://mediatemple.net" class="jq-mediaTemple">Media Temple</a></p>
+				<p>CDN provided by <a href="https://www.maxcdn.com" class="mc-link">MaxCDN</a></p>
+			</div>
+		</div>
+	</div>
+	<script type="text/javascript">
+		var _gaq = _gaq || []; _gaq.push(['_setAccount', 'UA-1076265-1']); _gaq.push(['_trackPageview']); _gaq.push(['_setDomainName', '.jqueryui.com']);
+		(function() {var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+		ga.src = 'https://ssl.google-analytics.com/ga.js';
+		(document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(ga);})();
+	</script>
+</body>
+</html>

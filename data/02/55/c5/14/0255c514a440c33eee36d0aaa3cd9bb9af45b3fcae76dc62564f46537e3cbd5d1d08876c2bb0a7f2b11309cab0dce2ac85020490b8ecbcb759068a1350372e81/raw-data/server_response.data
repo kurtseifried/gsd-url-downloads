@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='*General Issues Bug #72433 - RDF' href='rss/bug.php?id=72433'>
+        <link rel='alternate' type='application/rss+xml' title='*General Issues Bug #72433 - RSS 2.0' href='rss/bug.php?id=72433&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #72433 :: Use After Free Vulnerability in PHP's GC algorithm and unserialize</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=72433">Sec Bug</a>&nbsp;#72433</th>
+            <td id="summary" colspan="5">Use After Free Vulnerability in PHP's GC algorithm and unserialize</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-06-16 14:37 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-06-23 12:51 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>3v0n1d3 &#x61;&#116; gmail &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=dmitry">dmitry</a> (<a href="https://people.php.net/dmitry">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=%2AGeneral+Issues">*General Issues</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.5.36</td>
+            <th class="details">OS:</th>
+            <td>*</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-5771" target="_blank">2016-5771</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=72433&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=72433&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=72433&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1466087838">&nbsp;</a><strong>[2016-06-16 14:37 UTC] 3v0n1d3 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+A critical use after free vulnerability was discovered when PHP's garbage collection algorithm interacts with other specific PHP objects.
+This vulnerability has wide reaching effects like allowing the exploitation of unserialize to gain remote code execution on a target system.
+
+While analyzing PHP's unserialize function we have found some serious flaws in PHP's internal GC algorithm.
+Those flaws can be exploited in a local or even remote context e.g. over PHP's unserialize function.
+
+The vulnerability in this report does not affect PHP 7.
+Please refer to our second report to see another vulnerability that affects all PHP versions &gt;= 5.3.0.
+
+The POC clearly shows that we can abuse the garbage collector to free a target array.
+At this point an attacker can craft a fake zval object and exploit the PHP process by taking over the EIP/RIP.
+Since this has been done already several times (c.f. [3]) we will leave out any POC exploit at this point.
+
+Short description of PHP's GC.
+--------------------
+The GC algorithm is supposed to clean up zvals with cyclic references (c.f. [1]).
+
+Every time a zval is destructed the GC algorithm gets involved and checks if this zval is a possible root candidate i.e. an array or object.
+If this is the case this zval is added to a root buffer (this buffer basically keeps track of potential zvals with cyclic references).
+This step is repeated until either
+a) gc_collect_cycles() is called manually
+or 
+b) more than GC_ROOT_BUFFER_MAX_ENTRIES (defined in the head section of 'Zend/zend_gc.c') zvals have been stored in the root buffer.
+   This step will also automatically invoke a call to gc_collect_cycles.
+
+gc_collect_cycles will then apply a marking algorithm.
+This algorithm can be divded into the following steps:
+1) gc_mark_roots(TSRMLS_C);
+   Apply gc_mark_grey to all elements in the root buffer:
+   1.1) Traverse all its children in a recursive fashion.
+   1.2) Decrement every visited zval's reference count by 1 and mark it grey.
+2) gc_scan_roots(TSRMLS_C);
+   Apply gc_mark_white to all elements in the root buffer that have a ref count of 0.
+   1.1) Traverse all its children in a recursive fashion.
+        Apply gc_mark_white again if the ref count is 0, else apply gc_mark_black on this zval recursively.
+3) gc_collect_roots(TSRMLS_C);
+   Restore the refcount of all elements and put all white nodes into a list to free.
+4) Finally, free all elements that have been marked white.
+--------------------
+
+Unfortunately, this algorithm can be tricked into decrementing specific entries multiple times, although those entries have already been marked grey.
+Please consider the following scenario:
+
+We initialize an ArrayObject with a reference to another array (this can be easily done in e.g. an unserialize context).
+Once the GC algorithm tries to access the elements inside this ArrayObject it will execute ('Zend/zend_gc.c', 'gc_mark_grey' method):
+HashTable *props = get_gc(pz, &amp;table, &amp;n TSRMLS_CC);
+
+This method is supposed to call the gc method of the object in question (in our case the gc method of our ArrayObject).
+However, in this case the ArrayObject class does not have an own gc method (this method was first introduced in PHP-7.1.0alpha1 c.f. [2]).
+
+In case an object does not have a gc method, its &quot;get_properties&quot; method will be invoked instead.
+Hence, 'spl_array_get_properties' will be called instead.
+
+This method will retrieve all elements inside the internal array (intern-&gt;array).
+Since this array is a reference the method will return the hash table of any target array.
+
+By abusing those circumstances it is possible to decrement the reference counters of all elements in one specific array multiple times.
+If done properly this element and all its children will be marked white and will be freed by the gc algorithm although there still exist dangling pointers.
+
+
+Please note:
+Calling &quot;gc_collect_cycles()&quot; manually is not necessary.
+The garbage collection can also be invoked during the unserialization process making this vulnerability remotely exploitable.
+This vulnerability was successfully exploited over remote in a local setup.
+
+Further, please consider that using &quot;unserialize&quot; is optional. This bug is very likely to be exploitable in other scenarios, too.
+
+Suggested fix:
+Make sure that 'ext/spl/spl_array.c' gets a proper gc method (like was done for PHP 7 c.f. [2]).
+
+
+This bug was very difficult to find since it involves several components interacting together in a relatively sophisticated way.
+Due to complexity reasons a lot of details and further description are left out in this report.
+Hence, we intend to do a thorough and detailed writeup about this vulnerability once it gets acknowledged in another context.
+
+Thank you for your consideration.
+Please feel free to ask for more technical details if necessary.
+
+References:
+[1] <a href="http://php.net/manual/de/features.gc.collecting-cycles.php" rel="nofollow">http://php.net/manual/de/features.gc.collecting-cycles.php</a>
+[2] <a href="https://github.com/php/php-src/commit/4e03ba4a6ef4c16b53e49e32eb4992a797ae08a8" rel="nofollow">https://github.com/php/php-src/commit/4e03ba4a6ef4c16b53e49e32eb4992a797ae08a8</a>
+[3] <a href="https://hackerone.com/reports/73235" rel="nofollow">https://hackerone.com/reports/73235</a>
+
+
+
+Test script:
+---------------
+&lt;?php
+// Fill any potential freed spaces until now.
+$filler = array();
+for($i = 0; $i &lt; 100; $i++)
+	$filler[] = &quot;&quot;;
+// Create our payload and unserialize it.
+$serialized_payload = 'a:3:{i:0;r:1;i:1;r:1;i:2;C:11:&quot;ArrayObject&quot;:19:{x:i:0;r:1;;m:a:0:{}}}';
+$free_me = unserialize($serialized_payload);
+// We need to increment the reference counter of our ArrayObject s.t. all reference counters of our unserialized array become 0.
+$inc_ref_by_one = $free_me[2];
+// The call to gc_collect_cycles will free '$free_me'.
+gc_collect_cycles();
+// We now have multiple freed spaces. Fill all of them.
+$fill_freed_space_1 = &quot;filler_zval_1&quot;;
+$fill_freed_space_2 = &quot;filler_zval_2&quot;;
+var_dump($free_me);
+
+Expected result:
+----------------
+Array with three elements: 2 references and one ArrayObject
+
+Actual result:
+--------------
+string(13) &quot;filler_zval_2&quot;
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=72433'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=72433'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1466131194">&nbsp;</a><strong>[2016-06-17 02:39 UTC] 3v0n1d3 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Adding missing sections.
+Affected Versions:
+------------------------
+Affected are all PHP versions &gt;= PHP 5.3.0 and &lt; PHP 7.
+
+Credits:
+------------------------
+This vulnerability was discovered by Ruslan Habalov and Dario Weißer.
+</pre>
+</div><div class='comment type_log' ><a name="1466483292">&nbsp;</a><strong>[2016-06-21 04:28 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: dmitry</span>
+</div></div></div><div class='comment type_comment' ><a name="1466483292">&nbsp;</a><strong>[2016-06-21 04:28 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Fix in security repo as 3f627e580acfdaf0595ae3b115b8bec677f203ee and in <a href="https://gist.github.com/efc065a5685d9305cf900f862c80cb1a" rel="nofollow">https://gist.github.com/efc065a5685d9305cf900f862c80cb1a</a>
+
+Please verify.
+</pre>
+</div><div class='comment type_log' ><a name="1466483302">&nbsp;</a><strong>[2016-06-21 04:28 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 5.6.23RC1</span>
+<span class="added">+PHP Version: 5.5.36</span>
+</div></div></div><div class='comment type_log' ><a name="1466492064">&nbsp;</a><strong>[2016-06-21 06:54 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_comment' ><a name="1466492064">&nbsp;</a><strong>[2016-06-21 06:54 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The fix for this bug has been committed.
+
+Snapshots of the sources are packaged every three hours; this change
+will be in the next snapshot. You can grab the snapshot at
+<a href="http://snaps.php.net/" rel="nofollow">http://snaps.php.net/</a>.
+
+ For Windows:
+
+<a href="http://windows.php.net/snapshots/" rel="nofollow">http://windows.php.net/snapshots/</a>
+ 
+Thank you for the report, and for helping us make PHP better.
+
+
+</pre>
+</div><div class='comment type_comment' ><a name="1466539501">&nbsp;</a><strong>[2016-06-21 20:05 UTC] 3v0n1d3 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Thank you for your fast reply and fast fix of this issue.
+The patch is exactly right.
+</pre>
+</div><div class='comment type_log' ><a name="1466686265">&nbsp;</a><strong>[2016-06-23 12:51 UTC] <a href="//people.php.net/kaplan">kaplan@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2016-5771</span>
+</div></div></div><div class='comment type_comment' ><a name="1469447819">&nbsp;</a><strong>[2016-07-25 11:56 UTC] uskokovic &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>If I run the testscript with zend.enable_gc=1 (which is the default) I can verify vulnerability:
+$ php -d zend.enable_gc=1 testscript
+string(13) &quot;filler_zval_2&quot;
+
+but with zend.enable_gc=0 it seems OK:
+$ php -d zend.enable_gc=0 testscript
+array(3) {
+  [0]=&gt;
+  *RECURSION*
+  [1]=&gt;
+  *RECURSION*
+  [2]=&gt;
+  object(ArrayObject)#1 (1) {
+    [&quot;storage&quot;:&quot;ArrayObject&quot;:private]=&gt;
+    *RECURSION*
+  }
+}
+
+Does setting zend.enable_gc=0 efects only test script or does it disable this vulnerability?
+
+Does setting zend.enable_gc=0 in php.ini (and disabling the gc_enable function) seem like a reasonable workaround until updating to non-vulnerable version of PHP?
+</pre>
+</div><div class='comment type_comment' ><a name="1476159652">&nbsp;</a><strong>[2016-10-11 04:20 UTC] lisycy &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>zend.enable_gc=1 is necessary.
+this bug was showing a gc implement bug
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

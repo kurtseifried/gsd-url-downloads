@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='Zip Related Bug #71923 - RDF' href='rss/bug.php?id=71923'>
+        <link rel='alternate' type='application/rss+xml' title='Zip Related Bug #71923 - RSS 2.0' href='rss/bug.php?id=71923&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #71923 :: integer overflow in ZipArchive::getFrom*</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=71923">Sec Bug</a>&nbsp;#71923</th>
+            <td id="summary" colspan="5">integer overflow in ZipArchive::getFrom*</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-03-29 23:45 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-04-27 06:34 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>hji &#x61;&#116; dyntopia &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=Zip+Related">Zip Related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>7.0.5RC1</td>
+            <th class="details">OS:</th>
+            <td></td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-3078" target="_blank">2016-3078</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=71923&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=71923&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=71923&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1459295156">&nbsp;</a><strong>[2016-03-29 23:45 UTC] hji &#x61;&#116; dyntopia &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+An integer wrap may occur in PHP 7.x when reading zip files with the
+getFromindex() and getFromName() methods of ZipArchive, resulting in a
+heap overflow.
+
+php-7.0.5/ext/zip/php_zip.c
+,----
+| 2679 static void php_zip_get_from(INTERNAL_FUNCTION_PARAMETERS, int type) /* {{{ */
+| 2680 {
+| ....
+| 2684     struct zip_stat sb;
+| ....
+| 2689     zend_long len = 0;
+| ....
+| 2692     zend_string *buffer;
+| ....
+| 2702     if (type == 1) {
+| 2703         if (zend_parse_parameters(ZEND_NUM_ARGS(), &quot;P|ll&quot;, &amp;filename, &amp;len, &amp;flags) == FAILURE) {
+| 2704             return;
+| 2705         }
+| 2706         PHP_ZIP_STAT_PATH(intern, ZSTR_VAL(filename), ZSTR_LEN(filename), flags, sb);  // (1)
+| 2707     } else {
+| 2708         if (zend_parse_parameters(ZEND_NUM_ARGS(), &quot;l|ll&quot;, &amp;index, &amp;len, &amp;flags) == FAILURE) {
+| 2709             return;
+| 2710         }
+| 2711         PHP_ZIP_STAT_INDEX(intern, index, 0, sb);                                      // (1)
+| 2712     }
+| ....
+| 2718     if (len &lt; 1) {
+| 2719         len = sb.size;
+| 2720     }
+| ....
+| 2731     buffer = zend_string_alloc(len, 0);                     // (2)
+| 2732     n = zip_fread(zf, ZSTR_VAL(buffer), ZSTR_LEN(buffer));  // (3)
+| ....
+| 2742 }
+`----
+
+With `sb.size' from (1) being:
+
+php-7.0.5/ext/zip/lib/zip_stat_index.c
+,----
+| 038 ZIP_EXTERN int
+| 039 zip_stat_index(zip_t *za, zip_uint64_t index, zip_flags_t flags,
+| 040                zip_stat_t *st)
+| 041 {
+| ...
+| 043     zip_dirent_t *de;
+| 044
+| 045     if ((de=_zip_get_dirent(za, index, flags, NULL)) == NULL)
+| 046         return -1;
+| ...
+| 063         st-&gt;size = de-&gt;uncomp_size;
+| ...
+| 086 }
+`----
+
+Both `size' and `uncomp_size' are unsigned 64bit integers:
+
+php-7.0.5/ext/zip/lib/zipint.h
+,----
+| 339 struct zip_dirent {
+| ...
+| 351     zip_uint64_t uncomp_size;        /* (cl) size of uncompressed data */
+| ...
+| 332 };
+`----
+
+php-7.0.5/ext/zip/lib/zip.h
+,----
+| 279 struct zip_stat {
+| ...
+| 283     zip_uint64_t size;            /* size of file (uncompressed) */
+| ...
+| 290 };
+`----
+
+Whereas `len' is signed and has a platform-dependent size:
+
+php-7.0.5/Zend/zend_long.h
+,----
+| 028 #if defined(__x86_64__) || defined(__LP64__) || defined(_LP64) || defined(_WIN64)
+| 029 # define ZEND_ENABLE_ZVAL_LONG64 1
+| 030 #endif
+| ...
+| 033 #ifdef ZEND_ENABLE_ZVAL_LONG64
+| 034 typedef int64_t zend_long;
+| ...
+| 043 #else
+| 044 typedef int32_t zend_long;
+| ...
+| 053 #endif
+`----
+
+Uncompressed file sizes in zip-archives may be specified as either 32-
+or 64bit values; with the latter requiring that the size be specified in
+the extra field in zip64 mode.
+
+Anyway, as for the invocation of `zend_string_alloc()' in (2):
+
+php-7.0.5/Zend/zend_string.h
+,----
+| 119 static zend_always_inline zend_string *zend_string_alloc(size_t len, int persistent)
+| 120 {
+| 121     zend_string *ret = (zend_string *)pemalloc(ZEND_MM_ALIGNED_SIZE(_ZSTR_STRUCT_SIZE(len)), persistent); // (4)
+| ...
+| 133     ZSTR_LEN(ret) = len;  // (5)
+| 134     return ret;
+| 135 }
+`----
+
+The `size' argument to the `pemalloc' macro is aligned/adjusted in (4)
+whilst the *original* value of `len' is stored as the size of the
+allocated buffer in (5).  No boundary checking is done in (4) and it may
+thus wrap, which would lead to a heap overflow during the invocation of
+`zip_fread()' in (3) as the `toread' argument is `ZSTR_LEN(buffer)':
+
+php-7.0.5/Zend/zend_string.h
+,----
+| 041 #define ZSTR_LEN(zstr)  (zstr)-&gt;len
+`----
+
+On a 32bit system:
+
+,----
+| (gdb) p/x ZEND_MM_ALIGNED_SIZE(_ZSTR_STRUCT_SIZE(0xfffffffe))
+| $1 = 0x10
+`----
+
+The wraparound may also occur on 64bit systems with `uncomp_size'
+specified in the extra field (Zip64 mode; ext/zip/lib/zip_dirent.c:463).
+However, it won't result in a buffer overflow because of `zip_fread()'
+bailing on a size that would have wrapped the allocation in (4):
+
+php-7.0.5/ext/zip/lib/zip_fread.c
+,----
+| 038 ZIP_EXTERN zip_int64_t
+| 039 zip_fread(zip_file_t *zf, void *outbuf, zip_uint64_t toread)
+| 040 {
+| ...
+| 049     if (toread &gt; ZIP_INT64_MAX) {
+| 050         zip_error_set(&amp;zf-&gt;error, ZIP_ER_INVAL, 0);
+| 051         return -1;
+| 052     }
+| ...
+| 063 }
+`----
+
+php-7.0.5/ext/zip/lib/zipconf.h
+,----
+| 130 #define ZIP_INT64_MAX     0x7fffffffffffffffLL
+`----
+
+,----
+| (gdb) p/x ZEND_MM_ALIGNED_SIZE(_ZSTR_STRUCT_SIZE(0xffffffffffffffff))
+| $1 = 0x18
+| (gdb) p/x ZEND_MM_ALIGNED_SIZE(_ZSTR_STRUCT_SIZE(0x7fffffffffffffff))
+| $2 = 0x8000000000000018
+`----
+
+
+Test script:
+---------------
+CVE-2016-3078.py: <a href="https://gist.github.com/dyntopia/42ec435c6671dc2c2d3c2d05804432d0" rel="nofollow">https://gist.github.com/dyntopia/42ec435c6671dc2c2d3c2d05804432d0</a>
+upload.php: <a href="https://gist.github.com/dyntopia/003b30d86f176c343168982c56f92cca" rel="nofollow">https://gist.github.com/dyntopia/003b30d86f176c343168982c56f92cca</a>
+
+Actual result:
+--------------
+On a 32bit machine running Arch Linux with php-fpm 7.0.5 behind nginx:
+
+,----
+| $ python CVE-2016-3078.py --bind-port 5555 <a href="http://1.2.3.4/upload.php" rel="nofollow">http://1.2.3.4/upload.php</a>
+| [*] this may take a while
+| [*] 103 of 4096 (0x67fd0)...
+| [+] connected to 1.2.3.4:5555
+| id
+| uid=33(http) gid=33(http) groups=33(http)
+| 
+| uname -a
+| Linux tmparch 4.4.5-1-ARCH #1 SMP PREEMPT Thu Mar 10 07:54:30 CET
+| 2016 i686 GNU/Linux
+| 
+| pacman -Qs php-fpm
+| local/php-fpm 7.0.5-1
+|     FastCGI Process Manager for PHP
+`----
+
+-- Hans Jerry Illikainen
+
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=71923'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=71923'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1460939615">&nbsp;</a><strong>[2016-04-18 00:33 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Summary: CVE-2016-3078: integer overflow in
+          ZipArchive::getFrom*</span>
+<span class="added">+Summary: integer overflow in ZipArchive::getFrom*</span>
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID:  2016-3078</span>
+</div></div></div><div class='comment type_comment' ><a name="1461135578">&nbsp;</a><strong>[2016-04-20 06:59 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>In security repo 7dfb5076ad4bce2382d5c2eb31d8b103466f65db and in <a href="https://gist.github.com/smalyshev/00d7a252a1a2a720fefdf34dcdda1103" rel="nofollow">https://gist.github.com/smalyshev/00d7a252a1a2a720fefdf34dcdda1103</a>. Please verify.
+</pre>
+</div><div class='comment type_log' ><a name="1461135614">&nbsp;</a><strong>[2016-04-20 07:00 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1461366563">&nbsp;</a><strong>[2016-04-22 23:09 UTC] hji &#x61;&#116; dyntopia &#x64;&#111;&#x74; com</strong>
+<pre class='note'>The patch fixes the issue.  However, there are currently &gt;200
+invocations of zend_string_alloc().  I haven't had time to go through
+them, although a cursory view seems to suggest that many of them don't
+rely on ZSTR_LEN.  Even so, the wraparound may potentially affect other
+callers where `size' is user-controllable and where ZSTR_LEN is later
+relied upon when dealing with the string.  As such, it may make sense
+to avoid the erroneous condition in zend_string_alloc() too, eg.
+
+<a href="https://gist.github.com/dyntopia/d373f15c60dc1a37c49daeae696bd542" rel="nofollow">https://gist.github.com/dyntopia/d373f15c60dc1a37c49daeae696bd542</a>
+</pre>
+</div><div class='comment type_log' ><a name="1461738875">&nbsp;</a><strong>[2016-04-27 06:34 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_comment' ><a name="1461738875">&nbsp;</a><strong>[2016-04-27 06:34 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The fix for this bug has been committed.
+
+Snapshots of the sources are packaged every three hours; this change
+will be in the next snapshot. You can grab the snapshot at
+<a href="http://snaps.php.net/" rel="nofollow">http://snaps.php.net/</a>.
+
+ For Windows:
+
+<a href="http://windows.php.net/snapshots/" rel="nofollow">http://windows.php.net/snapshots/</a>
+ 
+Thank you for the report, and for helping us make PHP better.
+
+
+</pre>
+</div><div class='comment type_svn' ><a name="1461773497">&nbsp;</a><strong>[2016-04-27 16:11 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=3b8d4de300854b3517c7acb239b84f7726c1353c" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=3b8d4de300854b3517c7acb239b84f7726c1353c</a>
+Log: Fix <a href='bug.php?id=71923'>bug #71923</a> - integer overflow in ZipArchive::getFrom*
+</pre>
+</div><div class='comment type_svn' ><a name="1469014311">&nbsp;</a><strong>[2016-07-20 11:31 UTC] <a href="//people.php.net/davey">davey@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=ccc12efa32f855e6057cb9b7e1e45afe08503a00" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=ccc12efa32f855e6057cb9b7e1e45afe08503a00</a>
+Log: Fix <a href='bug.php?id=71923'>bug #71923</a> - integer overflow in ZipArchive::getFrom*
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

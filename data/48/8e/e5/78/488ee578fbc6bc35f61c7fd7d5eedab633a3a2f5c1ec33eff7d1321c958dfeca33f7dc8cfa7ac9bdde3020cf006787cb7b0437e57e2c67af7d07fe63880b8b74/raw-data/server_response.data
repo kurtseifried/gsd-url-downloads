@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='Reproducible crash Bug #67492 - RDF' href='rss/bug.php?id=67492'>
+        <link rel='alternate' type='application/rss+xml' title='Reproducible crash Bug #67492 - RSS 2.0' href='rss/bug.php?id=67492&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #67492 :: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=67492">Sec Bug</a>&nbsp;#67492</th>
+            <td id="summary" colspan="5">unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2014-06-22 02:01 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2014-06-27 23:17 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>stas@php.net</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=Reproducible+crash">Reproducible crash</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.4.29</td>
+            <th class="details">OS:</th>
+            <td>*</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><em>None</em></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=67492&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=67492&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=67492&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1403402463">&nbsp;</a><strong>[2014-06-22 02:01 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Description:
+------------
+Betreff: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+&quot;Remote&quot; Code Execution Vulnerability
+Datum: Fri, 20 Jun 2014 23:06:40 +0200
+Von: Stefan Esser &lt;ontheroad@nopiracy.de&gt;
+An: security@php.net
+
+Hey,
+
+i have found two more type confusion vulnerabilities in PHP. This
+time I had a look into the SPL extension and the unserialize()
+handlers of it's objects. The ArrayObject and also the
+SPLObjectStorage unserialize() handler contain a similar code snippet
+that does not verify the type of unserialized data before using it.
+
+Let's have a look at the code from /ext/spl/spl_observer.c. When
+you look into SPL_METHOD(SplObjectStorage, unserialize) you can find
+the following code at the end of the function.
+
+	ALLOC_INIT_ZVAL(pmembers);
+	if (!php_var_unserialize(&amp;pmembers, &amp;p, s + buf_len, &amp;var_hash
+TSRMLS_CC)) {
+		zval_ptr_dtor(&amp;pmembers);
+		goto outexcept;
+	}
+
+	/* copy members */
+	if (!intern-&gt;std.properties) {
+		rebuild_object_properties(&amp;intern-&gt;std);
+	}
+	zend_hash_copy(intern-&gt;std.properties, Z_ARRVAL_P(pmembers),
+(copy_ctor_func_t) zval_add_ref, (void *) NULL, sizeof(zval *));
+	zval_ptr_dtor(&amp;pmembers);
+	
+The problem here is the &quot;pmembers&quot; is trusted to be an array after
+unserialization. However a malicious attacker can make it whatever
+he wants it to be, which might lead to a simple crash or arbitrary
+code execution. If &quot;pmembers&quot; is for example an integer the integer
+value will be used as a pointer to a Hashtable in memory. If an
+attacker knows the address of any Hashtable in memory (real or fake)
+he can cause trouble.
+
+However the attack is a lot easier if the attacker uses a string
+instead, because he can make the string look like a fake Hashtable
+and then let it be used. A fake Hashtable will then be copied into
+the properties. And on destruction the attacker supplied destructor
+of the fake Hashtable is executed. This allows arbitrary code
+execution.
+
+I have attached two example exploits for the two separate
+vulnerabilities in ArrayObject and SPLObjectStorage. They try to
+exploit the vulnerability locally with some heap spraying.
+As you can see from the output I control the program counter and
+because this is a destructor of our Fake Hashtable I also control
+the memory RDI points to.
+
+$ lldb php-5.5.13/sapi/cli/php unserialize_arrayobject_exploit.php
+0x112233445566
+Current executable set to 'php-5.5.13/sapi/cli/php' (x86_64).
+(lldb) run
+Process 86493 launched:
+'/Users/sesser/Desktop/PHP/php-5.5.13/sapi/cli/php' (x86_64)
+Setting up memory...
+Now performing exploit...
+Process 86493 stopped
+* thread #1: tid = 0x29ab6, 0x0000112233445566, queue =
+'com.apple.main-thread, stop reason = EXC_BAD_ACCESS (code=1,
+address=0x112233445566)
+    frame #0: 0x0000112233445566
+error: memory read failed for 0x112233445400
+(lldb) re re $pc
+     rip = 0x0000112233445566
+(lldb) x/20 $rdi
+0x114000038: 0x14000120 0x00000001 0x00000000 0x00000000
+0x114000048: 0x00000000 0x00000000 0x00000000 0x00000000
+0x114000058: 0x00000000 0x00000000 0x00000000 0x00000000
+0x114000068: 0x73737373 0x73737373 0x73737373 0x73737373
+0x114000078: 0x73737373 0x73737373 0x73737373 0x73737373
+(lldb)
+
+Unlike the previous vulnerability in phpinfo() that I reported
+last week (btw I still haven't received some ACK about it) this two
+vulnerabilities are exposed through unserialize() to user input quite
+often. And yes we all know that unserialize() should not be
+exposed to user input, because of object injection, but many
+projects still do it. Most of the time they think they are safe,
+because they do not expose any objects themselves and only use
+unserialize() for data exchange.
+
+These vulnerabilities however are a reminder how dangerous this is...
+
+Regards,
+Stefan Esser
+
+
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=67492'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=67492'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1403911020">&nbsp;</a><strong>[2014-06-27 23:17 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status:      Open</span>
+<span class="added">+Status:      Closed</span>
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1403911020">&nbsp;</a><strong>[2014-06-27 23:17 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The fix for this bug has been committed.
+
+Snapshots of the sources are packaged every three hours; this change
+will be in the next snapshot. You can grab the snapshot at
+<a href="http://snaps.php.net/" rel="nofollow">http://snaps.php.net/</a>.
+
+ For Windows:
+
+<a href="http://windows.php.net/snapshots/" rel="nofollow">http://windows.php.net/snapshots/</a>
+ 
+Thank you for the report, and for helping us make PHP better.
+
+
+</pre>
+</div><div class='comment type_svn' ><a name="1404159795">&nbsp;</a><strong>[2014-06-30 20:23 UTC] <a href="//people.php.net/dmitry">dmitry@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=a374dfab567ff7f0ab0dc150f14cc891b0340b47" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=a374dfab567ff7f0ab0dc150f14cc891b0340b47</a>
+Log: Fix <a href='bug.php?id=67492'>bug #67492</a>: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+</pre>
+</div><div class='comment type_svn' ><a name="1404159799">&nbsp;</a><strong>[2014-06-30 20:23 UTC] <a href="//people.php.net/dmitry">dmitry@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=b03993dde90b59a6b80ede62a6a268c5b4d390f6" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=b03993dde90b59a6b80ede62a6a268c5b4d390f6</a>
+Log: Fix <a href='bug.php?id=67492'>bug #67492</a>: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+</pre>
+</div><div class='comment type_svn' ><a name="1404159805">&nbsp;</a><strong>[2014-06-30 20:23 UTC] <a href="//people.php.net/dmitry">dmitry@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=88223c5245e9b470e1e6362bfd96829562ffe6ab" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=88223c5245e9b470e1e6362bfd96829562ffe6ab</a>
+Log: Fix <a href='bug.php?id=67492'>bug #67492</a>: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+</pre>
+</div><div class='comment type_svn' ><a name="1404265264">&nbsp;</a><strong>[2014-07-02 01:41 UTC] <a href="//people.php.net/tyrael">tyrael@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=b03993dde90b59a6b80ede62a6a268c5b4d390f6" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=b03993dde90b59a6b80ede62a6a268c5b4d390f6</a>
+Log: Fix <a href='bug.php?id=67492'>bug #67492</a>: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+</pre>
+</div><div class='comment type_svn' ><a name="1404265270">&nbsp;</a><strong>[2014-07-02 01:41 UTC] <a href="//people.php.net/tyrael">tyrael@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=88223c5245e9b470e1e6362bfd96829562ffe6ab" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=88223c5245e9b470e1e6362bfd96829562ffe6ab</a>
+Log: Fix <a href='bug.php?id=67492'>bug #67492</a>: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+</pre>
+</div><div class='comment type_svn' ><a name="1404289587">&nbsp;</a><strong>[2014-07-02 08:26 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=b03993dde90b59a6b80ede62a6a268c5b4d390f6" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=b03993dde90b59a6b80ede62a6a268c5b4d390f6</a>
+Log: Fix <a href='bug.php?id=67492'>bug #67492</a>: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+</pre>
+</div><div class='comment type_svn' ><a name="1404289594">&nbsp;</a><strong>[2014-07-02 08:26 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=88223c5245e9b470e1e6362bfd96829562ffe6ab" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=88223c5245e9b470e1e6362bfd96829562ffe6ab</a>
+Log: Fix <a href='bug.php?id=67492'>bug #67492</a>: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+</pre>
+</div><div class='comment type_svn' ><a name="1404290028">&nbsp;</a><strong>[2014-07-02 08:33 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=a374dfab567ff7f0ab0dc150f14cc891b0340b47" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=a374dfab567ff7f0ab0dc150f14cc891b0340b47</a>
+Log: Fix <a href='bug.php?id=67492'>bug #67492</a>: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+</pre>
+</div><div class='comment type_svn' ><a name="1404290032">&nbsp;</a><strong>[2014-07-02 08:33 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=b03993dde90b59a6b80ede62a6a268c5b4d390f6" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=b03993dde90b59a6b80ede62a6a268c5b4d390f6</a>
+Log: Fix <a href='bug.php?id=67492'>bug #67492</a>: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+</pre>
+</div><div class='comment type_svn' ><a name="1404290038">&nbsp;</a><strong>[2014-07-02 08:33 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=88223c5245e9b470e1e6362bfd96829562ffe6ab" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=88223c5245e9b470e1e6362bfd96829562ffe6ab</a>
+Log: Fix <a href='bug.php?id=67492'>bug #67492</a>: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+</pre>
+</div><div class='comment type_svn' ><a name="1406671004">&nbsp;</a><strong>[2014-07-29 21:56 UTC] <a href="//people.php.net/johannes">johannes@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=c74efe1b2efd7222b27d36f383623cd19ed0e102" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=c74efe1b2efd7222b27d36f383623cd19ed0e102</a>
+Log: Fix <a href='bug.php?id=67492'>bug #67492</a>: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+</pre>
+</div><div class='comment type_svn' ><a name="1408030443">&nbsp;</a><strong>[2014-08-14 15:34 UTC] <a href="//people.php.net/johannes">johannes@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=c74efe1b2efd7222b27d36f383623cd19ed0e102" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=c74efe1b2efd7222b27d36f383623cd19ed0e102</a>
+Log: Fix <a href='bug.php?id=67492'>bug #67492</a>: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+</pre>
+</div><div class='comment type_svn' ><a name="1408044725">&nbsp;</a><strong>[2014-08-14 19:32 UTC] <a href="//people.php.net/dmitry">dmitry@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=c74efe1b2efd7222b27d36f383623cd19ed0e102" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=c74efe1b2efd7222b27d36f383623cd19ed0e102</a>
+Log: Fix <a href='bug.php?id=67492'>bug #67492</a>: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+</pre>
+</div><div class='comment type_svn' ><a name="1412723632">&nbsp;</a><strong>[2014-10-07 23:13 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src-security.git;a=commit;h=c74efe1b2efd7222b27d36f383623cd19ed0e102" rel="nofollow">http://git.php.net/?p=php-src-security.git;a=commit;h=c74efe1b2efd7222b27d36f383623cd19ed0e102</a>
+Log: Fix <a href='bug.php?id=67492'>bug #67492</a>: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+</pre>
+</div><div class='comment type_svn' ><a name="1412723675">&nbsp;</a><strong>[2014-10-07 23:14 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src-security.git;a=commit;h=88223c5245e9b470e1e6362bfd96829562ffe6ab" rel="nofollow">http://git.php.net/?p=php-src-security.git;a=commit;h=88223c5245e9b470e1e6362bfd96829562ffe6ab</a>
+Log: Fix <a href='bug.php?id=67492'>bug #67492</a>: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+</pre>
+</div><div class='comment type_svn' ><a name="1412724300">&nbsp;</a><strong>[2014-10-07 23:25 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src-security.git;a=commit;h=c74efe1b2efd7222b27d36f383623cd19ed0e102" rel="nofollow">http://git.php.net/?p=php-src-security.git;a=commit;h=c74efe1b2efd7222b27d36f383623cd19ed0e102</a>
+Log: Fix <a href='bug.php?id=67492'>bug #67492</a>: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+</pre>
+</div><div class='comment type_svn' ><a name="1412724344">&nbsp;</a><strong>[2014-10-07 23:25 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src-security.git;a=commit;h=88223c5245e9b470e1e6362bfd96829562ffe6ab" rel="nofollow">http://git.php.net/?p=php-src-security.git;a=commit;h=88223c5245e9b470e1e6362bfd96829562ffe6ab</a>
+Log: Fix <a href='bug.php?id=67492'>bug #67492</a>: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+</pre>
+</div><div class='comment type_svn' ><a name="1469014847">&nbsp;</a><strong>[2016-07-20 11:40 UTC] <a href="//people.php.net/davey">davey@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=a374dfab567ff7f0ab0dc150f14cc891b0340b47" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=a374dfab567ff7f0ab0dc150f14cc891b0340b47</a>
+Log: Fix <a href='bug.php?id=67492'>bug #67492</a>: unserialize() SPL ArrayObject / SPLObjectStorage Type Confusion
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

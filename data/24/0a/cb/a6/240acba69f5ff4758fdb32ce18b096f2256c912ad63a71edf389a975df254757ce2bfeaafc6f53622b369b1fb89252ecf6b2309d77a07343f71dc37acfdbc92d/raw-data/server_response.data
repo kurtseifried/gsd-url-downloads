@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='SPL related Bug #72262 - RDF' href='rss/bug.php?id=72262'>
+        <link rel='alternate' type='application/rss+xml' title='SPL related Bug #72262 - RSS 2.0' href='rss/bug.php?id=72262&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #72262 :: int/size_t confusion in SplFileObject::fread</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=72262">Sec Bug</a>&nbsp;#72262</th>
+            <td id="summary" colspan="5">int/size_t confusion in SplFileObject::fread</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-05-25 09:44 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-06-27 00:14 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=SPL+related">SPL related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.5.35</td>
+            <th class="details">OS:</th>
+            <td></td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-5770" target="_blank">2016-5770</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=72262&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=72262&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=72262&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1464169462">&nbsp;</a><strong>[2016-05-25 09:44 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+int/size_t confusion in SplFileObject::fread
+
+this bug similar with bug#72114
+
+```
+SPL_METHOD(SplFileObject, fread)
+{
+	spl_filesystem_object *intern = (spl_filesystem_object*)zend_object_store_get_object(getThis() TSRMLS_CC);
+	long length = 0;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, &quot;l&quot;, &amp;length) == FAILURE) {
+		return;
+	}
+
+	if (length &lt;= 0) {
+		php_error_docref(NULL TSRMLS_CC, E_WARNING, &quot;Length parameter must be greater than 0&quot;);
+		RETURN_FALSE;
+	}
+
+	Z_STRVAL_P(return_value) = emalloc(length + 1);
+	Z_STRLEN_P(return_value) = php_stream_read(intern-&gt;u.file.stream, Z_STRVAL_P(return_value), length);
+
+	/* needed because recv/read/gzread doesnt put a null at the end*/
+	Z_STRVAL_P(return_value)[Z_STRLEN_P(return_value)] = 0;
+	Z_TYPE_P(return_value) = IS_STRING;
+}
+```
+
+PoC:
+```
+&lt;?php
+
+ini_set('memory_limit', -1);
+$filename = '/dev/zero';
+$file = new SplFileObject($filename, 'r');
+$file-&gt;fread(2147483648);
+
+?&gt;
+```
+
+Fix:
+```
+		RETURN_FALSE;
+	}
+	
++	if (length &gt; INT_MAX) {
++		php_error_docref(NULL TSRMLS_CC, E_WARNING, &quot;Length parameter must be no more than %d&quot;, INT_MAX);
++		RETURN_FALSE;
++	}
+
+	Z_STRVAL_P(return_value) = emalloc(length + 1);
+```
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=72262'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=72262'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1466053229">&nbsp;</a><strong>[2016-06-16 05:00 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1466053229">&nbsp;</a><strong>[2016-06-16 05:00 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>FIx in security repo as 7245bff300d3fa8bacbef7897ff080a6f1c23eba, also <a href="https://gist.github.com/8614d3d2afaf85b1fa6acb93a5bfff49" rel="nofollow">https://gist.github.com/8614d3d2afaf85b1fa6acb93a5bfff49</a>
+</pre>
+</div><div class='comment type_svn' ><a name="1466491743">&nbsp;</a><strong>[2016-06-21 06:49 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=7245bff300d3fa8bacbef7897ff080a6f1c23eba" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=7245bff300d3fa8bacbef7897ff080a6f1c23eba</a>
+Log: Fix <a href='bug.php?id=72262'>bug #72262</a> - do not overflow int
+</pre>
+</div><div class='comment type_log' ><a name="1466491743">&nbsp;</a><strong>[2016-06-21 06:49 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1466492621">&nbsp;</a><strong>[2016-06-21 07:03 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=7245bff300d3fa8bacbef7897ff080a6f1c23eba" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=7245bff300d3fa8bacbef7897ff080a6f1c23eba</a>
+Log: Fix <a href='bug.php?id=72262'>bug #72262</a> - do not overflow int
+</pre>
+</div><div class='comment type_svn' ><a name="1466493972">&nbsp;</a><strong>[2016-06-21 07:26 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=7245bff300d3fa8bacbef7897ff080a6f1c23eba" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=7245bff300d3fa8bacbef7897ff080a6f1c23eba</a>
+Log: Fix <a href='bug.php?id=72262'>bug #72262</a> - do not overflow int
+</pre>
+</div><div class='comment type_svn' ><a name="1466494042">&nbsp;</a><strong>[2016-06-21 07:27 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=7245bff300d3fa8bacbef7897ff080a6f1c23eba" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=7245bff300d3fa8bacbef7897ff080a6f1c23eba</a>
+Log: Fix <a href='bug.php?id=72262'>bug #72262</a> - do not overflow int
+</pre>
+</div><div class='comment type_svn' ><a name="1466575097">&nbsp;</a><strong>[2016-06-22 05:58 UTC] <a href="//people.php.net/krakjoe">krakjoe@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=7245bff300d3fa8bacbef7897ff080a6f1c23eba" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=7245bff300d3fa8bacbef7897ff080a6f1c23eba</a>
+Log: Fix <a href='bug.php?id=72262'>bug #72262</a> - do not overflow int
+</pre>
+</div><div class='comment type_log' ><a name="1466686252">&nbsp;</a><strong>[2016-06-23 12:50 UTC] <a href="//people.php.net/kaplan">kaplan@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2016-5770</span>
+</div></div></div><div class='comment type_comment' ><a name="1466820791">&nbsp;</a><strong>[2016-06-25 02:13 UTC] seth &#x64;&#111;&#x74; arnold &#x61;&#116; canonical &#x64;&#111;&#x74; com</strong>
+<pre class='note'>What happens if length == INT_MAX? Won't that cause emalloc(length + 1) to fail?
+
+Thanks
+</pre>
+</div><div class='comment type_comment' ><a name="1466986490">&nbsp;</a><strong>[2016-06-27 00:14 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>emalloc gets size_t, so it'll probably try to allocate a lot of memory - which will most probably fail.
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

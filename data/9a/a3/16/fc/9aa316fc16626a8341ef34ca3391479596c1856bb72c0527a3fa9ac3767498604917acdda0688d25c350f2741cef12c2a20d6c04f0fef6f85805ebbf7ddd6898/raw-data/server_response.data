@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='GD related Bug #66356 - RDF' href='rss/bug.php?id=66356'>
+        <link rel='alternate' type='application/rss+xml' title='GD related Bug #66356 - RSS 2.0' href='rss/bug.php?id=66356&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #66356 :: Heap Overflow Vulnerability in imagecrop()</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=66356">Sec Bug</a>&nbsp;#66356</th>
+            <td id="summary" colspan="5">Heap Overflow Vulnerability in imagecrop()</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2013-12-27 02:57 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2014-02-15 17:28 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>kuba &#x64;&#111;&#x74; brecka &#x61;&#116; gmail &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=pajoye">pajoye</a> (<a href="https://people.php.net/pajoye">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=GD+related">GD related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.5.7</td>
+            <th class="details">OS:</th>
+            <td>all</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2013-7226" target="_blank">2013-7226</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=66356&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=66356&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=66356&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1388113053">&nbsp;</a><strong>[2013-12-27 02:57 UTC] kuba &#x64;&#111;&#x74; brecka &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+The imagecrop() function can be used to crop an image with the following call:
+
+	$dimensions = array(&quot;x&quot; =&gt; 10, &quot;y&quot; =&gt; 10, &quot;width&quot; =&gt; 50, &quot;height&quot; =&gt; 50);
+	$new_image = image($image, $dimensions);
+
+The implementation of imagecrop() in ext/gd/gd.c performs very little checking of the supplied dimensions:
+
+	gdRect rect;
+	...
+	if (zend_hash_find(HASH_OF(z_rect), &quot;x&quot;, sizeof(&quot;x&quot;), (void **)&amp;tmp) != FAILURE) {
+		rect.x = Z_LVAL_PP(tmp);
+	} else {
+	...
+
+One issue here is that there is no check of tmp's type nor a conversion. This means that if the dimensions array contains the key &quot;x&quot;, its zval's value will be treated as an integer even if it's really a string or an array. This can be used as an information leak vulnerability, because strings and array contain pointers which can be used for subsequent exploits. See POC #1.
+
+The &quot;rect&quot; variable is then used in a call to &quot;gdImageCrop&quot;:
+
+	im_crop = gdImageCrop(im, &amp;rect);
+
+This function then uses the user-supplied dimensions for various calculations:
+
+	if (src-&gt;trueColor) {
+		dst = gdImageCreateTrueColor(crop-&gt;width, crop-&gt;height);
+		gdImageSaveAlpha(dst, 1);
+	} else {
+		dst = gdImageCreate(crop-&gt;width, crop-&gt;height);
+		gdImagePaletteCopy(dst, src);
+	}
+	dst-&gt;transparent = src-&gt;transparent;
+
+The gdImageCreateTrueColor() and gdImageCreate() functions are smart enough to block any attempt to overflow the width and height parameters, returning a NULL pointer when this happens. However, this code has an issue of not checking the return value of these functions, using the &quot;dst&quot; variable for memory writes unconditionally. This means it can cause a NULL pointer (or a close-to-NULL pointer) write, which is probably just crash the process, but since the gd image structure is very large, it could happen to even touch allocated memory. See POC #2.
+
+The function then performs some bounds checks:
+
+	if (src-&gt;sx &lt; (crop-&gt;x + crop-&gt;width -1)) {
+		crop-&gt;width = src-&gt;sx - crop-&gt;x + 1;
+	}
+	if (src-&gt;sy &lt; (crop-&gt;y + crop-&gt;height -1)) {
+		crop-&gt;height = src-&gt;sy - crop-&gt;y + 1;
+	}
+
+These are using signed integer arithmetics and can be overflown and tricked into incorrect calculations. Later, for true-color, the pixels are copied with this code:
+
+	int y = crop-&gt;y;
+	...
+	unsigned int dst_y = 0;
+	while (y &lt; (crop-&gt;y + (crop-&gt;height - 1))) {
+		/* TODO: replace 4 w/byte per channel||pitch once available */
+		memcpy(dst-&gt;tpixels[dst_y++], src-&gt;tpixels[y++] + crop-&gt;x, crop-&gt;width * 4);
+	}
+
+Remember that crop-&gt;x and crop-&gt;y are completely user-supplied values and we can supply negative values. This way we can force the copying code to read outside of the source image pixel data, causing a crash or an information leak. See POC #3.
+
+We must however keep the crop-&gt;width and crop-&gt;height positive, and reasonable, because they are used at the beginning of the function to create a destination bitmap. We can however trick the already mentioned bounds checking code: 
+
+	if (src-&gt;sx &lt; (crop-&gt;x + crop-&gt;width -1)) {
+		crop-&gt;width = src-&gt;sx - crop-&gt;x + 1;
+	}
+
+When supplying a very large crop-&gt;x value, we can make the condition pass, assigning a value to crop-&gt;width which is larger than the real destination's pixel buffer width. The memcpy will then copy more data than the heap-based buffers can hold, causing a heap-based buffer overflow. See POC #4.
+
+All the supplied POCs will cause a crash on 32-bit systems. First the POCs will segfault due to invalid memory read, the last one will crash due to a heap overflow (gdb output attached, but the backtrace is useless because the crash occurs much later, at PHP's shutdown and cleanup). Tested on a 32-bit Ubuntu Server machine. All versions of PHP containing the imagecrop() function are vulnerable, i.e. PHP 5.5.0 and newer. Proposed patch to fix the mentioned vulnerabilities is attached and it also adds a test for the POCs into the PHP test suite.
+
+
+Test script:
+---------------
+POC 1:
+------
+
+&lt;?
+	// POC #1
+	$img = imagecreatetruecolor(10, 10);
+	$img = imagecrop($img, array(&quot;x&quot; =&gt; &quot;a&quot;, &quot;y&quot; =&gt; 0, &quot;width&quot; =&gt; 10, &quot;height&quot; =&gt; 10));
+
+POC 2:
+------
+
+&lt;?
+	// POC #2
+	$img = imagecreatetruecolor(10, 10);
+	$img = imagecrop($img, array(&quot;x&quot; =&gt; 0, &quot;y&quot; =&gt; 0, &quot;width&quot; =&gt; -1, &quot;height&quot; =&gt; 10));
+
+POC 3:
+------
+
+&lt;?
+	// POC #3
+	$img = imagecreatetruecolor(10, 10);
+	$img = imagecrop($img, array(&quot;x&quot; =&gt; -20, &quot;y&quot; =&gt; -20, &quot;width&quot; =&gt; 10, &quot;height&quot; =&gt; 10));
+
+POC 4:
+------
+
+&lt;?
+	// POC #4
+	$img = imagecreatetruecolor(10, 10);
+	$img = imagecrop($img, array(&quot;x&quot; =&gt; 0x7fffff00, &quot;y&quot; =&gt; 0, &quot;width&quot; =&gt; 10, &quot;height&quot; =&gt; 10));
+
+
+Actual result:
+--------------
+GDB session from POC #4:
+
+
+kuba@sonny:~/php/php-src$ gdb ./sapi/cli/php
+(gdb) r ../crop.php
+Starting program: /home/kuba/php/php-src/sapi/cli/php ../crop.php
+[Fri Dec 27 01:47:50 2013]  Script:  '/home/kuba/php/crop.php'
+---------------------------------------
+/home/kuba/php/php-src/ext/gd/libgd/gd.c(242) : Block 0xb7c09d6c status:
+Invalid pointer: ((size=0x00000055) != (next.prev=0x00000094))
+---------------------------------------
+[Fri Dec 27 01:47:50 2013]  Script:  '/home/kuba/php/crop.php'
+---------------------------------------
+/home/kuba/php/php-src/ext/gd/libgd/gd.c(242) : Block 0xb7c09dc0 status:
+Invalid pointer: ((size=0x00000000) != (next.prev=0x00000094))
+Invalid pointer: ((prev=0x00000094) != (prev.size=0x00000000))
+---------------------------------------
+[Fri Dec 27 01:47:50 2013]  Script:  '/home/kuba/php/crop.php'
+---------------------------------------
+/home/kuba/php/php-src/ext/gd/libgd/gd.c(242) : Block 0xb7c09e4c status:
+Invalid pointer: ((size=0x00000002) != (next.prev=0x00000000))
+Invalid pointer: ((prev=0x00000000) != (prev.size=0x00000002))
+---------------------------------------
+
+Program received signal SIGSEGV, Segmentation fault.
+0x083d2cce in zend_mm_check_ptr (heap=0x8919398, ptr=0xb7c09ed8, silent=1, __zend_filename=0x87c02fc &quot;/home/kuba/php/php-src/ext/gd/libgd/gd.c&quot;, __zend_lineno=242,
+    __zend_orig_filename=0x0, __zend_orig_lineno=0) at /home/kuba/php/php-src/Zend/zend_alloc.c:1384
+1384            if (p-&gt;info._size != ZEND_MM_NEXT_BLOCK(p)-&gt;info._prev) {
+(gdb) bt
+#0  0x083d2cce in zend_mm_check_ptr (heap=0x8919398, ptr=0xb7c09ed8, silent=1, __zend_filename=0x87c02fc &quot;/home/kuba/php/php-src/ext/gd/libgd/gd.c&quot;, __zend_lineno=242,
+    __zend_orig_filename=0x0, __zend_orig_lineno=0) at /home/kuba/php/php-src/Zend/zend_alloc.c:1384
+#1  0x083d436c in _zend_mm_free_int (heap=0x8919398, p=0xb7c09ed8, __zend_filename=0x87c02fc &quot;/home/kuba/php/php-src/ext/gd/libgd/gd.c&quot;, __zend_lineno=242,
+    __zend_orig_filename=0x0, __zend_orig_lineno=0) at /home/kuba/php/php-src/Zend/zend_alloc.c:2068
+#2  0x083d538d in _efree (ptr=0xb7c09ed8, __zend_filename=0x87c02fc &quot;/home/kuba/php/php-src/ext/gd/libgd/gd.c&quot;, __zend_lineno=242, __zend_orig_filename=0x0, __zend_orig_lineno=0)
+    at /home/kuba/php/php-src/Zend/zend_alloc.c:2440
+#3  0x081e0f31 in php_gd_gdImageDestroy (im=0xb7c08000) at /home/kuba/php/php-src/ext/gd/libgd/gd.c:242
+#4  0x081d5bba in php_free_gd_image (rsrc=0xb7838038) at /home/kuba/php/php-src/ext/gd/gd.c:1077
+#5  0x084140ab in list_entry_destructor (ptr=0xb7838038) at /home/kuba/php/php-src/Zend/zend_list.c:183
+#6  0x08411419 in zend_hash_del_key_or_index (ht=0x8915c98 &lt;executor_globals+344&gt;, arKey=0x0, nKeyLength=0, h=5, flag=1) at /home/kuba/php/php-src/Zend/zend_hash.c:508
+#7  0x08413d99 in _zend_list_delete (id=5) at /home/kuba/php/php-src/Zend/zend_list.c:57
+#8  0x083ff6fb in _zval_dtor_func (zvalue=0xb7c07fc0, __zend_filename=0x887972c &quot;/home/kuba/php/php-src/Zend/zend_execute.h&quot;, __zend_lineno=79)
+    at /home/kuba/php/php-src/Zend/zend_variables.c:62
+#9  0x083ef20a in _zval_dtor (zvalue=0xb7c07fc0, __zend_filename=0x887972c &quot;/home/kuba/php/php-src/Zend/zend_execute.h&quot;, __zend_lineno=79)
+    at /home/kuba/php/php-src/Zend/zend_variables.h:35
+#10 0x083ef2b7 in i_zval_ptr_dtor (zval_ptr=0xb7c07fc0, __zend_filename=0x887ab6c &quot;/home/kuba/php/php-src/Zend/zend_variables.c&quot;, __zend_lineno=182)
+    at /home/kuba/php/php-src/Zend/zend_execute.h:79
+#11 0x083effd2 in _zval_ptr_dtor (zval_ptr=0xb7c05798, __zend_filename=0x887ab6c &quot;/home/kuba/php/php-src/Zend/zend_variables.c&quot;, __zend_lineno=182)
+    at /home/kuba/php/php-src/Zend/zend_execute_API.c:427
+#12 0x083ffa56 in _zval_ptr_dtor_wrapper (zval_ptr=0xb7c05798) at /home/kuba/php/php-src/Zend/zend_variables.c:182
+#13 0x084118c0 in zend_hash_apply_deleter (ht=0x8915bfc &lt;executor_globals+188&gt;, p=0xb7c0578c) at /home/kuba/php/php-src/Zend/zend_hash.c:626
+#14 0x08411a4e in zend_hash_graceful_reverse_destroy (ht=0x8915bfc &lt;executor_globals+188&gt;) at /home/kuba/php/php-src/Zend/zend_hash.c:663
+#15 0x083efa97 in shutdown_executor () at /home/kuba/php/php-src/Zend/zend_execute_API.c:247
+#16 0x08401781 in zend_deactivate () at /home/kuba/php/php-src/Zend/zend.c:953
+#17 0x08384405 in php_request_shutdown (dummy=0x0) at /home/kuba/php/php-src/main/main.c:1807
+#18 0x0849ddac in do_cli (argc=2, argv=0x89191e0) at /home/kuba/php/php-src/sapi/cli/php_cli.c:1177
+#19 0x0849e3fb in main (argc=2, argv=0x89191e0) at /home/kuba/php/php-src/sapi/cli/php_cli.c:1378
+
+
+</pre>
+</div><h2>Patches</h2>
+<a href="patch-display.php?bug_id=66356&amp;patch=libgd-v2.patch&amp;revision=latest" >libgd-v2.patch</a>
+(last revision 2013-12-28 08:13 UTC by remi@php.net)
+<br><a href="patch-display.php?bug_id=66356&amp;patch=libgd-v1.patch&amp;revision=latest" >libgd-v1.patch</a>
+(last revision 2013-12-28 08:13 UTC by remi@php.net)
+<br><a href="patch-display.php?bug_id=66356&amp;patch=bug66356.patch&amp;revision=latest" >bug66356.patch</a>
+(last revision 2013-12-28 05:34 UTC by laruence@php.net)
+<br><p><a href='patch-add.php?bug_id=66356'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=66356'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1388122791">&nbsp;</a><strong>[2013-12-27 05:39 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: pierre</span>
+</div></div></div><div class='comment type_comment' ><a name="1388123479">&nbsp;</a><strong>[2013-12-27 05:51 UTC] <a href="//people.php.net/pajoye">pajoye@php.net</a></strong>
+<pre class='note'>Thanks for the detailed report!
+
+As far as I remember it is fixed upstream (see Bitbucket repo). 
+
+I cannot read the patch yet but if not already fixed upstream it should be done on two parts:
+
+. type checks and conversions in php's binding
+. bound check in libgd
+
+I can check it on the 6 of January when I am back online (with laptop :)
+
+Thanks again for your report!
+</pre>
+</div><div class='comment type_log' ><a name="1388124931">&nbsp;</a><strong>[2013-12-27 06:15 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status:      Assigned</span>
+<span class="added">+Status:      Closed</span>
+<span class="removed">-Assigned To: pierre</span>
+<span class="added">+Assigned To: laruence</span>
+</div></div></div><div class='comment type_comment' ><a name="1388124931">&nbsp;</a><strong>[2013-12-27 06:15 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<pre class='note'>The fix for this bug has been committed.
+
+Snapshots of the sources are packaged every three hours; this change
+will be in the next snapshot. You can grab the snapshot at
+<a href="http://snaps.php.net/" rel="nofollow">http://snaps.php.net/</a>.
+
+ For Windows:
+
+<a href="http://windows.php.net/snapshots/" rel="nofollow">http://windows.php.net/snapshots/</a>
+ 
+Thank you for the report, and for helping us make PHP better.
+
+fixed in <a href="https://github.com/php/php-src/commit/2938329ce19cb8c4197dec146c3ec887c6f61d01" rel="nofollow">https://github.com/php/php-src/commit/2938329ce19cb8c4197dec146c3ec887c6f61d01</a>
+</pre>
+</div><div class='comment type_log' ><a name="1388125024">&nbsp;</a><strong>[2013-12-27 06:17 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To: laruence</span>
+<span class="added">+Assigned To: pajoye</span>
+</div></div></div><div class='comment type_comment' ><a name="1388125024">&nbsp;</a><strong>[2013-12-27 06:17 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<pre class='note'>pierre, sorry I didn't read your comment...  I get a fix and committed. there are also one issue, that is , the arguments could be modified.. I fixed it in the mean time..
+
+
+could you please review the commit?
+
+thanks
+</pre>
+</div><div class='comment type_comment' ><a name="1388143031">&nbsp;</a><strong>[2013-12-27 11:17 UTC] kuba &#x64;&#111;&#x74; brecka &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>The fix at <a href="https://github.com/php/php-src/commit/2938329ce19cb8c4197dec146c3ec887c6f61d01" rel="nofollow">https://github.com/php/php-src/commit/2938329ce19cb8c4197dec146c3ec887c6f61d01</a> only fixes the first POC I submitted. All the others, including the POC for heap overflow, still produce a crash.
+</pre>
+</div><div class='comment type_log' ><a name="1388174338">&nbsp;</a><strong>[2013-12-27 19:58 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Closed</span>
+<span class="added">+Status: Re-Opened</span>
+</div></div></div><div class='comment type_comment' ><a name="1388205975">&nbsp;</a><strong>[2013-12-28 04:46 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<pre class='note'>where is the patch you mentioned? thanks :)
+</pre>
+</div><div class='comment type_patch' ><a name="1388208897">&nbsp;</a><strong>[2013-12-28 05:34 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<pre class='note'>The following patch has been added/updated:
+
+Patch Name: bug66356.patch
+Revision:   1388208897
+URL:        <a href="https://bugs.php.net/patch-display.php?bug=66356&amp;patch=bug66356.patch&amp;revision=1388208897" rel="nofollow">https://bugs.php.net/patch-display.php?bug=66356&amp;patch=bug66356.patch&amp;revision=1388208897</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1388208947">&nbsp;</a><strong>[2013-12-28 05:35 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<pre class='note'>I attached a patch for fixing rest POCs.
+
+but I am not sure(not familiar with gd lib), whether we should also check if 
+
+dst-&gt;x + dst-&gt;width &gt; src-&gt;sx?
+
+thanks
+</pre>
+</div><div class='comment type_comment' ><a name="1388215678">&nbsp;</a><strong>[2013-12-28 07:27 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<pre class='note'>Notice: libgd 2.1 is not affected by this issue.
+
+gdImageCrop now use gdImageCopy which is protected by the use of gdImageBoundsSafeMacro.
+
+Tested with php 5.5.7 + system libgd 2.1.0, all POC pass without any segfault.
+</pre>
+</div><div class='comment type_patch' ><a name="1388218400">&nbsp;</a><strong>[2013-12-28 08:13 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<pre class='note'>The following patch has been added/updated:
+
+Patch Name: libgd-v1.patch
+Revision:   1388218399
+URL:        <a href="https://bugs.php.net/patch-display.php?bug=66356&amp;patch=libgd-v1.patch&amp;revision=1388218399" rel="nofollow">https://bugs.php.net/patch-display.php?bug=66356&amp;patch=libgd-v1.patch&amp;revision=1388218399</a>
+</pre>
+</div><div class='comment type_patch' ><a name="1388218414">&nbsp;</a><strong>[2013-12-28 08:13 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<pre class='note'>The following patch has been added/updated:
+
+Patch Name: libgd-v2.patch
+Revision:   1388218414
+URL:        <a href="https://bugs.php.net/patch-display.php?bug=66356&amp;patch=libgd-v2.patch&amp;revision=1388218414" rel="nofollow">https://bugs.php.net/patch-display.php?bug=66356&amp;patch=libgd-v2.patch&amp;revision=1388218414</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1388218856">&nbsp;</a><strong>[2013-12-28 08:20 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<pre class='note'>2 patches proposal (tested on php 5.5)
+
+v1: position out of src image will return NULL.
+
+v2: position out of the src image, will return a blank image, which is consistent with current size check: As the size check is done &quot;after&quot; image allocation, so, result image could be partially blank, but always of requested size.
+
+We could also think of moving size check &quot;before&quot; allocation, but this will be a  BC break.
+
+New size check seems better (even if the test is not really readable) and should be integer overflow free.
+
+For PHP 5.6, I will prefer to see bundled libgd updated to upstream version 2.1.x
+</pre>
+</div><div class='comment type_comment' ><a name="1388223919">&nbsp;</a><strong>[2013-12-28 09:45 UTC] <a href="//people.php.net/pajoye">pajoye@php.net</a></strong>
+<pre class='note'>@remi Please sync with gd 2.1.x tree isntead, there are all bug fixes in it and no new features.
+</pre>
+</div><div class='comment type_log' ><a name="1388237465">&nbsp;</a><strong>[2013-12-28 13:31 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Re-Opened</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_comment' ><a name="1388237465">&nbsp;</a><strong>[2013-12-28 13:31 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<pre class='note'>The fix for this bug has been committed.
+
+Snapshots of the sources are packaged every three hours; this change
+will be in the next snapshot. You can grab the snapshot at
+<a href="http://snaps.php.net/" rel="nofollow">http://snaps.php.net/</a>.
+
+ For Windows:
+
+<a href="http://windows.php.net/snapshots/" rel="nofollow">http://windows.php.net/snapshots/</a>
+ 
+Thank you for the report, and for helping us make PHP better.
+
+See <a href="http://git.php.net/?p=php-src.git;a=commitdiff;h=8f4a5373bb71590352fd934028d6dde5bc18530b" rel="nofollow">http://git.php.net/?p=php-src.git;a=commitdiff;h=8f4a5373bb71590352fd934028d6dde5bc18530b</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1388237631">&nbsp;</a><strong>[2013-12-28 13:33 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<pre class='note'>@laruence, I think it could make sense to apply your check in the PHP side...
+</pre>
+</div><div class='comment type_comment' ><a name="1388264861">&nbsp;</a><strong>[2013-12-28 21:07 UTC] kuba &#x64;&#111;&#x74; brecka &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Please use CVE-2013-7226 for this issue.
+</pre>
+</div><div class='comment type_log' ><a name="1392223257">&nbsp;</a><strong>[2014-02-12 16:40 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Type: Security</span>
+<span class="added">+Type: Bug</span>
+</div></div></div><div class='comment type_comment' ><a name="1392223257">&nbsp;</a><strong>[2014-02-12 16:40 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<pre class='note'>Drop the security type as 5.5.9 is now released.
+</pre>
+</div><div class='comment type_log' ><a name="1392223935">&nbsp;</a><strong>[2014-02-12 16:52 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Type: Bug</span>
+<span class="added">+Type: Security</span>
+</div></div></div><div class='comment type_log' ><a name="1392485280">&nbsp;</a><strong>[2014-02-15 17:28 UTC] <a href="//people.php.net/tyrael">tyrael@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2013-7226</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

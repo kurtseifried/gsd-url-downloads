@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='PHAR related Bug #71498 - RDF' href='rss/bug.php?id=71498'>
+        <link rel='alternate' type='application/rss+xml' title='PHAR related Bug #71498 - RSS 2.0' href='rss/bug.php?id=71498&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #71498 :: Out-of-Bound Read in phar_parse_zipfile()</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=71498">Sec Bug</a>&nbsp;#71498</th>
+            <td id="summary" colspan="5">Out-of-Bound Read in phar_parse_zipfile()</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-02-02 16:48 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-03-02 06:38 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>manhluat &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=PHAR+related">PHAR related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.5.32</td>
+            <th class="details">OS:</th>
+            <td>Unix</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><em>None</em></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=71498&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=71498&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=71498&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1454431688">&nbsp;</a><strong>[2016-02-02 16:48 UTC] manhluat &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</strong>
+<pre class='note'>Description:
+------------
+There is a flaw was found in PHAR's phar_parse_zipfile() function.
+
+
+--------------------------------
+ext/phar/zip.c:
+
+int phar_parse_zipfile(php_stream *fp, char *fname, int fname_len, char *alias, int alias_len, phar_archive_data** pphar, char **error) /* {{{ */
+{
+	phar_zip_dir_end locator;
+	char buf[sizeof(locator) + 65536];
+...
+	while ((p=(char *) memchr(p + 1, 'P', (size_t) (size - (p + 1 - buf)))) != NULL) {
+		if (!memcmp(p + 1, &quot;K\5\6&quot;, 3)) {
+			memcpy((void *)&amp;locator, (void *) p, sizeof(locator));
+			if (PHAR_GET_16(locator.centraldisk) != 0 || PHAR_GET_16(locator.disknumber) != 0) {
+				/* split archives not handled */
+				php_stream_close(fp);
+				if (error) {
+					spprintf(error, 4096, &quot;phar error: split archives spanning multiple zips cannot be processed in zip-based phar \&quot;%s\&quot;&quot;, fname);
+				}
+				return FAILURE;
+			}
+...
+
+--------------------------------
+
+Sizeof(buf) equals 0x10016 (0x16 (sizeof[locator]) plus 65536)
+
+The above code block tries to determine where is &quot;PK\x05\x06&quot; in buf. it is actually &quot;End of central directory record&quot; structure of zip file (<a href="https://users.cs.jmu.edu/buchhofp/forensics/formats/pkzip.html" rel="nofollow">https://users.cs.jmu.edu/buchhofp/forensics/formats/pkzip.html</a>). Then it copies 0x16 bytes  from there to `phar_zip_dir_end locator`. 
+
+What if &quot;PK\x05\x06&quot; signature is located at end of `buf` variable, it will read out-of-bound `buf` variable to copy to `locator`.
+
+You can see details of debugging below.
+
+* Note:
+- PHP5 and PHP7 latest version are vulnerable.
+- Works on Linux, Mac, Windows as well. I think
+- It is possible to memory leak, crash, etc.
+
+
+`poc.zip` can be downloaded here: <a href="https://drive.google.com/file/d/0B4qNn6UEDAR-V2ptcGlUR01DTjA/view?usp=sharing" rel="nofollow">https://drive.google.com/file/d/0B4qNn6UEDAR-V2ptcGlUR01DTjA/view?usp=sharing</a>
+
+
+
+
+
+Test script:
+---------------
+
+&lt;?php 
+$p = new PharData($argv[1]);
+?&gt;
+
+Actual result:
+--------------
+You can see that I print out `p`,`locator`,`buf`,.. to let you imagine the stack layout. Finally, `locator` contains some pointer, memory, blah blah.
+
+
+
+
+
+
+
+gdb-peda$ r
+Starting program: /root/test/php-7.0.2/sapi/cli/php ./php-test/zip.php ./php-test/reproduce/poc.zip
+[----------------------------------registers-----------------------------------]
+RAX: 0x0 
+RBX: 0x7ffffffe9440 ('b' &lt;repeats 200 times&gt;...)
+RCX: 0x0 
+RDX: 0x0 
+RSI: 0x19 
+RDI: 0x7b ('{')
+RBP: 0x7fffffff9452 --&gt; 0x3100000006054b50 
+RSP: 0x7ffffffe8230 --&gt; 0x0 
+RIP: 0x50d28f (&lt;phar_parse_zipfile+1167&gt;:       movsx  ax,BYTE PTR [rbp+0x7])
+R8 : 0x46 ('F')
+R9 : 0x8e 
+R10: 0x0 
+R11: 0x0 
+R12: 0x10016 
+R13: 0x7ffff6474300 --&gt; 0xdd8e80 --&gt; 0x606090 (&lt;php_stdiop_write&gt;:      mov    rax,QWORD PTR [rdi+0x8])
+R14: 0x0 
+R15: 0x7ffff6474300 --&gt; 0xdd8e80 --&gt; 0x606090 (&lt;php_stdiop_write&gt;:      mov    rax,QWORD PTR [rdi+0x8])
+EFLAGS: 0x246 (carry PARITY adjust ZERO sign trap INTERRUPT direction overflow)
+[-------------------------------------code-------------------------------------]
+   0x50d283 &lt;phar_parse_zipfile+1155&gt;:  mov    BYTE PTR [rsp+0x60],al
+   0x50d287 &lt;phar_parse_zipfile+1159&gt;:  movzx  eax,BYTE PTR [rbp+0x15]
+   0x50d28b &lt;phar_parse_zipfile+1163&gt;:  mov    BYTE PTR [rsp+0x50],al
+=&gt; 0x50d28f &lt;phar_parse_zipfile+1167&gt;:  movsx  ax,BYTE PTR [rbp+0x7]
+   0x50d294 &lt;phar_parse_zipfile+1172&gt;:  shl    eax,0x8
+   0x50d297 &lt;phar_parse_zipfile+1175&gt;:  or     ax,r11w
+   0x50d29b &lt;phar_parse_zipfile+1179&gt;:  jne    0x50d3c0 &lt;phar_parse_zipfile+1472&gt;
+   0x50d2a1 &lt;phar_parse_zipfile+1185&gt;:  shl    ecx,0x8
+[------------------------------------stack-------------------------------------]
+0000| 0x7ffffffe8230 --&gt; 0x0 
+0008| 0x7ffffffe8238 --&gt; 0x0 
+0016| 0x7ffffffe8240 --&gt; 0x0 
+0024| 0x7ffffffe8248 --&gt; 0x0 
+0032| 0x7ffffffe8250 --&gt; 0x7fffffffacf0 --&gt; 0x0 
+0040| 0x7ffffffe8258 --&gt; 0x7ffff6471098 (&quot;/root/test/php-test/reproduce/poc.zip&quot;)
+0048| 0x7ffffffe8260 --&gt; 0x0 
+0056| 0x7ffffffe8268 --&gt; 0x25 ('%')
+[------------------------------------------------------------------------------]
+Legend: code, data, rodata, value
+
+Breakpoint 2, phar_parse_zipfile (fp=fp@entry=0x7ffff6474300, fname=fname@entry=0x7ffff6471098 &quot;/root/test/php-test/reproduce/poc.zip&quot;, fname_len=fname_len@entry=0x25, alias=alias@entry=0x0, alias_len=alias_len@entry=0x0, 
+    pphar=pphar@entry=0x7fffffffabe8, error=error@entry=0x7fffffffacf0) at /root/test/php-7.0.2/ext/phar/zip.c:204
+204                             if (PHAR_GET_16(locator.centraldisk) != 0 || PHAR_GET_16(locator.disknumber) != 0) {
+gdb-peda$ print p
+$12 = 0x7fffffff9452 &quot;PK\005\006&quot;
+gdb-peda$ print p+0x16
+$13 = 0x7fffffff9468 &quot;\350\253\377\377\377\177&quot;
+gdb-peda$ print buf+0x10016
+$14 = 0x7fffffff9456 &quot;&quot;
+gdb-peda$ x/20gx $rbp+0x4 &lt;--- locator
+0x7fffffff9456: 0x7b198e4631000000      0x7ffff6474300a65d
+0x7fffffff9466: 0x7fffffffabe80000      0x7fffffff96c00000
+0x7fffffff9476: 0x7ffff64710980000      0x0000000004000000
+0x7fffffff9486: 0x0000000000010000      0x7ffff64743000000
+0x7fffffff9496: 0x00000051b0e20000      0x7fffffffacf00000
+0x7fffffff94a6: 0x0000000000000000      0x0000000000000000
+0x7fffffff94b6: 0x7fffffff96d20000      0x0000000000000000
+0x7fffffff94c6: 0x0000000000000000      0x7fffffffacf00000
+0x7fffffff94d6: 0x0000000000000000      0x7fffffff96a00000
+0x7fffffff94e6: 0x7ffff64710980000      0x7fffffff96500000
+gdb-peda$ 
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=71498'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=71498'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1455727739">&nbsp;</a><strong>[2016-02-17 16:48 UTC] manhluat &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</strong>
+<pre class='note'>ping
+</pre>
+</div><div class='comment type_comment' ><a name="1456102401">&nbsp;</a><strong>[2016-02-22 00:53 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>fix in security repo as a6fdc5bb27b20d889de0cd29318b3968aabb57bd and in <a href="https://gist.github.com/acc83406aada4617a35d" rel="nofollow">https://gist.github.com/acc83406aada4617a35d</a> - please verify.
+</pre>
+</div><div class='comment type_log' ><a name="1456102413">&nbsp;</a><strong>[2016-02-22 00:53 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_log' ><a name="1456102634">&nbsp;</a><strong>[2016-02-22 00:57 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 5.6.17</span>
+<span class="added">+PHP Version: 5.5.32</span>
+</div></div></div><div class='comment type_svn' ><a name="1456900743">&nbsp;</a><strong>[2016-03-02 06:39 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=a6fdc5bb27b20d889de0cd29318b3968aabb57bd" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=a6fdc5bb27b20d889de0cd29318b3968aabb57bd</a>
+Log: Fix <a href='bug.php?id=71498'>bug #71498</a>: Out-of-Bound Read in phar_parse_zipfile()
+</pre>
+</div><div class='comment type_log' ><a name="1456900743">&nbsp;</a><strong>[2016-03-02 06:39 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1456901793">&nbsp;</a><strong>[2016-03-02 06:56 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=a6fdc5bb27b20d889de0cd29318b3968aabb57bd" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=a6fdc5bb27b20d889de0cd29318b3968aabb57bd</a>
+Log: Fix <a href='bug.php?id=71498'>bug #71498</a>: Out-of-Bound Read in phar_parse_zipfile()
+</pre>
+</div><div class='comment type_svn' ><a name="1456902767">&nbsp;</a><strong>[2016-03-02 07:12 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=a6fdc5bb27b20d889de0cd29318b3968aabb57bd" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=a6fdc5bb27b20d889de0cd29318b3968aabb57bd</a>
+Log: Fix <a href='bug.php?id=71498'>bug #71498</a>: Out-of-Bound Read in phar_parse_zipfile()
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

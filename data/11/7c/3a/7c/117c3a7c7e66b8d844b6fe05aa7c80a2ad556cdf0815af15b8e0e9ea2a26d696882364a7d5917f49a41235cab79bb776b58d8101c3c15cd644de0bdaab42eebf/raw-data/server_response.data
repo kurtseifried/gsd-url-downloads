@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='PHAR related Bug #73773 - RDF' href='rss/bug.php?id=73773'>
+        <link rel='alternate' type='application/rss+xml' title='PHAR related Bug #73773 - RSS 2.0' href='rss/bug.php?id=73773&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #73773 :: Seg fault when loading hostile phar</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=73773">Sec Bug</a>&nbsp;#73773</th>
+            <td id="summary" colspan="5">Seg fault when loading hostile phar</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-12-17 12:06 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2017-07-12 17:09 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>eyal &#x64;&#111;&#x74; itkin &#x61;&#116; gmail &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=PHAR+related">PHAR related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.6.29</td>
+            <th class="details">OS:</th>
+            <td></td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2017-11147" target="_blank">2017-11147</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=73773&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=73773&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=73773&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1481976371">&nbsp;</a><strong>[2016-12-17 12:06 UTC] eyal &#x64;&#111;&#x74; itkin &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+phar.c - phar_parse_pharfile() has insufficient sanity checks on the entry data. A hostile phar archive can lead the parser to access memory out of the allocated buffer, resulting in a crash.
+
+The for loop that parses the manifest entries does not properly checks that the metadata_len 4 bytes field is inside the buffer, enabling a huge page aligned archive to trigger an out-of-page read, causing a segmentation fault - as presented in the attached trace.
+
+The proposed fix is to add a check before reading this length field (just like the check in the start of the for loop):
+if ( 4 &gt; (size_t)(endbuffer - buffer))
+{
+    &lt;report error&gt;
+}
+
+This report is somewhat connected to report #73764, and both should probably be fixed together so to avoid confusion.
+
+Test script:
+---------------
+&lt;?php
+	$p = new Phar('example_hostile.phar', 0);
+	echo &quot;Loaded the phar archive\n&quot;;
+?&gt;
+
+Expected result:
+----------------
+no crash, calling the echo with the specified message as intended
+
+Actual result:
+--------------
+segmentation fault.
+
+(gdb) bt
+#0  0xb4c7cb56 in ?? () from /usr/lib/php/20151012/phar.so
+#1  0xb4c7ebce in phar_create_or_parse_filename ()
+   from /usr/lib/php/20151012/phar.so
+#2  0xb4c7f8b7 in phar_open_or_create_filename ()
+   from /usr/lib/php/20151012/phar.so
+#3  0xb4c8120e in zim_Phar___construct () from /usr/lib/php/20151012/phar.so
+#4  0x80348662 in execute_internal ()
+#5  0x802a1dce in dtrace_execute_internal ()
+#6  0x80339f65 in ?? ()
+#7  0x802f26da in execute_ex ()
+#8  0x802a1c35 in dtrace_execute_ex ()
+#9  0x8034a1b6 in zend_execute ()
+#10 0x802b210d in zend_execute_scripts ()
+#11 0x80251054 in php_execute_script ()
+#12 0x8034c01f in ?? ()
+#13 0x8012b64f in main ()
+(gdb) info reg
+eax            0xa8200000	-1474297856
+ecx            0x0	0
+edx            0xb49fffec	-1264582676
+ebx            0xb4ca6c40	-1261802432
+esp            0xbfeee240	0xbfeee240
+ebp            0xb5274000	0xb5274000
+esi            0x640001b	104857627
+edi            0xb4a00000	-1264582656
+eip            0xb4c7cb56	0xb4c7cb56
+eflags         0x210246	[ PF ZF IF RF ID ]
+cs             0x73	115
+ss             0x7b	123
+ds             0x7b	123
+es             0x7b	123
+fs             0x0	0
+gs             0x33	51
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=73773'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=73773'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1482822330">&nbsp;</a><strong>[2016-12-27 07:05 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Open</span>
+<span class="added">+Status: Feedback</span>
+</div></div></div><div class='comment type_comment' ><a name="1482822330">&nbsp;</a><strong>[2016-12-27 07:05 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Please provide example_hostile.phar
+</pre>
+</div><div class='comment type_log' ><a name="1482829472">&nbsp;</a><strong>[2016-12-27 09:04 UTC] eyal &#x64;&#111;&#x74; itkin &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Feedback</span>
+<span class="added">+Status: Open</span>
+</div></div></div><div class='comment type_comment' ><a name="1482829472">&nbsp;</a><strong>[2016-12-27 09:04 UTC] eyal &#x64;&#111;&#x74; itkin &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Uploaded the example_hostile.phar (+ the python script than generated it) to this link: <a href="http://www.cs.tau.ac.il/~eyalitki/Upload/73773/" rel="nofollow">http://www.cs.tau.ac.il/~eyalitki/Upload/73773/</a>
+</pre>
+</div><div class='comment type_log' ><a name="1483142837">&nbsp;</a><strong>[2016-12-31 00:07 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Open</span>
+<span class="added">+Status: Feedback</span>
+</div></div></div><div class='comment type_comment' ><a name="1483142837">&nbsp;</a><strong>[2016-12-31 00:07 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>I can't reproduce this after fix for #73764 is applied. Could you please check if it still happens for you?
+</pre>
+</div><div class='comment type_log' ><a name="1483174597">&nbsp;</a><strong>[2016-12-31 08:56 UTC] eyal &#x64;&#111;&#x74; itkin &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Feedback</span>
+<span class="added">+Status: Open</span>
+</div></div></div><div class='comment type_comment' ><a name="1483174597">&nbsp;</a><strong>[2016-12-31 08:56 UTC] eyal &#x64;&#111;&#x74; itkin &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>It still happens, and this is because:
+1) #73764 checked that the static 24 entry bytes (entry.filename_len, entry.uncompressed_filesize, timestamp, compressed_filesize, crc32, flags) have enough space in the buffer.
+2) #73764 also checked that the dynamic filename has enough space in the buffer
+3) After all of these fields there are additional fields:
+ a) 4   bytes - len (metadata_len)
+ b) len bytes - the actual metadata
+
+The current code reads the 4 bytes (without checking it is inside the buffer), and the checks that has enough (len) bytes so to read the metadata itself.
+</pre>
+</div><div class='comment type_log' ><a name="1483175999">&nbsp;</a><strong>[2016-12-31 09:19 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Open</span>
+<span class="added">+Status: Feedback</span>
+</div></div></div><div class='comment type_comment' ><a name="1483175999">&nbsp;</a><strong>[2016-12-31 09:19 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Could you please supply the file that reproduces it for you? For me it does not reproduce with the file at the link here.
+</pre>
+</div><div class='comment type_log' ><a name="1483180146">&nbsp;</a><strong>[2016-12-31 10:29 UTC] eyal &#x64;&#111;&#x74; itkin &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Feedback</span>
+<span class="added">+Status: Open</span>
+</div></div></div><div class='comment type_comment' ><a name="1483180146">&nbsp;</a><strong>[2016-12-31 10:29 UTC] eyal &#x64;&#111;&#x74; itkin &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>* I uploaded a new .phar file that was tested in my environment to reproduce the error.
+* Again, I uploaded the python script that generated it (build_phar_new.py).
+* Both files can be found in the same link as before:  <a href="http://www.cs.tau.ac.il/~eyalitki/Upload/73773/" rel="nofollow">http://www.cs.tau.ac.il/~eyalitki/Upload/73773/</a>
+</pre>
+</div><div class='comment type_log' ><a name="1483238917">&nbsp;</a><strong>[2017-01-01 02:48 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 7.1.0</span>
+<span class="added">+PHP Version: 5.6.29</span>
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1483238917">&nbsp;</a><strong>[2017-01-01 02:48 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The fix is in security repo as e5246580a85f031e1a3b8064edbaa55c1643a451 and in <a href="https://gist.github.com/b7b2c560555bedec94a12f73cacc182f" rel="nofollow">https://gist.github.com/b7b2c560555bedec94a12f73cacc182f</a>
+
+please verify
+</pre>
+</div><div class='comment type_comment' ><a name="1483243335">&nbsp;</a><strong>[2017-01-01 04:02 UTC] eyal &#x64;&#111;&#x74; itkin &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>I approve of the suggested fix.
+</pre>
+</div><div class='comment type_svn' ><a name="1483420311">&nbsp;</a><strong>[2017-01-03 05:11 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=e5246580a85f031e1a3b8064edbaa55c1643a451" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=e5246580a85f031e1a3b8064edbaa55c1643a451</a>
+Log: Fix <a href='bug.php?id=73773'>bug #73773</a> - Seg fault when loading hostile phar
+</pre>
+</div><div class='comment type_log' ><a name="1483420311">&nbsp;</a><strong>[2017-01-03 05:11 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1483421191">&nbsp;</a><strong>[2017-01-03 05:26 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=e5246580a85f031e1a3b8064edbaa55c1643a451" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=e5246580a85f031e1a3b8064edbaa55c1643a451</a>
+Log: Fix <a href='bug.php?id=73773'>bug #73773</a> - Seg fault when loading hostile phar
+</pre>
+</div><div class='comment type_log' ><a name="1483660620">&nbsp;</a><strong>[2017-01-05 23:57 UTC] <a href="//people.php.net/tyrael">tyrael@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Summary: Seg fault when loading hostile phar</span>
+<span class="added">+Summary: Segfault when loading hostile phar</span>
+</div></div></div><div class='comment type_log' ><a name="1483660814">&nbsp;</a><strong>[2017-01-06 00:00 UTC] <a href="//people.php.net/tyrael">tyrael@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Summary: Segfault when loading hostile phar</span>
+<span class="added">+Summary: Seg fault when loading hostile phar</span>
+</div></div></div><div class='comment type_log' ><a name="1486947289">&nbsp;</a><strong>[2017-02-13 00:54 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: needed</span>
+</div></div></div><div class='comment type_comment' ><a name="1499856071">&nbsp;</a><strong>[2017-07-12 10:41 UTC] henri &#x61;&#116; nerv &#x64;&#111;&#x74; fi</strong>
+<pre class='note'>CVE-2017-11147 has been assigned for this issue.
+</pre>
+</div><div class='comment type_log' ><a name="1499879381">&nbsp;</a><strong>[2017-07-12 17:09 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID: needed</span>
+<span class="added">+CVE-ID: 2017-11147</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

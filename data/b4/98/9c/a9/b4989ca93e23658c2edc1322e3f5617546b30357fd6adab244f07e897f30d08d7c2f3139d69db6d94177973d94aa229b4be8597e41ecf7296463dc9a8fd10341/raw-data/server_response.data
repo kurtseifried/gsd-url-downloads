@@ -1,0 +1,4096 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en" dir="ltr">
+  <head>
+<base href="https://bugs.launchpad.net/qemu/+bug/807893/+index" />
+
+    <meta charset="UTF-8" />
+    <title>Bug #807893 “qemu privilege escalation” : Bugs : QEMU</title>
+    <link rel="shortcut icon" href="/@@/launchpad.png" />
+    <link rel="canonical" href="https://bugs.launchpad.net/bugs/807893" />
+    
+      <link rel="alternate" type="application/atom+xml" href="http://feeds.launchpad.net/bugs/807893/bug.atom" title="Bug 807893 Feed" />
+    
+
+    
+  
+  <link type="text/css" rel="stylesheet" media="screen, print" href="/+icing/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/combo.css" />
+
+
+    
+
+    
+      <meta name="description" content="If qemu is started as root, with -runas, the extra groups is not dropped correctly
+
+/proc/`pidof qemu`/status
+..
+Uid:    100     100     100     100
+Gid:    100     100     100     100
+FDSize: 32
+Groups: 0 1 2 3 4 6 10 11 26 27 
+...
+
+The fix is to add initgroups() or setgroups(1, [gid]) where appropriate to os-posix.c.
+
+The extra gid's allow read or write access to other files (such as /dev etc).
+
+Emulating the qemu code:
+
+# python
+...
+&gt;&gt;&gt; import os
+&gt;&gt;&gt; os.setgid(100)
+&gt;&gt;&gt; os.setuid(100)
+&gt;&gt;&gt; o..." />
+      <meta property="og:description" content="If qemu is started as root, with -runas, the extra groups is not dropped correctly
+
+/proc/`pidof qemu`/status
+..
+Uid:    100     100     100     100
+Gid:    100     100     100     100
+FDSize: 32
+Groups: 0 1 2 3 4 6 10 11 26 27 
+...
+
+The fix is to add initgroups() or setgroups(1, [gid]) where appropriate to os-posix.c.
+
+The extra gid's allow read or write access to other files (such as /dev etc).
+
+Emulating the qemu code:
+
+# python
+...
+&gt;&gt;&gt; import os
+&gt;&gt;&gt; os.setgid(100)
+&gt;&gt;&gt; os.setuid(100)
+&gt;&gt;&gt; o..." />
+    
+
+    
+    
+      <meta property="og:title" content="Bug #807893 “qemu privilege escalation” : Bugs : QEMU" />
+      <meta property="og:type" content="website" />
+      <meta property="og:image" content="/@@/launchpad.png" />
+      <meta property="og:url" content="https://bugs.launchpad.net/bugs/807893" />
+      <meta property="og:site_name" content="Launchpad" />
+    
+
+    
+
+    
+  
+
+  
+  
+  <script type="text/javascript">
+    var LP = {
+        cache: {},
+        links: {}
+    };
+  </script>
+
+  
+
+  <script type="text/javascript">var cookie_scope = '; Path=/; Secure; Domain=.launchpad.net';</script>
+
+   <script type="text/javascript" src="/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?yui/yui/yui-min.js&amp;lp/meta.js&amp;yui/loader/loader-min.js"></script>
+   <script type="text/javascript">
+        var raw = null;
+        if (LP.devmode) {
+           raw = 'raw';
+        }
+        YUI.GlobalConfig = {
+            combine: true,
+            comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+            root: 'yui/',
+            filter: raw,
+            debug: false,
+            fetchCSS: false,
+            maxURLLength: 2000,
+            groups: {
+                lp: {
+                    combine: true,
+                    base: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?lp/',
+                    comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+                    root: 'lp/',
+                    // comes from including lp/meta.js
+                    modules: LP_MODULES,
+                    fetchCSS: false
+                }
+            }
+        }</script>
+
+  <script type="text/javascript">
+      // we need this to create a single YUI instance all events and code
+      // talks across. All instances of YUI().use should be based off of
+      // LPJS instead.
+      var LPJS = new YUI();
+  </script>
+
+
+
+    <script id="base-layout-load-scripts" type="text/javascript">
+        //<![CDATA[
+        LPJS.use('base', 'node', 'console', 'event',
+            'oop', 'lp', 'lp.app.foldables','lp.app.sorttable',
+            'lp.app.inlinehelp', 'lp.app.links',
+            'lp.bugs.bugtask_index', 'lp.bugs.subscribers',
+            'lp.app.ellipsis', 'lp.code.branchmergeproposal.diff',
+            'lp.views.global',
+             function(Y) {
+
+            Y.on("domready", function () {
+                var global_view = new Y.lp.views.Global();
+                global_view.render();
+
+                Y.lp.app.sorttable.SortTable.init();
+                Y.lp.app.inlinehelp.init_help();
+                Y.lp.activate_collapsibles();
+                Y.lp.app.foldables.activate();
+                Y.lp.app.links.check_valid_lp_links();
+            });
+
+            Y.on('lp:context:web_link:changed', function(e) {
+                  window.location = e.new_value;
+            });
+        });
+        //]]>
+    </script>
+    <script id="base-helper-functions" type="text/javascript">
+         //<![CDATA[
+        // This code is pulled from lp.js that needs to be available on every
+        // request. Pulling here to get it outside the scope of the YUI block.
+        function setFocusByName(name) {
+            // Focus the first element matching the given name which can be focused.
+            var nodes = document.getElementsByName(name);
+            var i, node;
+            for (i = 0; i < nodes.length; i++) {
+                node = nodes[i];
+                if (node.focus) {
+                    try {
+                        // Trying to focus a hidden element throws an error in IE8.
+                        if (node.offsetHeight !== 0) {
+                            node.focus();
+                        }
+                    } catch (e) {
+                        LPJS.use('console', function(Y) {
+                            Y.log('In setFocusByName(<' +
+                                node.tagName + ' type=' + node.type + '>): ' + e);
+                        });
+                    }
+                    break;
+                }
+            }
+        }
+
+        function selectWidget(widget_name, event) {
+          if (event && (event.keyCode === 9 || event.keyCode === 13)) {
+              // Avoid firing if user is tabbing through or simply pressing
+              // enter to submit the form.
+              return;
+          }
+          document.getElementById(widget_name).checked = true;
+        }
+        //]]>
+    </script>
+
+    
+      
+      <script type="text/javascript" id="available-official-tags-js">var available_official_tags = ["arm", "feature-request", "i386", "linux-user", "mips", "patch", "ppc", "qemu-img", "s390x", "sh4", "sparc", "usb", "windows"];</script>
+      <script type="text/javascript">
+        LPJS.use('base', 'node', 'oop', 'event', 'lp.bugs.bugtask_index',
+                  'lp.bugs.subscribers', 'lp.code.branchmergeproposal.diff',
+                  'lp.app.comment', 'lp.services.messages.edit', function(Y) {
+            Y.on('domready', function() {
+                Y.lp.code.branchmergeproposal.diff.connect_diff_links();
+                Y.lp.bugs.bugtask_index.setup_bugtask_index();
+                Y.lp.bugs.bugtask_index.setup_bugtask_table();
+                LP.cache.comment_context = LP.cache.bug;
+                var cl = new Y.lp.app.comment.CommentList();
+                cl.render();
+                var sl = new Y.lp.bugs.subscribers.createBugSubscribersLoader({
+                    container_box: '#other-bug-subscribers',
+                    subscribers_details_view:
+                        '/+bug-portlet-subscribers-details',
+                    subscribe_someone_else_link: '.menu-link-addsubscriber'
+                }, window);
+
+                Y.lp.services.messages.edit.setup();
+            });
+         });
+      </script>
+      <style type="text/css">
+        /* Align the 'add comment' link to the right of the comment box. */
+        #add-comment-form textarea { width: 100%; }
+        #add-comment-form { max-width: 60em; padding-bottom: 4em; }
+        #add-comment-form .actions {float: right;}
+        .buglink-summary dd { font-size: 10px; }
+        a#privacy-link:link:hover, a#privacy-link:visited:hover {text-decoration:none;}
+      </style>
+      <style type="text/css">
+        .yui3-overlay .value label  {
+          /* It normally makes sense for form labels to be bold, but since
+          this form consists only of radio buttons, there's nothing but labels
+          so we just get wall-to-wall bold. */
+          font-weight: normal !important;
+        }
+      </style>
+    
+    
+  </head>
+
+  <body id="document" itemscope="" itemtype="http://schema.org/WebPage" class="tab-bugs
+      main_side
+      public
+      yui3-skin-sam">
+          
+          
+    <div class="yui-d0">
+      <div id="locationbar" class="login-logout">
+        
+
+<div id="logincontrol"><a href="https://bugs.launchpad.net/qemu/+bug/807893/+login">Log in / Register</a></div>
+
+
+
+      </div><!--id="locationbar"-->
+
+      <div id="watermark" class="watermark-apps-portlet">
+        <div>
+          <a href="https://launchpad.net/qemu"><img alt="" width="64" height="64" src="https://launchpadlibrarian.net/27372372/qemu_64.png" /></a>
+        </div>
+        <div class="wide">
+          <h2 id="watermark-heading"><a href="https://launchpad.net/qemu">QEMU</a></h2>
+        </div>
+        
+  <!-- Application Menu -->
+  <ul class="facetmenu">
+    
+      
+      <li class="overview"><a href="https://launchpad.net/qemu">Overview</a></li>
+      
+    
+    
+      
+      <li class="branches"><a href="https://code.launchpad.net/qemu">Code</a></li>
+      
+    
+    
+      <li class="bugs active"><a href="https://bugs.launchpad.net/qemu">Bugs</a></li>
+      
+      
+    
+    
+      
+      <li class="specifications"><a href="https://blueprints.launchpad.net/qemu">Blueprints</a></li>
+      
+    
+    
+      
+      <li class="translations"><a href="https://translations.launchpad.net/qemu">Translations</a></li>
+      
+    
+    
+      
+      <li class="answers"><a href="https://answers.launchpad.net/qemu">Answers</a></li>
+      
+    
+  </ul>
+
+      </div>
+
+      <div class="yui-t4">
+        <div id="maincontent" class="yui-main">
+          <div class="yui-b" dir="ltr">
+            <div class="context-publication">
+              
+      <h1 id="edit-title">
+<span class="yui3-editable_text-text ellipsis" style="max-width: 95%;">
+    qemu privilege escalation
+</span>
+  
+</h1>
+
+
+
+    
+              
+
+              <div id="registration" class="registering">
+                
+      Bug #807893 reported by
+      <a href="https://launchpad.net/~andrewg+launchpad" class="sprite person">Andrew Griffiths</a>
+      <time title="2011-07-09 08:14:16 UTC" datetime="2011-07-09T08:14:16.094176+00:00">on 2011-07-09</time>
+    
+              </div>
+            </div>
+
+            
+            <div id="request-notifications">
+              
+            </div>
+
+            
+              <div>
+
+      
+
+      <div id="bug-is-duplicate">
+          
+      </div>
+      
+
+      <div style="float: right;">
+        <span><a href="/+help-bugs/bug-heat.html" target="help" class="sprite flame">8</a></span>
+      </div>
+
+      
+
+
+  
+  
+    <div class="actions">
+      <span id="affectsmetoo" style="display: inline">This bug affects 1 person</span>
+    </div>
+  
+
+
+
+    <table id="affected-software" class="listing">
+      <thead>
+        <tr>
+          <th colspan="2">Affects</th>
+          <th>Status</th>
+          <th>Importance</th>
+          <th>Assigned to</th>
+          <th>Milestone</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        
+          
+  <tr class="highlight" id="tasksummary952399">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/qemu/+bug/807893/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary952399">
+        <span class="yui3-activator-data-box">
+            <a class="sprite product" href="https://bugs.launchpad.net/qemu">QEMU</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/qemu/+bug/807893/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/qemu/+bug/807893/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary952399">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~stefanha">Stefan Hajnoczi</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task952399">
+     <td colspan="7"><form action="/qemu/+bug/807893/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/qemu">QEMU</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~andrewg+launchpad" class="sprite person">Andrew Griffiths</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2011-07-09 08:14:16 UTC" datetime="2011-07-09T08:14:16.094176+00:00">2011-07-09</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2011-07-09 09:14:37 UTC" datetime="2011-07-09T09:14:37.397439+00:00">2011-07-09</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2011-07-09 09:14:45 UTC" datetime="2011-07-09T09:14:45.337479+00:00">2011-07-09</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2016-08-12 10:54:46 UTC" datetime="2016-08-12T10:54:46.320608+00:00">2016-08-12</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2016-08-12 10:54:46 UTC" datetime="2016-08-12T10:54:46.320608+00:00">2016-08-12</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="qemu.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="qemu.target.option.package" name="qemu.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="qemu.target.distribution" name="qemu.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="qemu.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="qemu.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="qemu.target.package"
+                         name="qemu.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;qemu.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('qemu.target.package');
+              var select_menu = Y.DOM.byId('qemu.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-qemu-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a package", "vocabulary_filters": [], "input_element": "qemu.target.package", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search by name", "show_widget_id": "show-widget-qemu-target-package", "selected_value": null, "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "DistributionPackage"};
+        var show_widget_id = 'show-widget-qemu-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="qemu.target.option.product" name="qemu.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="qemu" id="qemu.target.product"
+                         name="qemu.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;qemu.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('qemu.target.product');
+              var select_menu = Y.DOM.byId('qemu.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-qemu-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a project", "vocabulary_filters": [], "input_element": "qemu.target.product", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search", "show_widget_id": "show-widget-qemu-target-product", "selected_value": "qemu", "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "Product"};
+        var show_widget_id = 'show-widget-qemu-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="qemu.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="qemu.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="qemu.status" name="qemu.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="qemu.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceUNDECIDED">Undecided</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="qemu.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="qemu.assignee.assign_to_me" name="qemu.assignee.option" value="qemu.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="qemu.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="qemu.assignee.assigned_to" name="qemu.assignee.option" value="qemu.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="qemu.assignee.assigned_to">
+              Stefan Hajnoczi (stefanha)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="qemu.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="qemu.comment_on_change" name="qemu.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+      </tbody>
+
+    </table>
+
+
+
+<div class="actions">
+  
+    <span id="also-affects-product" class="">
+    <a class="menu-link-addupstream sprite add" href="https://bugs.launchpad.net/qemu/+bug/807893/+choose-affected-product">Also affects project</a>
+        <a href="/+help-bugs/also-affects-project-help.html" target="help" class="sprite maybe action-icon">(?)</a>
+    </span>
+    <span id="also-affects-package" class="">
+    <a class="menu-link-adddistro sprite add" href="https://bugs.launchpad.net/qemu/+bug/807893/+distrotask">Also affects distribution/package</a>
+    </span>
+    <a class="menu-link-nominate sprite milestone" href="https://bugs.launchpad.net/qemu/+bug/807893/+nominate">Nominate for series</a>
+    
+  
+
+</div>
+
+
+
+
+      <div id="maincontentsub">
+        <div class="top-portlet">
+
+      <div itemprop="mainContentOfPage" class="report">
+        
+
+        <div>
+  <div class="lazr-multiline-edit" id="edit-description">
+  <div class="clearfix">
+    
+
+    <h3>Bug Description</h3>
+  </div>
+
+  <div class="yui3-editable_text-text"><p>If qemu is started as root, with -runas, the extra groups is not dropped correctly</p>
+<p>/proc/`pidof qemu`/status<br />
+..<br />
+Uid:    100     100     100     100<br />
+Gid:    100     100     100     100<br />
+FDSize: 32<br />
+Groups: 0 1 2 3 4 6 10 11 26 27<br />
+...</p>
+<p>The fix is to add initgroups() or setgroups(1, [gid]) where appropriate to os-posix.c.</p>
+<p>The extra gid&#x27;s allow read or write access to other files (such as /dev etc).</p>
+<p>Emulating the qemu code:</p>
+<p># python<br />
+...<br />
+&gt;&gt;&gt; import os<br />
+&gt;&gt;&gt; os.setgid(100)<br />
+&gt;&gt;&gt; os.setuid(100)<br />
+&gt;&gt;&gt; os.execve(<wbr />&quot;/bin/sh&quot;<wbr />, [ &quot;/bin/sh&quot; ], os.environ)<br />
+sh-4.1$ xxd /dev/sda | head -n2<br />
+0000000: eb48 9000 0000 0000 0000 0000 0000 0000  .H..............<br />
+0000010: 0000 0000 0000 0000 0000 0000 0000 0000  ................<br />
+sh-4.1$ ls -l /dev/sda<br />
+brw-rw---- 1 root disk 8, 0 Jul  8 11:54 /dev/sda<br />
+sh-4.1$ id<br />
+uid=100(qemu00) gid=100(users) groups=<wbr />100(users)<wbr />,0(root)<wbr />,1(bin)<wbr />,2(daemon)<wbr />,3(sys)<wbr />,4(adm)<wbr />,6(disk)<wbr />,10(wheel)<wbr />,11(floppy)<wbr />,26(tape)<wbr />,27(video)</p></div>
+  </div>
+
+  
+</div>
+
+
+        <div style="margin:-10px 0 20px 5px" class="clearfix">
+          
+        </div>
+
+        <div id="bug-tags">
+          <span id="tags-heading">
+            Tags:
+          </span>
+          <span id="tag-list">
+            <a class="unofficial-tag" href="/qemu/+bugs?field.tag=escalation">escalation</a>
+            <a class="unofficial-tag" href="/qemu/+bugs?field.tag=groups">groups</a>
+            <a class="unofficial-tag" href="/qemu/+bugs?field.tag=privilege">privilege</a>
+            <a class="unofficial-tag" href="/qemu/+bugs?field.tag=security">security</a>
+          </span>
+          
+          <a href="+edit" title="Edit tags" id="tags-trigger" class="sprite edit action-icon">Edit</a>
+          <a href="/+help-bugs/tag-help.html" target="help" class="sprite maybe action-icon">Tag help</a>
+        </div>
+
+        <script type="text/javascript">
+          LPJS.use('event', 'node', 'lp.bugs.tags_entry', function(Y) {
+              Y.on('domready',
+                   function(e) {
+                       Y.lp.bugs.tags_entry.setup_tag_entry(
+                           available_official_tags);
+                   },
+                   window);
+          });
+        </script>
+
+        <div class="clearfix"></div>
+      </div>
+
+      <div id="branches-and-cves">
+        <div id="bug-branches-container" style="float: left">
+          
+        </div><!-- bug-branch-container -->
+
+        <div class="cves">
+          <h2>CVE References</h2>
+          <ul>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2011-2527" title="The change_process_uid function in os...">2011-2527</a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="clearfix"></div>
+      </div> <!-- branches and CVEs -->
+
+      </div>
+
+      <div>
+      
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~stefanha" class="sprite person">Stefan Hajnoczi (stefanha)</a>
+    
+    <time title="2011-07-09 09:14:37 UTC" datetime="2011-07-09T09:14:37.209049+00:00">on 2011-07-09</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in qemu: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Confirmed
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; Stefan Hajnoczi (stefanha)
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/1" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~stefanha" class="sprite person">Stefan Hajnoczi (stefanha)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-09T09:22:07+00:00" title="2011-07-09 09:22:07 UTC">on 2011-07-09</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/qemu/+bug/807893/comments/1">
+                <strong>[PATCH] os-posix: set groups properly for -runas</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/1"> #1</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Andrew Griffiths reports that -runas does not set supplementary group<br />
+IDs.  This means that gid 0 (root) is not dropped when switching to an<br />
+unprivileged user.</p>
+<p>Add an initgroups(3) call to use the -runas user&#x27;s /etc/groups<br />
+membership to update the supplementary group IDs.</p>
+<p>Signed-off-by: Stefan Hajnoczi &lt;email address hidden&gt;<br />
+---<br />
+Note this needs compile testing on various POSIX host platforms.  Tested on<br />
+Linux.  Should work on BSD and Solaris.  initgroups(3) is SVr4/BSD but not in<br />
+POSIX.</p>
+<p>&nbsp;os-posix.c |    6 ++++++<br />
+&nbsp;1 files changed, 6 insertions(+), 0 deletions(-)</p>
+<p>diff --git a/os-posix.c b/os-posix.c<br />
+index 7dfb278..6f8d488 100644<br />
+--- a/os-posix.c<br />
++++ b/os-posix.c<br />
+@@ -31,6 +31,7 @@<br />
+&nbsp;/*needed for MAP_POPULATE before including qemu-options.h */<br />
+&nbsp;#include &lt;sys/mman.h&gt;<br />
+&nbsp;#include &lt;pwd.h&gt;<br />
++#include &lt;grp.h&gt;<br />
+&nbsp;#include &lt;libgen.h&gt;</p>
+<p>&nbsp;/* Needed early for CONFIG_BSD etc. */<br />
+@@ -199,6 +200,11 @@ static void change_<wbr />process_<wbr />uid(void)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;fprintf(<wbr />stderr, &quot;Failed to setgid(%d)\n&quot;, user_pwd-&gt;pw_gid);<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;exit(<wbr />1);<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;}<br />
++        if (initgroups(<wbr />user_pwd-<wbr />&gt;pw_name, user_pwd-&gt;pw_gid) &lt; 0) {<br />
++            fprintf(stderr, &quot;Failed to initgroups(\&quot;%s\&quot;, %d)\n&quot;,<br />
++                    user_pwd-&gt;pw_name, user_pwd-&gt;pw_gid);<br />
++            exit(1);<br />
++        }<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if (setuid(<wbr />user_pwd-<wbr />&gt;pw_uid) &lt; 0) {<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;fprintf(<wbr />stderr, &quot;Failed to setuid(%d)\n&quot;, user_pwd-&gt;pw_uid);<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;exit(<wbr />1);<br />
+--<br />
+1.7.5.4</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Andrew Griffiths reports that -runas does not set supplementary group
+IDs.  This means that gid 0 (root) is not dropped when switching to an
+unprivileged user.
+
+Add an initgroups(3) call to use the -runas user's /etc/groups
+membership to update the supplementary group IDs.
+
+Signed-off-by: Stefan Hajnoczi &lt;stefanha@linux.vnet.ibm.com&gt;
+---
+Note this needs compile testing on various POSIX host platforms.  Tested on
+Linux.  Should work on BSD and Solaris.  initgroups(3) is SVr4/BSD but not in
+POSIX.
+
+ os-posix.c |    6 ++++++
+ 1 files changed, 6 insertions(+), 0 deletions(-)
+
+diff --git a/os-posix.c b/os-posix.c
+index 7dfb278..6f8d488 100644
+--- a/os-posix.c
++++ b/os-posix.c
+@@ -31,6 +31,7 @@
+ /*needed for MAP_POPULATE before including qemu-options.h */
+ #include &lt;sys/mman.h&gt;
+ #include &lt;pwd.h&gt;
++#include &lt;grp.h&gt;
+ #include &lt;libgen.h&gt;
+ 
+ /* Needed early for CONFIG_BSD etc. */
+@@ -199,6 +200,11 @@ static void change_process_uid(void)
+             fprintf(stderr, "Failed to setgid(%d)\n", user_pwd-&gt;pw_gid);
+             exit(1);
+         }
++        if (initgroups(user_pwd-&gt;pw_name, user_pwd-&gt;pw_gid) &lt; 0) {
++            fprintf(stderr, "Failed to initgroups(\"%s\", %d)\n",
++                    user_pwd-&gt;pw_name, user_pwd-&gt;pw_gid);
++            exit(1);
++        }
+         if (setuid(user_pwd-&gt;pw_uid) &lt; 0) {
+             fprintf(stderr, "Failed to setuid(%d)\n", user_pwd-&gt;pw_uid);
+             exit(1);
+-- 
+1.7.5.4
+
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/2" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~andrewg+launchpad" class="sprite person">Andrew Griffiths (andrewg+launchpad)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-12T15:21:14.285605+00:00" title="2011-07-12 15:21:14 UTC">on 2011-07-12</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/2"> #2</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Yep, that fix looks fine. RedHat should have a CVE number for this issue.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Yep, that fix looks fine. RedHat should have a CVE number for this issue. </textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/3" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~andrewg+launchpad" class="sprite person">Andrew Griffiths (andrewg+launchpad)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-12T15:21:51.021943+00:00" title="2011-07-12 15:21:51 UTC">on 2011-07-12</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/3"> #3</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>or any other linux vendor that has an interest in qemu :)</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">or any other linux vendor that has an interest in qemu :) </textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/4" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~stefanha" class="sprite person">Stefan Hajnoczi (stefanha)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-12T15:59:06+00:00" title="2011-07-12 15:59:06 UTC">on 2011-07-12</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/qemu/+bug/807893/comments/4">
+                <strong>Re: [Qemu-devel] [PATCH] os-posix: set groups properly for -runas</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/4"> #4</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>On Sat, Jul 9, 2011 at 10:22 AM, Stefan Hajnoczi<br />
+&lt;email address hidden&gt; wrote:<br />
+<span class="foldable-quoted">
+&gt; Andrew Griffiths reports that -runas does not set supplementary group<br />
+&gt; IDs.  This means that gid 0 (root) is not dropped when switching to an<br />
+&gt; unprivileged user.<br />
+&gt;<br />
+&gt; Add an initgroups(3) call to use the -runas user&#x27;s /etc/groups<br />
+&gt; membership to update the supplementary group IDs.<br />
+&gt;<br />
+&gt; Signed-off-by: Stefan Hajnoczi &lt;email address hidden&gt;<br />
+&gt; ---<br />
+&gt; Note this needs compile testing on various POSIX host platforms.  Tested on<br />
+&gt; Linux.  Should work on BSD and Solaris.  initgroups(3) is SVr4/BSD but not in<br />
+&gt; POSIX.<br />
+&gt;<br />
+&gt;  os-posix.c |    6 ++++++<br />
+&gt;  1 files changed, 6 insertions(+), 0 deletions(-)
+</span></p>
+<p>Are you happy with this patch?  Bumping because security-related.</p>
+<p>Regarding portability, Linux, BSD, Solaris, and Mac OS X all provide<br />
+initgroups(3).  I think we&#x27;re good.</p>
+<p>Stefan</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">On Sat, Jul 9, 2011 at 10:22 AM, Stefan Hajnoczi
+&lt;stefanha@linux.vnet.ibm.com&gt; wrote:
+&gt; Andrew Griffiths reports that -runas does not set supplementary group
+&gt; IDs.  This means that gid 0 (root) is not dropped when switching to an
+&gt; unprivileged user.
+&gt;
+&gt; Add an initgroups(3) call to use the -runas user's /etc/groups
+&gt; membership to update the supplementary group IDs.
+&gt;
+&gt; Signed-off-by: Stefan Hajnoczi &lt;stefanha@linux.vnet.ibm.com&gt;
+&gt; ---
+&gt; Note this needs compile testing on various POSIX host platforms.  Tested on
+&gt; Linux.  Should work on BSD and Solaris.  initgroups(3) is SVr4/BSD but not in
+&gt; POSIX.
+&gt;
+&gt;  os-posix.c |    6 ++++++
+&gt;  1 files changed, 6 insertions(+), 0 deletions(-)
+
+Are you happy with this patch?  Bumping because security-related.
+
+Regarding portability, Linux, BSD, Solaris, and Mac OS X all provide
+initgroups(3).  I think we're good.
+
+Stefan
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/5" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~chrisw-x" class="sprite person">Chris Wright (chrisw-x)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-12T16:43:55.940600+00:00" title="2011-07-12 16:43:55 UTC">on 2011-07-12</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/5"> #5</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Requesting CVE.  Tools like libvirt deprivilege themselves before launching qemu as an unprivileged user (no use of -runas), so aren&#x27;t vulnerable.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Requesting CVE.  Tools like libvirt deprivilege themselves before launching qemu as an unprivileged user (no use of -runas), so aren't vulnerable.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/6" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~chrisw-x" class="sprite person">Chris Wright (chrisw-x)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-12T17:39:43.051819+00:00" title="2011-07-12 17:39:43 UTC">on 2011-07-12</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/6"> #6</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This bug is being tracked as CVE-2011-2527</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This bug is being tracked as CVE-2011-2527</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/7" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~chrisw-x" class="sprite person">Chris Wright (chrisw-x)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-12T18:10:33+00:00" title="2011-07-12 18:10:33 UTC">on 2011-07-12</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/7"> #7</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>* Stefan Hajnoczi (&lt;email address hidden&gt;) wrote:<br />
+<span class="foldable-quoted">
+&gt; @@ -199,6 +200,11 @@ static void change_<wbr />process_<wbr />uid(void)<br />
+&gt;              fprintf(stderr, &quot;Failed to setgid(%d)\n&quot;, user_pwd-&gt;pw_gid);<br />
+&gt;              exit(1);<br />
+&gt;          }<br />
+&gt; +        if (initgroups(<wbr />user_pwd-<wbr />&gt;pw_name, user_pwd-&gt;pw_gid) &lt; 0) {<br />
+&gt; +            fprintf(stderr, &quot;Failed to initgroups(\&quot;%s\&quot;, %d)\n&quot;,<br />
+&gt; +                    user_pwd-&gt;pw_name, user_pwd-&gt;pw_gid);<br />
+&gt; +            exit(1);<br />
+&gt; +        }
+</span></p>
+<p>Does initgroups need access to /etc/group?  How does this combine w/<br />
+-chroot?</p>
+<p>Added bonus...this will fail when the initial user is not privileged<br />
+_and_ is the same user as -runas user (probably not what a user intended,<br />
+but would&#x27;ve worked before).  Something like:</p>
+<p>[doh@laptop qemu]$ qemu -runas doh</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">* Stefan Hajnoczi (stefanha@linux.vnet.ibm.com) wrote:
+&gt; @@ -199,6 +200,11 @@ static void change_process_uid(void)
+&gt;              fprintf(stderr, "Failed to setgid(%d)\n", user_pwd-&gt;pw_gid);
+&gt;              exit(1);
+&gt;          }
+&gt; +        if (initgroups(user_pwd-&gt;pw_name, user_pwd-&gt;pw_gid) &lt; 0) {
+&gt; +            fprintf(stderr, "Failed to initgroups(\"%s\", %d)\n",
+&gt; +                    user_pwd-&gt;pw_name, user_pwd-&gt;pw_gid);
+&gt; +            exit(1);
+&gt; +        }
+
+Does initgroups need access to /etc/group?  How does this combine w/
+-chroot?
+
+Added bonus...this will fail when the initial user is not privileged
+_and_ is the same user as -runas user (probably not what a user intended,
+but would've worked before).  Something like:
+
+[doh@laptop qemu]$ qemu -runas doh
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/8" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~chrisw-x" class="sprite person">Chris Wright (chrisw-x)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-12T19:18:31+00:00" title="2011-07-12 19:18:31 UTC">on 2011-07-12</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/8"> #8</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>* Chris Wright (&lt;email address hidden&gt;) wrote:<br />
+<span class="foldable-quoted">
+&gt; * Stefan Hajnoczi (&lt;email address hidden&gt;) wrote:<br />
+&gt; &gt; @@ -199,6 +200,11 @@ static void change_<wbr />process_<wbr />uid(void)<br />
+&gt; &gt;              fprintf(stderr, &quot;Failed to setgid(%d)\n&quot;, user_pwd-&gt;pw_gid);<br />
+&gt; &gt;              exit(1);<br />
+&gt; &gt;          }<br />
+&gt; &gt; +        if (initgroups(<wbr />user_pwd-<wbr />&gt;pw_name, user_pwd-&gt;pw_gid) &lt; 0) {<br />
+&gt; &gt; +            fprintf(stderr, &quot;Failed to initgroups(\&quot;%s\&quot;, %d)\n&quot;,<br />
+&gt; &gt; +                    user_pwd-&gt;pw_name, user_pwd-&gt;pw_gid);<br />
+&gt; &gt; +            exit(1);<br />
+&gt; &gt; +        }<br />
+&gt;<br />
+&gt; Does initgroups need access to /etc/group?  How does this combine w/<br />
+&gt; -chroot?
+</span></p>
+<p>Tested this on Linux, and w/out /etc/group it simply fails to add any<br />
+supplementary groups (doesn&#x27;t fail completely, just fails safely).<br />
+Appears similar from solaris manpages.</p>
+<p>Given that...</p>
+<p>Acked-by: Chris Wright &lt;email address hidden&gt;</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">* Chris Wright (chrisw@sous-sol.org) wrote:
+&gt; * Stefan Hajnoczi (stefanha@linux.vnet.ibm.com) wrote:
+&gt; &gt; @@ -199,6 +200,11 @@ static void change_process_uid(void)
+&gt; &gt;              fprintf(stderr, "Failed to setgid(%d)\n", user_pwd-&gt;pw_gid);
+&gt; &gt;              exit(1);
+&gt; &gt;          }
+&gt; &gt; +        if (initgroups(user_pwd-&gt;pw_name, user_pwd-&gt;pw_gid) &lt; 0) {
+&gt; &gt; +            fprintf(stderr, "Failed to initgroups(\"%s\", %d)\n",
+&gt; &gt; +                    user_pwd-&gt;pw_name, user_pwd-&gt;pw_gid);
+&gt; &gt; +            exit(1);
+&gt; &gt; +        }
+&gt; 
+&gt; Does initgroups need access to /etc/group?  How does this combine w/
+&gt; -chroot?
+
+Tested this on Linux, and w/out /etc/group it simply fails to add any
+supplementary groups (doesn't fail completely, just fails safely).
+Appears similar from solaris manpages.
+
+Given that...
+
+Acked-by: Chris Wright &lt;chrisw@sous-sol.org&gt;
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/9" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~blauwirbel" class="sprite person">blueswirl (blauwirbel)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-12T21:44:21+00:00" title="2011-07-12 21:44:21 UTC">on 2011-07-12</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/9"> #9</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Thanks, applied.</p>
+<p>On Sat, Jul 9, 2011 at 12:22 PM, Stefan Hajnoczi<br />
+&lt;email address hidden&gt; wrote:<br />
+<span class="foldable-quoted">
+&gt; Andrew Griffiths reports that -runas does not set supplementary group<br />
+&gt; IDs.  This means that gid 0 (root) is not dropped when switching to an<br />
+&gt; unprivileged user.<br />
+&gt;<br />
+&gt; Add an initgroups(3) call to use the -runas user&#x27;s /etc/groups<br />
+&gt; membership to update the supplementary group IDs.<br />
+&gt;<br />
+&gt; Signed-off-by: Stefan Hajnoczi &lt;email address hidden&gt;<br />
+&gt; ---<br />
+&gt; Note this needs compile testing on various POSIX host platforms.  Tested on<br />
+&gt; Linux.  Should work on BSD and Solaris.  initgroups(3) is SVr4/BSD but not in<br />
+&gt; POSIX.<br />
+&gt;<br />
+&gt;  os-posix.c |    6 ++++++<br />
+&gt;  1 files changed, 6 insertions(+), 0 deletions(-)<br />
+&gt;<br />
+&gt; diff --git a/os-posix.c b/os-posix.c<br />
+&gt; index 7dfb278..6f8d488 100644<br />
+&gt; --- a/os-posix.c<br />
+&gt; +++ b/os-posix.c<br />
+&gt; @@ -31,6 +31,7 @@<br />
+&gt;  /*needed for MAP_POPULATE before including qemu-options.h */<br />
+&gt;  #include &lt;sys/mman.h&gt;<br />
+&gt;  #include &lt;pwd.h&gt;<br />
+&gt; +#include &lt;grp.h&gt;<br />
+&gt;  #include &lt;libgen.h&gt;<br />
+&gt;<br />
+&gt;  /* Needed early for CONFIG_BSD etc. */<br />
+&gt; @@ -199,6 +200,11 @@ static void change_<wbr />process_<wbr />uid(void)<br />
+&gt;             fprintf(stderr, &quot;Failed to setgid(%d)\n&quot;, user_pwd-&gt;pw_gid);<br />
+&gt;             exit(1);<br />
+&gt;         }<br />
+&gt; +        if (initgroups(<wbr />user_pwd-<wbr />&gt;pw_name, user_pwd-&gt;pw_gid) &lt; 0) {<br />
+&gt; +            fprintf(stderr, &quot;Failed to initgroups(\&quot;%s\&quot;, %d)\n&quot;,<br />
+&gt; +                    user_pwd-&gt;pw_name, user_pwd-&gt;pw_gid);<br />
+&gt; +            exit(1);<br />
+&gt; +        }<br />
+&gt;         if (setuid(<wbr />user_pwd-<wbr />&gt;pw_uid) &lt; 0) {<br />
+&gt;             fprintf(stderr, &quot;Failed to setuid(%d)\n&quot;, user_pwd-&gt;pw_uid);<br />
+&gt;             exit(1);<br />
+&gt; --<br />
+&gt; 1.7.5.4<br />
+&gt;<br />
+&gt;<br />
+&gt;
+</span></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Thanks, applied.
+
+On Sat, Jul 9, 2011 at 12:22 PM, Stefan Hajnoczi
+&lt;stefanha@linux.vnet.ibm.com&gt; wrote:
+&gt; Andrew Griffiths reports that -runas does not set supplementary group
+&gt; IDs.  This means that gid 0 (root) is not dropped when switching to an
+&gt; unprivileged user.
+&gt;
+&gt; Add an initgroups(3) call to use the -runas user's /etc/groups
+&gt; membership to update the supplementary group IDs.
+&gt;
+&gt; Signed-off-by: Stefan Hajnoczi &lt;stefanha@linux.vnet.ibm.com&gt;
+&gt; ---
+&gt; Note this needs compile testing on various POSIX host platforms.  Tested on
+&gt; Linux.  Should work on BSD and Solaris.  initgroups(3) is SVr4/BSD but not in
+&gt; POSIX.
+&gt;
+&gt;  os-posix.c |    6 ++++++
+&gt;  1 files changed, 6 insertions(+), 0 deletions(-)
+&gt;
+&gt; diff --git a/os-posix.c b/os-posix.c
+&gt; index 7dfb278..6f8d488 100644
+&gt; --- a/os-posix.c
+&gt; +++ b/os-posix.c
+&gt; @@ -31,6 +31,7 @@
+&gt;  /*needed for MAP_POPULATE before including qemu-options.h */
+&gt;  #include &lt;sys/mman.h&gt;
+&gt;  #include &lt;pwd.h&gt;
+&gt; +#include &lt;grp.h&gt;
+&gt;  #include &lt;libgen.h&gt;
+&gt;
+&gt;  /* Needed early for CONFIG_BSD etc. */
+&gt; @@ -199,6 +200,11 @@ static void change_process_uid(void)
+&gt;             fprintf(stderr, "Failed to setgid(%d)\n", user_pwd-&gt;pw_gid);
+&gt;             exit(1);
+&gt;         }
+&gt; +        if (initgroups(user_pwd-&gt;pw_name, user_pwd-&gt;pw_gid) &lt; 0) {
+&gt; +            fprintf(stderr, "Failed to initgroups(\"%s\", %d)\n",
+&gt; +                    user_pwd-&gt;pw_name, user_pwd-&gt;pw_gid);
+&gt; +            exit(1);
+&gt; +        }
+&gt;         if (setuid(user_pwd-&gt;pw_uid) &lt; 0) {
+&gt;             fprintf(stderr, "Failed to setuid(%d)\n", user_pwd-&gt;pw_uid);
+&gt;             exit(1);
+&gt; --
+&gt; 1.7.5.4
+&gt;
+&gt;
+&gt;
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/10" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~andrewg+launchpad" class="sprite person">Andrew Griffiths (andrewg+launchpad)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-13T10:00:07.516062+00:00" title="2011-07-13 10:00:07 UTC">on 2011-07-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/10"> #10</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p># ps axwu<br />
+...<br />
+qemu00   29957  0.5  9.8 480568 405228 ?       Sl   Jul12   7:41 /usr/bin/<wbr />qemu-system-<wbr />x86_64 -runas ...<br />
+...</p>
+<p># ps axwu -L<br />
+...<br />
+qemu00   29957 29957  0.2    3  9.8 480568 405228 ?       Sl   Jul12   2:49 /usr/bin/<wbr />qemu-system-<wbr />x86_64 -runas ...<br />
+root     29957 29959  0.3    3  9.8 480568 405228 ?       Sl   Jul12   4:47 /usr/bin/<wbr />qemu-system-<wbr />x86_64 -runas ...<br />
+root     29957 29960  0.0    3  9.8 480568 405228 ?       Sl   Jul12   0:00 /usr/bin/<wbr />qemu-system-<wbr />x86_64 -runas ...<br />
+...</p>
+<p># cat /proc/29957/<wbr />task/29959/<wbr />status<br />
+Name:   qemu-system-x86<br />
+State:  S (sleeping)<br />
+Tgid:   29957<br />
+Pid:    29959<br />
+PPid:   1<br />
+TracerPid:      0<br />
+Uid:    0       0       0       0<br />
+Gid:    0       0       0       0<br />
+FDSize: 32<br />
+Groups: 999</p>
+<p>...</p>
+<p>Threads can have their own uid/gid set.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10"># ps axwu
+...
+qemu00   29957  0.5  9.8 480568 405228 ?       Sl   Jul12   7:41 /usr/bin/qemu-system-x86_64 -runas ...
+...
+
+# ps axwu -L
+...
+qemu00   29957 29957  0.2    3  9.8 480568 405228 ?       Sl   Jul12   2:49 /usr/bin/qemu-system-x86_64 -runas ...
+root     29957 29959  0.3    3  9.8 480568 405228 ?       Sl   Jul12   4:47 /usr/bin/qemu-system-x86_64 -runas ...
+root     29957 29960  0.0    3  9.8 480568 405228 ?       Sl   Jul12   0:00 /usr/bin/qemu-system-x86_64 -runas ...
+...
+
+
+# cat /proc/29957/task/29959/status 
+Name:   qemu-system-x86
+State:  S (sleeping)
+Tgid:   29957
+Pid:    29959
+PPid:   1
+TracerPid:      0
+Uid:    0       0       0       0
+Gid:    0       0       0       0
+FDSize: 32
+Groups: 999 
+
+...
+
+Threads can have their own uid/gid set.
+
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/11" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~andrewg+launchpad" class="sprite person">Andrew Griffiths (andrewg+launchpad)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-13T10:12:07.103143+00:00" title="2011-07-13 10:12:07 UTC">on 2011-07-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/11"> #11</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Once you have code execution in the process, you can modify the others threads execution (if required) to execute your own code. With full capabilities, it would be trivial to escape from a chroot on a normal Linux kernel (grsecurity with appropriate kernel chroot restrictions enabled would reduce the avenues available for escaping.).</p>
+<p>I seem to recall other distro&#x27;s handle thread privileges differently.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Once you have code execution in the process, you can modify the others threads execution (if required) to execute your own code. With full capabilities, it would be trivial to escape from a chroot on a normal Linux kernel (grsecurity with appropriate kernel chroot restrictions enabled would reduce the avenues available for escaping.).
+
+I seem to recall other distro's handle thread privileges differently. 
+
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/12" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~andrewg+launchpad" class="sprite person">Andrew Griffiths (andrewg+launchpad)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-13T10:13:02.966782+00:00" title="2011-07-13 10:13:02 UTC">on 2011-07-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/12"> #12</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>correction: s/other distro&#x27;s/other operating systems/g</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">correction: s/other distro's/other operating systems/g
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/13" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~stefanha" class="sprite person">Stefan Hajnoczi (stefanha)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-13T10:43:22+00:00" title="2011-07-13 10:43:22 UTC">on 2011-07-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/qemu/+bug/807893/comments/13">
+                <strong>Re: [Bug 807893] Re: qemu privilege escalation</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/13"> #13</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>On Wed, Jul 13, 2011 at 11:12 AM, Andrew Griffiths<br />
+&lt;email address hidden&gt; wrote:<br />
+<span class="foldable-quoted">
+&gt; Once you have code execution in the process, you can modify the others<br />
+&gt; threads execution (if required) to execute your own code. With full<br />
+&gt; capabilities, it would be trivial to escape from a chroot on a normal<br />
+&gt; Linux kernel (grsecurity with appropriate kernel chroot restrictions<br />
+&gt; enabled would reduce the avenues available for escaping.).<br />
+&gt;<br />
+&gt; I seem to recall other distro&#x27;s handle thread privileges differently.
+</span></p>
+<p>Hi Andrew,<br />
+I think what Chris meant is that libvirt does not use -runas at all.<br />
+It drops privileges (including initgroups(3)) itself *before* invoking<br />
+QEMU.  So I think his statement is simply that libvirt (commonly used<br />
+in KVM deployments) is not affected.</p>
+<p>Stefan</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">On Wed, Jul 13, 2011 at 11:12 AM, Andrew Griffiths
+&lt;807893@bugs.launchpad.net&gt; wrote:
+&gt; Once you have code execution in the process, you can modify the others
+&gt; threads execution (if required) to execute your own code. With full
+&gt; capabilities, it would be trivial to escape from a chroot on a normal
+&gt; Linux kernel (grsecurity with appropriate kernel chroot restrictions
+&gt; enabled would reduce the avenues available for escaping.).
+&gt;
+&gt; I seem to recall other distro's handle thread privileges differently.
+
+Hi Andrew,
+I think what Chris meant is that libvirt does not use -runas at all.
+It drops privileges (including initgroups(3)) itself *before* invoking
+QEMU.  So I think his statement is simply that libvirt (commonly used
+in KVM deployments) is not affected.
+
+Stefan
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/14" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~andrewg+launchpad" class="sprite person">Andrew Griffiths (andrewg+launchpad)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-13T10:50:20.084434+00:00" title="2011-07-13 10:50:20 UTC">on 2011-07-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/14"> #14</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Hello Stefan,</p>
+<p>I was explaining the threads / uids per thread issue, in case it wasn&#x27;t obvious of what the impact was, or how to exploit that issue (in case someone was wondering about that). It was not directed at Chris in any shape or form, nor was it about libvirt.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Hello Stefan,
+
+I was explaining the threads / uids per thread issue, in case it wasn't obvious of what the impact was, or how to exploit that issue (in case someone was wondering about that). It was not directed at Chris in any shape or form, nor was it about libvirt.
+
+
+
+
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/15" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~stefanha" class="sprite person">Stefan Hajnoczi (stefanha)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-13T11:08:08+00:00" title="2011-07-13 11:08:08 UTC">on 2011-07-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/15"> #15</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>On Wed, Jul 13, 2011 at 11:50 AM, Andrew Griffiths<br />
+&lt;email address hidden&gt; wrote:<br />
+<span class="foldable-quoted">
+&gt; I was explaining the threads / uids per thread issue, in case it wasn&#x27;t<br />
+&gt; obvious of what the impact was, or how to exploit that issue (in case<br />
+&gt; someone was wondering about that). It was not directed at Chris in any<br />
+&gt; shape or form, nor was it about libvirt.
+</span></p>
+<p>I see.  Thanks for the clarification.</p>
+<p>Stefan</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">On Wed, Jul 13, 2011 at 11:50 AM, Andrew Griffiths
+&lt;807893@bugs.launchpad.net&gt; wrote:
+&gt; I was explaining the threads / uids per thread issue, in case it wasn't
+&gt; obvious of what the impact was, or how to exploit that issue (in case
+&gt; someone was wondering about that). It was not directed at Chris in any
+&gt; shape or form, nor was it about libvirt.
+
+I see.  Thanks for the clarification.
+
+Stefan
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/16" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~andrewg+launchpad" class="sprite person">Andrew Griffiths (andrewg+launchpad)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-14T10:37:22.020744+00:00" title="2011-07-14 10:37:22 UTC">on 2011-07-14</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/16"> #16</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Regarding the threads having different privilege level, I have isolated that to being related to my grsecurity configuration (more specifically, chroot_findtask will block it).</p>
+<p>While it&#x27;s still an issue on older glibc where the setuid/setgid code does not enforce it across all threads, it may not be high priority since fixing it would be a lot more effort.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Regarding the threads having different privilege level, I have isolated that to being related to my grsecurity configuration (more specifically, chroot_findtask will block it).
+
+While it's still an issue on older glibc where the setuid/setgid code does not enforce it across all threads, it may not be high priority since fixing it would be a lot more effort.
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/17" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~stefanha" class="sprite person">Stefan Hajnoczi (stefanha)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-14T11:19:44+00:00" title="2011-07-14 11:19:44 UTC">on 2011-07-14</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/17"> #17</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>On Thu, Jul 14, 2011 at 11:37 AM, Andrew Griffiths<br />
+&lt;email address hidden&gt; wrote:<br />
+<span class="foldable-quoted">
+&gt; Regarding the threads having different privilege level, I have isolated<br />
+&gt; that to being related to my grsecurity configuration (more specifically,<br />
+&gt; chroot_findtask will block it).<br />
+&gt;<br />
+&gt; While it&#x27;s still an issue on older glibc where the setuid/setgid code<br />
+&gt; does not enforce it across all threads, it may not be high priority<br />
+&gt; since fixing it would be a lot more effort.
+</span></p>
+<p>Wow, just learnt something new that glibc does behind our backs :).  I<br />
+see it uses SIGRTMIN+1 to signal threads and get them to do the set*id<br />
+system calls.</p>
+<p>I&#x27;m glad it does this because although most QEMU threads should be<br />
+started after command-line parsing, I can think of instances where we<br />
+might start a thread before -runas is completed.</p>
+<p>Stefan</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">On Thu, Jul 14, 2011 at 11:37 AM, Andrew Griffiths
+&lt;807893@bugs.launchpad.net&gt; wrote:
+&gt; Regarding the threads having different privilege level, I have isolated
+&gt; that to being related to my grsecurity configuration (more specifically,
+&gt; chroot_findtask will block it).
+&gt;
+&gt; While it's still an issue on older glibc where the setuid/setgid code
+&gt; does not enforce it across all threads, it may not be high priority
+&gt; since fixing it would be a lot more effort.
+
+Wow, just learnt something new that glibc does behind our backs :).  I
+see it uses SIGRTMIN+1 to signal threads and get them to do the set*id
+system calls.
+
+I'm glad it does this because although most QEMU threads should be
+started after command-line parsing, I can think of instances where we
+might start a thread before -runas is completed.
+
+Stefan
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/18" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~andrewg+launchpad" class="sprite person">Andrew Griffiths (andrewg+launchpad)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-14T11:46:49.659961+00:00" title="2011-07-14 11:46:49 UTC">on 2011-07-14</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/18"> #18</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Actually, from a quick google perhaps ensuring all threads run after chroot / dropping privileges might be a good idea.</p>
+<p>- <a rel="nofollow" href="http://wiki.freebsd.org/Per-Thread%20Credentials">http://<wbr />wiki.freebsd.<wbr />org/Per-<wbr />Thread%<wbr />20Credentials</a><br />
+- <a rel="nofollow" href="http://www.cocoabuilder.com/archive/cocoa/33107-cthread-fork.html">http://<wbr />www.cocoabuilde<wbr />r.com/archive/<wbr />cocoa/33107-<wbr />cthread-<wbr />fork.html</a></p>
+<p>though it looks like you might need to put in effort into getting per-thread uid&#x27;s for freebsd/macosx when they make that available, and you&#x27;re assuming they&#x27;re running a recent glibc. Depending on complexity, it can&#x27;t hurt to ensure you&#x27;re not going to hit into per-thread uid/gid&#x27;s. I&#x27;m of two minds about glibc doing this. This was a particular favourite bug class of mine :)</p>
+<p>It seems that there is a linux distro which uses uclibc, which does not emulate the glibc behaviour:</p>
+<p><a rel="nofollow" href="http://dl-4.alpinelinux.org/alpine/v2.2/main/x86/">http://<wbr />dl-4.alpinelinu<wbr />x.org/alpine/<wbr />v2.2/main/<wbr />x86/</a>  &lt;-- has qemu packages.</p>
+<p>we can use <a rel="nofollow" href="http://paste.pocoo.org/raw/438497/">http://<wbr />paste.pocoo.<wbr />org/raw/<wbr />438497/</a> to emulate qemu&#x27;s behaviour</p>
+<p># ./test<br />
+[main] my [ug]id is 100/100<br />
+[thread] my [ug]id is 0/0</p>
+<p>^-- the qemu thread would be running as root</p>
+<p>running the same code under glibc (without grsecurity chroot_findtask), and it will drop privileges as you&#x27;d expect on recent glibc.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Actually, from a quick google perhaps ensuring all threads run after chroot / dropping privileges might be a good idea.
+
+- http://wiki.freebsd.org/Per-Thread%20Credentials
+- http://www.cocoabuilder.com/archive/cocoa/33107-cthread-fork.html
+
+though it looks like you might need to put in effort into getting per-thread uid's for freebsd/macosx when they make that available, and you're assuming they're running a recent glibc. Depending on complexity, it can't hurt to ensure you're not going to hit into per-thread uid/gid's. I'm of two minds about glibc doing this. This was a particular favourite bug class of mine :)
+
+It seems that there is a linux distro which uses uclibc, which does not emulate the glibc behaviour:
+
+http://dl-4.alpinelinux.org/alpine/v2.2/main/x86/  &lt;-- has qemu packages.
+
+we can use http://paste.pocoo.org/raw/438497/ to emulate qemu's behaviour
+
+# ./test
+[main] my [ug]id is 100/100
+[thread] my [ug]id is 0/0
+
+^-- the qemu thread would be running as root
+
+running the same code under glibc (without grsecurity chroot_findtask), and it will drop privileges as you'd expect on recent glibc. 
+
+
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/19" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~stefanha" class="sprite person">Stefan Hajnoczi (stefanha)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-14T12:44:09+00:00" title="2011-07-14 12:44:09 UTC">on 2011-07-14</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/19"> #19</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>On Thu, Jul 14, 2011 at 12:46 PM, Andrew Griffiths<br />
+&lt;email address hidden&gt; wrote:<br />
+<span class="foldable-quoted">
+&gt; Actually, from a quick google perhaps ensuring all threads run after<br />
+&gt; chroot / dropping privileges might be a good idea.<br />
+&gt;<br />
+&gt; - <a rel="nofollow" href="http://wiki.freebsd.org/Per-Thread%20Credentials">http://<wbr />wiki.freebsd.<wbr />org/Per-<wbr />Thread%<wbr />20Credentials</a><br />
+&gt; - <a rel="nofollow" href="http://www.cocoabuilder.com/archive/cocoa/33107-cthread-fork.html">http://<wbr />www.cocoabuilde<wbr />r.com/archive/<wbr />cocoa/33107-<wbr />cthread-<wbr />fork.html</a><br />
+&gt;<br />
+&gt; though it looks like you might need to put in effort into getting per-<br />
+&gt; thread uid&#x27;s for freebsd/macosx when they make that available, and<br />
+&gt; you&#x27;re assuming they&#x27;re running a recent glibc. Depending on complexity,<br />
+&gt; it can&#x27;t hurt to ensure you&#x27;re not going to hit into per-thread<br />
+&gt; uid/gid&#x27;s. I&#x27;m of two minds about glibc doing this. This was a<br />
+&gt; particular favourite bug class of mine :)<br />
+&gt;<br />
+&gt; It seems that there is a linux distro which uses uclibc, which does not<br />
+&gt; emulate the glibc behaviour:<br />
+&gt;<br />
+&gt; <a rel="nofollow" href="http://dl-4.alpinelinux.org/alpine/v2.2/main/x86/">http://<wbr />dl-4.alpinelinu<wbr />x.org/alpine/<wbr />v2.2/main/<wbr />x86/</a>  &lt;-- has qemu<br />
+&gt; packages.
+</span></p>
+<p>Good point about other OSes and distros.  QEMU does not create any<br />
+threads before -runas processing AFAICT.</p>
+<p>It&#x27;s a nasty problem in general though because shared libraries could...</p>
+<p>Stefan</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">On Thu, Jul 14, 2011 at 12:46 PM, Andrew Griffiths
+&lt;807893@bugs.launchpad.net&gt; wrote:
+&gt; Actually, from a quick google perhaps ensuring all threads run after
+&gt; chroot / dropping privileges might be a good idea.
+&gt;
+&gt; - http://wiki.freebsd.org/Per-Thread%20Credentials
+&gt; - http://www.cocoabuilder.com/archive/cocoa/33107-cthread-fork.html
+&gt;
+&gt; though it looks like you might need to put in effort into getting per-
+&gt; thread uid's for freebsd/macosx when they make that available, and
+&gt; you're assuming they're running a recent glibc. Depending on complexity,
+&gt; it can't hurt to ensure you're not going to hit into per-thread
+&gt; uid/gid's. I'm of two minds about glibc doing this. This was a
+&gt; particular favourite bug class of mine :)
+&gt;
+&gt; It seems that there is a linux distro which uses uclibc, which does not
+&gt; emulate the glibc behaviour:
+&gt;
+&gt; http://dl-4.alpinelinux.org/alpine/v2.2/main/x86/  &lt;-- has qemu
+&gt; packages.
+
+Good point about other OSes and distros.  QEMU does not create any
+threads before -runas processing AFAICT.
+
+It's a nasty problem in general though because shared libraries could...
+
+Stefan
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/20" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~andrewg+launchpad" class="sprite person">Andrew Griffiths (andrewg+launchpad)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-14T12:51:22.499474+00:00" title="2011-07-14 12:51:22 UTC">on 2011-07-14</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/20"> #20</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>It does create threads before chroot/<wbr />setgid/<wbr />setuid, see <a rel="nofollow" href="https://bugs.launchpad.net/qemu/+bug/807893/comments/10">https:/<wbr />/bugs.launchpad<wbr />.net/qemu/<wbr />+bug/807893/<wbr />comments/<wbr />10</a>.</p>
+<p>That process was created with following options:</p>
+<p>-enable-kvm<br />
+-runas<br />
+-chroot<br />
+-m<br />
+-kernel<br />
+-append<br />
+-drive<br />
+-net nic,model=virtio, -net tap,ifname=xxx<br />
+-serial none<br />
+-serial unix:..<br />
+-serial file: ...<br />
+-monitor unix:...<br />
+-daemonize</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">It does create threads before chroot/setgid/setuid, see https://bugs.launchpad.net/qemu/+bug/807893/comments/10.
+
+That process was created with following options:
+
+-enable-kvm
+-runas
+-chroot
+-m
+-kernel
+-append
+-drive 
+-net nic,model=virtio, -net tap,ifname=xxx
+-serial none
+-serial unix:.. 
+-serial file: ...
+-monitor unix:...
+-daemonize
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/21" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~andrewg+launchpad" class="sprite person">Andrew Griffiths (andrewg+launchpad)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-14T13:00:18.868380+00:00" title="2011-07-14 13:00:18 UTC">on 2011-07-14</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/21"> #21</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>with some grepping of parent callers, looks like the cpu is probably my issue</p>
+<p>static void qemu_kvm_<wbr />start_vcpu(<wbr />CPUState *env)<br />
+{<br />
+&nbsp;&nbsp;&nbsp;&nbsp;env-&gt;thread = qemu_mallocz(<wbr />sizeof(<wbr />QemuThread)<wbr />);<br />
+&nbsp;&nbsp;&nbsp;&nbsp;env-&gt;halt_cond = qemu_mallocz(<wbr />sizeof(<wbr />QemuCond)<wbr />);<br />
+&nbsp;&nbsp;&nbsp;&nbsp;qemu_<wbr />cond_init(<wbr />env-&gt;halt_<wbr />cond);<br />
+&nbsp;&nbsp;&nbsp;&nbsp;qemu_<wbr />thread_<wbr />create(<wbr />env-&gt;thread, qemu_kvm_<wbr />cpu_thread_<wbr />fn, env);</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;/* init the dynamic translator */<br />
+&nbsp;&nbsp;&nbsp;&nbsp;cpu_<wbr />exec_init_<wbr />all(tb_<wbr />size * 1024 * 1024);</p>
+<p>.. etc<br />
+6613 clone(child_<wbr />stack=0xa75df45<wbr />4, flags=CLONE_<wbr />VM|CLONE_<wbr />FS|CLONE_<wbr />FILES|CLONE_<wbr />SIGHAND|<wbr />CLONE_THREAD|<wbr />CLONE_SYSVSEM|<wbr />CLONE_SETTLS|<wbr />CLONE_PARENT_<wbr />SETTID|<wbr />CLONE_CHILD_<wbr />CLEARTID, parent_<wbr />tidptr=<wbr />0xa75dfbd8, {entry_number:6, base_addr:<wbr />0xa75dfb70, limit:1048575, seg_32bit:1, contents:0, read_exec_only:0, limit_in_pages:1, seg_not_present:0, useable:1}, child_tidptr=<wbr />0xa75dfbd8) = 16615<br />
+.. etc<br />
+16615 ioctl(4, KVM_CREATE_VCPU, 0)      = 7<br />
+16615 ioctl(3, KVM_GET_<wbr />VCPU_MMAP_<wbr />SIZE, 0) = 12288<br />
+16615 mmap2(NULL, 12288, PROT_READ|<wbr />PROT_WRITE, MAP_SHARED, 7, 0) = 0xa6ddc000<br />
+16615 ioctl(7, KVM_SET_VAPIC_ADDR, 0xa75de1a4) = 0</p>
+<p>later on it does chroot/<wbr />setgid/<wbr />setuid</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">with some grepping of parent callers, looks like the cpu is probably my issue
+
+static void qemu_kvm_start_vcpu(CPUState *env)
+{
+    env-&gt;thread = qemu_mallocz(sizeof(QemuThread));
+    env-&gt;halt_cond = qemu_mallocz(sizeof(QemuCond));
+    qemu_cond_init(env-&gt;halt_cond);
+    qemu_thread_create(env-&gt;thread, qemu_kvm_cpu_thread_fn, env);
+
+    /* init the dynamic translator */
+    cpu_exec_init_all(tb_size * 1024 * 1024);
+
+
+.. etc
+6613 clone(child_stack=0xa75df454, flags=CLONE_VM|CLONE_FS|CLONE_FILES|CLONE_SIGHAND|CLONE_THREAD|CLONE_SYSVSEM|CLONE_SETTLS|CLONE_PARENT_SETTID|CLONE_CHILD_CLEARTID, parent_tidptr=0xa75dfbd8, {entry_number:6, base_addr:0xa75dfb70, limit:1048575, seg_32bit:1, contents:0, read_exec_only:0, limit_in_pages:1, seg_not_present:0, useable:1}, child_tidptr=0xa75dfbd8) = 16615
+.. etc
+16615 ioctl(4, KVM_CREATE_VCPU, 0)      = 7
+16615 ioctl(3, KVM_GET_VCPU_MMAP_SIZE, 0) = 12288
+16615 mmap2(NULL, 12288, PROT_READ|PROT_WRITE, MAP_SHARED, 7, 0) = 0xa6ddc000
+16615 ioctl(7, KVM_SET_VAPIC_ADDR, 0xa75de1a4) = 0
+
+later on it does chroot/setgid/setuid
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/22" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~stefanha" class="sprite person">Stefan Hajnoczi (stefanha)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-14T15:59:41+00:00" title="2011-07-14 15:59:41 UTC">on 2011-07-14</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/22"> #22</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>On Thu, Jul 14, 2011 at 2:00 PM, Andrew Griffiths<br />
+&lt;email address hidden&gt; wrote:<br />
+<span class="foldable-quoted">
+&gt; with some grepping of parent callers, looks like the cpu is probably my<br />
+&gt; issue
+</span></p>
+<p>The -runas processing doesn&#x27;t happen until os_setup_post() right<br />
+before entering the main loop.  It is too late at that point because<br />
+threads may have been spawned.</p>
+<p>My mistake was to think -runas processing happens in os_parse_<wbr />cmd_args(<wbr />).</p>
+<p>Stefan</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">On Thu, Jul 14, 2011 at 2:00 PM, Andrew Griffiths
+&lt;807893@bugs.launchpad.net&gt; wrote:
+&gt; with some grepping of parent callers, looks like the cpu is probably my
+&gt; issue
+
+The -runas processing doesn't happen until os_setup_post() right
+before entering the main loop.  It is too late at that point because
+threads may have been spawned.
+
+My mistake was to think -runas processing happens in os_parse_cmd_args().
+
+Stefan
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/23" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~vipmike007" class="sprite person">Mike Cao (vipmike007)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-18T05:43:17.074307+00:00" title="2011-07-18 05:43:17 UTC">on 2011-07-18</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/23"> #23</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>I think I verified this issue on lastest qemu</p>
+<p>steps:<br />
+1./configure &amp;&amp; make<br />
+2.start  qemu-kvm process with -runas nobody<br />
+./qemu-<wbr />system-<wbr />x86_64 -m 2G -smp 4 -cpu qemu64,+x2apic -usbdevice tablet -drive file=/home/<wbr />win2003-<wbr />32-new.<wbr />raw,if=<wbr />none,id=<wbr />drive-ide0-<wbr />0-0,werror=<wbr />stop,rerror=<wbr />stop,cache=<wbr />none,format=<wbr />raw -device ide-drive,<wbr />bus=ide.<wbr />0,unit=<wbr />0,bootindex=<wbr />1,drive=<wbr />drive-ide0-<wbr />0-0,id=<wbr />ide0-0-<wbr />0 -netdev tap,id=<wbr />hostnet0,<wbr />script=<wbr />/etc/qemu-<wbr />ifup,downscript<wbr />=no -device rtl8139,<wbr />netdev=<wbr />hostnet0,<wbr />mac=76:<wbr />0E:40:3F:<wbr />2F:3F -boot dc -uuid cc5aee77-<wbr />d631-41d4-<wbr />92a0-4e59c3b5cb<wbr />6c -rtc-td-hack -monitor stdio -name win2k3-32-serial -vnc :10 -device virtio-<wbr />balloon-<wbr />pci,id=<wbr />balloon0 -runas nobody</p>
+<p>3# cat /proc/25996/status<br />
+Name:	qemu-system-x86<br />
+State:	R (running)<br />
+Tgid:	25996<br />
+Pid:	25996<br />
+PPid:	28206<br />
+TracerPid:	0<br />
+Uid:	99	99	99	99<br />
+Gid:	99	99	99	99<br />
+Utrace:	0<br />
+FDSize:	256<br />
+Groups:	99</p>
+<p>4# cat /proc/25996/<wbr />task/25996/<wbr />status<br />
+Name:	qemu-system-x86<br />
+State:	R (running)<br />
+Tgid:	25996<br />
+Pid:	25996<br />
+PPid:	28206<br />
+TracerPid:	0<br />
+Uid:	99	99	99	99<br />
+Gid:	99	99	99	99<br />
+Utrace:	0<br />
+FDSize:	256<br />
+Groups:	99</p>
+<p>Based on above ,I think this bug has been fixed ald.</p>
+<p>Best Regards,<br />
+Mike</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">I think I verified this issue on lastest qemu
+
+steps:
+1./configure &amp;&amp; make
+2.start  qemu-kvm process with -runas nobody
+./qemu-system-x86_64 -m 2G -smp 4 -cpu qemu64,+x2apic -usbdevice tablet -drive file=/home/win2003-32-new.raw,if=none,id=drive-ide0-0-0,werror=stop,rerror=stop,cache=none,format=raw -device ide-drive,bus=ide.0,unit=0,bootindex=1,drive=drive-ide0-0-0,id=ide0-0-0 -netdev tap,id=hostnet0,script=/etc/qemu-ifup,downscript=no -device rtl8139,netdev=hostnet0,mac=76:0E:40:3F:2F:3F -boot dc -uuid cc5aee77-d631-41d4-92a0-4e59c3b5cb6c -rtc-td-hack -monitor stdio -name win2k3-32-serial -vnc :10 -device virtio-balloon-pci,id=balloon0 -runas nobody
+
+3# cat /proc/25996/status 
+Name:	qemu-system-x86
+State:	R (running)
+Tgid:	25996
+Pid:	25996
+PPid:	28206
+TracerPid:	0
+Uid:	99	99	99	99
+Gid:	99	99	99	99
+Utrace:	0
+FDSize:	256
+Groups:	99 
+
+4# cat /proc/25996/task/25996/status 
+Name:	qemu-system-x86
+State:	R (running)
+Tgid:	25996
+Pid:	25996
+PPid:	28206
+TracerPid:	0
+Uid:	99	99	99	99
+Gid:	99	99	99	99
+Utrace:	0
+FDSize:	256
+Groups:	99 
+
+Based on above ,I think this bug has been fixed ald.
+
+Best Regards,
+Mike</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/24" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~stefanha" class="sprite person">Stefan Hajnoczi (stefanha)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-18T06:29:07+00:00" title="2011-07-18 06:29:07 UTC">on 2011-07-18</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/24"> #24</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Mike, the issue is solved for Linux hosts with a modern glibc. Andrew<br />
+explained that uclibc or non-Linux hosts may still be affected if they do<br />
+not apply set*id() to all threads in the process.</p>
+<p>The safe way to solve this universally is to perform -runas before creating<br />
+threads.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Mike, the issue is solved for Linux hosts with a modern glibc. Andrew
+explained that uclibc or non-Linux hosts may still be affected if they do
+not apply set*id() to all threads in the process.
+
+The safe way to solve this universally is to perform -runas before creating
+threads.
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/25" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~andrewg+launchpad" class="sprite person">Andrew Griffiths (andrewg+launchpad)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2011-07-18T10:15:40.492702+00:00" title="2011-07-18 10:15:40 UTC">on 2011-07-18</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/25"> #25</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Here&#x27;s some reproduction code you can use to see the difference between glibc and raw system calls:</p>
+<p><a rel="nofollow" href="https://gist.github.com/1084042">https:/<wbr />/gist.github.<wbr />com/1084042</a></p>
+<p>If you&#x27;re wondering about Linux and non-glibc distributions using qemu, Alpine is one particular answer to that question (so the affected Linux distributions is non-zero).</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Here's some reproduction code you can use to see the difference between glibc and raw system calls:
+
+https://gist.github.com/1084042
+
+If you're wondering about Linux and non-glibc distributions using qemu, Alpine is one particular answer to that question (so the affected Linux distributions is non-zero). 
+
+
+
+
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/qemu/+bug/807893/comments/26" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~th-huth" class="sprite person">Thomas Huth (th-huth)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2016-08-12T10:54:53.444758+00:00" title="2016-08-12 10:54:53 UTC">on 2016-08-12</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/qemu/+bug/807893/comments/26"> #26</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>According to Stefan, this problem has been fixed by this commit:<br />
+<a rel="nofollow" href="http://git.qemu.org/?p=qemu.git;a=commitdiff;h=cc4662f9642995c78">http://<wbr />git.qemu.<wbr />org/?p=<wbr />qemu.git;<wbr />a=commitdiff;<wbr />h=cc4662f964299<wbr />5c78</a><br />
+... so let&#x27;s close this bug ticket now.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">According to Stefan, this problem has been fixed by this commit:
+http://git.qemu.org/?p=qemu.git;a=commitdiff;h=cc4662f9642995c78
+... so let's close this bug ticket now.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in qemu: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Confirmed &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        <div style="float: right;">
+          <a class="menu-link-activitylog" href="https://bugs.launchpad.net/qemu/+bug/807893/+activity">See full activity log</a>
+        </div>
+        <div class="clearfix"></div>
+
+        
+          
+
+          
+            <div align="center" id="add-comment-login-first">
+              To post a comment you must <a href="+login?comments=all">log in</a>.
+            </div>
+          
+        
+        
+      
+
+      </div><!-- class="top-portlet" -->
+      </div><!--- id="maincontentsub"-->
+      <div>
+        <div id="duplicate-form-container"></div>
+        <div id="privacy-form-container"></div>
+      </div>
+    </div>
+            
+            
+          </div><!-- yui-b -->
+        </div><!-- yui-main -->
+
+        
+          <div id="side-portlets" class="yui-b side">
+            
+      <div id="involvement" class="portlet">
+        <ul class="involvement">
+          <li class="single">
+            <a class="sprite bugs" href="/qemu/+filebug">
+              Report a bug
+            </a>
+          </li>
+        </ul>
+      </div>
+      <div id="privacy" class="first portlet public">
+  <div id="privacy-text">
+     <span id="information-type-summary" class="sprite public">This report contains
+         <strong id="information-type">Public</strong>
+         information
+     </span>&nbsp;<a class="sprite edit action-icon" id="privacy-link" href="/qemu/+bug/807893/+secrecy">Edit</a>
+
+     <div id="information-type-description" style="padding-top: 5px">Everyone can see this information.
+</div>
+  </div>
+</div>
+
+      <div id="portlet-actions" class="portlet vertical">
+  <ul id="duplicate-actions">
+    <li class="sprite bug-dupe">
+    <span id="mark-duplicate-text">
+    <a class="menu-link-mark-dupe" href="/qemu/+bug/807893/+duplicate">Mark as duplicate</a>
+    </span>
+    </li>
+    
+    <li><a class="menu-link-createquestion sprite add" href="https://bugs.launchpad.net/qemu/+bug/807893/+create-question">Convert to a question</a></li>
+    
+    <li><a class="menu-link-addbranch sprite add" href="https://bugs.launchpad.net/qemu/+bug/807893/+addbranch">Link a related branch</a></li>
+    <li><a class="menu-link-linktocve sprite add" href="https://bugs.launchpad.net/qemu/+bug/807893/+linkcve">Link to <abbr title="Common Vulnerabilities and Exposures Index">CVE</abbr></a></li>
+    <li><a class="menu-link-unlinkcve sprite modify remove" href="https://bugs.launchpad.net/qemu/+bug/807893/+unlinkcve">Remove CVE link</a></li>
+  </ul>
+</div>
+
+      
+
+      <div class="portlet vertical" id="portlet-subscription">
+  <div class="section">
+    <div id="current_user_subscription" class="False">
+      
+        <span>You are</span>
+        
+        <a class="menu-link-subscription sprite modify edit" href="/qemu/+bug/807893/+subscribe">
+           
+           
+           
+           not directly subscribed to this bug's notifications.
+        </a>
+      
+      
+    </div>
+    <div id="sub-unsub-spinner">Subscribing...</div>
+    <ul>
+      
+      <li><a class="menu-link-editsubscriptions sprite modify edit" href="https://bugs.launchpad.net/qemu/+bug/807893/+subscriptions" title="View and change your subscriptions to this bug">Edit bug mail</a></li>
+    </ul>
+  </div>
+  <script type="text/javascript">
+    LPJS.use('io-base', 'node',
+            'lp.bugs.bugtask_index.portlets.subscription', function(Y) {
+        Y.on('domready', function() {
+            Y.lp.bugs.bugtask_index.portlets.subscription.initialize();
+        });
+    });
+  </script>
+</div>
+
+      <div class="portlet vertical" id="portlet-subscribers">
+  <h2>Other bug subscribers</h2>
+  <div>
+    <div><a class="menu-link-addsubscriber sprite add" href="https://bugs.launchpad.net/qemu/+bug/807893/+addsubscriber" title="Launchpad will email that person whenever this bugs changes">Subscribe someone else</a></div>
+  </div>
+  <div id="other-bug-subscribers"></div>
+</div>
+
+      
+
+      
+
+      
+  
+  
+
+
+      
+
+    
+          </div><!-- yui-b side -->
+        
+      </div><!-- yui-t4 -->
+
+      
+  <div id="footer" class="footer">
+    <div class="lp-arcana">
+        <div class="lp-branding">
+          <a href="https://launchpad.net/"><img src="/@@/launchpad-logo-and-name-hierarchy.png" alt="Launchpad" /></a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://launchpad.net/+tour">Take the tour</a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://help.launchpad.net/">Read the guide</a>
+          &nbsp;
+          <form id="globalsearch" method="get" accept-charset="UTF-8" action="https://launchpad.net/+search">
+            <input type="search" id="search-text" name="field.text" />
+            <input type="image" src="/@@/search" style="vertical-align:5%" alt="Search Launchpad" />
+          </form>
+        </div>
+        
+  
+
+    </div>
+
+    <div class="colophon">
+      &copy; 2004-2021
+      <a href="http://canonical.com/">Canonical&nbsp;Ltd.</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://launchpad.net/legal">Terms of use</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://www.ubuntu.com/legal/dataprivacy">Data privacy</a>
+      &nbsp;&bull;&nbsp;
+      <a href="/feedback">Contact Launchpad Support</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="http://blog.launchpad.net/">Blog</a>
+      
+	&nbsp;&bull;&nbsp;
+	<a href="https://canonical.com/careers">Careers</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="https://twitter.com/launchpadstatus">System status</a>
+      <span id="lp-version">
+      &nbsp;&bull;&nbsp;
+        r0d8de2b
+        
+        
+        (<a href="https://dev.launchpad.net/">Get the code!</a>)
+      </span>
+    </div>
+  </div>
+
+    </div><!-- yui-d0-->
+
+    
+  
+  
+  <script id="json-cache-script">LP.cache = {"bug_is_private": false, "information_type_data": {"PUBLICSECURITY": {"name": "Public Security", "description_css_class": "choice-description", "is_private": false, "value": "PUBLICSECURITY", "description": "Everyone can see this security related information.\n", "order": 1}, "PRIVATESECURITY": {"name": "Private Security", "description_css_class": "choice-description", "is_private": true, "value": "PRIVATESECURITY", "description": "Only the security group can see this information.\n ", "order": 2}, "PUBLIC": {"name": "Public", "description_css_class": "choice-description", "is_private": false, "value": "PUBLIC", "description": "Everyone can see this information.\n", "order": 0}, "USERDATA": {"name": "Private", "description_css_class": "choice-description", "is_private": true, "value": "USERDATA", "description": "Only shared with users permitted to see private user information.\n", "order": 3}}, "initial_comment_batch_offset": 41, "subscribers_portlet_url_data": {"web_link": "https://bugs.launchpad.net/bugs/807893", "self_link": "https://bugs.launchpad.net/api/devel/bugs/807893"}, "first visible_recent_comment": -14, "bug": {"self_link": "https://bugs.launchpad.net/api/devel/bugs/807893", "web_link": "https://bugs.launchpad.net/bugs/807893", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug", "id": 807893, "private": false, "information_type": "Public", "name": null, "title": "qemu privilege escalation", "description": "If qemu is started as root, with -runas, the extra groups is not dropped correctly\n\n/proc/`pidof qemu`/status\n..\nUid:    100     100     100     100\nGid:    100     100     100     100\nFDSize: 32\nGroups: 0 1 2 3 4 6 10 11 26 27 \n...\n\nThe fix is to add initgroups() or setgroups(1, [gid]) where appropriate to os-posix.c.\n\nThe extra gid's allow read or write access to other files (such as /dev etc).\n\nEmulating the qemu code:\n\n# python\n...\n\u003e\u003e\u003e import os\n\u003e\u003e\u003e os.setgid(100)\n\u003e\u003e\u003e os.setuid(100)\n\u003e\u003e\u003e os.execve(\"/bin/sh\", [ \"/bin/sh\" ], os.environ)\nsh-4.1$ xxd /dev/sda | head -n2\n0000000: eb48 9000 0000 0000 0000 0000 0000 0000  .H..............\n0000010: 0000 0000 0000 0000 0000 0000 0000 0000  ................\nsh-4.1$ ls -l /dev/sda\nbrw-rw---- 1 root disk 8, 0 Jul  8 11:54 /dev/sda\nsh-4.1$ id\nuid=100(qemu00) gid=100(users) groups=100(users),0(root),1(bin),2(daemon),3(sys),4(adm),6(disk),10(wheel),11(floppy),26(tape),27(video)", "owner_link": "https://bugs.launchpad.net/api/devel/~andrewg+launchpad", "bug_tasks_collection_link": "https://bugs.launchpad.net/api/devel/bugs/807893/bug_tasks", "duplicate_of_link": null, "date_created": "2011-07-09T08:14:16.094176+00:00", "activity_collection_link": "https://bugs.launchpad.net/api/devel/bugs/807893/activity", "subscriptions_collection_link": "https://bugs.launchpad.net/api/devel/bugs/807893/subscriptions", "date_last_updated": "2016-08-12T10:54:53.875418+00:00", "who_made_private_link": null, "date_made_private": null, "heat": 8, "bug_watches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/807893/bug_watches", "cves_collection_link": "https://bugs.launchpad.net/api/devel/bugs/807893/cves", "duplicates_collection_link": "https://bugs.launchpad.net/api/devel/bugs/807893/duplicates", "attachments_collection_link": "https://bugs.launchpad.net/api/devel/bugs/807893/attachments", "security_related": false, "latest_patch_uploaded": null, "tags": ["escalation", "groups", "privilege", "security"], "date_last_message": "2016-08-12T10:54:53.444758+00:00", "number_of_duplicates": 0, "message_count": 27, "users_affected_count": 1, "users_unaffected_count": 0, "users_affected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/807893/users_affected", "users_unaffected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/807893/users_unaffected", "users_affected_count_with_dupes": 1, "other_users_affected_count_with_dupes": 1, "users_affected_with_dupes_collection_link": "https://bugs.launchpad.net/api/devel/bugs/807893/users_affected_with_dupes", "messages_collection_link": "https://bugs.launchpad.net/api/devel/bugs/807893/messages", "linked_branches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/807893/linked_branches", "linked_merge_proposals_collection_link": "https://bugs.launchpad.net/api/devel/bugs/807893/linked_merge_proposals", "http_etag": "\"97290d0f567dbc34d19a3698df8cf6e66dd1961a-349e728d3aaa086dff735ab19c0050b528ca5472\""}, "total_comments_and_activity": 31, "related_features": {}, "context": {"self_link": "https://bugs.launchpad.net/api/devel/qemu/+bug/807893", "web_link": "https://bugs.launchpad.net/qemu/+bug/807893", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug_task", "bug_link": "https://bugs.launchpad.net/api/devel/bugs/807893", "milestone_link": null, "status": "Fix Released", "importance": "Undecided", "assignee_link": "https://bugs.launchpad.net/api/devel/~stefanha", "bug_target_display_name": "QEMU", "bug_target_name": "qemu", "bug_watch_link": null, "date_assigned": "2011-07-09T09:14:45.337479+00:00", "date_created": "2011-07-09T08:14:16.094176+00:00", "date_confirmed": "2011-07-09T09:14:37.397439+00:00", "date_incomplete": null, "date_in_progress": "2016-08-12T10:54:46.320608+00:00", "date_closed": "2016-08-12T10:54:46.320608+00:00", "date_left_new": "2011-07-09T09:14:37.397439+00:00", "date_triaged": "2016-08-12T10:54:46.320608+00:00", "date_fix_committed": "2016-08-12T10:54:46.320608+00:00", "date_fix_released": "2016-08-12T10:54:46.320608+00:00", "date_left_closed": null, "owner_link": "https://bugs.launchpad.net/api/devel/~andrewg+launchpad", "target_link": "https://bugs.launchpad.net/api/devel/qemu", "title": "Bug #807893 in QEMU: \"qemu privilege escalation\"", "related_tasks_collection_link": "https://bugs.launchpad.net/api/devel/qemu/+bug/807893/related_tasks", "is_complete": true, "http_etag": "\"da121f193a7226525d4d201ba5829334f4f815a1-28f14c810ae3542b93115af79b6d73bc3a2ce371\""}, "bugtask_data": {"952399": {"bugtask_path": "/qemu/+bug/807893", "bug_title": "qemu privilege escalation", "user_can_delete": false, "milestone_value": null, "milestone_widget_items": "[]", "importance_widget_items": "[]", "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_assignee": false, "targetname": "QEMU", "hide_assignee_team_selection": true, "assignee_is_team": false, "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/qemu/+bug/807893/+delete", "row_id": "tasksummary952399", "target_is_product": true, "id": 952399, "form_row_id": "task952399", "assignee_vocabulary_filters": [], "prefix": "qemu", "importance_value": "Undecided", "status_value": "Fix Released", "assignee_value": "stefanha", "user_can_edit_milestone": false, "user_can_unassign": false, "user_can_edit_status": true, "user_can_edit_importance": false}}};</script>
+
+    
+  
+
+    
+  </body>
+
+
+  <!--
+    Facet name: bugs
+    Page type: main_side
+    Has global search: True
+    Has application tabs: True
+    Has side portlets: True
+
+    At least 56 queries/external actions issued in 0.57 seconds
+
+    Features: {'app.mainsite_only.canonical_url': None, 'disclosure.dsp_picker.enabled': 'on', 'bugs.affected_count_includes_dupes.disabled': None, 'baselayout.careers_link.disabled': None, 'js.yui_version': None, 'profiling.enabled': None, 'visible_render_time': None, 'hard_timeout': '9000', 'bugs.nominations.bug_supervisors_can_target': 'on', 'app.maintenance_message': None}
+
+    r0d8de2b
+
+    -->
+
+</html>
+

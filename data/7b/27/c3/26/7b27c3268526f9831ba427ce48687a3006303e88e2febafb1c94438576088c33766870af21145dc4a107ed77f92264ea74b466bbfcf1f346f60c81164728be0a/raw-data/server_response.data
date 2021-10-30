@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='PHAR related Bug #71488 - RDF' href='rss/bug.php?id=71488'>
+        <link rel='alternate' type='application/rss+xml' title='PHAR related Bug #71488 - RSS 2.0' href='rss/bug.php?id=71488&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #71488 :: Stack overflow when decompressing tar archives</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=71488">Sec Bug</a>&nbsp;#71488</th>
+            <td id="summary" colspan="5">Stack overflow when decompressing tar archives</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-01-31 19:58 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-03-10 21:12 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>hji &#x61;&#116; dyntopia &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=PHAR+related">PHAR related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.5.31</td>
+            <th class="details">OS:</th>
+            <td></td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-2554" target="_blank">2016-2554</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=71488&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=71488&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=71488&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1454270301">&nbsp;</a><strong>[2016-01-31 19:58 UTC] hji &#x61;&#116; dyntopia &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+A stack overflow may occur when decompressing tar archives due to
+`phar_tar_writeheaders()' potentially copying non-terminated linknames
+from entries parsed by `phar_parse_tarfile()' (tested with 5.6.11,
+5.6.17 and 7.0.2).
+
+
+php-5.6.17/ext/phar/tar.h #65..94:
+,----
+| typedef struct _tar_header {  /* {{{ */
+|     [...]
+|     char linkname[100]; /* name of linked file */
+|     char magic[6];      /* USTAR indicator */
+|     char version[2];    /* USTAR version */
+|     char uname[32];     /* owner user name */
+|     char gname[32];     /* owner group name */
+|     char devmajor[8];   /* device major number */
+|     char devminor[8];   /* device minor number */
+|     char prefix[155];   /* prefix for file name;
+|                            the value of the prefix field, if non-null,
+|                            is prefixed to the name field to allow names
+|                            longer then 100 characters */
+|     char padding[12];   /* unused zeroed bytes */
+| } PHAR_TAR_PACK tar_header;
+`----
+
+
+php-5.6.17/ext/phar/tar.c #198..678:
+,----
+| int phar_parse_tarfile(php_stream* fp, char *fname, int fname_len, char *alias, int alias_len, phar_archive_data** pphar, int is_data, php_uint32 compression, char **error TSRMLS_DC) /* {{{ */
+| {
+|     char buf[512], *actual_alias = NULL, *p;
+|     phar_entry_info entry = {0};
+|     size_t pos = 0, read, totalsize;
+|     tar_header *hdr;
+|     php_uint32 sum1, sum2, size, old;
+|     phar_archive_data *myphar, **actual;
+|     int last_was_longlink = 0;
+| 
+|     [...]
+|     read = php_stream_read(fp, buf, sizeof(buf));
+|     [...]
+| 
+|     do {
+|         [...]
+|         hdr = (tar_header*) buf;
+|         [...]
+| 
+|         if (entry.tar_type == TAR_LINK) {
+|             [...]
+|             entry.link = estrdup(hdr-&gt;linkname);
+|         } else if (entry.tar_type == TAR_SYMLINK) {
+|             entry.link = estrdup(hdr-&gt;linkname);
+|         }
+|         [...]
+|         read = php_stream_read(fp, buf, sizeof(buf));
+|         [...]
+|     } while (read != 0);
+|     [...]
+| }
+| /* }}} */
+`----
+
+
+linkname is expected to be &lt;=100 bytes and it's estrdup:ed from
+`((tar_header *)buf)-&gt;linkname' to `entry.link'.  However, since there's
+no guarantee that `linkname' or any of the following buffers are
+NUL-terminated, the resulting `entry.link' may be at least
+sizeof(linkname) + ... + sizeof(padding) = 355 bytes (and possibly
+bigger depending on where \0 is encountered).
+
+As the header is later written in `phar_tar_writeheaders()', linkname is
+strncpy:d to `char linkname[100]' with a len based on the source string.
+
+php-5.6.17/ext/phar/tar.c #688..835:
+,----
+| static int phar_tar_writeheaders(void *pDest, void *argument TSRMLS_DC) /* {{{ */
+| {
+|     tar_header header;
+|     [...]
+|     phar_entry_info *entry = (phar_entry_info *) pDest;
+| 
+|     [...]
+|     if (entry-&gt;link) {
+|         strncpy(header.linkname, entry-&gt;link, strlen(entry-&gt;link));
+|     }
+|     [...]
+| }
+| /* }}} */
+`----
+
+
+Test script:
+---------------
+crash.py: <a href="https://gist.github.com/dyntopia/561a1be3b0e772d792b6" rel="nofollow">https://gist.github.com/dyntopia/561a1be3b0e772d792b6</a>
+phar.py: <a href="https://gist.github.com/dyntopia/292f2b975f18dde06491" rel="nofollow">https://gist.github.com/dyntopia/292f2b975f18dde06491</a>
+
+Actual result:
+--------------
+With php-5.6.17 compiled with -D_FORTIFY_SOURCE=2:
+
+,----
+| $ python crash.py crash.tar
+| $ gdb --args php-5.6.17/bin/php phar.php crash.tar ext
+| (gdb) b tar.c:490
+| (gdb) r
+| Breakpoint 1, phar_parse_tarfile [...]
+| 490				entry.link = estrdup(hdr-&gt;linkname);
+| 
+| (gdb) call strlen(hdr-&gt;linkname)
+| $1 = 617
+| (gdb) printf &quot;%s\n&quot;, hdr-&gt;linkname
+| linkname...linkname...linkname...linkname...linkname...linkname...
+| linkname...linkname...linkname...lmagic...uname...uname...uname...
+| uname...gname...gname...gname...gname...major...minor...prefix...
+| prefix...prefix...prefix...prefix...prefix...prefix...prefix...
+| prefix...prefix...prefix...prefix...prefix...prefix...prefix...
+| prefix...prefix...prpadding...paprefix...prefix...prefix...
+| prefix...prefix...prefix...prefix...prefix...prefix...prefix...
+| prefix...prefix...prefix...prefix...prefix...prefix...prefix...
+| pr/name...name...name...name...name...name...name...name...name...
+| name...name...name...name...name...na?????
+| 
+| (gdb) b strncpy
+| (gdb) c
+| Breakpoint 2, phar_tar_writeheaders [...]
+| 756			strncpy(header.linkname, entry-&gt;link, strlen(entry-&gt;link));
+| (gdb) p sizeof(header.linkname)
+| $2 = 100
+| 
+| (gdb) s
+| strncpy (__len=617, __src=0x7ffff7fdbbe0 &quot;linkname...linkname...
+| linkname...linkname...linkname...linkname...linkname...linkname...
+| linkname...lmagic...uname...uname...uname...uname...gname...gname...
+| gname...gname...major...minor...prefix...pre&quot;..., __dest=0x7fffffffa13d &quot;&quot;)
+| at /usr/include/x86_64-linux-gnu/bits/string3.h:126
+| 126	  return __builtin___strncpy_chk (__dest, __src, __len, __bos (__dest));
+| 
+| (gdb) c
+| Continuing.
+|  *** buffer overflow detected ***: /home/php/php-5.6.17/bin/php terminated
+| ======= Backtrace: =========
+| /lib/x86_64-linux-gnu/libc.so.6(+0x78c4e)[0x7ffff6fa7c4e]
+| /lib/x86_64-linux-gnu/libc.so.6(__fortify_fail+0x5c)[0x7ffff7047e8c]
+| /lib/x86_64-linux-gnu/libc.so.6(+0x116e80)[0x7ffff7045e80]
+| /lib/x86_64-linux-gnu/libc.so.6(+0x116319)[0x7ffff7045319]
+| /home/php/php-5.6.17/bin/php[0x5983e4]
+| /home/php/php-5.6.17/bin/php(zend_hash_apply_with_argument+0x79)[0x6f4cf9]
+| /home/php/php-5.6.17/bin/php[0x59aa84]
+| /home/php/php-5.6.17/bin/php[0x5af476]
+| /home/php/php-5.6.17/bin/php[0x5ba050]
+| /home/php/php-5.6.17/bin/php[0x5baf2a]
+| /home/php/php-5.6.17/bin/php[0x79543f]
+| /home/php/php-5.6.17/bin/php(execute_ex+0x40)[0x723a50]
+| /home/php/php-5.6.17/bin/php(zend_execute_scripts+0x180)[0x6e7dd0]
+| /home/php/php-5.6.17/bin/php(php_execute_script+0x280)[0x683160]
+| /home/php/php-5.6.17/bin/php[0x796f32]
+| /home/php/php-5.6.17/bin/php[0x423c9e]
+| /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xf0)[0x7ffff6f4fa40]
+| /home/php/php-5.6.17/bin/php(_start+0x29)[0x423de9]
+| ======= Memory map: ========
+| 00400000-00bff000 r-xp 00000000 08:01 557690                             /home/php/php-5.6.17/bin/php
+| 00dfe000-00e8f000 r--p 007fe000 08:01 557690                             /home/php/php-5.6.17/bin/php
+| 00e8f000-00e98000 rw-p 0088f000 08:01 557690                             /home/php/php-5.6.17/bin/php
+| 00e98000-01051000 rw-p 00000000 00:00 0                                  [heap]
+| 7ffff44f3000-7ffff4931000 r--p 00000000 08:01 136079                     /usr/lib/locale/locale-archive
+| 7ffff4931000-7ffff4947000 r-xp 00000000 08:01 786971                     /lib/x86_64-linux-gnu/libgcc_s.so.1
+| 7ffff4947000-7ffff4b46000 ---p 00016000 08:01 786971                     /lib/x86_64-linux-gnu/libgcc_s.so.1
+| 7ffff4b46000-7ffff4b47000 r--p 00015000 08:01 786971                     /lib/x86_64-linux-gnu/libgcc_s.so.1
+| 7ffff4b47000-7ffff4b48000 rw-p 00016000 08:01 786971                     /lib/x86_64-linux-gnu/libgcc_s.so.1
+| 7ffff4b48000-7ffff4cbb000 r-xp 00000000 08:01 133608                     /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.21
+| 7ffff4cbb000-7ffff4eba000 ---p 00173000 08:01 133608                     /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.21
+| 7ffff4eba000-7ffff4ec4000 r--p 00172000 08:01 133608                     /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.21
+| 7ffff4ec4000-7ffff4ec6000 rw-p 0017c000 08:01 133608                     /usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.21
+| 7ffff4ec6000-7ffff4eca000 rw-p 00000000 00:00 0
+| 7ffff4eca000-7ffff6780000 r-xp 00000000 08:01 140633                     /usr/lib/x86_64-linux-gnu/libicudata.so.55.1
+| 7ffff6780000-7ffff697f000 ---p 018b6000 08:01 140633                     /usr/lib/x86_64-linux-gnu/libicudata.so.55.1
+| 7ffff697f000-7ffff6980000 r--p 018b5000 08:01 140633                     /usr/lib/x86_64-linux-gnu/libicudata.so.55.1
+| 7ffff6980000-7ffff6981000 rw-p 018b6000 08:01 140633                     /usr/lib/x86_64-linux-gnu/libicudata.so.55.1
+| 7ffff6981000-7ffff699a000 r-xp 00000000 08:01 787064                     /lib/x86_64-linux-gnu/libz.so.1.2.8
+| 7ffff699a000-7ffff6b99000 ---p 00019000 08:01 787064                     /lib/x86_64-linux-gnu/libz.so.1.2.8
+| 7ffff6b99000-7ffff6b9a000 r--p 00018000 08:01 787064                     /lib/x86_64-linux-gnu/libz.so.1.2.8
+| 7ffff6b9a000-7ffff6b9b000 rw-p 00019000 08:01 787064                     /lib/x86_64-linux-gnu/libz.so.1.2.8
+| 7ffff6b9b000-7ffff6d1a000 r-xp 00000000 08:01 140629                     /usr/lib/x86_64-linux-gnu/libicuuc.so.55.1
+| 7ffff6d1a000-7ffff6f1a000 ---p 0017f000 08:01 140629                     /usr/lib/x86_64-linux-gnu/libicuuc.so.55.1
+| 7ffff6f1a000-7ffff6f2a000 r--p 0017f000 08:01 140629                     /usr/lib/x86_64-linux-gnu/libicuuc.so.55.1
+| 7ffff6f2a000-7ffff6f2b000 rw-p 0018f000 08:01 140629                     /usr/lib/x86_64-linux-gnu/libicuuc.so.55.1
+| 7ffff6f2b000-7ffff6f2f000 rw-p 00000000 00:00 0
+| 7ffff6f2f000-7ffff70ef000 r-xp 00000000 08:01 786945                     /lib/x86_64-linux-gnu/libc-2.21.so
+| 7ffff70ef000-7ffff72ef000 ---p 001c0000 08:01 786945                     /lib/x86_64-linux-gnu/libc-2.21.so
+| 7ffff72ef000-7ffff72f3000 r--p 001c0000 08:01 786945                     /lib/x86_64-linux-gnu/libc-2.21.so
+| 7ffff72f3000-7ffff72f5000 rw-p 001c4000 08:01 786945                     /lib/x86_64-linux-gnu/libc-2.21.so
+| 7ffff72f5000-7ffff72f9000 rw-p 00000000 00:00 0
+| 7ffff72f9000-7ffff74a6000 r-xp 00000000 08:01 134031                     /usr/lib/x86_64-linux-gnu/libxml2.so.2.9.2
+| 7ffff74a6000-7ffff76a6000 ---p 001ad000 08:01 134031                     /usr/lib/x86_64-linux-gnu/libxml2.so.2.9.2
+| 7ffff76a6000-7ffff76ae000 r--p 001ad000 08:01 134031                     /usr/lib/x86_64-linux-gnu/libxml2.so.2.9.2
+| 7ffff76ae000-7ffff76b0000 rw-p 001b5000 08:01 134031                     /usr/lib/x86_64-linux-gnu/libxml2.so.2.9.2
+| 7ffff76b0000-7ffff76b1000 rw-p 00000000 00:00 0
+| 7ffff76b1000-7ffff76b4000 r-xp 00000000 08:01 786959                     /lib/x86_64-linux-gnu/libdl-2.21.so
+| 7ffff76b4000-7ffff78b3000 ---p 00003000 08:01 786959                     /lib/x86_64-linux-gnu/libdl-2.21.so
+| 7ffff78b3000-7ffff78b4000 r--p 00002000 08:01 786959                     /lib/x86_64-linux-gnu/libdl-2.21.so
+| 7ffff78b4000-7ffff78b5000 rw-p 00003000 08:01 786959                     /lib/x86_64-linux-gnu/libdl-2.21.so
+| 7ffff78b5000-7ffff79bc000 r-xp 00000000 08:01 786990                     /lib/x86_64-linux-gnu/libm-2.21.so
+| 7ffff79bc000-7ffff7bbb000 ---p 00107000 08:01 786990                     /lib/x86_64-linux-gnu/libm-2.21.so
+| 7ffff7bbb000-7ffff7bbc000 r--p 00106000 08:01 786990                     /lib/x86_64-linux-gnu/libm-2.21.so
+| 7ffff7bbc000-7ffff7bbd000 rw-p 00107000 08:01 786990                     /lib/x86_64-linux-gnu/libm-2.21.so
+| 7ffff7bbd000-7ffff7bd4000 r-xp 00000000 08:01 787034                     /lib/x86_64-linux-gnu/libresolv-2.21.so
+| 7ffff7bd4000-7ffff7dd4000 ---p 00017000 08:01 787034                     /lib/x86_64-linux-gnu/libresolv-2.21.so
+| 7ffff7dd4000-7ffff7dd6000 r--p 00017000 08:01 787034                     /lib/x86_64-linux-gnu/libresolv-2.21.so
+| 7ffff7dd6000-7ffff7dd7000 rw-p 00019000 08:01 787034                     /lib/x86_64-linux-gnu/libresolv-2.21.so
+| 7ffff7dd7000-7ffff7dd9000 rw-p 00000000 00:00 0
+| 7ffff7dd9000-7ffff7dfd000 r-xp 00000000 08:01 786921                     /lib/x86_64-linux-gnu/ld-2.21.so
+| 7ffff7e51000-7ffff7fea000 rw-p 00000000 00:00 0
+| 7ffff7ff5000-7ffff7ff8000 rw-p 00000000 00:00 0
+| 7ffff7ff8000-7ffff7ffa000 r--p 00000000 00:00 0                          [vvar]
+| 7ffff7ffa000-7ffff7ffc000 r-xp 00000000 00:00 0                          [vdso]
+| 7ffff7ffc000-7ffff7ffd000 r--p 00023000 08:01 786921                     /lib/x86_64-linux-gnu/ld-2.21.so
+| 7ffff7ffd000-7ffff7ffe000 rw-p 00024000 08:01 786921                     /lib/x86_64-linux-gnu/ld-2.21.so
+| 7ffff7ffe000-7ffff7fff000 rw-p 00000000 00:00 0
+| 7ffffffde000-7ffffffff000 rw-p 00000000 00:00 0                          [stack]
+| ffffffffff600000-ffffffffff601000 r-xp 00000000 00:00 0                  [vsyscall]
+| 
+| Program received signal SIGABRT, Aborted.
+| 0x00007ffff6f64267 in __GI_raise (sig=sig@entry=6) at ../sysdeps/unix/sysv/linux/raise.c:55
+| 55	../sysdeps/unix/sysv/linux/raise.c: No such file or directory.
+| (gdb)
+`----
+
+
+-- Hans Jerry Illikainen
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=71488'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=71488'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1454297482">&nbsp;</a><strong>[2016-02-01 03:31 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_log' ><a name="1454298046">&nbsp;</a><strong>[2016-02-01 03:40 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 5.6.17</span>
+<span class="added">+PHP Version: 5.5.31</span>
+</div></div></div><div class='comment type_comment' ><a name="1454298047">&nbsp;</a><strong>[2016-02-01 03:40 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Thanks for the report! Patch added to security repo commit 07c7df68bd68bbe706371fccc77c814ebb335d9e and here: <a href="https://gist.github.com/smalyshev/7e8403a564c70977a971" rel="nofollow">https://gist.github.com/smalyshev/7e8403a564c70977a971</a>
+
+Please verify.
+</pre>
+</div><div class='comment type_comment' ><a name="1454338884">&nbsp;</a><strong>[2016-02-01 15:01 UTC] hji &#x61;&#116; dyntopia &#x64;&#111;&#x74; com</strong>
+<pre class='note'>I took a look at _estrndup():
+
+zend_alloc.c #2641..2659:
+,----
+| ZEND_API char *_estrndup(const char *s, uint length ZEND_FILE_LINE_DC ZEND_FILE_LINE_ORIG_DC)
+| {
+|     char *p;
+|     [...]
+| 
+|     p = (char *) _emalloc(safe_address(length, 1, 1) ZEND_FILE_LINE_RELAY_CC ZEND_FILE_LINE_ORIG_RELAY_CC);
+|     [...]
+| 
+|     memcpy(p, s, length);
+|     p[length] = 0;
+| 
+|     [...]
+|     return p;
+| }
+`----
+
+And the linked patch:
+
+,----
+| linkname_len = strnlen(hdr-&gt;linkname, 100);
+| [...]
+| entry.link = estrndup(hdr-&gt;linkname, linkname_len);
+`----
+
+With safe_address() returning nmemb * size + offset, the max size of
+entry.link is 101 bytes, with the last being \0.
+
+When strncpy():ing in phar_tar_writeheaders():
+
+,----
+| memset((char *) &amp;header, 0, sizeof(header));                // (1)
+| [...]
+| strncpy(header.linkname, entry-&gt;link, strlen(entry-&gt;link)); // (2)
+| [...]
+| strncpy(header.magic, &quot;ustar&quot;, sizeof(&quot;ustar&quot;)-1);          // (3)
+`----
+
+Since strlen() don't account for the terminating NUL, the max len in
+(2) is 100.  With a len of 100, all of linkname will be non-NUL with a
+resulting string of linkname + \0 from magic[0] due to the header
+being zeroed in (1).  However, after (3), the string is
+linkname + magic:
+
+,----
+| $ gdb --args patch-php-5.6.17/bin/php phar.php crash.tar ext
+| (gdb) b tar.c:769
+| (gdb) r
+| Breakpoint 1, phar_tar_writeheaders [...]
+| 769    strncpy(header.magic, &quot;ustar&quot;, sizeof(&quot;ustar&quot;)-1);
+| 
+| (gdb) x/s header.linkname
+| 0x7fffffff9d7d:	&quot;linkname...linkname...linkname...linkname...
+| linkname...linkname...linkname...linkname...linkname...l&quot;
+| 
+| (gdb) call strlen(header.linkname)
+| $1 = 100
+| 
+| (gdb) n
+| 770    strncpy(header.version, &quot;00&quot;, sizeof(&quot;00&quot;)-1);
+| 
+| (gdb) x/s header.linkname
+| 0x7fffffff9d7d:	&quot;linkname...linkname...linkname...linkname...
+| linkname...linkname...linkname...linkname...linkname...lustar&quot;
+| 
+| (gdb) call strlen(header.linkname)
+| $2 = 105
+`----
+</pre>
+</div><div class='comment type_svn' ><a name="1454383160">&nbsp;</a><strong>[2016-02-02 03:19 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=07c7df68bd68bbe706371fccc77c814ebb335d9e" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=07c7df68bd68bbe706371fccc77c814ebb335d9e</a>
+Log: Fixed <a href='bug.php?id=71488'>bug #71488</a>: Stack overflow when decompressing tar archives
+</pre>
+</div><div class='comment type_log' ><a name="1454383162">&nbsp;</a><strong>[2016-02-02 03:19 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1454384182">&nbsp;</a><strong>[2016-02-02 03:36 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=07c7df68bd68bbe706371fccc77c814ebb335d9e" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=07c7df68bd68bbe706371fccc77c814ebb335d9e</a>
+Log: Fixed <a href='bug.php?id=71488'>bug #71488</a>: Stack overflow when decompressing tar archives
+</pre>
+</div><div class='comment type_svn' ><a name="1454388388">&nbsp;</a><strong>[2016-02-02 04:46 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=07c7df68bd68bbe706371fccc77c814ebb335d9e" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=07c7df68bd68bbe706371fccc77c814ebb335d9e</a>
+Log: Fixed <a href='bug.php?id=71488'>bug #71488</a>: Stack overflow when decompressing tar archives
+</pre>
+</div><div class='comment type_log' ><a name="1457644349">&nbsp;</a><strong>[2016-03-10 21:12 UTC] <a href="//people.php.net/kaplan">kaplan@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2016-2554</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

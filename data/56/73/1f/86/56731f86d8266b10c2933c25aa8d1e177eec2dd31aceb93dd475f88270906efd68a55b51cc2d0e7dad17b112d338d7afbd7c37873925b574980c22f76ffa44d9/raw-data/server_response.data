@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='opcache Bug #69090 - RDF' href='rss/bug.php?id=69090'>
+        <link rel='alternate' type='application/rss+xml' title='opcache Bug #69090 - RSS 2.0' href='rss/bug.php?id=69090&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Request #69090 :: add prefix/xor to cache keys/check permissions or separate caches</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=69090">Request</a>&nbsp;#69090</th>
+            <td id="summary" colspan="5">add prefix/xor to cache keys/check permissions or separate caches</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2015-02-20 14:37 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-11-15 15:15 UTC</td>
+            <td rowspan="6">
+
+                <table id="votes">
+                    <tr><th class="details">Votes:</th><td>121</td></tr>
+                    <tr><th class="details">Avg. Score:</th><td>4.9 &plusmn; 0.3</td></tr>
+                    <tr><th class="details">Reproduced:</th><td>112 of 113 (99.1%)</td></tr>
+                    <tr><th class="details">Same Version:</th><td>35 (31.2%)</td></tr>
+                    <tr><th class="details">Same OS:</th><td>71 (63.4%)</td></tr>
+                </table>
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>simon &#x61;&#116; ikanobori &#x64;&#111;&#x74; jp</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=dmitry">dmitry</a> (<a href="https://people.php.net/dmitry">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=opcache">opcache</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.6.5</td>
+            <th class="details">OS:</th>
+            <td>linux/debian</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><em>None</em></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=69090&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=69090&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=69090&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1424443043">&nbsp;</a><strong>[2015-02-20 14:37 UTC] simon &#x61;&#116; ikanobori &#x64;&#111;&#x74; jp</strong>
+<pre class='note'>Description:
+------------
+PHP's opcache seems to create keys for files it caches based on their filepath (including the cwd when the option opcache.use_cwd is set).
+
+When turning on opcache in commonly used hosting environments where users are chrooted it is very easy to get key collissions as the full path of a file in a chroot can commonly be /wp-config.php. The file that was accessed on this path first will be stored by opcache and be used by any interpreters executing the same file later on.
+
+Even without a chroot it is often easy to predict where files of another user on the same server will be located and they can still be included circumventing any file permissions set on these files even if PHP executes as the correct user (made even more trivial to figure out interesting files if access to the opcache_get_status() function is not restricted by the host).
+
+Example is in the &quot;test script&quot; below which shortly shows my relevant config lines.
+
+It'd be neat if opcache could implement a runtime config variable to give to an interpreter with a value that mashes up the key by prefixing or xor'ing it without the possibility of being overwritten from within the script.
+
+Alternatively it might be possible to use different parts of shm based on a configuration option so the cache is per-user.
+
+Test script:
+---------------
+# Permissions on both directories and files are set to rwx for user only
+root@debian:/home# ls -l .
+total 12
+drwx------ 2 one       one       4096 Feb 20 12:45 one
+drwx------ 2 two       two       4096 Feb 20 12:45 two
+
+root@debian:/home# ls -l one/
+total 4
+-rw------- 1 one one 25 Feb 20 12:42 one.php
+
+root@debian:/home# ls -l two/
+total 4
+-rw------- 1 two two 46 Feb 20 12:44 two.php
+
+# one.php just sets a single variable
+root@debian:/home# cat one/one.php 
+&lt;?php
+
+$one = &quot;one&quot;;
+
+?&gt;
+
+# This file tries to include the non-existent &quot;/one.php&quot; in its chroot
+root@debian:/home# cat two/two.php 
+&lt;?php
+
+	include &quot;/one.php&quot;;
+
+	print $one;
+
+?&gt;
+
+# FPM processes are configured to run as the user           
+root@debian:/home# grep -r &quot;user =&quot; /etc/php5/fpm/pool.d/
+/etc/php5/fpm/pool.d/1.conf:user = one
+/etc/php5/fpm/pool.d/2.conf:user = two
+
+# FPM processes also run chrooted into the homedirs
+root@debian:/home# grep -r &quot;chroot &quot; /etc/php5/fpm/pool.d/
+/etc/php5/fpm/pool.d/1.conf:chroot = /home/one
+/etc/php5/fpm/pool.d/2.conf:chroot = /home/two
+
+# Request one.php on pool one
+root@debian:/home# curl <a href="http://1.localhost/one.php" rel="nofollow">http://1.localhost/one.php</a>
+
+# Request two.php on pool two
+root@debian:/home# curl <a href="http://2.localhost/two.php" rel="nofollow">http://2.localhost/two.php</a>
+one
+
+# That's the content of /one.php which is owned by user one, in its own chroot
+# being served by user two from a different chroot while user two doesnt even
+# have read permissions on the file.
+
+Expected result:
+----------------
+Users can only access their own files (when configured correctly).
+
+Actual result:
+--------------
+Users can access other users' files when previously accessed by opcache cross chroots and ignoring filesystem permissions.
+
+</pre>
+</div><h2>Patches</h2>
+<a href="patch-display.php?bug_id=69090&amp;patch=bug69090.diff&amp;revision=latest" >bug69090.diff</a>
+(last revision 2016-11-15 15:37 UTC by dmitry@php.net)
+<br><a href="patch-display.php?bug_id=69090&amp;patch=validate_permission.diff&amp;revision=latest" >validate_permission.diff</a>
+(last revision 2016-11-15 11:21 UTC by dmitry@php.net)
+<br><a href="patch-display.php?bug_id=69090&amp;patch=opcache_bug69090_user_id_keys&amp;revision=latest" >opcache_bug69090_user_id_keys</a>
+(last revision 2016-11-04 10:35 UTC by php-dev &#x61;&#116; coydogsoftware &#x64;&#111;&#x74; net)
+<br><p><a href='patch-add.php?bug_id=69090'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=69090'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1424443130">&nbsp;</a><strong>[2015-02-20 14:38 UTC] simon &#x61;&#116; ikanobori &#x64;&#111;&#x74; jp</strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 5.5.22</span>
+<span class="added">+PHP Version: 5.6.5</span>
+</div></div></div><div class='comment type_comment' ><a name="1424443130">&nbsp;</a><strong>[2015-02-20 14:38 UTC] simon &#x61;&#116; ikanobori &#x64;&#111;&#x74; jp</strong>
+<pre class='note'>Correct PHP version.
+</pre>
+</div><div class='comment type_log' ><a name="1424484040">&nbsp;</a><strong>[2015-02-21 02:00 UTC] <a href="//people.php.net/rasmus">rasmus@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Open</span>
+<span class="added">+Status: Analyzed</span>
+</div></div></div><div class='comment type_comment' ><a name="1424484040">&nbsp;</a><strong>[2015-02-21 02:00 UTC] <a href="//people.php.net/rasmus">rasmus@php.net</a></strong>
+<pre class='note'>I think the easiest would be to simply add an option to use a file's device+inode in addition to, or instead of, the full path. We have discussed this a few times, but nobody has gotten around to an implementation yet.
+</pre>
+</div><div class='comment type_comment' ><a name="1424517314">&nbsp;</a><strong>[2015-02-21 11:15 UTC] simon &#x61;&#116; ikanobori &#x64;&#111;&#x74; jp</strong>
+<pre class='note'>I've written a more extensive post with more examples here: <a href="https://ikanobori.jp/php55-opcache-shared-hosting.html" rel="nofollow">https://ikanobori.jp/php55-opcache-shared-hosting.html</a>
+
+Inodes seem to be a good idea, I think APC does it that way?
+</pre>
+</div><div class='comment type_comment' ><a name="1424568074">&nbsp;</a><strong>[2015-02-22 01:21 UTC] <a href="//people.php.net/rasmus">rasmus@php.net</a></strong>
+<pre class='note'>Yes, it was one of the features we lost by dropping APC. It has been on our radar for a while to fix, but nobody has gotten to writing the code yet.
+</pre>
+</div><div class='comment type_comment' ><a name="1434272642">&nbsp;</a><strong>[2015-06-14 09:04 UTC] thesparkdevelopment &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>4 month for critical fix... it's bad...
+</pre>
+</div><div class='comment type_comment' ><a name="1437073765">&nbsp;</a><strong>[2015-07-16 19:09 UTC] noescape &#x61;&#116; centrum &#x64;&#111;&#x74; sk</strong>
+<pre class='note'>I cannot seem to replicate this... But I got open basedir enabled. Can somebody verify that open basedir solve it?
+</pre>
+</div><div class='comment type_comment' ><a name="1437930612">&nbsp;</a><strong>[2015-07-26 17:10 UTC] thesparkdevelopment &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>noescape at centrum dot sk:
+
+I think open_basedir is useless in chroot
+</pre>
+</div><div class='comment type_comment' ><a name="1443119539">&nbsp;</a><strong>[2015-09-24 18:32 UTC] toni &#x61;&#116; lygon &#x64;&#111;&#x74; net</strong>
+<pre class='note'>I can replicate this with php5-fpm 5.5.9+dfsg-1ubuntu4.11.
+
+I baffled how a huge security / usability problem like this can exist, yet nobody gives a poop about it.
+We've got a server with multiple sites chrooted using the same directory structure inside the chrooted /.
+Obviously this causes fatal problems as there are conflicts, like index.php in those hosts causing it to randomly load from any of those.
+
+Because of this, opcache can not be used as we can't change the directory structure.
+
+Someone, please investigate this!
+</pre>
+</div><div class='comment type_comment' ><a name="1446590527">&nbsp;</a><strong>[2015-11-03 22:42 UTC] michal_micko &#x61;&#116; centrum &#x64;&#111;&#x74; cz</strong>
+<pre class='note'>I replicate this problem with two VirtualHosts (using open_basedir).
+
+OS: Debian 8.1
+php -v
+PHP 5.6.14-0+deb8u1 (cli) (built: Oct  4 2015 16:13:10) 
+Copyright (c) 1997-2015 The PHP Group
+Zend Engine v2.6.0, Copyright (c) 1998-2015 Zend Technologies
+    with XCache v3.2.0, Copyright (c) 2005-2014, by mOo
+    with Zend OPcache v7.0.6-dev, Copyright (c) 1999-2015, by Zend Technologies
+    with Xdebug v2.2.5, Copyright (c) 2002-2014, by Derick Rethans
+    with XCache Optimizer v3.2.0, Copyright (c) 2005-2014, by mOo
+    with XCache Cacher v3.2.0, Copyright (c) 2005-2014, by mOo
+    with XCache Coverager v3.2.0, Copyright (c) 2005-2014, by mOo
+
+Apache: 2.4.10
+
+VirtualHosts:
+-------------
+cat 050-opcache-fail.conf 
+&lt;VirtualHost *:80&gt;
+    ServerName app1
+    DocumentRoot /var/www/app1/web
+    php_admin_value open_basedir /var/www/app1
+    &lt;Directory /var/www/app1/web&gt;
+        Options Indexes FollowSymLinks MultiViews
+        AllowOverride None
+        #Order allow,deny
+        #Allow from All
+        Require all granted
+    &lt;/Directory&gt;
+&lt;/VirtualHost&gt;
+
+&lt;VirtualHost *:80&gt;
+    ServerName app2
+    DocumentRoot /var/www/app2/web
+    php_admin_value open_basedir /var/www/app2
+    &lt;Directory /var/www/app2/web&gt;
+        Options Indexes FollowSymLinks MultiViews
+        AllowOverride None
+        #Order allow,deny
+        #Allow from All
+        Require all granted
+    &lt;/Directory&gt;
+&lt;/VirtualHost&gt;
+
+Example - PHP apps - typical using with composer (dummy):
+---------------------------------------------------------
+apps directory structures: /var/www/
+
+app1
+  vendor
+    third
+      party
+        lib.php
+    autoload.php
+  web
+    index.php
+
+app2
+  vendor
+    third
+      party
+        lib.php
+    autoload.php
+  web
+    index.php
+
+
+web/index.php (same app1 and app2):
+-----------------------------------
+&lt;?php
+require_once __DIR__ . '/../vendor/autoload.php';
+
+echo (new third\party\lib())-&gt;getName();
+?&gt;
+
+
+vendor/autoload.php (same app1 and app2):
+-----------------------------------------
+&lt;?php
+require_once __DIR__ . '/third/party/lib.php';
+?&gt;
+
+
+vendor/third/party/lib.php (app1):
+----------------------------------
+&lt;?php
+namespace third\party;
+
+class lib
+{
+    public function getName()
+    {
+        return 'good library';
+    }
+}
+?&gt;
+
+
+vendor/third/party/lib.php (app2):
+----------------------------------
+&lt;?php
+namespace third\party;
+
+class lib
+{
+    public function getName()
+    {
+        return 'bad hacked library';
+    }
+}
+?&gt;
+
+
+Security issue:
+---------------
+It would be a problem in webhostings. After web server restart just run bad app2 as first.
+
+
+
+Workaround:
+-----------
+opcache.optimization_level=0
+</pre>
+</div><div class='comment type_comment' ><a name="1446628445">&nbsp;</a><strong>[2015-11-04 09:14 UTC] michal_micko &#x61;&#116; centrum &#x64;&#111;&#x74; cz</strong>
+<pre class='note'>important note to the previous example:
+---------------------------------------
+PHP is running as Apache module
+</pre>
+</div><div class='comment type_comment' ><a name="1459245099">&nbsp;</a><strong>[2016-03-29 09:51 UTC] admin &#x61;&#116; 3dr &#x64;&#111;&#x74; org</strong>
+<pre class='note'>Is this still beeing considered as a bug or should we just give up on chroot+opcache?
+</pre>
+</div><div class='comment type_comment' ><a name="1464958748">&nbsp;</a><strong>[2016-06-03 12:59 UTC] rgpublic &#x61;&#116; gmx &#x64;&#111;&#x74; net</strong>
+<pre class='note'>This is probably related:
+
+<a href="https://bugs.php.net/bug.php?id=67481" rel="nofollow">https://bugs.php.net/bug.php?id=67481</a>
+
+I also find it stunning that - at the very least - PHP doesn't warn about this or even better refuse to start in this configuration. This is a serious security issue and all too easy to overlook. Took me a while to figure out whats actually happening. This can lead to very mysterious errors. Fragments or error messages of other unrelated sites on the same server suddenly showing up and so on. 
+
+Can anybody confirm that &quot;opcache.optimization_level=0&quot; is really a solid workaround that can be used in production? There should be no information leak whatsoever. No files. No data. No code. No nothing. That's why we have a chrooted environment in the first place. But obviously I'd rather have an optimzation level 0 than no opcache at all.
+</pre>
+</div><div class='comment type_comment' ><a name="1477546776">&nbsp;</a><strong>[2016-10-27 05:39 UTC] kmark937 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>I'm concerned about this issue since it has the potential to be a security deal-breaker for Zend OPcache when used on (as an example) a shared-hosting platform.
+
+With that said I'm unable to replicate this using michal_micko's instructions for mod_php and open_basedir configurations.
+
+I used the same exact two VirtualHosts, directory tree, and file contents. I restarted apache, accessed <a href="http://app2" rel="nofollow">http://app2</a> first and then <a href="http://app1" rel="nofollow">http://app1</a> but both displayed their proper &quot;bad&quot; and &quot;good&quot; texts respectively.
+
+Ubuntu 14.04.5 LTS (as opposed to Debian 8.1)
+Apache 2.4.7 (Ubuntu) (as opposed to 2.4.10, default config plus VirtualHosts)
+PHP 5.6.27-1+deb.sury.org~trusty+1 (as opposed to 5.6.14-0+deb8u1, default config)
+
+Possibly relevant:
+opcache.enable = On
+opcache.optimization_level = 0x7FFFBFFF
+opcache.revalidate_path = Off
+opcache.use_cwd = On
+opcache.validate_timestamps = On
+
+One potentially major difference between my config and michal_micko's is that I do not have any XCache modules or Xdebug loaded. I would think, with except perhaps the PHP version, that is the only major configuration difference between my set up and michal_micko's.
+
+For me it looks safe to use PHP 5.6 OPcache + mod_php + open_basedir. When I dump the output of opcache_get_status() I see only full paths for both the &quot;full_path&quot; value and the array keys. I believe this is the use_cwd option doing its job. The only additional &quot;securing&quot; that I see is setting restrict_api to something out of reach or adding opcache_* functions to disable_functions.
+
+I'd greatly appreciate it if anyone is able to correct or confirm what I've found.
+</pre>
+</div><div class='comment type_comment' ><a name="1478071232">&nbsp;</a><strong>[2016-11-02 07:20 UTC] jeff &#x61;&#116; mcneill &#x64;&#111;&#x74; io</strong>
+<pre class='note'>Does this configuration of Opcache resolve the problem? See: <a href="http://stackoverflow.com/questions/20960469/php-fpm-5-5-does-opcache-run-per-domain" rel="nofollow">http://stackoverflow.com/questions/20960469/php-fpm-5-5-does-opcache-run-per-domain</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1478255576">&nbsp;</a><strong>[2016-11-04 10:32 UTC] php-dev &#x61;&#116; coydogsoftware &#x64;&#111;&#x74; net</strong>
+<pre class='note'>At this point two separate but related issues are being discussed:
+
+ 1. OPCache is prone to filename collisions across chroots. Adding inode number to the key would fix this.
+
+ 2. All child PHP processes have access to all scripts in the cache, regardless of file permissions. This renders OPCache unusable and dangerous on shared hosting servers, where OPCache may be used by malicious users to bypass file permissions (and open_basedir FWIW). Adding inode to the cache key would *not* fix this vulnerability, although in practice it would help in cases where parent directory is unreadable.
+
+I'll focus on the second issue: The obvious real-world example is a shared hosting server with multiple CMS sites. Most PHP CMS's store database credentials and other sensitive information in PHP scripts. Thus one malicious user (translation: compromised CMS) typically has full access to databases for other users' CMS's if OPCache is enabled. If anyone doubts this, I can provide working proof of concept exploit scripts targeted at WordPress. Fortunately this doesn't seem to be exploited in the wild on any large scale, but I anticipate PHP malware will start incorporating this technique as soon as it's more widely known.
+
+I'm attaching a patch against the 5.6 branch which prepends a unique user identifier (username in Windows, euid elsewhere) to the cache key. This should fix issue 2 in all situations where dl() is not allowed (PHP5 with FPM would still in theory be vulnerable unless dl() is disabled).
+
+It's not a perfect fix because it requires the PHP process to act as gatekeeper, essentially a substitute for kernel enforcement of filesystem permissions. This is a problem if any PHP child process with a descriptor for the shared opcache can be subverted, for example with a malicious extension, hence my concern about dl()).
+	
+It will also fix issue 1 *only* in cases where the chroot environments are running PHP scripts with separate user accounts. If the chroots use a shared web server user for PHP, issue 1 is still a problem.
+
+I agree with Rasmus that the script inode should also be added to the key, but I wasn't sure if it would be appropriate to stat the script for its inode in the key generation function due to performance concerns, and being unfamiliar with the extension and PHP itself I wasn't prepared to do this in a more appropriate place.
+
+I started with 5.6 because I believe this is a fairly serious security vulnerability which many users are unaware of, which isn't adequately explained in the OPCache documentation, and which should IMHO be fixed in a patch release. I'm willing to port it forward to 7.x if there's interest and time allows, but I feel strongly that this patch or something similar should be included in a 5.6 patch release ASAP.
+
+Code is only minimally tested. Use at own risk. Apologies for any indentation issues; I did my best to follow the style guide, but existing OPCache code did not. Feedback is welcome.
+</pre>
+</div><div class='comment type_comment' ><a name="1478278470">&nbsp;</a><strong>[2016-11-04 16:54 UTC] <a href="//people.php.net/jpauli">jpauli@php.net</a></strong>
+<pre class='note'>Excuse me but...
+
+Wouldn't it be safer, more reliable, less hackish ... to separate the PHP pools of the website ? One pool per site, each pool listening on one port for CGI requests.
+
+I mean, we do know for sure, that PHP cannot replace the OS and the configuration to secure webservers in a shared architecture (shared hosting).
+We've tried things such as safe_mode, open_basedir etc... since the beginning, with no success.
+Nowadays, with mature OS, mature stacks, and a mature FCGI handler (PHP-FPM), it is easy to build a shared hosting architecture not relying on the PHP language itself to isolate the virtualhosts.
+
+Security - of the filesystem here - is the matter of the OS , not PHP.
+
+Why don't you create several PHP-FPM pools, and secure them with one Unix user per pool ? Obviously, the OPCache SHM wouldn't be shared here, but that is not what you want : OPCache SHM shouldn't be crossed against several websites.
+
+One pool per website = one SHM per website = one unix user per website = we solved every low level security problems, right ?
+</pre>
+</div><div class='comment type_comment' ><a name="1478279494">&nbsp;</a><strong>[2016-11-04 17:11 UTC] jeff &#x61;&#116; mcneill &#x64;&#111;&#x74; io</strong>
+<pre class='note'>The suggestion as one user per site would have to apply all the way across the stack. So Apache would have to have a single user, and no multi-site, no virtual sites, no resource sharing at all? This would mean full resources for each and every site, which would be extremely wasteful. I have a client with four websites. Does the single client need four users? I have several clients but I want to run all clients and all their sites with a single configuration. Apache can do this, PHP can do this, therefore opcache should be able to support such a configuration.
+</pre>
+</div><div class='comment type_comment' ><a name="1478290301">&nbsp;</a><strong>[2016-11-04 20:11 UTC] php-dev &#x61;&#116; coydogsoftware &#x64;&#111;&#x74; net</strong>
+<pre class='note'>I'll address jpauli's points:
+
+Not everyone is using FPM. My patch fixes this problem on both FPM and apache2handler, where we can separate users with mod_ruid2.
+
+My experience with FPM is limited so I may be speaking out of turn, but when I tried separate FPM pools with separate users, they were still forked from the same parent FPM master process. Correct me if I'm wrong but the OPCache SHM segment is opened in this master process and inherited by the pools as a file descriptor. The multi-user pools still share a single OPCache, and thus they actually aid in bypassing file permissions, rather than fixing the problem.
+
+I agree 100% with your points about relying on the lower stack to isolate vhosts and enforce permissions, but the entire point of this bug report is that OPCache breaks this isolation in real-world configurations since it uses a shared cache passed from Apache parent to children, or from FPM master to pools.
+
+You stated &quot;Obviously, the OPCache SHM wouldn't be shared here&quot; in a multi-pool configuration. What would such a configuration look like? My testing shows the opposite to be true. Perhaps you meant to suggest multiple FPM master daemons instead of multiple pools? If the OPCache SHM can be initialized at the pool level instead of in the master process (I don't think this is how it works today; I'd love to be proven wrong on this), this is great for FPM users but does nothing for users of other SAPI's.
+
+The big caveat in my testing is that most of it was done under cPanel. Both mod_ruid2/mod_php and FPM have the shared OPCache problem under both EA3 and EA4. This is true for both PHP5 and PHP7. If you think this is a problem with cPanel's apache2handler and FPM configurations then I can take the issue up with cPanel, but I'd love to see how they could fix this for all SAPI's where OPCache is useful. Clearly the problem isn't limited to cPanel though, based on the other users commenting on this bug.
+
+Hopefully this will clarify users' concerns with this bug; from your response I'm frankly not sure you fully understand the problem we're reporting. I agree with &quot;jeff at mcneill dot io&quot; that to isolate vhosts with PHP as it stands today, you'd need entirely separate Apache parents (for apache2handler) or FPM master processes (not just multiple pools).
+</pre>
+</div><div class='comment type_comment' ><a name="1478453221">&nbsp;</a><strong>[2016-11-06 17:27 UTC] bjh438-git &#x61;&#116; yahoo &#x64;&#111;&#x74; com</strong>
+<pre class='note'>php-dev - would it not be best (at least when using fpm) to run each pool under a separate user / group account as discussed here: <a href="https://www.digitalocean.com/community/tutorials/how-to-host-multiple-websites-securely-with-nginx-and-php-fpm-on-ubuntu-14-04" rel="nofollow">https://www.digitalocean.com/community/tutorials/how-to-host-multiple-websites-securely-with-nginx-and-php-fpm-on-ubuntu-14-04</a> 
+
+This would seem to satisfy the original suggestions earlier in the thread to leave as much as possible to the OS level security controls.
+
+I mention because I was wondering if your patches (which are warmly welcomed...I've been posting on this issue for a while now on SF &amp; SE) presume that these types of controls would also be implemented or perhaps obviate them.
+</pre>
+</div><div class='comment type_comment' ><a name="1478465689">&nbsp;</a><strong>[2016-11-06 20:54 UTC] php-dev &#x61;&#116; coydogsoftware &#x64;&#111;&#x74; net</strong>
+<pre class='note'>bjh438-git, thank you for your comments. I had previously read that article. The setup described mitigates the security concerns I've outlined for one reason: It recommends disabling OPCache completely.
+
+Such a multi-user setup is generally recommended, but as I mentioned in my response to jpauli, it's dangerous when combined with a single SHM cache with a simplistic hash keying scheme which makes no attempt to segregate users.
+
+My readings of php-internals archives suggest that OPCache was indeed meant to be usable in multi-user setups so perhaps the maintainers simply haven't thought through the all implications of the key scheme, though they have discussed its other shortcomimgs. I'm working on a brief but more comprehensive advisory which I'll post here and on php-internals soon if we don't get more meaningful engagement on this issue.
+</pre>
+</div><div class='comment type_comment' ><a name="1478511566">&nbsp;</a><strong>[2016-11-07 09:39 UTC] sjon &#x61;&#116; hortensius &#x64;&#111;&#x74; net</strong>
+<pre class='note'>jpauli, using separate pools does not fix this issue; the cache is maintained by the master process that has access to all pools regardless of permissions of those pools.
+</pre>
+</div><div class='comment type_comment' ><a name="1478519180">&nbsp;</a><strong>[2016-11-07 11:46 UTC] dol+list &#x61;&#116; cyon &#x64;&#111;&#x74; ch</strong>
+<pre class='note'>First off all thank you php-dev to bringing this issue back on the table.
+I'd like to bring in my view from a shared hosting provider.
+
+IMHO the two big hosting panel softwares Plesk and cPanel are vulnerable to this issue. We currently use cPanel. cPanel provides a different set of options to isolate the user from reading other users files. In addition to the user isolation it's also possible to isolate you processes any further by running them in a chroot environment. This could be easy leveraged by using tools/distros like Cloudlinux CageFS (<a href="https://www.cloudlinux.com/cagefs" rel="nofollow">https://www.cloudlinux.com/cagefs</a>), which we use.
+
+All this countermeasures to separate processes users on process and file system level are voided if the OpCache is accessible without the user boundaries.
+
+Our stack currently is not vulnerable to the mentioned issue due to the combination of additional tools and server softwares that isolate users also on the OpCache level. The magic is a combination of Cloudlinix as file system isolation and Litespeed as a PHP SAPI process and OpCache isolation.
+
+Having some insights into the hosting industry this stack is not the majority. IMHO most of the cPanel users use the built in capabilities of the EasyApache stack, which is vulnerable.
+
+In the past we've seen some attacks targeting multiple users on the same server. The most effective was: Symlink Bypass <a href="http://www.rafayhackingarticles.net/2012/01/hack-website-on-shared-host-symlink.html" rel="nofollow">http://www.rafayhackingarticles.net/2012/01/hack-website-on-shared-host-symlink.html</a>
+
+A skilled attacker could easily take over dozens of shared hosting with the help of this vulnerability. Depending on the shared hosting provider I guess an average of users per host is approx. 200-1000 users. Given the current market share of Wordpress (easy extractable secrets) of approx. 60% ( <a href="https://w3techs.com/technologies/details/cm-wordpress/all/all" rel="nofollow">https://w3techs.com/technologies/details/cm-wordpress/all/all</a> ) the impact of a hacked website/CMS/Plugin is very high. In automatic manner an attacker could take over half of shared hostings only by optimizing for Wordpress.
+
+This is IMHO a pressing matter for all the other shared hosting providers and customers support staffs out there.
+
+
+I'm in favor to the current solution to fix the issue by appending a contextual part to the path.
+IMHO the best solution from a security point of view would be the inode information.
+From a operations point of view inodes also solve the issue of deploying with symlinks. E.g. <a href="https://www.scalingphpbook.com/blog/2014/01/30/zend-opcache-and-atomic-deploys.html" rel="nofollow">https://www.scalingphpbook.com/blog/2014/01/30/zend-opcache-and-atomic-deploys.html</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1478531593">&nbsp;</a><strong>[2016-11-07 15:13 UTC] php-dev &#x61;&#116; coydogsoftware &#x64;&#111;&#x74; net</strong>
+<pre class='note'>dol+list, thank you for your comments. Your observations are consistent with my own experiences, with the exception that I haven't had a chance to test exploitation under CloudLinux/CageFS. I haven't bothered testing with cPanel's &quot;Jail Apache&quot; virtfs feature either, due to unrelated reliability problems with that feature. I'm trying to avoid too much discussion of such platform-specific mitigations because they're out of scope for a PHP bug report, and they shouldn't even be necessary. I feel strongly that this is a PHP bug which needs to be fixed in PHP.
+
+I agree that device+inode should ideally be added to the key scheme, but they alone are insufficient. They are not necessarily private information, and can be read if permissions of the parent directory allow. This breaks user expectations; if wp-config.php is unreadable for a user, that user should not be able to execute that script, period. This is why I think EUID should be part of the key. I don't like the thought of opcache playing permissions referee and I think it suggests a fundamental design flaw with the way SHM is being used, but working within the existing SHM design I think EUID is the best way forward. Perhaps a more radical change would be better, but I'm not familiar enough with prior art in PHP opcode caching to know what it is.
+
+Using device+inode is also less straightforward than using EUID, otherwise I'm sure the maintainers would have already done it: it seems inappropriate to stat() for this info during key generation for performance reasons. APC apparently got a stat struct passed from the SAPI so the stat() was already done outside of APC code (does this imply APC cached scripts per compilation unit and not per file, since the web server wouldn't know which files are included? I haven't reviewed APC code in enough detail yet to confirm).
+
+For my patch I use EUID simply because there's no undue performance hit and it fixes the cross-user permissions bypass in both &quot;out of the box&quot; and common control panel environments. It's probably not perfect but surely we can agree it's better than the existing code.
+
+For anyone using FPM who wants to mitigate before PHP fixes the vulnerability, 2 years ago Mattias Geniar confirmed that separate FPM master daemons is the way to go, and provided example configs. It's cumbersome and inefficient and shouldn't be necessary: <a href="https://ma.ttias.be/a-better-way-to-run-php-fpm/" rel="nofollow">https://ma.ttias.be/a-better-way-to-run-php-fpm/</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1478570331">&nbsp;</a><strong>[2016-11-08 01:58 UTC] kmark937 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>php-dev,
+
+Thanks for providing further insight into this issue. I'd like to take you up on your offer of a PoC for replicating under mod_php + open_basedir. FPM works as well but I'm particularly interested in the mod_php case.
+
+Thanks!
+</pre>
+</div><div class='comment type_comment' ><a name="1478588770">&nbsp;</a><strong>[2016-11-08 07:06 UTC] php-dev &#x61;&#116; coydogsoftware &#x64;&#111;&#x74; net</strong>
+<pre class='note'>kmark937, I've emailed you directly with a PoC exploit script. I'd love to hear about your results when you try it.
+
+dol+list, one nitpick with your earlier comments; according to OPCache comments any changes to the key scheme need to be prepended, not appended, due to the way the key delimiters are parsed (I wonder what happens when script filenames contain ':'?).
+
+To any PHP project people still reading, would it be possible to reclassify this as a bug report instead of feature request? This was opened as a feature request at the suggestion of the original bug reporter in #67481, who withdrew their bug report when they decided that the vulnerable behavior was desirable after they found a workaround by enabling use_cwd. use_cwd does not fix this issue in most cases with common CMS applications because the use_cwd logic is only applied to scripts invoked/included via relative paths, which is less common in real-world web server/CMS environments. So far I've avoided opening yet another duplicate bug tracker item for this behavior, but it absolutely needs to be treated as a bug and not a feature request since OPCache documentation does not warn about it and php-internals discussions dating back to the Optimizer+ days indicate that the maintainers do indeed intend this feature to be usable in multi-user environments.
+
+jpauli, I do sincerely appreciate that you took the time to comment on this as a PHP project member. Did you have a chance to review my response? Do you see that multiple FPM pools with separate users to *not* have the &quot;obvious&quot; separate SHM behavior which you seem to think they do? Would you care to try my exploit script? I'm trying to give the PHP project every chance to address the issue before I publish the exploit script, but they've literally had years to address this and show little interest in fixing it. There's nothing novel about the exploit btw; it does nothing different from the PoC configs already given in this request and in <a href='bug.php?id=67481'>bug #67481</a>.
+</pre>
+</div><div class='comment type_comment' ><a name="1478612790">&nbsp;</a><strong>[2016-11-08 13:46 UTC] php-dev &#x61;&#116; coydogsoftware &#x64;&#111;&#x74; net</strong>
+<pre class='note'>I've just tested suexec/mod_fcgid: This configuration seems to be unaffected because separate vhosts' php-cgi processes don't share a common parent PHP process. mod_fcgid plays a similar role to the FPM master, but because it's not PHP and doesn't initialize the opcache, there's no single SHM object being shared. Each vhost gets its own opcache SHM object if I understand correctly. 
+
+Thus mod_fcgid with suexec provides better compartmentization than FPM since it has no single parent PHP process from which all others are descended.
+
+To summarize,
+ - apache/mod_ruid2/mod_php is vulnerable.
+ - php-fpm is vulnerable (probably regardless of webserver).
+ - apache/suexec/mod_fcgid/php-cgi is not vulnerable.
+
+Perhaps php-fpm needs a long hard look at the order in which it initializes pools vs extensions?
+</pre>
+</div><div class='comment type_comment' ><a name="1478767229">&nbsp;</a><strong>[2016-11-10 08:40 UTC] simon &#x61;&#116; ikanobori &#x64;&#111;&#x74; jp</strong>
+<pre class='note'>Original reporter here, I sitll read the updates to this.
+
+Thanks php-dev for the patch, it seems to work if just the euid is included but correct me if I am wrong for yes the euid gets set after PHP-FPM forks a new pool under a specific user but just running separate sites chrooted under the same user (say, www-data) would still cause the same issues as described in my original report.
+
+Now, that's obviously an unwise way to run any PHP shared hosting environment but it might be something we want to change as well. I'll take a look at the patch as well but maybe we can do something closer to inodes to be used in the cache key instead of effective user id.
+
+I'll try to replicate with your patch applied over the weekend :)
+</pre>
+</div><div class='comment type_comment' ><a name="1478787901">&nbsp;</a><strong>[2016-11-10 14:25 UTC] php-dev &#x61;&#116; coydogsoftware &#x64;&#111;&#x74; net</strong>
+<pre class='note'>Simon, that's correct; my patch doesn't fix same-user, multiple chroot scenarios. Search the comments for &quot;I agree with Rasmus&quot; for my thoughts on that. I was only attempting to fix the cross-user permissions bypass, which I personally consider the more serious issue. If I knew the appropriate place to do the stat() call I would have added device+inode, but I've only had limited time for this and it's my first exposure to PHP internals so I kept the scope small. Maybe if I get more free time, and reach consensus with the maintainers, I'll have a more complete fix later.
+</pre>
+</div><div class='comment type_comment' ><a name="1478789988">&nbsp;</a><strong>[2016-11-10 14:59 UTC] sjon &#x61;&#116; hortensius &#x64;&#111;&#x74; net</strong>
+<pre class='note'>I'd prefer something like <a href="https://github.com/SjonHortensius/php-src/commit/21b596086843f02ff0e4d937a17c80e758b27365" rel="nofollow">https://github.com/SjonHortensius/php-src/commit/21b596086843f02ff0e4d937a17c80e758b27365</a> (untested wip) instead
+
+It's untested; but shows the general idea. After a successful chroot (either from fpm or userspace); the path is stored in a global which is prepended to the cache keys.
+</pre>
+</div><div class='comment type_log' ><a name="1479208805">&nbsp;</a><strong>[2016-11-15 11:20 UTC] <a href="//people.php.net/dmitry">dmitry@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: dmitry</span>
+</div></div></div><div class='comment type_patch' ><a name="1479208880">&nbsp;</a><strong>[2016-11-15 11:21 UTC] <a href="//people.php.net/dmitry">dmitry@php.net</a></strong>
+<pre class='note'>The following patch has been added/updated:
+
+Patch Name: validate_permission.diff
+Revision:   1479208880
+URL:        <a href="https://bugs.php.net/patch-display.php?bug=69090&amp;patch=validate_permission.diff&amp;revision=1479208880" rel="nofollow">https://bugs.php.net/patch-display.php?bug=69090&amp;patch=validate_permission.diff&amp;revision=1479208880</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1479209778">&nbsp;</a><strong>[2016-11-15 11:36 UTC] <a href="//people.php.net/dmitry">dmitry@php.net</a></strong>
+<pre class='note'>I've attached a patch to enable optional file permission validation. 
+
+<a href="https://bugs.php.net/patch-display.php?bug_id=69090&amp;patch=validate_permission.diff&amp;revision=latest" rel="nofollow">https://bugs.php.net/patch-display.php?bug_id=69090&amp;patch=validate_permission.diff&amp;revision=latest</a>
+
+With opcache.validate_permission=1 php.ini directive, PHP is going to revalidate readability of cached files using access() syscall. This directive is going to be disabled by default and should be enabled by shared hosting providers. Additional checks lead to ~5% slowdown on Wordpress.
+
+The proposed manipulations with keys (e.g. including user name or root directory into key) won't work out of the box, because in some cases opcache doesn't use keys constructed by accel_make_persistent_key(), but uses full-real-name instead.
+
+I didn't solve the chroot keys collision problem yet.
+</pre>
+</div><div class='comment type_patch' ><a name="1479222667">&nbsp;</a><strong>[2016-11-15 15:11 UTC] <a href="//people.php.net/dmitry">dmitry@php.net</a></strong>
+<pre class='note'>The following patch has been added/updated:
+
+Patch Name: bug69090.diff
+Revision:   1479222667
+URL:        <a href="https://bugs.php.net/patch-display.php?bug=69090&amp;patch=bug69090.diff&amp;revision=1479222667" rel="nofollow">https://bugs.php.net/patch-display.php?bug=69090&amp;patch=bug69090.diff&amp;revision=1479222667</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1479222945">&nbsp;</a><strong>[2016-11-15 15:15 UTC] <a href="//people.php.net/dmitry">dmitry@php.net</a></strong>
+<pre class='note'>The new attached patch should completely fix both problems.
+
+<a href="https://bugs.php.net/patch-display.php?bug_id=69090&amp;patch=bug69090.diff&amp;revision=latest" rel="nofollow">https://bugs.php.net/patch-display.php?bug_id=69090&amp;patch=bug69090.diff&amp;revision=latest</a>
+
+It modifies values of hash function XOR-ing them with a value constructed from the root inode number. This value calculated once per request, using stat(&quot;/&quot;) at request startup, if opcache.validate_root is enabled (disabled by default).
+</pre>
+</div><div class='comment type_patch' ><a name="1479224278">&nbsp;</a><strong>[2016-11-15 15:37 UTC] <a href="//people.php.net/dmitry">dmitry@php.net</a></strong>
+<pre class='note'>The following patch has been added/updated:
+
+Patch Name: bug69090.diff
+Revision:   1479224278
+URL:        <a href="https://bugs.php.net/patch-display.php?bug=69090&amp;patch=bug69090.diff&amp;revision=1479224278" rel="nofollow">https://bugs.php.net/patch-display.php?bug=69090&amp;patch=bug69090.diff&amp;revision=1479224278</a>
+</pre>
+</div><div class='comment type_svn' ><a name="1479290325">&nbsp;</a><strong>[2016-11-16 09:58 UTC] <a href="//people.php.net/dmitry">dmitry@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of dmitry@zend.com
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=ecba563f2fa1e027ea91b9ee0d50611273852995" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=ecba563f2fa1e027ea91b9ee0d50611273852995</a>
+Log: Fixed <a href='bug.php?id=69090'>bug #69090</a> (check cached files permissions)
+</pre>
+</div><div class='comment type_log' ><a name="1479290325">&nbsp;</a><strong>[2016-11-16 09:58 UTC] <a href="//people.php.net/dmitry">dmitry@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Analyzed</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1479290379">&nbsp;</a><strong>[2016-11-16 09:59 UTC] <a href="//people.php.net/dmitry">dmitry@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of dmitry@zend.com
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=ecba563f2fa1e027ea91b9ee0d50611273852995" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=ecba563f2fa1e027ea91b9ee0d50611273852995</a>
+Log: Fixed <a href='bug.php?id=69090'>bug #69090</a> (check cached files permissions)
+</pre>
+</div><div class='comment type_svn' ><a name="1479820450">&nbsp;</a><strong>[2016-11-22 13:14 UTC] <a href="//people.php.net/krakjoe">krakjoe@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of dmitry@zend.com
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=ecba563f2fa1e027ea91b9ee0d50611273852995" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=ecba563f2fa1e027ea91b9ee0d50611273852995</a>
+Log: Fixed <a href='bug.php?id=69090'>bug #69090</a> (check cached files permissions)
+</pre>
+</div><div class='comment type_comment' ><a name="1481860882">&nbsp;</a><strong>[2016-12-16 04:01 UTC] me &#x61;&#116; anatoli &#x64;&#111;&#x74; ws</strong>
+<pre class='note'>The issue in question appears to be fixed, thanks Dmitry for resolving this 2yo security and stability problem. Nevertheless, IMO the current solution looks more like a workaround for a larger problem: there's complex code (for which multiple bugs are fixed in half of the releases) that runs outside the chroot environment with complete visibility of the entire filesystem, making it a perfect escape route (which was actually demonstrated with the current bug).
+
+IMO, the appropriate fix would be to initialize everything that could access the filesystem (including internal functionality &amp; all plug-ins) AFTER performing chroot. Only the logic responsible for loading of the configs, libraries and modules should be placed in the pre-chroot portion of the daemon (to avoid placing their files in the chroot environment), but NOT their parsing (for the per-pool configs), initialization (for the modules) and management, which should be performed in the isolated chrooted environments, a separate instance for each chrooted pool.
+
+If the current logic is to save some memory that could be shared between the chrooted pools, I do believe that security should not be sacrificed for performance or lower resource usage, especially nowadays with so cheap hardware.
+
+PHP devs, please let me know if it's appropriate to open a new bug (type: security) for tracking this change or if this one should be reopened, or if you consider this issue has no merit to expect its implementation some day.
+</pre>
+</div><div class='comment type_comment' ><a name="1538568054">&nbsp;</a><strong>[2018-10-03 12:00 UTC] danieleckid &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>I would to update this bug with releated issue.
+
+# php-fpm -v
+PHP 7.2.10 (fpm-fcgi) (built: Oct  3 2018 08:52:25)
+Copyright (c) 1997-2018 The PHP Group
+Zend Engine v3.2.0, Copyright (c) 1998-2018 Zend Technologies
+    with Zend OPcache v7.2.10, Copyright (c) 1999-2018, by Zend Technologies
+
+
+# uname -a
+FreeBSD websrv1 11.2-RELEASE-p4 FreeBSD 11.2-RELEASE-p4 #0: Thu Sep 27
+08:16:24 UTC 2018
+root@amd64-builder.daemonology.net:/usr/obj/usr/src/sys/GENERIC  amd64
+
+
+php-fpm pools:
+
+[aaa]
+user = aaa
+group = nobody
+listen.owner = aaa
+listen.group = www
+listen.mode = 660
+listen = /var/sockets/php72-aaa.sock
+chroot = /home/aaa
+(...)
+
+[bbb]
+user = bbb
+group = nobody
+listen.owner = bbb
+listen.group = www
+listen.mode = 660
+listen = /var/sockets/php72-bbb.sock
+chroot = /home/bbb
+(...)
+
+
+php.ini quotation:
+(...)
+[opcache]
+opcache.use_cwd = 1
+opcache.validate_permission = 1
+opcache.validate_root = 1
+
+
+
+echo &quot;some small php code&quot; &gt; /home/aaa/public_html/index.php
+chown aaa /home/aaa/public_html/index.php
+
+echo &quot;some huge php code&quot; &gt; /home/bbb/public_html/index.php
+chown bbb /home/bbb/public_html/index.php
+
+
+Even with these above new settings  opcache caches only one sample of
+index.php from two totals.
+
+When visiting website of user aaa then index.php of this user is located in opcache cache. When visiting website of user bbb only index.php of bbb is located in the cache instead.
+
+We are never seeing these two files cached same time although these are
+two different files. These has two different non-chrooted paths and different persmission (owner).
+
+We have found this issue looking at list of cached files as seen on
+opcache-status-master/opcache.php. Even if file list is innacurate we had compared also used/free memory and that looks like only one file is cached same time.
+
+We haven't found  crosscache problem nor other security problem. Just no cache profit when chrooted paths and names of files are the same (which is common and expected in multiuser chroot environment)
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

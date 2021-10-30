@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='cURL related Bug #72674 - RDF' href='rss/bug.php?id=72674'>
+        <link rel='alternate' type='application/rss+xml' title='cURL related Bug #72674 - RSS 2.0' href='rss/bug.php?id=72674&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Bug #72674 :: Heap overflow in curl_escape</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=72674">Bug</a>&nbsp;#72674</th>
+            <td id="summary" colspan="5">Heap overflow in curl_escape</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-07-26 08:45 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2017-02-13 01:38 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>nguyenvuhoang199321 &#x61;&#116; gmail &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=cURL+related">cURL related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>7.0.9</td>
+            <th class="details">OS:</th>
+            <td>*Nix</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-7134" target="_blank">2016-7134</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=72674&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=72674&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=72674&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1469522753">&nbsp;</a><strong>[2016-07-26 08:45 UTC] nguyenvuhoang199321 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+I have founded a code block that leads to heap overflow. As you can see at :
+```
+PHP_FUNCTION(curl_escape)
+{
+        char       *str = NULL, *res = NULL;
+        size_t        str_len = 0;
+        zval       *zid;
+        php_curl   *ch;
+        *** SNIP ***
+        if ((res = curl_easy_escape(ch-&gt;cp, str, str_len))) {
+                RETVAL_STRING(res);
+                curl_free(res);
+        } else {
+                RETURN_FALSE;
+        }
+        *** SNIP ***
+}
+```
+I do some analysis with curl_easy_escape in libcurl and here the source code :
+```
+char *curl_easy_escape(CURL *handle, const char *string, int inlength)
+{
+        size_t alloc = (inlength?(size_t)inlength:strlen(string))+1;
+        char *ns;
+        char *testing_ptr = NULL;
+        
+        *** SNIP ***
+        
+        ns = malloc(alloc);
+        if(!ns)
+            return NULL;
+
+        length = alloc-1;
+        while(length--) {
+            in = *string;
+            if (Curl_isalnum(in)) {
+            /* just copy this */
+                ns[strindex++]=in;
+        *** SNIP ***
+```
+Here you see that alloc is calculated by adding inlength with one. If we pass a string with length 0xfffffff in curl_escape
+and the alloc add it with 1 and the result of alloc is 0. After that, the malloc a buffer with size 0 and length = 0 - 1 = -1 = 0xfffffff
+this leads to heap overflow
+
+Test script:
+---------------
+&lt;?php
+
+ini_set('memory_limit',-1);
+
+$ch = curl_init('<a href="http://google.com'" rel="nofollow">http://google.com'</a>);
+curl_escape($ch,str_repeat(&quot;A&quot;,0xffffffff));
+
+?&gt;
+
+
+Actual result:
+--------------
+Program received signal SIGSEGV, Segmentation fault.
+[----------------------------------registers-----------------------------------]
+RAX: 0x7ffff67ce508 (&lt;curl_easy_escape+120&gt;:    mov    BYTE PTR [r14+r13*1],cl)
+RBX: 0x0 
+RCX: 0x41 ('A')
+RDX: 0x14 
+RSI: 0x7ffff67a2b20 --&gt; 0x100000000 
+RDI: 0x0 
+RBP: 0x7ffff67ff8ec --&gt; 0xfffcec1cfffcec1c 
+RSP: 0x7fffffffa720 --&gt; 0x148fd80 ('A' &lt;repeats 200 times&gt;...)
+RIP: 0x7ffff67ce508 (&lt;curl_easy_escape+120&gt;:    mov    BYTE PTR [r14+r13*1],cl)
+R8 : 0x7fffffffa5b8 --&gt; 0x0 
+R9 : 0x7fffffffa5b4 --&gt; 0x0 
+R10: 0x14773e0 --&gt; 0x79746974 ('tity')
+R11: 0x7ffff67ce490 (&lt;curl_easy_escape&gt;:        push   r15)
+R12: 0x0 
+R13: 0x38c10 
+R14: 0x14773f0 ('A' &lt;repeats 200 times&gt;...)
+R15: 0x7ffeef038c28 ('A' &lt;repeats 200 times&gt;...)
+EFLAGS: 0x10213 (CARRY parity ADJUST zero sign trap INTERRUPT direction overflow)
+[-------------------------------------code-------------------------------------]
+   0x7ffff67ce4fc &lt;curl_easy_escape+108&gt;:       add    rax,rbp
+   0x7ffff67ce4ff &lt;curl_easy_escape+111&gt;:       jmp    rax
+   0x7ffff67ce501 &lt;curl_easy_escape+113&gt;:       nop    DWORD PTR [rax+0x0]
+=&gt; 0x7ffff67ce508 &lt;curl_easy_escape+120&gt;:       mov    BYTE PTR [r14+r13*1],cl
+   0x7ffff67ce50c &lt;curl_easy_escape+124&gt;:       add    r13,0x1
+   0x7ffff67ce510 &lt;curl_easy_escape+128&gt;:       mov    rax,QWORD PTR [rsp+0x10]
+   0x7ffff67ce515 &lt;curl_easy_escape+133&gt;:       add    r15,0x1
+   0x7ffff67ce519 &lt;curl_easy_escape+137&gt;:       sub    rax,r15
+[------------------------------------stack-------------------------------------]
+0000| 0x7fffffffa720 --&gt; 0x148fd80 ('A' &lt;repeats 200 times&gt;...)
+0008| 0x7fffffffa728 --&gt; 0x7ffeef000018 ('A' &lt;repeats 200 times&gt;...)
+0016| 0x7fffffffa730 --&gt; 0xffffffffffffffff 
+0024| 0x7fffffffa738 --&gt; 0x7ffeef000018 ('A' &lt;repeats 200 times&gt;...)
+0032| 0x7fffffffa740 --&gt; 0x148fd80 ('A' &lt;repeats 200 times&gt;...)
+0040| 0x7fffffffa748 --&gt; 0x0 
+0048| 0x7fffffffa750 --&gt; 0x7fffffffa7e0 --&gt; 0x7fffffffa810 --&gt; 0x7fffffffa840 --&gt; 0x7fffffffa880 --&gt; 0x7fffffffa990 --&gt; 0x7fffffffcc90 --&gt; 0x7fffffffe010 --&gt; 0x7fffffffe160 --&gt; 0xa28260 (&lt;__libc_csu_init&gt;:        push   r15)
+0056| 0x7fffffffa758 --&gt; 0x42cb20 (&lt;_start&gt;:    xor    ebp,ebp)
+[------------------------------------------------------------------------------]
+Legend: code, data, rodata, value
+Stopped reason: SIGSEGV
+0x00007ffff67ce508 in curl_easy_escape () from /usr/lib/x86_64-linux-gnu/libcurl.so.4
+gdb-peda$ bt
+#0  0x00007ffff67ce508 in curl_easy_escape () from /usr/lib/x86_64-linux-gnu/libcurl.so.4
+#1  0x00000000005ff72c in zif_curl_escape (execute_data=0x7fffef614110, return_value=0x7fffef614100)
+    at /home/hoangnguyen/Data/Build/audit/php-7.0.7/ext/curl/interface.c:3571
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=72674'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=72674'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1469522845">&nbsp;</a><strong>[2016-07-26 08:47 UTC] nguyenvuhoang199321 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Here my patch of this bug :
+```
+diff --git a/ext/curl/interface.c b/ext/curl/interface.c
+index 6a61641..573bde5 100644
+--- a/ext/curl/interface.c
++++ b/ext/curl/interface.c
+@@ -3568,6 +3568,10 @@ PHP_FUNCTION(curl_escape)
+                RETURN_FALSE;
+        }
+ 
++       if(str_len &lt; 0 || str_len &gt; INT_MAX){
++               RETURN_FALSE;
++       }
++
+        if ((res = curl_easy_escape(ch-&gt;cp, str, str_len))) {
+                RETVAL_STRING(res);
+                curl_free(res);
+```
+</pre>
+</div><div class='comment type_comment' ><a name="1469780835">&nbsp;</a><strong>[2016-07-29 08:27 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>This looks like a bug in libcurl. We can add mitigation of course but I advisee to report it to libcurl maintainers.
+</pre>
+</div><div class='comment type_comment' ><a name="1469786127">&nbsp;</a><strong>[2016-07-29 09:55 UTC] nguyenvuhoang199321 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>OK, i will reported this bug to libcurl, but you still assign this bug ?
+</pre>
+</div><div class='comment type_log' ><a name="1470211199">&nbsp;</a><strong>[2016-08-03 07:59 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 7.1Git-2016-07-26 (Git)</span>
+<span class="added">+PHP Version: 7.0.9</span>
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1470211199">&nbsp;</a><strong>[2016-08-03 07:59 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>fix in security repo as 72dbb7f416160f490c4e9987040989a10ad431c7
+</pre>
+</div><div class='comment type_log' ><a name="1471241025">&nbsp;</a><strong>[2016-08-15 06:03 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: needed</span>
+</div></div></div><div class='comment type_svn' ><a name="1471422233">&nbsp;</a><strong>[2016-08-17 08:23 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=72dbb7f416160f490c4e9987040989a10ad431c7" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=72dbb7f416160f490c4e9987040989a10ad431c7</a>
+Log: Fix <a href='bug.php?id=72674'>bug #72674</a> - check both curl_escape and curl_unescape
+</pre>
+</div><div class='comment type_log' ><a name="1471422236">&nbsp;</a><strong>[2016-08-17 08:23 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1471425349">&nbsp;</a><strong>[2016-08-17 09:15 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=72dbb7f416160f490c4e9987040989a10ad431c7" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=72dbb7f416160f490c4e9987040989a10ad431c7</a>
+Log: Fix <a href='bug.php?id=72674'>bug #72674</a> - check both curl_escape and curl_unescape
+</pre>
+</div><div class='comment type_svn' ><a name="1471435452">&nbsp;</a><strong>[2016-08-17 12:04 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=19c10bb629139c42f55f10c9c84dfe3ba29567c6" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=19c10bb629139c42f55f10c9c84dfe3ba29567c6</a>
+Log: Fix <a href='bug.php?id=72674'>bug #72674</a> - check both curl_escape and curl_unescape
+</pre>
+</div><div class='comment type_log' ><a name="1473089395">&nbsp;</a><strong>[2016-09-05 15:29 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID: needed</span>
+<span class="added">+CVE-ID: 2016-7134</span>
+</div></div></div><div class='comment type_svn' ><a name="1476699012">&nbsp;</a><strong>[2016-10-17 10:10 UTC] <a href="//people.php.net/bwoebi">bwoebi@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=72dbb7f416160f490c4e9987040989a10ad431c7" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=72dbb7f416160f490c4e9987040989a10ad431c7</a>
+Log: Fix <a href='bug.php?id=72674'>bug #72674</a> - check both curl_escape and curl_unescape
+</pre>
+</div><div class='comment type_log' ><a name="1486949889">&nbsp;</a><strong>[2017-02-13 01:38 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Type: Security</span>
+<span class="added">+Type: Bug</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

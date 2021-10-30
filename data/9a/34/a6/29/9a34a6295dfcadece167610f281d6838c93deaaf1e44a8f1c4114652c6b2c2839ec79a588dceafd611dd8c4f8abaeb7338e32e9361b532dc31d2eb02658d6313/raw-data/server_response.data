@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='mbstring related Bug #72402 - RDF' href='rss/bug.php?id=72402'>
+        <link rel='alternate' type='application/rss+xml' title='mbstring related Bug #72402 - RSS 2.0' href='rss/bug.php?id=72402&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #72402 :: _php_mb_regex_ereg_replace_exec - double free</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=72402">Sec Bug</a>&nbsp;#72402</th>
+            <td id="summary" colspan="5">_php_mb_regex_ereg_replace_exec - double free</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-06-14 11:47 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-06-23 12:50 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>shm@php.net</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=mbstring+related">mbstring related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.5.36</td>
+            <th class="details">OS:</th>
+            <td>Linux</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-5768" target="_blank">2016-5768</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=72402&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=72402&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=72402&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1465904879">&nbsp;</a><strong>[2016-06-14 11:47 UTC] <a href="//people.php.net/shm">shm@php.net</a></strong>
+<pre class='note'>Description:
+------------
+# short description 
+
+_php_mb_regex_ereg_replace_exec when called by mb_ereg_replace_callback frees the description twice in case when callback execution failed (i.e. threw am exception).
+
+# why I think it's security issue?
+
+callbacks used in mb_ereg_replace_callback are usually provided by the script author, but may fail in many cases on particular input. In that case, PHP interpreter will free memory twice, which may be used to allocate memory area for two distinct purposes. So if remote attacker is able to trigger this bug remotely (which depends heavily on callbacks used with this function), then this bug may be exploited to gain code execution. But feel free to evaluate this bug whatever you want. :)
+
+# code
+
+#10 0x0000000000a9fe3f in _php_mb_regex_ereg_replace_exec (execute_data=0x7ffff23b98e0, return_value=0x7ffff23b98c0, options=0xc, is_callable=0x1)
+    at /home/shm/src/php-src/ext/mbstring/php_mbregex.c:1012
+1012                    efree(description);
+gdb-peda$ list
+1007                    }
+1008                    onig_region_free(regs, 0);
+1009            }
+1010    
+1011            if (description) {
+1012                    efree(description);
+1013            }
+1014            if (regs != NULL) {
+1015                    onig_region_free(regs, 1);
+1016            }
+gdb-peda$ list -40
+972                                     /* null terminate buffer */
+973                                     smart_str_0(&amp;eval_buf);
+974     
+975                                     arg_replace_fci.param_count = 1;
+976                                     arg_replace_fci.params = args;
+977                                     arg_replace_fci.retval = &amp;retval;
+978                                     if (zend_call_function(&amp;arg_replace_fci, &amp;arg_replace_fci_cache) == SUCCESS &amp;&amp;
+979                                                     !Z_ISUNDEF(retval)) {
+980                                             convert_to_string_ex(&amp;retval);
+981                                             smart_str_appendl(&amp;out_buf, Z_STRVAL(retval), Z_STRLEN(retval));
+gdb-peda$ 
+982                                             smart_str_free(&amp;eval_buf);
+983                                             zval_ptr_dtor(&amp;retval);
+984                                     } else {
+985                                             efree(description);
+986                                             if (!EG(exception)) {
+987                                                     php_error_docref(NULL, E_WARNING, &quot;Unable to call custom replacement function&quot;);
+988                                             }
+989                                     }
+990                                     zval_ptr_dtor(&amp;subpats);
+991                             }
+gdb-peda$ 
+992     
+993                             n = regs-&gt;end[0];
+994                             if ((pos - (OnigUChar *)string) &lt; n) {
+995                                     pos = (OnigUChar *)string + n;
+996                             } else {
+997                                     if (pos &lt; string_lim) {
+998                                             smart_str_appendl(&amp;out_buf, (char *)pos, 1);
+999                                     }
+1000                                    pos++;
+1001                            }
+gdb-peda$ 
+1002                    } else { /* nomatch */
+1003                            /* stick that last bit of string on our output */
+1004                            if (string_lim - pos &gt; 0) {
+1005                                    smart_str_appendl(&amp;out_buf, (char *)pos, string_lim - pos);
+1006                            }
+1007                    }
+1008                    onig_region_free(regs, 0);
+1009            }
+1010    
+1011            if (description) {
+gdb-peda$ 
+1012                    efree(description);
+1013            }
+
+decsription is freed twice in 1012 and 984 lines, as shown here:
+
+Breakpoint 6, _php_mb_regex_ereg_replace_exec (execute_data=0x7ffff2a150e0, return_value=0x7ffff2a150c0, options=0xc, is_callable=0x1)
+    at /home/shm/src/php-src/ext/mbstring/php_mbregex.c:985
+985                                             efree(description);
+gdb-peda$ print description
+$5 = 0x7ffff2a80200 &quot;/home/shm/research/svn/notes/0day/php/php7/full
+
+Breakpoint 5, _php_mb_regex_ereg_replace_exec (execute_data=0x7ffff2a150e0, return_value=0x7ffff2a150c0, options=0xc, is_callable=0x1)
+    at /home/shm/src/php-src/ext/mbstring/php_mbregex.c:1012
+1012                    efree(description);
+gdb-peda$ print description
+$6 = 0x7ffff2a80200 &quot;&quot;
+
+
+ASAN report bt:
+bt
+#0  0x00007ffff3596cc9 in __GI_raise (sig=sig@entry=0x6) at ../nptl/sysdeps/unix/sysv/linux/raise.c:56
+#1  0x00007ffff359a0d8 in __GI_abort () at abort.c:89
+#2  0x00007ffff4e667f9 in ?? () from /usr/lib/x86_64-linux-gnu/libasan.so.0
+#3  0x00007ffff4e5d3ec in ?? () from /usr/lib/x86_64-linux-gnu/libasan.so.0
+#4  0x00007ffff4e63fe2 in ?? () from /usr/lib/x86_64-linux-gnu/libasan.so.0
+#5  0x00007ffff4e636e1 in ?? () from /usr/lib/x86_64-linux-gnu/libasan.so.0
+#6  0x00007ffff4e6265f in ?? () from /usr/lib/x86_64-linux-gnu/libasan.so.0
+#7  0x00007ffff4e53a18 in ?? () from /usr/lib/x86_64-linux-gnu/libasan.so.0
+#8  0x00007ffff4e60368 in free () from /usr/lib/x86_64-linux-gnu/libasan.so.0
+#9  0x0000000000f87b2f in _efree (ptr=0x60220001fa80, __zend_filename=0x18d7dc0 &quot;/home/shm/src/php-src/ext/mbstring/php_mbregex.c&quot;, __zend_lineno=0x3f4,
+    __zend_orig_filename=0x0, __zend_orig_lineno=0x0) at /home/shm/src/php-src/Zend/zend_alloc.c:2461
+#10 0x0000000000a9fe3f in _php_mb_regex_ereg_replace_exec (execute_data=0x7ffff23b98e0, return_value=0x7ffff23b98c0, options=0xc, is_callable=0x1)
+    at /home/shm/src/php-src/ext/mbstring/php_mbregex.c:1012
+#11 0x0000000000aa0257 in zif_mb_ereg_replace_callback (execute_data=0x7ffff23b98e0, return_value=0x7ffff23b98c0) at /home/shm/src/php-src/ext/mbstring/php_mbregex.c:1051
+#12 0x00000000010fe846 in ZEND_DO_ICALL_SPEC_HANDLER () at /home/shm/src/php-src/Zend/zend_vm_execute.h:586
+#13 0x00000000010fd8bf in execute_ex (ex=0x7ffff23b9830) at /home/shm/src/php-src/Zend/zend_vm_execute.h:414
+#14 0x00000000010fdb1a in zend_execute (op_array=0x60220001fba0, return_value=0x0) at /home/shm/src/php-src/Zend/zend_vm_execute.h:458
+#15 0x0000000001012aef in zend_execute_scripts (type=0x8, retval=0x0, file_count=0x3) at /home/shm/src/php-src/Zend/zend.c:1427
+#16 0x0000000000ea2159 in php_execute_script (primary_file=0x7fffffffcb30) at /home/shm/src/php-src/main/main.c:2494
+#17 0x000000000122931c in do_cli (argc=0x2, argv=0x60060000ed40) at /home/shm/src/php-src/sapi/cli/php_cli.c:974
+#18 0x000000000122b8f8 in main (argc=0x2, argv=0x60060000ed40) at /home/shm/src/php-src/sapi/cli/php_cli.c:1344
+#19 0x00007ffff3581ec5 in __libc_start_main (main=0x122a3d0 &lt;main&gt;, argc=0x2, argv=0x7fffffffe038, init=&lt;optimized out&gt;, fini=&lt;optimized out&gt;, rtld_fini=&lt;optimized out&gt;,
+    stack_end=0x7fffffffe028) at libc-start.c:287
+#20 0x000000000042dc49 in _start ()
+
+
+Test script:
+---------------
+&lt;?php
+function exception_handler($exception) {
+  echo &quot;Uncaught exception: &quot; , $exception-&gt;getMessage(), &quot;\n&quot;;
+}
+$var10 = &quot;exception_handler&quot;;
+$var14 = mb_ereg_replace_callback(&quot;&quot;, $var10, &quot;&quot;);
+
+
+Expected result:
+----------------
+description is freed once
+
+Actual result:
+--------------
+description is freed twice
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=72402'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=72402'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1466311858">&nbsp;</a><strong>[2016-06-19 04:50 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1466311858">&nbsp;</a><strong>[2016-06-19 04:50 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Fixed in security repo as 5b597a2e5b28e2d5a52fc1be13f425f08f47cb62 and in <a href="https://gist.github.com/9ecb704363f2df6b5e256a9ab3557257" rel="nofollow">https://gist.github.com/9ecb704363f2df6b5e256a9ab3557257</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1466446569">&nbsp;</a><strong>[2016-06-20 18:16 UTC] <a href="//people.php.net/shm">shm@php.net</a></strong>
+<pre class='note'>LGTM, thanks.
+</pre>
+</div><div class='comment type_log' ><a name="1466491612">&nbsp;</a><strong>[2016-06-21 06:46 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 7.0Git-2016-06-14 (Git)</span>
+<span class="added">+PHP Version: 5.5.36</span>
+</div></div></div><div class='comment type_svn' ><a name="1466491736">&nbsp;</a><strong>[2016-06-21 06:48 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=5b597a2e5b28e2d5a52fc1be13f425f08f47cb62" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=5b597a2e5b28e2d5a52fc1be13f425f08f47cb62</a>
+Log: Fix <a href='bug.php?id=72402'>bug #72402</a>: _php_mb_regex_ereg_replace_exec - double free
+</pre>
+</div><div class='comment type_log' ><a name="1466491737">&nbsp;</a><strong>[2016-06-21 06:48 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1466492618">&nbsp;</a><strong>[2016-06-21 07:03 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=5b597a2e5b28e2d5a52fc1be13f425f08f47cb62" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=5b597a2e5b28e2d5a52fc1be13f425f08f47cb62</a>
+Log: Fix <a href='bug.php?id=72402'>bug #72402</a>: _php_mb_regex_ereg_replace_exec - double free
+</pre>
+</div><div class='comment type_svn' ><a name="1466493970">&nbsp;</a><strong>[2016-06-21 07:26 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=5b597a2e5b28e2d5a52fc1be13f425f08f47cb62" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=5b597a2e5b28e2d5a52fc1be13f425f08f47cb62</a>
+Log: Fix <a href='bug.php?id=72402'>bug #72402</a>: _php_mb_regex_ereg_replace_exec - double free
+</pre>
+</div><div class='comment type_svn' ><a name="1466494039">&nbsp;</a><strong>[2016-06-21 07:27 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=5b597a2e5b28e2d5a52fc1be13f425f08f47cb62" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=5b597a2e5b28e2d5a52fc1be13f425f08f47cb62</a>
+Log: Fix <a href='bug.php?id=72402'>bug #72402</a>: _php_mb_regex_ereg_replace_exec - double free
+</pre>
+</div><div class='comment type_svn' ><a name="1466575088">&nbsp;</a><strong>[2016-06-22 05:58 UTC] <a href="//people.php.net/krakjoe">krakjoe@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=5b597a2e5b28e2d5a52fc1be13f425f08f47cb62" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=5b597a2e5b28e2d5a52fc1be13f425f08f47cb62</a>
+Log: Fix <a href='bug.php?id=72402'>bug #72402</a>: _php_mb_regex_ereg_replace_exec - double free
+</pre>
+</div><div class='comment type_log' ><a name="1466686227">&nbsp;</a><strong>[2016-06-23 12:50 UTC] <a href="//people.php.net/kaplan">kaplan@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2016-5768</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

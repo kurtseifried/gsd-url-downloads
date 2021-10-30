@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='PHAR related Bug #69453 - RDF' href='rss/bug.php?id=69453'>
+        <link rel='alternate' type='application/rss+xml' title='PHAR related Bug #69453 - RSS 2.0' href='rss/bug.php?id=69453&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #69453 :: Memory Corruption in phar_parse_tarfile when entry filename starts with null</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=69453">Sec Bug</a>&nbsp;#69453</th>
+            <td id="summary" colspan="5">Memory Corruption in phar_parse_tarfile when entry filename starts with null</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2015-04-14 22:15 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2015-05-19 05:33 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=laruence">laruence</a> (<a href="https://people.php.net/laruence">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=PHAR+related">PHAR related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.6.8</td>
+            <th class="details">OS:</th>
+            <td>*</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2015-4021" target="_blank">2015-4021</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=69453&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=69453&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=69453&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1429049729">&nbsp;</a><strong>[2015-04-14 22:15 UTC] emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+This is a single byte memory corruption vulnerability. It is triggered when a tar entry-&gt;filename starts with a null byte.
+
+At tar.c:430 entry.filename_len will be set to zero.
+if (hdr-&gt;name[i] == '\0') {
+break;
+}
+entry.filename_len = i;
+
+
+
+This will result in an underflow in the array index at tar.437 :
+if (entry.filename[entry.filename_len - 1] == '/') {
+entry.filename[entry.filename_len - 1] = '\0';
+entry.filename_len--;
+}
+
+
+Since entry.filename is pointing to a heap chunk (zend_mm_block), on a x86 machine, it has the potential to corrupt the heap chunk metadata.
+
+on x64 machine, it has the potential to corrupt 1 byte at the offset entry.filename+0xFFFFFFFF
+
+
+
+
+
+Test script:
+---------------
+POC here:
+<a href="https://www.dropbox.com/s/dg8uit7533e8q8l/POC_1byte_corruption.zip?dl=0" rel="nofollow">https://www.dropbox.com/s/dg8uit7533e8q8l/POC_1byte_corruption.zip?dl=0</a>
+
+$ ./php POC_FileName_Nullbyte_crash.php
+
+Segmentation fault
+
+Actual result:
+--------------
+
+
+gdb-peda$ frame
+#0  phar_parse_tarfile (fp=0x7ffff7fbdfe0, fname=0x7ffff7fbeb20 &quot;/home/elaw/php-5.6.7/sapi/cli/PHAR_TAR_GZ_FUZZING/WIP_POC__null_byte_filename.tar.phar&quot;, fname_len=0x56,
+    alias=0x0, alias_len=0x0, pphar=0x7fffffffa760, is_data=0x0, compression=0x0, error=0x7fffffffa8b8) at /home/elaw/php-5.6.8RC1/ext/phar/tar.c:437
+437                             if (entry.filename[entry.filename_len - 1] == '/') {
+gdb-peda$ p entry.filename_len
+$2 = 0x0
+gdb-peda$ p entry.filename_len -1
+$3 = 0xffffffff   &lt;&lt;&lt; integer underflow
+
+
+gdb-peda$ bt
+#0  phar_parse_tarfile (fp=0x7ffff7fbdfe0, fname=0x7ffff7fbeb20 &quot;/home/elaw/php-5.6.7/sapi/cli/PHAR_TAR_GZ_FUZZING/WIP_POC__null_byte_filename.tar.phar&quot;, fname_len=0x56,
+    alias=0x0, alias_len=0x0, pphar=0x7fffffffa760, is_data=0x0, compression=0x0, error=0x7fffffffa8b8) at /home/elaw/php-5.6.8RC1/ext/phar/tar.c:437
+#1  0x00000000006339d2 in phar_open_from_fp (fp=0x7ffff7fbdfe0, fname=0x7ffff7fbeb20 &quot;/home/elaw/php-5.6.7/sapi/cli/PHAR_TAR_GZ_FUZZING/WIP_POC__null_byte_filename.tar.phar&quot;,
+    fname_len=0x56, alias=0x0, alias_len=0x0, options=0x8, pphar=0x7fffffffa760, is_data=0x0, error=0x7fffffffa8b8) at /home/elaw/php-5.6.8RC1/ext/phar/phar.c:1709
+#2  0x00000000006326f4 in phar_create_or_parse_filename (fname=0x7ffff7fbeb20 &quot;/home/elaw/php-5.6.7/sapi/cli/PHAR_TAR_GZ_FUZZING/WIP_POC__null_byte_filename.tar.phar&quot;,
+    fname_len=0x56, alias=0x0, alias_len=0x0, is_data=0x0, options=0x8, pphar=0x7fffffffa760, error=0x7fffffffa8b8) at /home/elaw/php-5.6.8RC1/ext/phar/phar.c:1346
+#3  0x0000000000612018 in phar_open_or_create_tar (fname=0x7ffff7fbe688 &quot;WIP_POC__null_byte_filename.tar.phar&quot;, fname_len=0x24, alias=0x0, alias_len=0x0, is_data=0x0, options=0x8,
+    pphar=0x7fffffffa878, error=0x7fffffffa8b8) at /home/elaw/php-5.6.8RC1/ext/phar/tar.c:130
+#4  0x00000000006325d3 in phar_open_or_create_filename (fname=0x7ffff7fbe688 &quot;WIP_POC__null_byte_filename.tar.phar&quot;, fname_len=0x24, alias=0x0, alias_len=0x0, is_data=0x0,
+    options=0x8, pphar=0x7fffffffa878, error=0x7fffffffa8b8) at /home/elaw/php-5.6.8RC1/ext/phar/phar.c:1312
+#5  0x000000000063e438 in zim_Phar___construct (ht=0x2, return_value=0x7ffff7fbc350, return_value_ptr=0x7ffff7f854d0, this_ptr=0x7ffff7fbc440, return_value_used=0x0)
+    at /home/elaw/php-5.6.8RC1/ext/phar/phar_object.c:1189
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=69453'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=69453'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1430305247">&nbsp;</a><strong>[2015-04-29 11:00 UTC] emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 5.6.8RC1</span>
+<span class="added">+PHP Version: 5.6.8</span>
+</div></div></div><div class='comment type_comment' ><a name="1430305247">&nbsp;</a><strong>[2015-04-29 11:00 UTC] emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Hi,
+any update/verification on this? The latest version of PHP is still affected.
+</pre>
+</div><div class='comment type_svn' ><a name="1431459623">&nbsp;</a><strong>[2015-05-12 19:40 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=c27f012b7a447e59d4a704688971cbfa7dddaa74" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=c27f012b7a447e59d4a704688971cbfa7dddaa74</a>
+Log: Fix <a href='bug.php?id=69453'>bug #69453</a> - don't try to cut empty string
+</pre>
+</div><div class='comment type_log' ><a name="1431459623">&nbsp;</a><strong>[2015-05-12 19:40 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Open</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1431471530">&nbsp;</a><strong>[2015-05-12 22:58 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=c27f012b7a447e59d4a704688971cbfa7dddaa74" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=c27f012b7a447e59d4a704688971cbfa7dddaa74</a>
+Log: Fix <a href='bug.php?id=69453'>bug #69453</a> - don't try to cut empty string
+</pre>
+</div><div class='comment type_svn' ><a name="1431514404">&nbsp;</a><strong>[2015-05-13 10:53 UTC] <a href="//people.php.net/jpauli">jpauli@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=2c1e49075ba48d93439a9e79eae43d9f8469b832" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=2c1e49075ba48d93439a9e79eae43d9f8469b832</a>
+Log: Fix <a href='bug.php?id=69453'>bug #69453</a> - don't try to cut empty string
+</pre>
+</div><div class='comment type_log' ><a name="1432013593">&nbsp;</a><strong>[2015-05-19 05:33 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: laruence</span>
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID:      2015-4021</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

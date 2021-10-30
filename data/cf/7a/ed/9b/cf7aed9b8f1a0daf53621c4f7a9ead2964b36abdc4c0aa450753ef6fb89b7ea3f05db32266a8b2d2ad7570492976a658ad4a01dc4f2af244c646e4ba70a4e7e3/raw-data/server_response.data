@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='*General Issues Bug #72114 - RDF' href='rss/bug.php?id=72114'>
+        <link rel='alternate' type='application/rss+xml' title='*General Issues Bug #72114 - RSS 2.0' href='rss/bug.php?id=72114&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #72114 :: Integer underflow / arbitrary null write  in fread/gzread</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=72114">Sec Bug</a>&nbsp;#72114</th>
+            <td id="summary" colspan="5">Integer underflow / arbitrary null write  in fread/gzread</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-04-27 23:51 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-05-26 21:03 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>fernando &#x61;&#116; null-life &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=%2AGeneral+Issues">*General Issues</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.5.35</td>
+            <th class="details">OS:</th>
+            <td>Linux</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-5096" target="_blank">2016-5096</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=72114&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=72114&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=72114&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1461801071">&nbsp;</a><strong>[2016-04-27 23:51 UTC] fernando &#x61;&#116; null-life &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+Run the test script with ASAN. I could only reproduce this on a 64 bit environment.
+
+
+  PHPAPI PHP_FUNCTION(fread)
+{
+        zval *res;
+        long len;
+        php_stream *stream;
+
+        if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, &quot;rl&quot;, &amp;res, &amp;len) == FAILURE) {
+                RETURN_FALSE;
+        }
+
+        PHP_STREAM_TO_ZVAL(stream, &amp;res);
+
+        if (len &lt;= 0) {
+                php_error_docref(NULL TSRMLS_CC, E_WARNING, &quot;Length parameter must be greater than 0&quot;);
+                RETURN_FALSE;
+        }
+
+        Z_STRVAL_P(return_value) = emalloc(len + 1);
+        Z_STRLEN_P(return_value) = php_stream_read(stream, Z_STRVAL_P(return_value), len);
+
+        /* needed because recv/read/gzread doesnt put a null at the end*/
+        Z_STRVAL_P(return_value)[Z_STRLEN_P(return_value)] = 0;  # Integer Underflow and null write
+        Z_TYPE_P(return_value) = IS_STRING;
+}
+
+
+(gdb) run gzread2.php 
+Starting program: /home/operac/php/php-56/sapi/cli/php gzread2.php
+
+Program received signal SIGSEGV, Segmentation fault.
+0x0000000000727b66 in zif_fread (ht=2, return_value=0x7ffff7fd7d00, return_value_ptr=0x7ffff7fa21c8, this_ptr=0x0, return_value_used=0)
+    at /home/operac/php/php-56/ext/standard/file.c:1769
+1769            Z_STRVAL_P(return_value)[Z_STRLEN_P(return_value)] = 0;
+(gdb) print (*return_value)
+$2 = {value = {lval = 140735140003952, dval = 6,9532397838610798e-310, str = {val = 0x7fff74070070 &quot;&quot;, len = -2147483648}, ht = 0x7fff74070070, 
+    obj = {handle = 1946615920, handlers = 0x5a5a5a5a80000000}, ast = 0x7fff74070070}, refcount__gc = 1, type = 0 '\000', is_ref__gc = 0 '\000'}
+(gdb) print (*return_value).value.str.len
+$1 = -2147483648
+
+
+-----------
+ASM:
+
+   0x727b45 &lt;zif_fread+336&gt;:    callq  0x7ef31b &lt;_php_stream_read&gt;
+   0x727b4a &lt;zif_fread+341&gt;:    mov    %eax,%edx
+   0x727b4c &lt;zif_fread+343&gt;:    mov    -0x50(%rbp),%rax
+   0x727b50 &lt;zif_fread+347&gt;:    mov    %edx,0x8(%rax)
+   0x727b53 &lt;zif_fread+350&gt;:    mov    -0x50(%rbp),%rax
+   0x727b57 &lt;zif_fread+354&gt;:    mov    (%rax),%rdx
+   0x727b5a &lt;zif_fread+357&gt;:    mov    -0x50(%rbp),%rax
+   0x727b5e &lt;zif_fread+361&gt;:    mov    0x8(%rax),%eax
+   0x727b61 &lt;zif_fread+364&gt;:    cltq                       # converts the value to 64 bits      
+   0x727b63 &lt;zif_fread+366&gt;:    add    %rdx,%rax
+=&gt; 0x727b66 &lt;zif_fread+369&gt;:    movb   $0x0,(%rax)         # offset rax is negative here and causes an arbitrary null byte write
+   0x727b69 &lt;zif_fread+372&gt;:    mov    -0x50(%rbp),%rax
+   0x727b6d &lt;zif_fread+376&gt;:    movb   $0x6,0x14(%rax)
+   0x727b71 &lt;zif_fread+380&gt;:    add    $0x68,%rsp
+   0x727b75 &lt;zif_fread+384&gt;:    pop    %rbx
+   0x727b76 &lt;zif_fread+385&gt;:    pop    %rbp
+   0x727b77 &lt;zif_fread+386&gt;:    retq
+
+
+I place a breakpoint on cltq and you can see when it's executed the rax value becomes negative, later this offset is used with the heap base to calculate the write address of the null byte. 
+
+Breakpoint 1, 0x0000000000727b61 in zif_fread (ht=2, return_value=0x7ffff7fd7d00, return_value_ptr=0x7ffff7fa21c8, this_ptr=0x0, return_value_used=0) at /home/operac/php/php-56/ext/standard/file.c:1769
+1769    /home/operac/php/php-56/ext/standard/file.c: No such file or directory.
+(gdb) i r
+rax            0x80000000       2147483648             # len parameter
+rbx            0x3      3
+rcx            0x0      0
+rdx            0x7fff74070070   140735140003952        # heap pointer (emalloc return address)
+rsi            0x7ffff7fdcc08   140737353993224
+rdi            0x7ffff4070070   140737287487600
+rbp            0x7fffffffa620   0x7fffffffa620
+rsp            0x7fffffffa5b0   0x7fffffffa5b0
+r8             0x0      0
+r9             0x0      0
+r10            0x7d3    2003
+r11            0x246    582
+r12            0x423ed0 4341456
+r13            0x7fffffffe080   140737488347264
+r14            0x0      0
+r15            0x0      0
+rip            0x727b61 0x727b61 &lt;zif_fread+364&gt;
+eflags         0x206    [ PF IF ]
+cs             0x33     51
+ss             0x2b     43
+ds             0x0      0
+es             0x0      0
+fs             0x0      0
+gs             0x0      0
+(gdb) si
+0x0000000000727b63      1769    in /home/operac/php/php-56/ext/standard/file.c
+(gdb) i r
+rax            0xffffffff80000000       -2147483648   # cltq   (Convert Long To Quad)
+rbx            0x3      3
+rcx            0x0      0
+rdx            0x7fff74070070   140735140003952      # heap pointer (emalloc return address)
+rsi            0x7ffff7fdcc08   140737353993224
+rdi            0x7ffff4070070   140737287487600
+rbp            0x7fffffffa620   0x7fffffffa620
+rsp            0x7fffffffa5b0   0x7fffffffa5b0
+r8             0x0      0
+r9             0x0      0
+r10            0x7d3    2003
+r11            0x246    582
+r12            0x423ed0 4341456
+r13            0x7fffffffe080   140737488347264
+r14            0x0      0
+r15            0x0      0
+rip            0x727b63 0x727b63 &lt;zif_fread+366&gt;
+eflags         0x206    [ PF IF ]
+cs             0x33     51
+ss             0x2b     43
+ds             0x0      0
+es             0x0      0
+fs             0x0      0
+gs             0x0      0
+(gdb) si
+0x0000000000727b66      1769    in /home/operac/php/php-56/ext/standard/file.c
+(gdb) i r
+rax            0x7ffef4070070   140732992520304      # heap pointer + len &lt; heap pointer   !!
+rbx            0x3      3
+rcx            0x0      0
+rdx            0x7fff74070070   140735140003952      # heap pointer (emalloc return address)
+rsi            0x7ffff7fdcc08   140737353993224
+rdi            0x7ffff4070070   140737287487600
+rbp            0x7fffffffa620   0x7fffffffa620
+rsp            0x7fffffffa5b0   0x7fffffffa5b0
+r8             0x0      0
+r9             0x0      0
+r10            0x7d3    2003
+r11            0x246    582
+r12            0x423ed0 4341456
+r13            0x7fffffffe080   140737488347264
+r14            0x0      0
+r15            0x0      0
+rip            0x727b66 0x727b66 &lt;zif_fread+369&gt;
+eflags         0x203    [ CF IF ]
+cs             0x33     51
+ss             0x2b     43
+ds             0x0      0
+es             0x0      0
+fs             0x0      0
+gs             0x0      0
+
+
+Test script:
+---------------
+&lt;?php
+
+ini_set('memory_limit', &quot;2500M&quot;);
+$fp2 = fopen(&quot;/dev/zero&quot;, &quot;r&quot;);
+$var1=$fp2;
+$var2=2147483648;
+gzread($var1, $var2);
+
+
+Expected result:
+----------------
+No crash
+
+Actual result:
+--------------
+ASAN:SIGSEGV
+=================================================================
+==3500==ERROR: AddressSanitizer: SEGV on unknown address 0x7f7fc2573860 (pc 0x000001168928 bp 0x0fffe7a9c75c sp 0x7fff3d4e3ad0 T0)
+    #0 0x1168927 in zif_fread /home/operac/php/php56asan/ext/standard/file.c:1769
+    #1 0x1ae39b5 in zend_do_fcall_common_helper_SPEC /home/operac/php/php56asan/Zend/zend_vm_execute.h:558
+    #2 0x198fd08 in execute_ex /home/operac/php/php56asan/Zend/zend_vm_execute.h:363
+    #3 0x16e3228 in zend_execute_scripts /home/operac/php/php56asan/Zend/zend.c:1341
+    #4 0x144093f in php_execute_script /home/operac/php/php56asan/main/main.c:2613
+    #5 0x1aec405 in do_cli /home/operac/php/php56asan/sapi/cli/php_cli.c:994
+    #6 0x448bc5 in main /home/operac/php/php56asan/sapi/cli/php_cli.c:1378
+    #7 0x7f80c797982f in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2082f)
+    #8 0x4490b8 in _start (/home/operac/php/php56asan/sapi/cli/php+0x4490b8)
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=72114'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=72114'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1462855571">&nbsp;</a><strong>[2016-05-10 04:46 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1462855571">&nbsp;</a><strong>[2016-05-10 04:46 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Looks like a case of size_t/int confusion.
+</pre>
+</div><div class='comment type_log' ><a name="1462855590">&nbsp;</a><strong>[2016-05-10 04:46 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 5.6.20</span>
+<span class="added">+PHP Version: 5.5.35</span>
+</div></div></div><div class='comment type_comment' ><a name="1462856301">&nbsp;</a><strong>[2016-05-10 04:58 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Fixed in security repo as abd159cce48f3e34f08e4751c568e09677d5ec9c and in <a href="https://gist.github.com/ba60b922906a9c5a685e104c7b7994a8" rel="nofollow">https://gist.github.com/ba60b922906a9c5a685e104c7b7994a8</a>
+. Please verify.
+</pre>
+</div><div class='comment type_comment' ><a name="1462964580">&nbsp;</a><strong>[2016-05-11 11:03 UTC] fernando &#x61;&#116; null-life &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Patch works. Thanks.
+
+$ ./php/php-56/sapi/cli/php -n ./gzread.php
+
+Warning: gzread(): Length parameter must be no more than 2147483647 in /home/fmunozs/gzread.php on line 8
+</pre>
+</div><div class='comment type_svn' ><a name="1464132638">&nbsp;</a><strong>[2016-05-24 23:30 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=abd159cce48f3e34f08e4751c568e09677d5ec9c" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=abd159cce48f3e34f08e4751c568e09677d5ec9c</a>
+Log: Fix <a href='bug.php?id=72114'>bug #72114</a> - int/size_t confusion in fread
+</pre>
+</div><div class='comment type_log' ><a name="1464132639">&nbsp;</a><strong>[2016-05-24 23:30 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1464135715">&nbsp;</a><strong>[2016-05-25 00:21 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=abd159cce48f3e34f08e4751c568e09677d5ec9c" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=abd159cce48f3e34f08e4751c568e09677d5ec9c</a>
+Log: Fix <a href='bug.php?id=72114'>bug #72114</a> - int/size_t confusion in fread
+</pre>
+</div><div class='comment type_svn' ><a name="1464148276">&nbsp;</a><strong>[2016-05-25 03:51 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=abd159cce48f3e34f08e4751c568e09677d5ec9c" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=abd159cce48f3e34f08e4751c568e09677d5ec9c</a>
+Log: Fix <a href='bug.php?id=72114'>bug #72114</a> - int/size_t confusion in fread
+</pre>
+</div><div class='comment type_svn' ><a name="1464148331">&nbsp;</a><strong>[2016-05-25 03:52 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=abd159cce48f3e34f08e4751c568e09677d5ec9c" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=abd159cce48f3e34f08e4751c568e09677d5ec9c</a>
+Log: Fix <a href='bug.php?id=72114'>bug #72114</a> - int/size_t confusion in fread
+</pre>
+</div><div class='comment type_svn' ><a name="1464148437">&nbsp;</a><strong>[2016-05-25 03:53 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=abd159cce48f3e34f08e4751c568e09677d5ec9c" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=abd159cce48f3e34f08e4751c568e09677d5ec9c</a>
+Log: Fix <a href='bug.php?id=72114'>bug #72114</a> - int/size_t confusion in fread
+</pre>
+</div><div class='comment type_log' ><a name="1464296600">&nbsp;</a><strong>[2016-05-26 21:03 UTC] <a href="//people.php.net/kaplan">kaplan@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2016-5096</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

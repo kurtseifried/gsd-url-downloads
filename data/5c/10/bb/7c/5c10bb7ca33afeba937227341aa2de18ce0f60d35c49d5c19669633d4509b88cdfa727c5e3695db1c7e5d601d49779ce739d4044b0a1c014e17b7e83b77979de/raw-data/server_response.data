@@ -1,0 +1,3548 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en" dir="ltr">
+  <head>
+<base href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+index" />
+
+    <meta charset="UTF-8" />
+    <title>Bug #1052789 “Need to send long keyids to software-center to pre...” : Bugs : Software Center Agent</title>
+    <link rel="shortcut icon" href="/@@/launchpad.png" />
+    <link rel="canonical" href="https://bugs.launchpad.net/bugs/1052789" />
+    
+      <link rel="alternate" type="application/atom+xml" href="http://feeds.launchpad.net/bugs/1052789/bug.atom" title="Bug 1052789 Feed" />
+    
+
+    
+  
+  <link type="text/css" rel="stylesheet" media="screen, print" href="/+icing/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/combo.css" />
+
+
+    
+
+    
+      <meta name="description" content="In the subscriptions_for_me json and in the purchase json wgrant noticed that we use the short gpg keyids:
+e.g. u'signing_key_id': u'1024r/75254d99'
+
+These are vulnerable to man-in-the-middle attacks as its relatively easy to create collisions on them and sneak
+in a different key into the keyring and compromise the system. Instead we need to send the long keyid. This
+*should* be transparent to the client (but obviously we need to test that). It should send the long fingerprint,
+e.g.  019A25FE..." />
+      <meta property="og:description" content="In the subscriptions_for_me json and in the purchase json wgrant noticed that we use the short gpg keyids:
+e.g. u'signing_key_id': u'1024r/75254d99'
+
+These are vulnerable to man-in-the-middle attacks as its relatively easy to create collisions on them and sneak
+in a different key into the keyring and compromise the system. Instead we need to send the long keyid. This
+*should* be transparent to the client (but obviously we need to test that). It should send the long fingerprint,
+e.g.  019A25FE..." />
+    
+
+    
+    
+      <meta property="og:title" content="Bug #1052789 “Need to send long keyids to software-center to pre...” : Bugs : Software Center Agent" />
+      <meta property="og:type" content="website" />
+      <meta property="og:image" content="/@@/launchpad.png" />
+      <meta property="og:url" content="https://bugs.launchpad.net/bugs/1052789" />
+      <meta property="og:site_name" content="Launchpad" />
+    
+
+    
+
+    
+  
+
+  
+  
+  <script type="text/javascript">
+    var LP = {
+        cache: {},
+        links: {}
+    };
+  </script>
+
+  
+
+  <script type="text/javascript">var cookie_scope = '; Path=/; Secure; Domain=.launchpad.net';</script>
+
+   <script type="text/javascript" src="/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?yui/yui/yui-min.js&amp;lp/meta.js&amp;yui/loader/loader-min.js"></script>
+   <script type="text/javascript">
+        var raw = null;
+        if (LP.devmode) {
+           raw = 'raw';
+        }
+        YUI.GlobalConfig = {
+            combine: true,
+            comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+            root: 'yui/',
+            filter: raw,
+            debug: false,
+            fetchCSS: false,
+            maxURLLength: 2000,
+            groups: {
+                lp: {
+                    combine: true,
+                    base: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?lp/',
+                    comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+                    root: 'lp/',
+                    // comes from including lp/meta.js
+                    modules: LP_MODULES,
+                    fetchCSS: false
+                }
+            }
+        }</script>
+
+  <script type="text/javascript">
+      // we need this to create a single YUI instance all events and code
+      // talks across. All instances of YUI().use should be based off of
+      // LPJS instead.
+      var LPJS = new YUI();
+  </script>
+
+
+
+    <script id="base-layout-load-scripts" type="text/javascript">
+        //<![CDATA[
+        LPJS.use('base', 'node', 'console', 'event',
+            'oop', 'lp', 'lp.app.foldables','lp.app.sorttable',
+            'lp.app.inlinehelp', 'lp.app.links',
+            'lp.bugs.bugtask_index', 'lp.bugs.subscribers',
+            'lp.app.ellipsis', 'lp.code.branchmergeproposal.diff',
+            'lp.views.global',
+             function(Y) {
+
+            Y.on("domready", function () {
+                var global_view = new Y.lp.views.Global();
+                global_view.render();
+
+                Y.lp.app.sorttable.SortTable.init();
+                Y.lp.app.inlinehelp.init_help();
+                Y.lp.activate_collapsibles();
+                Y.lp.app.foldables.activate();
+                Y.lp.app.links.check_valid_lp_links();
+            });
+
+            Y.on('lp:context:web_link:changed', function(e) {
+                  window.location = e.new_value;
+            });
+        });
+        //]]>
+    </script>
+    <script id="base-helper-functions" type="text/javascript">
+         //<![CDATA[
+        // This code is pulled from lp.js that needs to be available on every
+        // request. Pulling here to get it outside the scope of the YUI block.
+        function setFocusByName(name) {
+            // Focus the first element matching the given name which can be focused.
+            var nodes = document.getElementsByName(name);
+            var i, node;
+            for (i = 0; i < nodes.length; i++) {
+                node = nodes[i];
+                if (node.focus) {
+                    try {
+                        // Trying to focus a hidden element throws an error in IE8.
+                        if (node.offsetHeight !== 0) {
+                            node.focus();
+                        }
+                    } catch (e) {
+                        LPJS.use('console', function(Y) {
+                            Y.log('In setFocusByName(<' +
+                                node.tagName + ' type=' + node.type + '>): ' + e);
+                        });
+                    }
+                    break;
+                }
+            }
+        }
+
+        function selectWidget(widget_name, event) {
+          if (event && (event.keyCode === 9 || event.keyCode === 13)) {
+              // Avoid firing if user is tabbing through or simply pressing
+              // enter to submit the form.
+              return;
+          }
+          document.getElementById(widget_name).checked = true;
+        }
+        //]]>
+    </script>
+
+    
+      
+      <script type="text/javascript" id="available-official-tags-js">var available_official_tags = ["a11y", "appstream", "bionic", "bisect-done", "bitesize", "canonical-webops-ca", "cherry-pick", "community-security", "desktop-file", "disco", "dist-upgrade", "focal", "ftbfs", "groovy", "hirsute", "hw-specific", "impish", "jammy", "kernel-bug", "manpage", "metabug", "multiarch", "needs-bisect", "needs-design", "needs-packaging", "needs-reassignment", "package-conflict", "packaging", "patch", "patch-accepted-debian", "patch-accepted-upstream", "patch-forwarded-debian", "patch-forwarded-upstream", "patch-needswork", "patch-rejected", "patch-rejected-debian", "patch-rejected-upstream", "performing-bisect", "py2-removal", "qt4-removal", "regression-proposed", "regression-release", "regression-update", "string-fix", "suspend-resume", "systemd-boot", "testcase", "touch", "unmetdeps", "upgrade-software-version", "verification-done-bionic", "verification-done-focal", "verification-done-groovy", "verification-done-hirsute", "verification-done-impish", "verification-done-xenial", "verification-failed-bionic", "verification-failed-groovy", "verification-failed-impish", "verification-failed-xenial", "verification-needed-bionic", "verification-needed-focal", "verification-needed-groovy", "verification-needed-hirsute", "verification-needed-impish", "verification-needed-trusty", "verification-needed-xenial", "wayland", "xenial"];</script>
+      <script type="text/javascript">
+        LPJS.use('base', 'node', 'oop', 'event', 'lp.bugs.bugtask_index',
+                  'lp.bugs.subscribers', 'lp.code.branchmergeproposal.diff',
+                  'lp.app.comment', 'lp.services.messages.edit', function(Y) {
+            Y.on('domready', function() {
+                Y.lp.code.branchmergeproposal.diff.connect_diff_links();
+                Y.lp.bugs.bugtask_index.setup_bugtask_index();
+                Y.lp.bugs.bugtask_index.setup_bugtask_table();
+                LP.cache.comment_context = LP.cache.bug;
+                var cl = new Y.lp.app.comment.CommentList();
+                cl.render();
+                var sl = new Y.lp.bugs.subscribers.createBugSubscribersLoader({
+                    container_box: '#other-bug-subscribers',
+                    subscribers_details_view:
+                        '/+bug-portlet-subscribers-details',
+                    subscribe_someone_else_link: '.menu-link-addsubscriber'
+                }, window);
+
+                Y.lp.services.messages.edit.setup();
+            });
+         });
+      </script>
+      <style type="text/css">
+        /* Align the 'add comment' link to the right of the comment box. */
+        #add-comment-form textarea { width: 100%; }
+        #add-comment-form { max-width: 60em; padding-bottom: 4em; }
+        #add-comment-form .actions {float: right;}
+        .buglink-summary dd { font-size: 10px; }
+        a#privacy-link:link:hover, a#privacy-link:visited:hover {text-decoration:none;}
+      </style>
+      <style type="text/css">
+        .yui3-overlay .value label  {
+          /* It normally makes sense for form labels to be bold, but since
+          this form consists only of radio buttons, there's nothing but labels
+          so we just get wall-to-wall bold. */
+          font-weight: normal !important;
+        }
+      </style>
+    
+    
+  </head>
+
+  <body id="document" itemscope="" itemtype="http://schema.org/WebPage" class="tab-bugs
+      main_side
+      public
+      yui3-skin-sam">
+          
+          
+    <div class="yui-d0">
+      <div id="locationbar" class="login-logout">
+        
+
+<div id="logincontrol"><a href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+login">Log in / Register</a></div>
+
+
+
+      </div><!--id="locationbar"-->
+
+      <div id="watermark" class="watermark-apps-portlet">
+        <div>
+          <a href="https://launchpad.net/software-center-agent"><img alt="" width="64" height="64" src="/@@/product-logo" /></a>
+        </div>
+        <div class="wide">
+          <h2 id="watermark-heading"><a href="https://launchpad.net/software-center-agent">Software Center Agent</a></h2>
+        </div>
+        
+  <!-- Application Menu -->
+  <ul class="facetmenu">
+    
+      
+      <li class="overview"><a href="https://launchpad.net/software-center-agent">Overview</a></li>
+      
+    
+    
+      
+      <li class="branches"><a href="https://code.launchpad.net/software-center-agent">Code</a></li>
+      
+    
+    
+      <li class="bugs active"><a href="https://bugs.launchpad.net/software-center-agent">Bugs</a></li>
+      
+      
+    
+    
+      
+      <li class="specifications"><a href="https://blueprints.launchpad.net/software-center-agent">Blueprints</a></li>
+      
+    
+    
+      
+      <li class="translations"><a href="https://translations.launchpad.net/software-center-agent">Translations</a></li>
+      
+    
+    
+      
+      <li class="answers"><a href="https://answers.launchpad.net/software-center-agent">Answers</a></li>
+      
+    
+  </ul>
+
+      </div>
+
+      <div class="yui-t4">
+        <div id="maincontent" class="yui-main">
+          <div class="yui-b" dir="ltr">
+            <div class="context-publication">
+              
+      <h1 id="edit-title">
+<span class="yui3-editable_text-text ellipsis" style="max-width: 95%;">
+    Need to send long keyids to software-center to prevent MITM attack
+</span>
+  
+</h1>
+
+
+
+    
+              
+
+              <div id="registration" class="registering">
+                
+      Bug #1052789 reported by
+      <a href="https://launchpad.net/~mvo" class="sprite person">Michael Vogt</a>
+      <time title="2012-09-19 07:57:56 UTC" datetime="2012-09-19T07:57:56.789037+00:00">on 2012-09-19</time>
+    
+              </div>
+            </div>
+
+            
+            <div id="request-notifications">
+              
+            </div>
+
+            
+              <div>
+
+      
+
+      <div id="bug-is-duplicate">
+          
+      </div>
+      
+
+      <div style="float: right;">
+        <span><a href="/+help-bugs/bug-heat.html" target="help" class="sprite flame">264</a></span>
+      </div>
+
+      
+
+
+  
+  
+    <div class="actions">
+      <span id="affectsmetoo" style="display: inline">This bug affects 1 person</span>
+    </div>
+  
+
+
+
+    <table id="affected-software" class="listing">
+      <thead>
+        <tr>
+          <th colspan="2">Affects</th>
+          <th>Status</th>
+          <th>Importance</th>
+          <th>Assigned to</th>
+          <th>Milestone</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        
+          
+  <tr class="highlight" id="tasksummary1269425">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary1269425">
+        <span class="yui3-activator-data-box">
+            <a class="sprite product" href="https://bugs.launchpad.net/software-center-agent">Software Center Agent</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceCRITICAL">Critical</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1269425">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~elachuni">Anthony Lenton</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1269425">
+     <td colspan="7"><form action="/software-center-agent/+bug/1052789/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/software-center-agent">Software Center Agent</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~mvo" class="sprite person">Michael Vogt</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2012-09-19 07:57:56 UTC" datetime="2012-09-19T07:57:56.789037+00:00">2012-09-19</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2012-10-03 12:43:03 UTC" datetime="2012-10-03T12:43:03.759475+00:00">2012-10-03</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2012-10-03 12:43:11 UTC" datetime="2012-10-03T12:43:11.419205+00:00">2012-10-03</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2012-10-03 12:43:03 UTC" datetime="2012-10-03T12:43:03.759475+00:00">2012-10-03</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2012-10-15 14:22:00 UTC" datetime="2012-10-15T14:22:00.394032+00:00">2012-10-15</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="software-center-agent.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="software-center-agent.target.option.package" name="software-center-agent.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="software-center-agent.target.distribution" name="software-center-agent.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="software-center-agent.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="software-center-agent.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="software-center-agent.target.package"
+                         name="software-center-agent.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;software-center-agent.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('software-center-agent.target.package');
+              var select_menu = Y.DOM.byId('software-center-agent.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-software-center-agent-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a package", "vocabulary_filters": [], "input_element": "software-center-agent.target.package", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search by name", "show_widget_id": "show-widget-software-center-agent-target-package", "selected_value": null, "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "DistributionPackage"};
+        var show_widget_id = 'show-widget-software-center-agent-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="software-center-agent.target.option.product" name="software-center-agent.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="software-center-agent" id="software-center-agent.target.product"
+                         name="software-center-agent.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;software-center-agent.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('software-center-agent.target.product');
+              var select_menu = Y.DOM.byId('software-center-agent.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-software-center-agent-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a project", "vocabulary_filters": [], "input_element": "software-center-agent.target.product", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search", "show_widget_id": "show-widget-software-center-agent-target-product", "selected_value": "software-center-agent", "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "Product"};
+        var show_widget_id = 'show-widget-software-center-agent-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="software-center-agent.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="software-center-agent.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="software-center-agent.status" name="software-center-agent.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="software-center-agent.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceCRITICAL">Critical</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="software-center-agent.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="software-center-agent.assignee.assign_to_me" name="software-center-agent.assignee.option" value="software-center-agent.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="software-center-agent.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="software-center-agent.assignee.assigned_to" name="software-center-agent.assignee.option" value="software-center-agent.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="software-center-agent.assignee.assigned_to">
+              Anthony Lenton (elachuni)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="software-center-agent.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="software-center-agent.comment_on_change" name="software-center-agent.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1278741">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/+source/aptdaemon/+bug/1052789/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary1278741">
+        <span class="yui3-activator-data-box">
+            <a class="sprite package-source" href="https://bugs.launchpad.net/ubuntu/+source/aptdaemon" title="Latest release: 1.1.1+bzr982-0ubuntu36, uploaded to main on 2020-12-11 15:00:09.770255+00:00 by Marc Deslauriers (mdeslaur), maintained by Ubuntu Developers (ubuntu-devel-discuss-lists)">aptdaemon (Ubuntu)</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/+source/aptdaemon/+bug/1052789/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/+source/aptdaemon/+bug/1052789/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1278741">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1278741">
+     <td colspan="7"><form action="/ubuntu/+source/aptdaemon/+bug/1052789/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/+source/aptdaemon">aptdaemon (Ubuntu)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~mvo" class="sprite person">Michael Vogt</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2012-10-02 16:11:47 UTC" datetime="2012-10-02T16:11:47.413919+00:00">2012-10-02</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2012-10-12 14:39:09 UTC" datetime="2012-10-12T14:39:09.277919+00:00">2012-10-12</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2012-10-12 14:39:09 UTC" datetime="2012-10-12T14:39:09.277919+00:00">2012-10-12</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2012-12-11 15:32:51 UTC" datetime="2012-12-11T15:32:51.304098+00:00">2012-12-11</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_aptdaemon.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="ubuntu_aptdaemon.target.option.package" name="ubuntu_aptdaemon.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="ubuntu_aptdaemon.target.distribution" name="ubuntu_aptdaemon.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="ubuntu_aptdaemon.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="ubuntu_aptdaemon.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="aptdaemon" id="ubuntu_aptdaemon.target.package"
+                         name="ubuntu_aptdaemon.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;ubuntu_aptdaemon.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_aptdaemon.target.package');
+              var select_menu = Y.DOM.byId('ubuntu_aptdaemon.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_aptdaemon-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a package", "vocabulary_filters": [], "input_element": "ubuntu_aptdaemon.target.package", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search by name", "show_widget_id": "show-widget-ubuntu_aptdaemon-target-package", "selected_value": "aptdaemon", "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "DistributionPackage"};
+        var show_widget_id = 'show-widget-ubuntu_aptdaemon-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="ubuntu_aptdaemon.target.option.product" name="ubuntu_aptdaemon.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="ubuntu_aptdaemon.target.product"
+                         name="ubuntu_aptdaemon.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;ubuntu_aptdaemon.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_aptdaemon.target.product');
+              var select_menu = Y.DOM.byId('ubuntu_aptdaemon.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_aptdaemon-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a project", "vocabulary_filters": [], "input_element": "ubuntu_aptdaemon.target.product", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search", "show_widget_id": "show-widget-ubuntu_aptdaemon-target-product", "selected_value": null, "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "Product"};
+        var show_widget_id = 'show-widget-ubuntu_aptdaemon-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_aptdaemon.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_aptdaemon.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_aptdaemon.status" name="ubuntu_aptdaemon.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_aptdaemon.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_aptdaemon.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="ubuntu_aptdaemon.assignee.assign_to_nobody" name="ubuntu_aptdaemon.assignee.option" value="ubuntu_aptdaemon.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_aptdaemon.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_aptdaemon.assignee.assign_to_me" name="ubuntu_aptdaemon.assignee.option" value="ubuntu_aptdaemon.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_aptdaemon.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_aptdaemon.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_aptdaemon.comment_on_change" name="ubuntu_aptdaemon.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1317527">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/oneiric/+source/aptdaemon/+bug/1052789/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/oneiric/+source/aptdaemon">Oneiric</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/oneiric/+source/aptdaemon/+bug/1052789/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/oneiric/+source/aptdaemon/+bug/1052789/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1317527">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~mdeslaur">Marc Deslauriers</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1317527">
+     <td colspan="7"><form action="/ubuntu/oneiric/+source/aptdaemon/+bug/1052789/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/oneiric/+source/aptdaemon">aptdaemon (Ubuntu Oneiric)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~mvo" class="sprite person">Michael Vogt</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2012-12-11 15:31:59 UTC" datetime="2012-12-11T15:31:59.687424+00:00">2012-12-11</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2012-12-17 13:58:14 UTC" datetime="2012-12-17T13:58:14.758962+00:00">2012-12-17</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2012-12-12 14:05:03 UTC" datetime="2012-12-12T14:05:03.387860+00:00">2012-12-12</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2012-12-17 13:58:14 UTC" datetime="2012-12-17T13:58:14.758962+00:00">2012-12-17</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2012-12-17 13:58:14 UTC" datetime="2012-12-17T13:58:14.758962+00:00">2012-12-17</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_oneiric_aptdaemon.sourcepackagename">Package</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          
+
+
+    <input type="text" value="aptdaemon" id="ubuntu_oneiric_aptdaemon.sourcepackagename"
+                         name="ubuntu_oneiric_aptdaemon.sourcepackagename" size="20"
+                         maxlength=""
+                         onKeyPress="" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_oneiric_aptdaemon.sourcepackagename');
+              var select_menu = Y.DOM.byId('ubuntu_oneiric_aptdaemon.sourcepackagename-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_oneiric_aptdaemon-sourcepackagename" href="#">Find&hellip;</a>)</span>
+    <script>
+  LPJS.use('node', 'lp.app.picker', function(Y) {
+      var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a package", "vocabulary_filters": [], "input_element": "ubuntu_oneiric_aptdaemon.sourcepackagename", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search by name", "show_widget_id": "show-widget-ubuntu_oneiric_aptdaemon-sourcepackagename", "selected_value": "aptdaemon", "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "DistributionSourcePackage"};
+      var distribution_name = '';
+      var distribution_id = '';
+      var distroseries_id = '';
+      if (distribution_name !== '') {
+          config.getContextPath = function() {
+              return '/' + distribution_name;
+          }
+      } else if (distribution_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distribution_id).value;
+          };
+      } else if (distroseries_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distroseries_id).value.split('/', 2)[0];
+          };
+      }
+      var show_widget_id = 'show-widget-ubuntu_oneiric_aptdaemon-sourcepackagename';
+      Y.on('domready', function(e) {
+          Y.lp.app.picker.addPicker(config, show_widget_id);
+      });
+  });
+  </script>
+  
+
+
+
+          
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_oneiric_aptdaemon.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_oneiric_aptdaemon.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_oneiric_aptdaemon.status" name="ubuntu_oneiric_aptdaemon.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_oneiric_aptdaemon.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceUNDECIDED">Undecided</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_oneiric_aptdaemon.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_oneiric_aptdaemon.assignee.assign_to_me" name="ubuntu_oneiric_aptdaemon.assignee.option" value="ubuntu_oneiric_aptdaemon.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_oneiric_aptdaemon.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="ubuntu_oneiric_aptdaemon.assignee.assigned_to" name="ubuntu_oneiric_aptdaemon.assignee.option" value="ubuntu_oneiric_aptdaemon.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="ubuntu_oneiric_aptdaemon.assignee.assigned_to">
+              Marc Deslauriers (mdeslaur)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_oneiric_aptdaemon.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_oneiric_aptdaemon.comment_on_change" name="ubuntu_oneiric_aptdaemon.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1317528">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/precise/+source/aptdaemon/+bug/1052789/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/precise/+source/aptdaemon">Precise</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/precise/+source/aptdaemon/+bug/1052789/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/precise/+source/aptdaemon/+bug/1052789/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1317528">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~mdeslaur">Marc Deslauriers</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1317528">
+     <td colspan="7"><form action="/ubuntu/precise/+source/aptdaemon/+bug/1052789/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/precise/+source/aptdaemon">aptdaemon (Ubuntu Precise)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~mvo" class="sprite person">Michael Vogt</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2012-12-11 15:31:59 UTC" datetime="2012-12-11T15:31:59.687424+00:00">2012-12-11</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2012-12-17 13:58:19 UTC" datetime="2012-12-17T13:58:19.020503+00:00">2012-12-17</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2012-12-12 14:05:06 UTC" datetime="2012-12-12T14:05:06.230574+00:00">2012-12-12</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2012-12-17 13:58:19 UTC" datetime="2012-12-17T13:58:19.020503+00:00">2012-12-17</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2012-12-17 13:58:19 UTC" datetime="2012-12-17T13:58:19.020503+00:00">2012-12-17</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_precise_aptdaemon.sourcepackagename">Package</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          
+
+
+    <input type="text" value="aptdaemon" id="ubuntu_precise_aptdaemon.sourcepackagename"
+                         name="ubuntu_precise_aptdaemon.sourcepackagename" size="20"
+                         maxlength=""
+                         onKeyPress="" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_precise_aptdaemon.sourcepackagename');
+              var select_menu = Y.DOM.byId('ubuntu_precise_aptdaemon.sourcepackagename-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_precise_aptdaemon-sourcepackagename" href="#">Find&hellip;</a>)</span>
+    <script>
+  LPJS.use('node', 'lp.app.picker', function(Y) {
+      var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a package", "vocabulary_filters": [], "input_element": "ubuntu_precise_aptdaemon.sourcepackagename", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search by name", "show_widget_id": "show-widget-ubuntu_precise_aptdaemon-sourcepackagename", "selected_value": "aptdaemon", "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "DistributionSourcePackage"};
+      var distribution_name = '';
+      var distribution_id = '';
+      var distroseries_id = '';
+      if (distribution_name !== '') {
+          config.getContextPath = function() {
+              return '/' + distribution_name;
+          }
+      } else if (distribution_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distribution_id).value;
+          };
+      } else if (distroseries_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distroseries_id).value.split('/', 2)[0];
+          };
+      }
+      var show_widget_id = 'show-widget-ubuntu_precise_aptdaemon-sourcepackagename';
+      Y.on('domready', function(e) {
+          Y.lp.app.picker.addPicker(config, show_widget_id);
+      });
+  });
+  </script>
+  
+
+
+
+          
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_precise_aptdaemon.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_precise_aptdaemon.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_precise_aptdaemon.status" name="ubuntu_precise_aptdaemon.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_precise_aptdaemon.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceUNDECIDED">Undecided</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_precise_aptdaemon.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_precise_aptdaemon.assignee.assign_to_me" name="ubuntu_precise_aptdaemon.assignee.option" value="ubuntu_precise_aptdaemon.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_precise_aptdaemon.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="ubuntu_precise_aptdaemon.assignee.assigned_to" name="ubuntu_precise_aptdaemon.assignee.option" value="ubuntu_precise_aptdaemon.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="ubuntu_precise_aptdaemon.assignee.assigned_to">
+              Marc Deslauriers (mdeslaur)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_precise_aptdaemon.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_precise_aptdaemon.comment_on_change" name="ubuntu_precise_aptdaemon.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1317529">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/quantal/+source/aptdaemon/+bug/1052789/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/quantal/+source/aptdaemon">Quantal</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/quantal/+source/aptdaemon/+bug/1052789/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/quantal/+source/aptdaemon/+bug/1052789/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1317529">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1317529">
+     <td colspan="7"><form action="/ubuntu/quantal/+source/aptdaemon/+bug/1052789/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/quantal/+source/aptdaemon">aptdaemon (Ubuntu Quantal)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~mvo" class="sprite person">Michael Vogt</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2012-12-11 15:32:41 UTC" datetime="2012-12-11T15:32:41.289538+00:00">2012-12-11</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2012-12-11 15:32:54 UTC" datetime="2012-12-11T15:32:54.663904+00:00">2012-12-11</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2012-12-11 15:32:54 UTC" datetime="2012-12-11T15:32:54.663904+00:00">2012-12-11</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2012-12-11 15:32:54 UTC" datetime="2012-12-11T15:32:54.663904+00:00">2012-12-11</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_quantal_aptdaemon.sourcepackagename">Package</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          
+
+
+    <input type="text" value="aptdaemon" id="ubuntu_quantal_aptdaemon.sourcepackagename"
+                         name="ubuntu_quantal_aptdaemon.sourcepackagename" size="20"
+                         maxlength=""
+                         onKeyPress="" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_quantal_aptdaemon.sourcepackagename');
+              var select_menu = Y.DOM.byId('ubuntu_quantal_aptdaemon.sourcepackagename-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_quantal_aptdaemon-sourcepackagename" href="#">Find&hellip;</a>)</span>
+    <script>
+  LPJS.use('node', 'lp.app.picker', function(Y) {
+      var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a package", "vocabulary_filters": [], "input_element": "ubuntu_quantal_aptdaemon.sourcepackagename", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search by name", "show_widget_id": "show-widget-ubuntu_quantal_aptdaemon-sourcepackagename", "selected_value": "aptdaemon", "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "DistributionSourcePackage"};
+      var distribution_name = '';
+      var distribution_id = '';
+      var distroseries_id = '';
+      if (distribution_name !== '') {
+          config.getContextPath = function() {
+              return '/' + distribution_name;
+          }
+      } else if (distribution_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distribution_id).value;
+          };
+      } else if (distroseries_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distroseries_id).value.split('/', 2)[0];
+          };
+      }
+      var show_widget_id = 'show-widget-ubuntu_quantal_aptdaemon-sourcepackagename';
+      Y.on('domready', function(e) {
+          Y.lp.app.picker.addPicker(config, show_widget_id);
+      });
+  });
+  </script>
+  
+
+
+
+          
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_quantal_aptdaemon.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_quantal_aptdaemon.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_quantal_aptdaemon.status" name="ubuntu_quantal_aptdaemon.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_quantal_aptdaemon.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceUNDECIDED">Undecided</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_quantal_aptdaemon.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="ubuntu_quantal_aptdaemon.assignee.assign_to_nobody" name="ubuntu_quantal_aptdaemon.assignee.option" value="ubuntu_quantal_aptdaemon.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_quantal_aptdaemon.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_quantal_aptdaemon.assignee.assign_to_me" name="ubuntu_quantal_aptdaemon.assignee.option" value="ubuntu_quantal_aptdaemon.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_quantal_aptdaemon.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_quantal_aptdaemon.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_quantal_aptdaemon.comment_on_change" name="ubuntu_quantal_aptdaemon.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1317530">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/raring/+source/aptdaemon/+bug/1052789/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/raring/+source/aptdaemon">Raring</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/raring/+source/aptdaemon/+bug/1052789/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/raring/+source/aptdaemon/+bug/1052789/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1317530">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1317530">
+     <td colspan="7"><form action="/ubuntu/raring/+source/aptdaemon/+bug/1052789/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/raring/+source/aptdaemon">aptdaemon (Ubuntu Raring)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~mvo" class="sprite person">Michael Vogt</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2012-12-11 15:32:41 UTC" datetime="2012-12-11T15:32:41.289538+00:00">2012-12-11</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2012-10-12 14:39:09 UTC" datetime="2012-10-12T14:39:09.277919+00:00">2012-10-12</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2012-10-12 14:39:09 UTC" datetime="2012-10-12T14:39:09.277919+00:00">2012-10-12</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2012-12-11 15:32:51 UTC" datetime="2012-12-11T15:32:51.304098+00:00">2012-12-11</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_raring_aptdaemon.sourcepackagename">Package</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          
+
+
+    <input type="text" value="aptdaemon" id="ubuntu_raring_aptdaemon.sourcepackagename"
+                         name="ubuntu_raring_aptdaemon.sourcepackagename" size="20"
+                         maxlength=""
+                         onKeyPress="" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_raring_aptdaemon.sourcepackagename');
+              var select_menu = Y.DOM.byId('ubuntu_raring_aptdaemon.sourcepackagename-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_raring_aptdaemon-sourcepackagename" href="#">Find&hellip;</a>)</span>
+    <script>
+  LPJS.use('node', 'lp.app.picker', function(Y) {
+      var config = {"remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "header": "Select a package", "vocabulary_filters": [], "input_element": "ubuntu_raring_aptdaemon.sourcepackagename", "show_remove_button": false, "show_assign_me_button": false, "step_title": "Search by name", "show_widget_id": "show-widget-ubuntu_raring_aptdaemon-sourcepackagename", "selected_value": "aptdaemon", "selected_value_metadata": null, "remove_team_text": "Remove team", "assign_me_text": "Pick me", "show_create_team": false, "vocabulary_name": "DistributionSourcePackage"};
+      var distribution_name = '';
+      var distribution_id = '';
+      var distroseries_id = '';
+      if (distribution_name !== '') {
+          config.getContextPath = function() {
+              return '/' + distribution_name;
+          }
+      } else if (distribution_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distribution_id).value;
+          };
+      } else if (distroseries_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distroseries_id).value.split('/', 2)[0];
+          };
+      }
+      var show_widget_id = 'show-widget-ubuntu_raring_aptdaemon-sourcepackagename';
+      Y.on('domready', function(e) {
+          Y.lp.app.picker.addPicker(config, show_widget_id);
+      });
+  });
+  </script>
+  
+
+
+
+          
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_raring_aptdaemon.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_raring_aptdaemon.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_raring_aptdaemon.status" name="ubuntu_raring_aptdaemon.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_raring_aptdaemon.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_raring_aptdaemon.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="ubuntu_raring_aptdaemon.assignee.assign_to_nobody" name="ubuntu_raring_aptdaemon.assignee.option" value="ubuntu_raring_aptdaemon.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_raring_aptdaemon.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_raring_aptdaemon.assignee.assign_to_me" name="ubuntu_raring_aptdaemon.assignee.option" value="ubuntu_raring_aptdaemon.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_raring_aptdaemon.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_raring_aptdaemon.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_raring_aptdaemon.comment_on_change" name="ubuntu_raring_aptdaemon.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+      </tbody>
+
+    </table>
+
+
+
+<div class="actions">
+  
+    <span id="also-affects-product" class="">
+    <a class="menu-link-addupstream sprite add" href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+choose-affected-product">Also affects project</a>
+        <a href="/+help-bugs/also-affects-project-help.html" target="help" class="sprite maybe action-icon">(?)</a>
+    </span>
+    <span id="also-affects-package" class="">
+    <a class="menu-link-adddistro sprite add" href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+distrotask">Also affects distribution/package</a>
+    </span>
+    <a class="menu-link-nominate sprite milestone" href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+nominate">Nominate for series</a>
+    
+  
+
+</div>
+
+
+
+
+      <div id="maincontentsub">
+        <div class="top-portlet">
+
+      <div itemprop="mainContentOfPage" class="report">
+        
+
+        <div>
+  <div class="lazr-multiline-edit" id="edit-description">
+  <div class="clearfix">
+    
+
+    <h3>Bug Description</h3>
+  </div>
+
+  <div class="yui3-editable_text-text"><p>In the subscriptions_<wbr />for_me json and in the purchase json wgrant noticed that we use the short gpg keyids:<br />
+e.g. u&#x27;signing_key_id&#x27;: u&#x27;1024r/75254d99&#x27;</p>
+<p>These are vulnerable to man-in-the-middle attacks as its relatively easy to create collisions on them and sneak<br />
+in a different key into the keyring and compromise the system. Instead we need to send the long keyid. This<br />
+*should* be transparent to the client (but obviously we need to test that). It should send the long fingerprint,<br />
+e.g.  019A25FED88F961<wbr />763935D7F129196<wbr />470EB12F05  from <a rel="nofollow" href="http://launchpad.net/~mvo/+archive">http://<wbr />launchpad.<wbr />net/~mvo/<wbr />+archive</a> under<br />
+fingerprint</p></div>
+  </div>
+
+  
+</div>
+
+
+        <div style="margin:-10px 0 20px 5px" class="clearfix">
+          
+        </div>
+
+        <div id="bug-tags">
+          <span id="tags-heading">
+            Tags:
+          </span>
+          <span id="tag-list">
+            <a class="unofficial-tag" href="/software-center-agent/+bugs?field.tag=ca-escalated">ca-escalated</a>
+          </span>
+          
+          <a href="+edit" title="Edit tags" id="tags-trigger" class="sprite edit action-icon">Edit</a>
+          <a href="/+help-bugs/tag-help.html" target="help" class="sprite maybe action-icon">Tag help</a>
+        </div>
+
+        <script type="text/javascript">
+          LPJS.use('event', 'node', 'lp.bugs.tags_entry', function(Y) {
+              Y.on('domready',
+                   function(e) {
+                       Y.lp.bugs.tags_entry.setup_tag_entry(
+                           available_official_tags);
+                   },
+                   window);
+          });
+        </script>
+
+        <div class="clearfix"></div>
+      </div>
+
+      <div id="branches-and-cves">
+        <div id="bug-branches-container" style="float: left">
+          
+
+            <div id="bug-branches">
+              <h2>Related branches</h2>
+
+              
+                
+
+ 
+
+ <div class="buglink-summary">
+
+  <a href="https://code.launchpad.net/~ubuntu-branches/ubuntu/oneiric/aptdaemon/oneiric-security" class="sprite branch">lp:ubuntu/oneiric-security/aptdaemon</a>
+  
+  
+</div>
+
+
+
+              
+              
+                
+
+ 
+
+ <div class="buglink-summary">
+
+  <a href="https://code.launchpad.net/~ubuntu-branches/ubuntu/precise/aptdaemon/precise-security" class="sprite branch">lp:ubuntu/precise-security/aptdaemon</a>
+  
+  
+</div>
+
+
+
+              
+              
+                
+
+ 
+
+ <div class="buglink-summary">
+
+  <a href="https://code.launchpad.net/~ubuntu-branches/ubuntu/precise/aptdaemon/precise-updates" class="sprite branch">lp:ubuntu/precise-updates/aptdaemon</a>
+  
+  
+</div>
+
+
+
+              
+            </div>
+          
+        </div><!-- bug-branch-container -->
+
+        <div class="cves">
+          <h2>CVE References</h2>
+          <ul>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2012-0962" title="Aptdaemon 0.43 in Ubuntu 11.10 and 12...">2012-0962</a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="clearfix"></div>
+      </div> <!-- branches and CVEs -->
+
+      </div>
+
+      <div>
+      
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/software-center-agent/+bug/1052789/comments/1" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mvo" class="sprite person">Michael Vogt (mvo)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-10-02T16:11:24.489341+00:00" title="2012-10-02 16:11:24 UTC">on 2012-10-02</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/software-center-agent/+bug/1052789/comments/1"> #1</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This also affects aptdaemon, it is using:</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;proc = subprocess.<wbr />Popen([<wbr />&quot;/usr/bin/<wbr />apt-key&quot;<wbr />, &quot;adv&quot;,<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&quot;-<wbr />-keyserver&quot;<wbr />, keyserver,<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&quot;-<wbr />-recv&quot;, keyid], stderr=<wbr />subprocess.<wbr />STDOUT,<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;stdout=<wbr />subprocess.<wbr />PIPE, close_fds=True)</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This also affects aptdaemon, it is using:
+
+        proc = subprocess.Popen(["/usr/bin/apt-key", "adv",
+                                 "--keyserver", keyserver,
+                                 "--recv", keyid], stderr=subprocess.STDOUT,
+                                 stdout=subprocess.PIPE, close_fds=True)
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/software-center-agent/+bug/1052789/comments/2" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mvo" class="sprite person">Michael Vogt (mvo)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-10-02T16:12:48.319990+00:00" title="2012-10-02 16:12:48 UTC">on 2012-10-02</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/software-center-agent/+bug/1052789/comments/2"> #2</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>We need to port the software-properties fix for the key import to aptdaemon or fix the apt apt-key code.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">We need to port the software-properties fix for the key import to aptdaemon or fix the apt apt-key code.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~mvo" class="sprite person">Michael Vogt (mvo)</a>
+    
+    <time title="2012-10-02 16:24:37 UTC" datetime="2012-10-02T16:24:37.406556+00:00">on 2012-10-02</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>tags</b>:
+      </td>
+      <td>
+        added: ca-escalated
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~elachuni" class="sprite person">Anthony Lenton (elachuni)</a>
+    
+    <time title="2012-10-03 12:43:03 UTC" datetime="2012-10-03T12:43:03.379882+00:00">on 2012-10-03</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in software-center-agent: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; In Progress
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>importance</b>:
+      </td>
+      <td>
+        Undecided &#8594; Critical
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>importance</b>:
+      </td>
+      <td>
+        Critical &#8594; High
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; Anthony Lenton (elachuni)
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>importance</b>:
+      </td>
+      <td>
+        High &#8594; Critical
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/software-center-agent/+bug/1052789/comments/3" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mvo" class="sprite person">Michael Vogt (mvo)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-10-12T14:08:50.481625+00:00" title="2012-10-12 14:08:50 UTC">on 2012-10-12</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/software-center-agent/+bug/1052789/comments/3"> #3</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+attachment/3396373/+files/aptd-recv-key.bzr-bundle">Bzr bundle with key verification against lp:~aptdaemon-developers/aptdaemon/ubuntu-precise</a>
+        <a class="sprite edit action-icon" href="/software-center-agent/+bug/1052789/+attachment/3396373">Edit</a>
+        (11.8 KiB,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>To test you need to build the branch with bzr-buildpackage and install it.</p>
+<p>Then run:<br />
+# aptdcon --keyserver=<wbr />keyserver.<wbr />ubuntu.<wbr />com --add-vendor-<wbr />key-from-<wbr />keyserver=<wbr />437D05B5</p>
+<p>this should give you a error</p>
+<p># aptdon --add-vendor-<wbr />key-from-<wbr />keyserver=<wbr />0xa1BD8E9D78F7F<wbr />E5C3E65D8AF8B48<wbr />AD6246925553 --keyserver=<wbr />keyserver.<wbr />ubuntu.<wbr />com<br />
+&nbsp;# apt-key list</p>
+<p>Should work and show:<br />
+pub   4096R/46925553 2012-04-27 [expires: 2020-04-25]<br />
+uid                  Debian Archive Automatic Signing Key (7.0/wheezy) &lt;email address hidden&gt;</p>
+<p>in the apt-key list output.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">To test you need to build the branch with bzr-buildpackage and install it.
+
+Then run:
+# aptdcon --keyserver=keyserver.ubuntu.com --add-vendor-key-from-keyserver=437D05B5 
+
+this should give you a error
+
+# aptdon --add-vendor-key-from-keyserver=0xa1BD8E9D78F7FE5C3E65D8AF8B48AD6246925553 --keyserver=keyserver.ubuntu.com
+ # apt-key list
+
+Should work and show:
+pub   4096R/46925553 2012-04-27 [expires: 2020-04-25]
+uid                  Debian Archive Automatic Signing Key (7.0/wheezy) &lt;ftpmaster@debian.org&gt;
+
+in the apt-key list output.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/software-center-agent/+bug/1052789/comments/4" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mvo" class="sprite person">Michael Vogt (mvo)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-10-12T14:38:46.688626+00:00" title="2012-10-12 14:38:46 UTC">on 2012-10-12</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/software-center-agent/+bug/1052789/comments/4"> #4</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+attachment/3396408/+files/oneiric-aptd-recv-key.debdiff">debdiff with the oneiric version of the diff</a>
+        <a class="sprite edit action-icon" href="/software-center-agent/+bug/1052789/+attachment/3396408">Edit</a>
+        (7.5 KiB,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Same test as for precise.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Same test as for precise.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in aptdaemon (Ubuntu): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; In Progress
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>importance</b>:
+      </td>
+      <td>
+        Undecided &#8594; High
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~elachuni" class="sprite person">Anthony Lenton (elachuni)</a>
+    
+    <time title="2012-10-15 14:21:59 UTC" datetime="2012-10-15T14:21:59.752482+00:00">on 2012-10-15</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in software-center-agent: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        In Progress &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/software-center-agent/+bug/1052789/comments/5" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mvo" class="sprite person">Michael Vogt (mvo)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-12-11T15:34:15.101945+00:00" title="2012-12-11 15:34:15 UTC">on 2012-12-11</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/software-center-agent/+bug/1052789/comments/5"> #5</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Someone from the QA team like davmor2 should test a purchase in the software-center when this is applied to get a additional test.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Someone from the QA team like davmor2 should test a purchase in the software-center when this is applied to get a additional test.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in aptdaemon (Ubuntu Raring): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        In Progress &#8594; Fix Released
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in aptdaemon (Ubuntu Quantal): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/software-center-agent/+bug/1052789/comments/6" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-12-11T15:54:22.549173+00:00" title="2012-12-11 15:54:22 UTC">on 2012-12-11</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/software-center-agent/+bug/1052789/comments/6"> #6</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This is CVE-2012-0962</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This is CVE-2012-0962</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+    
+    <time title="2012-12-12 14:05:02 UTC" datetime="2012-12-12T14:05:02.976955+00:00">on 2012-12-12</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in aptdaemon (Ubuntu Oneiric): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; Marc Deslauriers (mdeslaur)
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in aptdaemon (Ubuntu Precise): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; Marc Deslauriers (mdeslaur)
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/software-center-agent/+bug/1052789/comments/7" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~janitor" class="sprite person-inactive">Launchpad Janitor (janitor)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-12-17T13:58:12.788539+00:00" title="2012-12-17 13:58:12 UTC">on 2012-12-17</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/software-center-agent/+bug/1052789/comments/7"> #7</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This bug was fixed in the package aptdaemon - 0.43+bzr697-<wbr />0ubuntu1.<wbr />3</p>
+<p>---------------<br />
+aptdaemon (0.43+bzr697-<wbr />0ubuntu1.<wbr />3) oneiric-security; urgency=low</p>
+<p>&nbsp;&nbsp;* SECURITY UPDATE: check downloaded keyid (LP: <a href="/bugs/1052789" class="bug-link">#1052789</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2012-0962<br />
+&nbsp;-- Michael Vogt &lt;email address hidden&gt;   Fri, 12 Oct 2012 16:20:20 +0200</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This bug was fixed in the package aptdaemon - 0.43+bzr697-0ubuntu1.3
+
+---------------
+aptdaemon (0.43+bzr697-0ubuntu1.3) oneiric-security; urgency=low
+
+  * SECURITY UPDATE: check downloaded keyid (LP: #1052789)
+    - CVE-2012-0962
+ -- Michael Vogt &lt;michael.vogt@ubuntu.com&gt;   Fri, 12 Oct 2012 16:20:20 +0200</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in aptdaemon (Ubuntu Oneiric): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/software-center-agent/+bug/1052789/comments/8" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~janitor" class="sprite person-inactive">Launchpad Janitor (janitor)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-12-17T13:58:18.381433+00:00" title="2012-12-17 13:58:18 UTC">on 2012-12-17</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/software-center-agent/+bug/1052789/comments/8"> #8</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This bug was fixed in the package aptdaemon - 0.43+bzr805-<wbr />0ubuntu7</p>
+<p>---------------<br />
+aptdaemon (0.43+bzr805-<wbr />0ubuntu7) precise-security; urgency=low</p>
+<p>&nbsp;&nbsp;* SECURITY UPDATE: check downloaded keyid (LP: <a href="/bugs/1052789" class="bug-link">#1052789</a>)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- CVE-2012-0962<br />
+&nbsp;-- Michael Vogt &lt;email address hidden&gt;   Fri, 12 Oct 2012 15:59:48 +0200</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This bug was fixed in the package aptdaemon - 0.43+bzr805-0ubuntu7
+
+---------------
+aptdaemon (0.43+bzr805-0ubuntu7) precise-security; urgency=low
+
+  * SECURITY UPDATE: check downloaded keyid (LP: #1052789)
+    - CVE-2012-0962
+ -- Michael Vogt &lt;michael.vogt@ubuntu.com&gt;   Fri, 12 Oct 2012 15:59:48 +0200</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in aptdaemon (Ubuntu Precise): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+    
+    <time title="2012-12-17 14:05:08 UTC" datetime="2012-12-17T14:05:08.106157+00:00">on 2012-12-17</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>information type</b>:
+      </td>
+      <td>
+        Private Security &#8594; Public Security
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        <div style="float: right;">
+          <a class="menu-link-activitylog" href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+activity">See full activity log</a>
+        </div>
+        <div class="clearfix"></div>
+
+        
+          
+
+          
+            <div align="center" id="add-comment-login-first">
+              To post a comment you must <a href="+login?comments=all">log in</a>.
+            </div>
+          
+        
+        
+      
+
+      </div><!-- class="top-portlet" -->
+      </div><!--- id="maincontentsub"-->
+      <div>
+        <div id="duplicate-form-container"></div>
+        <div id="privacy-form-container"></div>
+      </div>
+    </div>
+            
+            
+          </div><!-- yui-b -->
+        </div><!-- yui-main -->
+
+        
+          <div id="side-portlets" class="yui-b side">
+            
+      <div id="involvement" class="portlet">
+        <ul class="involvement">
+          <li class="single">
+            <a class="sprite bugs" href="/software-center-agent/+filebug">
+              Report a bug
+            </a>
+          </li>
+        </ul>
+      </div>
+      <div id="privacy" class="first portlet public">
+  <div id="privacy-text">
+     <span id="information-type-summary" class="sprite public">This report contains
+         <strong id="information-type">Public Security</strong>
+         information
+     </span>&nbsp;<a class="sprite edit action-icon" id="privacy-link" href="/software-center-agent/+bug/1052789/+secrecy">Edit</a>
+
+     <div id="information-type-description" style="padding-top: 5px">Everyone can see this security related information.
+</div>
+  </div>
+</div>
+
+      <div id="portlet-actions" class="portlet vertical">
+  <ul id="duplicate-actions">
+    <li class="sprite bug-dupe">
+    <span id="mark-duplicate-text">
+    <a class="menu-link-mark-dupe" href="/software-center-agent/+bug/1052789/+duplicate">Mark as duplicate</a>
+    </span>
+    </li>
+    
+    <li><a class="menu-link-createquestion sprite add" href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+create-question">Convert to a question</a></li>
+    
+    <li><a class="menu-link-addbranch sprite add" href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+addbranch">Link a related branch</a></li>
+    <li><a class="menu-link-linktocve sprite add" href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+linkcve">Link to <abbr title="Common Vulnerabilities and Exposures Index">CVE</abbr></a></li>
+    <li><a class="menu-link-unlinkcve sprite modify remove" href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+unlinkcve">Remove CVE link</a></li>
+  </ul>
+</div>
+
+      
+
+      <div class="portlet vertical" id="portlet-subscription">
+  <div class="section">
+    <div id="current_user_subscription" class="False">
+      
+        <span>You are</span>
+        
+        <a class="menu-link-subscription sprite modify edit" href="/software-center-agent/+bug/1052789/+subscribe">
+           
+           
+           
+           not directly subscribed to this bug's notifications.
+        </a>
+      
+      
+    </div>
+    <div id="sub-unsub-spinner">Subscribing...</div>
+    <ul>
+      
+      <li><a class="menu-link-editsubscriptions sprite modify edit" href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+subscriptions" title="View and change your subscriptions to this bug">Edit bug mail</a></li>
+    </ul>
+  </div>
+  <script type="text/javascript">
+    LPJS.use('io-base', 'node',
+            'lp.bugs.bugtask_index.portlets.subscription', function(Y) {
+        Y.on('domready', function() {
+            Y.lp.bugs.bugtask_index.portlets.subscription.initialize();
+        });
+    });
+  </script>
+</div>
+
+      <div class="portlet vertical" id="portlet-subscribers">
+  <h2>Other bug subscribers</h2>
+  <div>
+    <div><a class="menu-link-addsubscriber sprite add" href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+addsubscriber" title="Launchpad will email that person whenever this bugs changes">Subscribe someone else</a></div>
+  </div>
+  <div id="other-bug-subscribers"></div>
+</div>
+
+      
+
+      
+
+      
+  <div class="portlet" id="portlet-patches">
+    <h2>Patches</h2>
+    <ul>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+attachment/3396373/+files/aptd-recv-key.bzr-bundle">Bzr bundle with key verification against lp:~aptdaemon-developers/aptdaemon/ubuntu-precise</a>
+        <small>
+          (<a href="/software-center-agent/+bug/1052789/+attachment/3396373">edit</a>)
+        </small>
+      </li>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/software-center-agent/+bug/1052789/+attachment/3396408/+files/oneiric-aptd-recv-key.debdiff">debdiff with the oneiric version of the diff</a>
+        <small>
+          (<a href="/software-center-agent/+bug/1052789/+attachment/3396408">edit</a>)
+        </small>
+      </li>
+    </ul>
+    <ul>
+      <li>
+        <a class="sprite add" href="/software-center-agent/+bug/1052789/+addcomment?field.patch=on">Add patch</a>
+      </li>
+    </ul>
+  </div>
+  
+
+
+      
+
+    
+          </div><!-- yui-b side -->
+        
+      </div><!-- yui-t4 -->
+
+      
+  <div id="footer" class="footer">
+    <div class="lp-arcana">
+        <div class="lp-branding">
+          <a href="https://launchpad.net/"><img src="/@@/launchpad-logo-and-name-hierarchy.png" alt="Launchpad" /></a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://launchpad.net/+tour">Take the tour</a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://help.launchpad.net/">Read the guide</a>
+          &nbsp;
+          <form id="globalsearch" method="get" accept-charset="UTF-8" action="https://launchpad.net/+search">
+            <input type="search" id="search-text" name="field.text" />
+            <input type="image" src="/@@/search" style="vertical-align:5%" alt="Search Launchpad" />
+          </form>
+        </div>
+        
+  
+
+    </div>
+
+    <div class="colophon">
+      &copy; 2004-2021
+      <a href="http://canonical.com/">Canonical&nbsp;Ltd.</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://launchpad.net/legal">Terms of use</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://www.ubuntu.com/legal/dataprivacy">Data privacy</a>
+      &nbsp;&bull;&nbsp;
+      <a href="/feedback">Contact Launchpad Support</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="http://blog.launchpad.net/">Blog</a>
+      
+	&nbsp;&bull;&nbsp;
+	<a href="https://canonical.com/careers">Careers</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="https://twitter.com/launchpadstatus">System status</a>
+      <span id="lp-version">
+      &nbsp;&bull;&nbsp;
+        r0d8de2b
+        
+        
+        (<a href="https://dev.launchpad.net/">Get the code!</a>)
+      </span>
+    </div>
+  </div>
+
+    </div><!-- yui-d0-->
+
+    
+  
+  
+  <script id="json-cache-script">LP.cache = {"bug_is_private": false, "information_type_data": {"PUBLICSECURITY": {"name": "Public Security", "description_css_class": "choice-description", "is_private": false, "value": "PUBLICSECURITY", "description": "Everyone can see this security related information.\n", "order": 1}, "PRIVATESECURITY": {"name": "Private Security", "description_css_class": "choice-description", "is_private": true, "value": "PRIVATESECURITY", "description": "Only the security group can see this information.\n ", "order": 2}, "PUBLIC": {"name": "Public", "description_css_class": "choice-description", "is_private": false, "value": "PUBLIC", "description": "Everyone can see this information.\n", "order": 0}, "USERDATA": {"name": "Private", "description_css_class": "choice-description", "is_private": true, "value": "USERDATA", "description": "Only shared with users permitted to see private user information.\n", "order": 3}}, "initial_comment_batch_offset": 41, "subscribers_portlet_url_data": {"web_link": "https://bugs.launchpad.net/bugs/1052789", "self_link": "https://bugs.launchpad.net/api/devel/bugs/1052789"}, "first visible_recent_comment": -32, "bug": {"self_link": "https://bugs.launchpad.net/api/devel/bugs/1052789", "web_link": "https://bugs.launchpad.net/bugs/1052789", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug", "id": 1052789, "private": false, "information_type": "Public Security", "name": null, "title": "Need to send long keyids to software-center to prevent MITM attack", "description": "In the subscriptions_for_me json and in the purchase json wgrant noticed that we use the short gpg keyids:\ne.g. u'signing_key_id': u'1024r/75254d99'\n\nThese are vulnerable to man-in-the-middle attacks as its relatively easy to create collisions on them and sneak\nin a different key into the keyring and compromise the system. Instead we need to send the long keyid. This\n*should* be transparent to the client (but obviously we need to test that). It should send the long fingerprint,\ne.g.  019A25FED88F961763935D7F129196470EB12F05  from http://launchpad.net/~mvo/+archive under\nfingerprint", "owner_link": "https://bugs.launchpad.net/api/devel/~mvo", "bug_tasks_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1052789/bug_tasks", "duplicate_of_link": null, "date_created": "2012-09-19T07:57:56.789037+00:00", "activity_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1052789/activity", "subscriptions_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1052789/subscriptions", "date_last_updated": "2012-12-17T14:38:42.266207+00:00", "who_made_private_link": null, "date_made_private": null, "heat": 264, "bug_watches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1052789/bug_watches", "cves_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1052789/cves", "duplicates_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1052789/duplicates", "attachments_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1052789/attachments", "security_related": true, "latest_patch_uploaded": "2012-10-12T14:38:46.688626+00:00", "tags": ["ca-escalated"], "date_last_message": "2012-12-17T13:58:18.381433+00:00", "number_of_duplicates": 0, "message_count": 9, "users_affected_count": 1, "users_unaffected_count": 0, "users_affected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1052789/users_affected", "users_unaffected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1052789/users_unaffected", "users_affected_count_with_dupes": 1, "other_users_affected_count_with_dupes": 1, "users_affected_with_dupes_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1052789/users_affected_with_dupes", "messages_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1052789/messages", "linked_branches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1052789/linked_branches", "linked_merge_proposals_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1052789/linked_merge_proposals", "http_etag": "\"b4ed95cc336d5f2063038729b359fff318643dd2-d186756035baabfd2964a44f24ca7c912b4298a3\""}, "total_comments_and_activity": 43, "related_features": {}, "context": {"self_link": "https://bugs.launchpad.net/api/devel/software-center-agent/+bug/1052789", "web_link": "https://bugs.launchpad.net/software-center-agent/+bug/1052789", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug_task", "bug_link": "https://bugs.launchpad.net/api/devel/bugs/1052789", "milestone_link": null, "status": "Fix Released", "importance": "Critical", "assignee_link": "https://bugs.launchpad.net/api/devel/~elachuni", "bug_target_display_name": "Software Center Agent", "bug_target_name": "software-center-agent", "bug_watch_link": null, "date_assigned": "2012-10-03T12:43:11.419205+00:00", "date_created": "2012-09-19T07:57:56.789037+00:00", "date_confirmed": "2012-10-03T12:43:03.759475+00:00", "date_incomplete": null, "date_in_progress": "2012-10-03T12:43:03.759475+00:00", "date_closed": "2012-10-15T14:22:00.394032+00:00", "date_left_new": "2012-10-03T12:43:03.759475+00:00", "date_triaged": "2012-10-03T12:43:03.759475+00:00", "date_fix_committed": "2012-10-15T14:22:00.394032+00:00", "date_fix_released": "2012-10-15T14:22:00.394032+00:00", "date_left_closed": null, "owner_link": "https://bugs.launchpad.net/api/devel/~mvo", "target_link": "https://bugs.launchpad.net/api/devel/software-center-agent", "title": "Bug #1052789 in Software Center Agent: \"Need to send long keyids to software-center to prevent MITM attack\"", "related_tasks_collection_link": "https://bugs.launchpad.net/api/devel/software-center-agent/+bug/1052789/related_tasks", "is_complete": true, "http_etag": "\"b7039ffba0f8c100f6f717aba9d876d4c8e8a7be-0ca57732cb5921b4f478858b79646a04728eacd9\""}, "bugtask_data": {"1269425": {"bugtask_path": "/software-center-agent/+bug/1052789", "bug_title": "Need to send long keyids to software-center to prevent MITM attack", "user_can_delete": false, "milestone_value": null, "milestone_widget_items": "[]", "importance_widget_items": "[]", "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_assignee": false, "targetname": "Software Center Agent", "hide_assignee_team_selection": true, "assignee_is_team": false, "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/software-center-agent/+bug/1052789/+delete", "row_id": "tasksummary1269425", "target_is_product": true, "id": 1269425, "form_row_id": "task1269425", "assignee_vocabulary_filters": [], "prefix": "software-center-agent", "importance_value": "Critical", "status_value": "Fix Released", "assignee_value": "elachuni", "user_can_edit_milestone": false, "user_can_unassign": false, "user_can_edit_status": true, "user_can_edit_importance": false}, "1278741": {"bugtask_path": "/ubuntu/+source/aptdaemon/+bug/1052789", "bug_title": "Need to send long keyids to software-center to prevent MITM attack", "user_can_delete": false, "milestone_value": null, "milestone_widget_items": "[]", "importance_widget_items": "[]", "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_assignee": false, "targetname": "aptdaemon (Ubuntu)", "hide_assignee_team_selection": true, "assignee_is_team": null, "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ubuntu/+source/aptdaemon/+bug/1052789/+delete", "row_id": "tasksummary1278741", "target_is_product": false, "id": 1278741, "form_row_id": "task1278741", "assignee_vocabulary_filters": [], "prefix": "ubuntu_aptdaemon", "importance_value": "High", "status_value": "Fix Released", "assignee_value": null, "user_can_edit_milestone": false, "user_can_unassign": false, "user_can_edit_status": true, "user_can_edit_importance": false}, "1317527": {"bugtask_path": "/ubuntu/oneiric/+source/aptdaemon/+bug/1052789", "bug_title": "Need to send long keyids to software-center to prevent MITM attack", "user_can_delete": false, "milestone_value": null, "milestone_widget_items": "[]", "importance_widget_items": "[]", "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_assignee": false, "targetname": "aptdaemon (Ubuntu Oneiric)", "hide_assignee_team_selection": true, "assignee_is_team": false, "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ubuntu/oneiric/+source/aptdaemon/+bug/1052789/+delete", "row_id": "tasksummary1317527", "target_is_product": false, "id": 1317527, "form_row_id": "task1317527", "assignee_vocabulary_filters": [], "prefix": "ubuntu_oneiric_aptdaemon", "importance_value": "Undecided", "status_value": "Fix Released", "assignee_value": "mdeslaur", "user_can_edit_milestone": false, "user_can_unassign": false, "user_can_edit_status": true, "user_can_edit_importance": false}, "1317528": {"bugtask_path": "/ubuntu/precise/+source/aptdaemon/+bug/1052789", "bug_title": "Need to send long keyids to software-center to prevent MITM attack", "user_can_delete": false, "milestone_value": null, "milestone_widget_items": "[]", "importance_widget_items": "[]", "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_assignee": false, "targetname": "aptdaemon (Ubuntu Precise)", "hide_assignee_team_selection": true, "assignee_is_team": false, "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ubuntu/precise/+source/aptdaemon/+bug/1052789/+delete", "row_id": "tasksummary1317528", "target_is_product": false, "id": 1317528, "form_row_id": "task1317528", "assignee_vocabulary_filters": [], "prefix": "ubuntu_precise_aptdaemon", "importance_value": "Undecided", "status_value": "Fix Released", "assignee_value": "mdeslaur", "user_can_edit_milestone": false, "user_can_unassign": false, "user_can_edit_status": true, "user_can_edit_importance": false}, "1317529": {"bugtask_path": "/ubuntu/quantal/+source/aptdaemon/+bug/1052789", "bug_title": "Need to send long keyids to software-center to prevent MITM attack", "user_can_delete": false, "milestone_value": null, "milestone_widget_items": "[]", "importance_widget_items": "[]", "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_assignee": false, "targetname": "aptdaemon (Ubuntu Quantal)", "hide_assignee_team_selection": true, "assignee_is_team": null, "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ubuntu/quantal/+source/aptdaemon/+bug/1052789/+delete", "row_id": "tasksummary1317529", "target_is_product": false, "id": 1317529, "form_row_id": "task1317529", "assignee_vocabulary_filters": [], "prefix": "ubuntu_quantal_aptdaemon", "importance_value": "Undecided", "status_value": "Fix Released", "assignee_value": null, "user_can_edit_milestone": false, "user_can_unassign": false, "user_can_edit_status": true, "user_can_edit_importance": false}, "1317530": {"bugtask_path": "/ubuntu/raring/+source/aptdaemon/+bug/1052789", "bug_title": "Need to send long keyids to software-center to prevent MITM attack", "user_can_delete": false, "milestone_value": null, "milestone_widget_items": "[]", "importance_widget_items": "[]", "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_assignee": false, "targetname": "aptdaemon (Ubuntu Raring)", "hide_assignee_team_selection": true, "assignee_is_team": null, "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ubuntu/raring/+source/aptdaemon/+bug/1052789/+delete", "row_id": "tasksummary1317530", "target_is_product": false, "id": 1317530, "form_row_id": "task1317530", "assignee_vocabulary_filters": [], "prefix": "ubuntu_raring_aptdaemon", "importance_value": "High", "status_value": "Fix Released", "assignee_value": null, "user_can_edit_milestone": false, "user_can_unassign": false, "user_can_edit_status": true, "user_can_edit_importance": false}}};</script>
+
+    
+  
+
+    
+  </body>
+
+
+  <!--
+    Facet name: bugs
+    Page type: main_side
+    Has global search: True
+    Has application tabs: True
+    Has side portlets: True
+
+    At least 86 queries/external actions issued in 0.75 seconds
+
+    Features: {'app.mainsite_only.canonical_url': None, 'disclosure.dsp_picker.enabled': 'on', 'bugs.affected_count_includes_dupes.disabled': None, 'baselayout.careers_link.disabled': None, 'js.yui_version': None, 'profiling.enabled': None, 'visible_render_time': None, 'hard_timeout': '9000', 'bugs.nominations.bug_supervisors_can_target': 'on', 'app.maintenance_message': None}
+
+    r0d8de2b
+
+    -->
+
+</html>
+

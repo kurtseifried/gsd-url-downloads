@@ -1,0 +1,618 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html><head>
+<title>#47229 - Local privilege escalation via guix-daemon and ‘--keep-failed’ - GNU bug report logs</title>
+<meta http-equiv="Content-Type" content="text/html;charset=utf-8">
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="/css/bugs.css" type="text/css">
+
+<script type="text/javascript">
+function toggle_infmessages()
+{
+        allDivs=document.getElementsByTagName("div");
+        for (var i = 0 ; i < allDivs.length ; i++ )
+        {
+                if (allDivs[i].className == "infmessage")
+                {
+                        allDivs[i].style.display=(allDivs[i].style.display == 'none' | allDivs[i].style.display == '') ? 'block' : 'none';
+                }
+        }
+}
+</script>
+</head>
+<body>
+<h1>GNU bug report logs - 
+#47229<br/>
+Local privilege escalation via guix-daemon and ‘--keep-failed’</h1>
+<p><a href="bugreport.cgi?bug=47228">Previous</a> <a href="bugreport.cgi?bug=47230">Next</a></p>
+<div class="versiongraph"></div>
+<div class="pkginfo">
+  <p>Package:
+     <a class="submitter" href="pkgreport.cgi?package=guix">guix</a>;
+</p>
+</div>
+
+<div class="buginfo">
+  <p>Reported by: <a href="pkgreport.cgi?submitter=ludo%40gnu.org">Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt;</a></p>
+  <p>Date: Thu, 18 Mar 2021 11:18:02 UTC</p>
+
+<p>Severity: <em class="severity">serious</em></p>
+<p>Tags: fixed, security</p>
+
+
+<p><strong>Done:</strong> Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt;</p>
+
+<p>Bug is archived. No further changes may be made.<p></div>
+
+<p>To add a comment to this bug, you must first <a href="/server-control.html">unarchive</a> it, by sending<br>
+a message to control AT debbugs.gnu.org, with <em>unarchive 47229</em> in the body.<br>
+You can then email your comments to 47229 AT debbugs.gnu.org in the normal way.
+<p><a href="javascript:toggle_infmessages();">Toggle</a> the display of automated, internal messages from the tracker.</p><div class="msgreceived"><p>View this report as an <a href="bugreport.cgi?bug=47229;mbox=yes" title="Folder with messages as they arrived at the tracker">mbox folder</a>, <a href="bugreport.cgi?bug=47229;mboxstat=yes" title="Folder with a status summary message at the start">status mbox</a>, <a href="bugreport.cgi?bug=47229;mboxmaint=yes;mbox=yes" title="Folder of messages as sent from the tracker to the maintainers">maintainer mbox</a></p></div>
+
+<div class="infmessage"><hr>
+<a name="1"></a>
+<!-- request_addr: leo &lt;at&gt; famulari.name, bug-guix &lt;at&gt; gnu.org -->
+<!-- time:1616066282 -->
+<strong>Report forwarded</strong>
+to <code>leo &lt;at&gt; famulari.name, bug-guix &lt;at&gt; gnu.org</code>:<br>
+<code>bug#47229</code>; Package <code>guix</code>.
+ (Thu, 18 Mar 2021 11:18:02 GMT) <a href="bugreport.cgi?msg=2;bug=47229">Full text</a> and <a href="bugreport.cgi?bug=47229;msg=2;mbox=yes">rfc822 format</a> available.</div>
+
+<div class="infmessage"><hr>
+<a name="3"></a>
+<!-- request_addr: Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt; -->
+<!-- time:1616066282 -->
+<strong>Acknowledgement sent</strong>
+to <code>Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt;</code>:<br>
+New bug report received and forwarded.  Copy sent to <code>leo &lt;at&gt; famulari.name, bug-guix &lt;at&gt; gnu.org</code>.
+ (Thu, 18 Mar 2021 11:18:02 GMT) <a href="bugreport.cgi?msg=4;bug=47229">Full text</a> and <a href="bugreport.cgi?mbox=yes;msg=4;bug=47229">rfc822 format</a> available.</div>
+
+<hr><p class="msgreceived"><a name="5"></a><a name="msg5"></a><a href="#5">Message #5</a> received at submit &lt;at&gt; debbugs.gnu.org (<a href="bugreport.cgi?bug=47229;msg=5">full text</a>, <a href="bugreport.cgi?msg=5;bug=47229;mbox=yes">mbox</a>):</p>
+<pre class="headers">
+<b>From:</b> Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt;
+<b>To:</b> &lt;bug-guix &lt;at&gt; gnu.org&gt;
+<b>Subject:</b> Local privilege escalation via guix-daemon and
+ ‘--keep-failed’
+<b>Date:</b> Thu, 18 Mar 2021 12:17:15 +0100
+</pre>
+<pre class="mime">[<a href="bugreport.cgi?att=0;msg=5;bug=47229">Message part 1</a> (text/plain, inline)]</pre>
+<pre class="message">A security vulnerability that can lead to local privilege escalation has
+been found in ’guix-daemon’.  It affects multi-user setups in which
+’guix-daemon’ runs locally.
+
+It does not affect multi-user setups where ‘guix-daemon’ runs on a
+separate machine and is accessed over the network, via
+‘GUIX_DAEMON_SOCKET’, as is customary on cluster setups.  Machines where
+the Linux “protected hardlink”[*] feature is enabled, which is common,
+are also unaffected—this is the case when the contents of
+/proc/sys/fs/protected_hardlinks are 1.
+
+[*] <a href="https://www.kernel.org/doc/Documentation/sysctl/fs.txt">https://www.kernel.org/doc/Documentation/sysctl/fs.txt</a>
+
+
+Vulnerability
+~~~~~~~~~~~~~
+
+The attack consists in having an unprivileged user spawn a build
+process, for instance with ‘guix build’, that makes its build directory
+world-writable.  The user then creates a hardlink within the build
+directory to a root-owned file from outside of the build directory, such
+as ‘/etc/shadow’.  If the user passed the ‘--keep-failed’ option and the
+build eventually fails, the daemon changes ownership of the whole build
+tree, including the hardlink, to the user.  At that point, the user has
+write access to the target file.
+
+
+Fix
+~~~
+
+The fix (patch attached) consists in adding a root-owned “wrapper”
+directory in which the build directory itself is located.  If the user
+passed the ‘--keep-failed’ option and the build fails, the ‘guix-daemon’
+first changes ownership of the build directory, and then, in two stages,
+moves the build directory into the location where users expect to find
+failed builds, roughly like this:
+
+  1. chown -R USER /tmp/guix-build-foo.drv-0/top
+  2. mv /tmp/guix-build-foo.drv-0{,.pivot}
+  3. mv /tmp/guix-build-foo.drv-0.pivot/top /tmp/guix-build-foo.drv-0
+
+In step #1, /tmp/guix-build-foo.drv-0 remains root-owned, with
+permissions of #o700.  Thus, only root can change directory into it or
+into ‘top’.  Likewise in step #2.
+
+The build tree becomes accessible to the user once step #3 has
+succeeded, not before.  These steps are performed after the package
+build scripts have stopped running.
+
+
+Additionally, the patch at &lt;<a href="https://issues.guix.gnu.org/47013">https://issues.guix.gnu.org/47013</a>&gt; enables
+protected hardlinks and symlinks by default on Guix System, which will
+protect against this class of vulnerability from now on.
+
+
+Credit
+~~~~~~
+
+We are grateful to Nathan Nye of WhiteBeam Security for reporting this
+bug and discussing fixes with us!
+
+
+Timeline
+~~~~~~~~
+
+We learned about this bug on the private guix-security &lt;at&gt; gnu.org list on
+February 7th, and discussed and prepared fixes in the interim.
+
+Ludo’ &amp; Leo Famulari.
+
+</pre>
+<pre class="mime">[<a href="bugreport.cgi?bug=47229;msg=5;att=1">Message part 2</a> (text/x-patch, inline)]</pre>
+<pre class="message">diff --git a/nix/libstore/build.cc b/nix/libstore/build.cc
+index 20d83fea4a..4f486f0822 100644
+--- a/nix/libstore/build.cc
++++ b/nix/libstore/build.cc
+@@ -1621,6 +1621,24 @@ void DerivationGoal::startBuilder()
+     auto drvName = storePathToName(drvPath);
+     tmpDir = createTempDir(&quot;&quot;, &quot;guix-build-&quot; + drvName, false, false, 0700);
+ 
++    if (useChroot) {
++	/* Make the build directory seen by the build process a sub-directory.
++	   That way, &quot;/tmp/guix-build-foo.drv-0&quot; is root-owned, and thus its
++	   permissions cannot be changed by the build process, while
++	   &quot;/tmp/guix-build-foo.drv-0/top&quot; is owned by the build user.  This
++	   cannot be done when !useChroot because then $NIX_BUILD_TOP would
++	   be inaccessible to the build user by its full file name.
++
++	   If the build user could make the build directory world-writable,
++	   then an attacker could create in it a hardlink to a root-owned file
++	   such as /etc/shadow.  If &#39;keepFailed&#39; is true, the daemon would
++	   then chown that hardlink to the user, giving them write access to
++	   that file.  */
++	tmpDir += &quot;/top&quot;;
++	if (mkdir(tmpDir.c_str(), 0700) == 1)
++	    throw SysError(&quot;creating top-level build directory&quot;);
++    }
++
+     /* In a sandbox, for determinism, always use the same temporary
+        directory. */
+     tmpDirInSandbox = useChroot ? canonPath(&quot;/tmp&quot;, true) + &quot;/guix-build-&quot; + drvName + &quot;-0&quot; : tmpDir;
+@@ -2626,20 +2644,41 @@ static void _chown(const Path &amp; path, uid_t uid, gid_t gid)
+ void DerivationGoal::deleteTmpDir(bool force)
+ {
+     if (tmpDir != &quot;&quot;) {
++	// When useChroot is true, tmpDir looks like
++	// &quot;/tmp/guix-build-foo.drv-0/top&quot;.  Its parent is root-owned.
++	string top;
++	if (useChroot) {
++	    if (baseNameOf(tmpDir) != &quot;top&quot;) abort();
++	    top = dirOf(tmpDir);
++	} else top = tmpDir;
++
+         if (settings.keepFailed &amp;&amp; !force) {
+             printMsg(lvlError,
+                 format(&quot;note: keeping build directory `%2%&#39;&quot;)
+-                % drvPath % tmpDir);
++                % drvPath % top);
+             chmod(tmpDir.c_str(), 0755);
++
+             // Change the ownership if clientUid is set. Never change the
+             // ownership or the group to &quot;root&quot; for security reasons.
+             if (settings.clientUid != (uid_t) -1 &amp;&amp; settings.clientUid != 0) {
+                 _chown(tmpDir, settings.clientUid,
+                        settings.clientGid != 0 ? settings.clientGid : -1);
++
++		if (top != tmpDir) {
++		    // Rename tmpDir to its parent, with an intermediate step.
++		    string pivot = top + &quot;.pivot&quot;;
++		    if (rename(top.c_str(), pivot.c_str()) == -1)
++			throw SysError(&quot;pivoting failed build tree&quot;);
++		    if (rename((pivot + &quot;/top&quot;).c_str(), top.c_str()) == -1)
++			throw SysError(&quot;renaming failed build tree&quot;);
++		    rmdir(pivot.c_str());
++		}
+             }
+         }
+-        else
++        else {
+             deletePath(tmpDir);
++	    if (top != tmpDir) rmdir(dirOf(tmpDir).c_str());
++	}
+         tmpDir = &quot;&quot;;
+     }
+ }
+</pre>
+
+<div class="msgreceived"><hr>
+<a name="6"></a>
+<!-- command:tag -->
+<!-- requester: Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt; -->
+<!-- request_addr: control &lt;at&gt; debbugs.gnu.org -->
+<!-- time:1616066342 -->
+<!-- new_data:
+$new_data = {
+              &#39;keywords&#39; =&gt; &#39;security&#39;
+            };
+-->
+<!-- old_data:
+$old_data = {
+              &#39;keywords&#39; =&gt; &#39;&#39;
+            };
+-->
+<strong>Added tag(s) security.</strong>
+Request was from <code>Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt;</code>
+to <code>control &lt;at&gt; debbugs.gnu.org</code>.
+ (Thu, 18 Mar 2021 11:19:02 GMT) <a href="bugreport.cgi?bug=47229;msg=7">Full text</a> and <a href="bugreport.cgi?mbox=yes;bug=47229;msg=7">rfc822 format</a> available.</div>
+
+<div class="msgreceived"><hr>
+<a name="8"></a>
+<!-- requester: Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt; -->
+<!-- request_addr: control &lt;at&gt; debbugs.gnu.org -->
+<!-- time:1616066342 -->
+<strong>Severity set to &#39;serious&#39; from &#39;normal&#39;
+</strong>
+Request was from <code>Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt;</code>
+to <code>control &lt;at&gt; debbugs.gnu.org</code>.
+ (Thu, 18 Mar 2021 11:19:02 GMT) <a href="bugreport.cgi?msg=9;bug=47229">Full text</a> and <a href="bugreport.cgi?mbox=yes;msg=9;bug=47229">rfc822 format</a> available.</div>
+
+<div class="infmessage"><hr>
+<a name="10"></a>
+<!-- request_addr: bug-guix &lt;at&gt; gnu.org -->
+<!-- time:1616067962 -->
+<strong>Information forwarded</strong>
+to <code>bug-guix &lt;at&gt; gnu.org</code>:<br>
+<code>bug#47229</code>; Package <code>guix</code>.
+ (Thu, 18 Mar 2021 11:46:02 GMT) <a href="bugreport.cgi?bug=47229;msg=11">Full text</a> and <a href="bugreport.cgi?mbox=yes;msg=11;bug=47229">rfc822 format</a> available.</div>
+
+<hr><p class="msgreceived"><a name="12"></a><a name="msg12"></a><a href="#12">Message #12</a> received at 47229 &lt;at&gt; debbugs.gnu.org (<a href="bugreport.cgi?bug=47229;msg=12">full text</a>, <a href="bugreport.cgi?msg=12;bug=47229;mbox=yes">mbox</a>):</p>
+<pre class="headers">
+<b>From:</b> Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt;
+<b>To:</b> 47229 &lt;at&gt; debbugs.gnu.org
+<b>Cc:</b> Leo Famulari &lt;leo &lt;at&gt; famulari.name&gt;
+<b>Subject:</b> Re: bug#47229: Local privilege escalation via guix-daemon and
+ ‘--keep-failed’
+<b>Date:</b> Thu, 18 Mar 2021 12:45:36 +0100
+</pre>
+<pre class="message">Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt; skribis:
+
+&gt; The fix (patch attached) consists in adding a root-owned “wrapper”
+&gt; directory in which the build directory itself is located.
+
+The fix has now been pushed:
+
+  <a href="https://git.savannah.gnu.org/cgit/guix.git/commit/?id=ec7fb669945bfb47c5e1fdf7de3a5d07f7002ccf">https://git.savannah.gnu.org/cgit/guix.git/commit/?id=ec7fb669945bfb47c5e1fdf7de3a5d07f7002ccf</a>
+
+Followed by an update of the ‘guix’ package to make the fix available:
+
+  <a href="https://git.savannah.gnu.org/cgit/guix.git/commit/?id=94f03125463ee0dba2f7916fcd43fd19d4b6c892">https://git.savannah.gnu.org/cgit/guix.git/commit/?id=94f03125463ee0dba2f7916fcd43fd19d4b6c892</a>
+
+We recommend upgrading the daemon (using commit 94f03125 or later).
+On Guix System, you achieve that by running something along these lines:
+
+  guix pull
+  sudo guix system reconfigure /run/current-system/configuration.scm
+  sudo herd restart guix-daemon
+
+On other distros, assuming services are managed by systemd:
+
+  sudo --login guix pull
+  sudo systemctl restart guix-daemon.service
+
+(See &lt;<a href="https://guix.gnu.org/manual/en/html_node/Upgrading-Guix.html&gt;.">https://guix.gnu.org/manual/en/html_node/Upgrading-Guix.html&gt;.</a>)
+
+Ludo’.
+
+
+
+</pre>
+
+<div class="infmessage"><hr>
+<a name="13"></a>
+<!-- request_addr: bug-guix &lt;at&gt; gnu.org -->
+<!-- time:1616068502 -->
+<strong>Information forwarded</strong>
+to <code>bug-guix &lt;at&gt; gnu.org</code>:<br>
+<code>bug#47229</code>; Package <code>guix</code>.
+ (Thu, 18 Mar 2021 11:55:02 GMT) <a href="bugreport.cgi?msg=14;bug=47229">Full text</a> and <a href="bugreport.cgi?mbox=yes;msg=14;bug=47229">rfc822 format</a> available.</div>
+
+<hr><p class="msgreceived"><a name="15"></a><a name="msg15"></a><a href="#15">Message #15</a> received at 47229 &lt;at&gt; debbugs.gnu.org (<a href="bugreport.cgi?msg=15;bug=47229">full text</a>, <a href="bugreport.cgi?mbox=yes;msg=15;bug=47229">mbox</a>):</p>
+<pre class="headers">
+<b>From:</b> Léo Le Bouter &lt;lle-bout &lt;at&gt; zaclys.net&gt;
+<b>To:</b> Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt;, 47229 &lt;at&gt; debbugs.gnu.org
+<b>Subject:</b> Re: bug#47229: Local privilege escalation via guix-daemon and
+ ‘--keep-failed’
+<b>Date:</b> Thu, 18 Mar 2021 12:53:51 +0100
+</pre>
+<pre class="mime">[<a href="bugreport.cgi?att=0;msg=15;bug=47229">Message part 1</a> (text/plain, inline)]</pre>
+<pre class="message">Thanks a lot to the reporter and for working on this!
+</pre>
+<pre class="mime">[<a href="bugreport.cgi?msg=15;bug=47229;att=1;filename=signature.asc">signature.asc</a> (application/pgp-signature, inline)]</pre>
+
+<div class="infmessage"><hr>
+<a name="16"></a>
+<!-- request_addr: bug-guix &lt;at&gt; gnu.org -->
+<!-- time:1616073302 -->
+<strong>Information forwarded</strong>
+to <code>bug-guix &lt;at&gt; gnu.org</code>:<br>
+<code>bug#47229</code>; Package <code>guix</code>.
+ (Thu, 18 Mar 2021 13:15:02 GMT) <a href="bugreport.cgi?bug=47229;msg=17">Full text</a> and <a href="bugreport.cgi?mbox=yes;bug=47229;msg=17">rfc822 format</a> available.</div>
+
+<hr><p class="msgreceived"><a name="18"></a><a name="msg18"></a><a href="#18">Message #18</a> received at 47229 &lt;at&gt; debbugs.gnu.org (<a href="bugreport.cgi?bug=47229;msg=18">full text</a>, <a href="bugreport.cgi?msg=18;bug=47229;mbox=yes">mbox</a>):</p>
+<pre class="headers">
+<b>From:</b> Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt;
+<b>To:</b> 47229 &lt;at&gt; debbugs.gnu.org
+<b>Cc:</b> Leo Famulari &lt;leo &lt;at&gt; famulari.name&gt;
+<b>Subject:</b> Re: bug#47229: Local privilege escalation via guix-daemon and
+ ‘--keep-failed’
+<b>Date:</b> Thu, 18 Mar 2021 14:14:28 +0100
+</pre>
+<pre class="message">An additional data point: guix-daemon chowns build trees to the caller
+upon failure (a very handy feature) since this 2016 commit:
+
+  <a href="https://git.savannah.gnu.org/cgit/guix.git/commit/?id=2608e40988ba8cf51723fe0d21bdedf6b3997c9c">https://git.savannah.gnu.org/cgit/guix.git/commit/?id=2608e40988ba8cf51723fe0d21bdedf6b3997c9c</a>
+
+The Nix build daemon, which guix-daemon is based on, did not have this
+feature.
+
+
+
+</pre>
+
+<div class="msgreceived"><hr>
+<a name="19"></a>
+<!-- command:tag -->
+<!-- requester: Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt; -->
+<!-- request_addr: control &lt;at&gt; debbugs.gnu.org -->
+<!-- time:1616074081 -->
+<!-- new_data:
+$new_data = {
+              &#39;keywords&#39; =&gt; &#39;security fixed&#39;
+            };
+-->
+<!-- old_data:
+$old_data = {
+              &#39;keywords&#39; =&gt; &#39;security&#39;
+            };
+-->
+<strong>Added tag(s) fixed.</strong>
+Request was from <code>Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt;</code>
+to <code>control &lt;at&gt; debbugs.gnu.org</code>.
+ (Thu, 18 Mar 2021 13:28:01 GMT) <a href="bugreport.cgi?bug=47229;msg=20">Full text</a> and <a href="bugreport.cgi?mbox=yes;msg=20;bug=47229">rfc822 format</a> available.</div>
+
+<div class="msgreceived"><hr>
+<a name="21"></a>
+<!-- requester: Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt; -->
+<!-- request_addr: control &lt;at&gt; debbugs.gnu.org -->
+<!-- time:1616074081 -->
+<strong>bug closed, send any further explanations to
+47229 &lt;at&gt; debbugs.gnu.org and Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt;</strong>
+Request was from <code>Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt;</code>
+to <code>control &lt;at&gt; debbugs.gnu.org</code>.
+ (Thu, 18 Mar 2021 13:28:01 GMT) <a href="bugreport.cgi?msg=22;bug=47229">Full text</a> and <a href="bugreport.cgi?msg=22;bug=47229;mbox=yes">rfc822 format</a> available.</div>
+
+<div class="infmessage"><hr>
+<a name="23"></a>
+<!-- request_addr: bug-guix &lt;at&gt; gnu.org -->
+<!-- time:1616101862 -->
+<strong>Information forwarded</strong>
+to <code>bug-guix &lt;at&gt; gnu.org</code>:<br>
+<code>bug#47229</code>; Package <code>guix</code>.
+ (Thu, 18 Mar 2021 21:11:02 GMT) <a href="bugreport.cgi?msg=24;bug=47229">Full text</a> and <a href="bugreport.cgi?mbox=yes;bug=47229;msg=24">rfc822 format</a> available.</div>
+
+<hr><p class="msgreceived"><a name="25"></a><a name="msg25"></a><a href="#25">Message #25</a> received at 47229 &lt;at&gt; debbugs.gnu.org (<a href="bugreport.cgi?msg=25;bug=47229">full text</a>, <a href="bugreport.cgi?mbox=yes;bug=47229;msg=25">mbox</a>):</p>
+<pre class="headers">
+<b>From:</b> Leo Famulari &lt;leo &lt;at&gt; famulari.name&gt;
+<b>To:</b> Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt;
+<b>Cc:</b> 47229 &lt;at&gt; debbugs.gnu.org
+<b>Subject:</b> Re: bug#47229: Local privilege escalation via guix-daemon and ‘--keep-failed’
+<b>Date:</b> Thu, 18 Mar 2021 17:10:49 -0400
+</pre>
+<pre class="mime">[<a href="bugreport.cgi?att=0;bug=47229;msg=25">Message part 1</a> (text/plain, inline)]</pre>
+<pre class="message">On Thu, Mar 18, 2021 at 12:17:15PM +0100, Ludovic Courtès wrote:
+&gt; It does not affect multi-user setups where ‘guix-daemon’ runs on a
+&gt; separate machine and is accessed over the network, via
+&gt; ‘GUIX_DAEMON_SOCKET’, as is customary on cluster setups.  Machines where
+&gt; the Linux “protected hardlink”[*] feature is enabled, which is common,
+&gt; are also unaffected—this is the case when the contents of
+&gt; /proc/sys/fs/protected_hardlinks are 1.
+
+After publishing the advisory, we received a clarification about the
+impact of &quot;protected hardlinks&quot;.
+
+When using a guix-daemon that does not include the fix [0] for the bug
+reported here, it is still possible for rogue build scripts to escape
+the build environment, even when protected hardlinks are enabled.
+
+Protected hardlinks do make exploitation significantly more difficult,
+but not impossible.
+
+For this reason, we continue to recommend that all Guix users upgrade
+their guix-daemons, as described in the original advisory.
+
+[0]
+<a href="https://git.savannah.gnu.org/cgit/guix.git/commit/?id=ec7fb669945bfb47c5e1fdf7de3a5d07f7002ccf">https://git.savannah.gnu.org/cgit/guix.git/commit/?id=ec7fb669945bfb47c5e1fdf7de3a5d07f7002ccf</a>
+</pre>
+<pre class="mime">[<a href="bugreport.cgi?att=1;filename=signature.asc;msg=25;bug=47229">signature.asc</a> (application/pgp-signature, inline)]</pre>
+
+<div class="infmessage"><hr>
+<a name="26"></a>
+<!-- request_addr: bug-guix &lt;at&gt; gnu.org -->
+<!-- time:1616526061 -->
+<strong>Information forwarded</strong>
+to <code>bug-guix &lt;at&gt; gnu.org</code>:<br>
+<code>bug#47229</code>; Package <code>guix</code>.
+ (Tue, 23 Mar 2021 19:01:01 GMT) <a href="bugreport.cgi?msg=27;bug=47229">Full text</a> and <a href="bugreport.cgi?bug=47229;msg=27;mbox=yes">rfc822 format</a> available.</div>
+
+<hr><p class="msgreceived"><a name="28"></a><a name="msg28"></a><a href="#28">Message #28</a> received at 47229 &lt;at&gt; debbugs.gnu.org (<a href="bugreport.cgi?bug=47229;msg=28">full text</a>, <a href="bugreport.cgi?bug=47229;msg=28;mbox=yes">mbox</a>):</p>
+<pre class="headers">
+<b>From:</b> Nathan Nye &lt;nnye &lt;at&gt; whitebeamsec.com&gt;
+<b>To:</b> 47229 &lt;at&gt; debbugs.gnu.org
+<b>Subject:</b> Hardlink mitigation limits
+<b>Date:</b> Tue, 23 Mar 2021 14:18:14 -0400
+</pre>
+<pre class="mime">[<a href="bugreport.cgi?att=0;bug=47229;msg=28">Message part 1</a> (text/plain, inline)]</pre>
+<pre class="message">Hello,
+
+I&#39;m sharing here for future reference why protected hardlinks alone did 
+not mitigate the recent LPE security advisory, pre-patch:
+
+&quot;The reasons why are lines 2633 and 2637 of nix/libstore/build.cc:
+
+ * <a href="https://git.savannah.gnu.org/cgit/guix.git/tree/nix/libstore/build.cc#n2633">https://git.savannah.gnu.org/cgit/guix.git/tree/nix/libstore/build.cc#n2633</a>
+ * <a href="https://git.savannah.gnu.org/cgit/guix.git/tree/nix/libstore/build.cc#n2637">https://git.savannah.gnu.org/cgit/guix.git/tree/nix/libstore/build.cc#n2637</a>
+
+When a package fails to build and the keep failed flag is set 
+(-K/--keep-failed), it runs a recursive chown on the build directory 
+(which is writable following guixbuilder01 changing the permissions to 
+777). It starts at the top level and chowns downwards.
+
+The first important thing to notice here is that at any point (even 
+pre-chown) the build user has been compromised. The build user can write 
+a SUID /bin/sh to the build path, and because a normal user can traverse 
+into the directory before and during the chown, they can run a SUID 
+shell (allowing them to become guixbuilder01 even after the build user 
+processes are terminated). Becoming the build user allows multiple paths 
+to privilege escalation, but in this scenario we have faster ways of 
+becoming root.
+
+Moving on to getting root, we&#39;re choosing not to use a hardlink to show 
+why it isn&#39;t necessary. Instead, we create a directory under the build 
+directory with thousands of sequentially named files, the final entry 
+being &quot;passwd&quot; or &quot;shadow&quot;. Then we terminate the build and watch for 
+the first entry to be chowned to our user ID (possibly with the inotify 
+API). This way, we have opened a lengthy window of time where it is 
+enumerating over a list of file paths in our chosen directory and 
+chowning each of them. Now we can execute our TOCTOU race condition 
+vulnerability.
+
+At the time of check (TOC), the guix-daemon has a list of file paths to 
+chown under what it assumes is a regular directory (because it ran 
+S_ISDIR on the directory). But we can swap out the directory from under 
+it with a symlink to /etc (most efficiently with renameat2() and using 
+the RENAME_EXCHANGE flag to atomically exchange the paths). At the time 
+of use (TOU) lchown() only checks if the file /itself/ that is being 
+chowned is a symlink, not if the path components are, as can be 
+demonstrated with Python:
+
+$ mkdir td;touch td/tf;python3 -c &#39;import os;os.lchown(&quot;/home/example/td/tf&quot;, 1000, 4)&#39;;ls -lahtrd td td/tf
+-rw-rw-r-- 1 example adm       0    Mar 19 19:20 td/tf
+drwxrwxr-x 2 example example   4.0K Mar 19 19:20 td
+$ rm -rf td
+$ mkdir td; ln -s td td2;touch td2/tf;python3 -c &#39;import os;os.lchown(&quot;/home/example/td2/tf&quot;, 1000, 4)&#39;;ls -lahtrd td2 td2/tf
+lrwxrwxrwx 1 example example 2 Mar 19 19:21 td2 -&gt; td
+-rw-rw-r-- 1 example adm     0 Mar 19 19:21 td2/tf
+
+So lchown can blindly chown /etc/passwd to our user by following the 
+directory symlink and subsequently verifying that passwd itself is not a 
+symlink. I hope this explains the TOCTOU race condition and why 
+protected hardlinks help (forcing an attacker to get root using this 
+race condition), but they are not a solution to the problem (alone).&quot;
+
+- Nathan
+
+</pre>
+<pre class="mime">[<a href="bugreport.cgi?msg=28;bug=47229;att=1">Message part 2</a> (text/html, inline)]</pre>
+
+<div class="infmessage"><hr>
+<a name="29"></a>
+<!-- request_addr: bug-guix &lt;at&gt; gnu.org -->
+<!-- time:1617031382 -->
+<strong>Information forwarded</strong>
+to <code>bug-guix &lt;at&gt; gnu.org</code>:<br>
+<code>bug#47229</code>; Package <code>guix</code>.
+ (Mon, 29 Mar 2021 15:23:02 GMT) <a href="bugreport.cgi?msg=30;bug=47229">Full text</a> and <a href="bugreport.cgi?mbox=yes;msg=30;bug=47229">rfc822 format</a> available.</div>
+
+<hr><p class="msgreceived"><a name="31"></a><a name="msg31"></a><a href="#31">Message #31</a> received at 47229 &lt;at&gt; debbugs.gnu.org (<a href="bugreport.cgi?bug=47229;msg=31">full text</a>, <a href="bugreport.cgi?mbox=yes;bug=47229;msg=31">mbox</a>):</p>
+<pre class="headers">
+<b>From:</b> Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt;
+<b>To:</b> Nathan Nye &lt;nnye &lt;at&gt; whitebeamsec.com&gt;
+<b>Cc:</b> 47229 &lt;at&gt; debbugs.gnu.org
+<b>Subject:</b> Re: bug#47229: Hardlink mitigation limits
+<b>Date:</b> Mon, 29 Mar 2021 17:22:30 +0200
+</pre>
+<pre class="message">Hi Nathan,
+
+Nathan Nye &lt;nnye &lt;at&gt; whitebeamsec.com&gt; skribis:
+
+&gt; I&#39;m sharing here for future reference why protected hardlinks alone
+&gt; did not mitigate the recent LPE security advisory, pre-patch:
+
+Thanks a lot for this clarification!
+
+Ludo’.
+
+
+
+</pre>
+
+<div class="infmessage"><hr>
+<a name="32"></a>
+<!-- request_addr: bug-guix &lt;at&gt; gnu.org -->
+<!-- time:1618077422 -->
+<strong>Information forwarded</strong>
+to <code>bug-guix &lt;at&gt; gnu.org</code>:<br>
+<code>bug#47229</code>; Package <code>guix</code>.
+ (Sat, 10 Apr 2021 17:57:02 GMT) <a href="bugreport.cgi?msg=33;bug=47229">Full text</a> and <a href="bugreport.cgi?mbox=yes;bug=47229;msg=33">rfc822 format</a> available.</div>
+
+<hr><p class="msgreceived"><a name="34"></a><a name="msg34"></a><a href="#34">Message #34</a> received at 47229 &lt;at&gt; debbugs.gnu.org (<a href="bugreport.cgi?bug=47229;msg=34">full text</a>, <a href="bugreport.cgi?msg=34;bug=47229;mbox=yes">mbox</a>):</p>
+<pre class="headers">
+<b>From:</b> Leo Famulari &lt;leo &lt;at&gt; famulari.name&gt;
+<b>To:</b> Ludovic Courtès &lt;ludo &lt;at&gt; gnu.org&gt;
+<b>Cc:</b> 47229 &lt;at&gt; debbugs.gnu.org
+<b>Subject:</b> Re: bug#47229: Local privilege escalation via guix-daemon and ‘--keep-failed’
+<b>Date:</b> Sat, 10 Apr 2021 13:56:27 -0400
+</pre>
+<pre class="mime">[<a href="bugreport.cgi?bug=47229;msg=34;att=0">Message part 1</a> (text/plain, inline)]</pre>
+<pre class="message">On Thu, Mar 18, 2021 at 12:17:15PM +0100, Ludovic Courtès wrote:
+&gt; Vulnerability
+&gt; ~~~~~~~~~~~~~
+&gt; 
+&gt; The attack consists in having an unprivileged user spawn a build
+&gt; process, for instance with ‘guix build’, that makes its build directory
+&gt; world-writable.  The user then creates a hardlink within the build
+&gt; directory to a root-owned file from outside of the build directory, such
+&gt; as ‘/etc/shadow’.  If the user passed the ‘--keep-failed’ option and the
+&gt; build eventually fails, the daemon changes ownership of the whole build
+&gt; tree, including the hardlink, to the user.  At that point, the user has
+&gt; write access to the target file.
+
+This has been assigned CVE-2021-27851.
+
+Soon, it should be available in the CVE database at
+&lt;<a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-27851">https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2021-27851</a>&gt;
+</pre>
+<pre class="mime">[<a href="bugreport.cgi?bug=47229;msg=34;filename=signature.asc;att=1">signature.asc</a> (application/pgp-signature, inline)]</pre>
+
+<div class="msgreceived"><hr>
+<a name="35"></a>
+<!-- command:archive -->
+<!-- requester: Debbugs Internal Request &lt;help-debbugs &lt;at&gt; gnu.org&gt; -->
+<!-- request_addr: internal_control &lt;at&gt; debbugs.gnu.org -->
+<!-- time:1620559446 -->
+<!-- new_data:
+$new_data = {};
+-->
+<!-- old_data:
+$old_data = {};
+-->
+<strong>bug archived.</strong>
+Request was from <code>Debbugs Internal Request &lt;help-debbugs &lt;at&gt; gnu.org&gt;</code>
+to <code>internal_control &lt;at&gt; debbugs.gnu.org</code>.
+ (Sun, 09 May 2021 11:24:06 GMT) <a href="bugreport.cgi?msg=36;bug=47229">Full text</a> and <a href="bugreport.cgi?msg=36;bug=47229;mbox=yes">rfc822 format</a> available.</div>
+
+<hr>
+<div class="msgreceived">This bug report was last modified 174 days ago.</div>
+
+<hr>
+<p><a href="bugreport.cgi?bug=47228">Previous</a> <a href="bugreport.cgi?bug=47230">Next</a></p>
+<!--
+<p class="msgreceived">Send a report that <a href="//debbugs.gnu.org/cgi/bugspam.cgi">this bug log contains spam</a>.</p> -->
+<hr>
+<P>
+<A HREF="//debbugs.gnu.org/">GNU bug tracking system</A><BR>
+Copyright (C) 1999 Darren O. Benham,
+1997,2003 nCipher Corporation Ltd,
+1994-97 Ian Jackson.
+</ADDRESS>
+
+</body>
+</html>

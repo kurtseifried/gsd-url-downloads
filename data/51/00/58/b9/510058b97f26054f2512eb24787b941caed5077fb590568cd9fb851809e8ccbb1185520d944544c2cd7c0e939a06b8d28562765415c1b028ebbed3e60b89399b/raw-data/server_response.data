@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='PHAR related Bug #70433 - RDF' href='rss/bug.php?id=70433'>
+        <link rel='alternate' type='application/rss+xml' title='PHAR related Bug #70433 - RSS 2.0' href='rss/bug.php?id=70433&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #70433 :: Uninitialized pointer in phar_make_dirstream when zip entry filename is &quot;/&quot;</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=70433">Sec Bug</a>&nbsp;#70433</th>
+            <td id="summary" colspan="5">Uninitialized pointer in phar_make_dirstream when zip entry filename is &quot;/&quot;</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2015-09-05 11:42 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2015-10-11 10:53 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>hugh &#x61;&#116; allthethings &#x64;&#111;&#x74; co &#x64;&#111;&#x74; nz</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=kaplan">kaplan</a> (<a href="https://people.php.net/kaplan">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=PHAR+related">PHAR related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.6Git-2015-09-05 (Git)</td>
+            <th class="details">OS:</th>
+            <td>Linux</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2015-7804" target="_blank">2015-7804</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=70433&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=70433&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=70433&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1441453366">&nbsp;</a><strong>[2015-09-05 11:42 UTC] hugh &#x61;&#116; allthethings &#x64;&#111;&#x74; co &#x64;&#111;&#x74; nz</strong>
+<pre class='note'>Description:
+------------
+When parsing a phar file in zip format (phar_parse_zipfile in ext/phar/zip.c) with a directory entry with filename /, the filename length is 1 to start with, but then because it is a directory, it is decremented to 0 (line 399 of ext/phar/zip.c), which causes it to get added to the manifest hash as a type LONG not as a type STRING (line 639 of ext/phar/zip.c).
+When making the dirstream from the phar file after loading the zip (function phar_make_dirstream in ext/phar/dirstream.c), the manifest hash is used, but the return is not checked for a STRING type, which is what it expects (line 201 in ext/phar/dirstream.c). In this case, a LONG is returned, and the two variables str_key and keylen are not set. The str_key is further used to set the filename.
+
+This will cause a crash when compiled with hardening options such as -D_FORTIFY_SOURCE=2 and -fstack-protector-all AND NO optimizations (-O flags), OR when compiled with ASAN. When compiled any other way that I've tried, it doesn't crash, but occasionally leaks data into the filename field outputted.
+
+This bug was found with afl-fuzz.
+
+The zip file passed to the script below is available at <a href="https://transfer.sh/VULId/fuzz-test.zip" rel="nofollow">https://transfer.sh/VULId/fuzz-test.zip</a> and has the hexdump of below:
+
+00000000  50 4b 03 04 30 30 30 30  30 30 30 30 30 30 30 30  |PK..000000000000|
+00000010  30 30 30 30 30 30 30 30  30 30 30 30 30 30 30 30  |0000000000000000|
+*
+000000c0  30 30 30 30 30 30 30 30  50 4b 01 02 30 30 30 30  |00000000PK..0000|
+000000d0  30 30 08 00 30 30 30 30  30 30 30 30 30 30 30 30  |00..000000000000|
+000000e0  30 30 30 30 01 00 00 00  00 00 30 30 30 30 30 30  |0000......000000|
+000000f0  30 30 30 30 30 30 2f 50  4b 05 06 00 00 00 00 01  |000000/PK.......|
+00000100  00 01 00 30 30 30 30 c8                           |...0000.|
+00000108
+
+
+To fix:
+
+a) check the return type of zend_hash_get_current_key_ex for more than just non existent (ie, for LONG as well), maybe fail if type is not STRING?
+
+or b) don't decrement the entry.filename_len in parse_zip if it would set the length to 0, that would mean it is stored in the hash as a string, not a long. I'm not too sure of the logic of this, so don't know if that reasoning is right.
+
+Also, I haven't checked other filetypes for phar, potentially a similar issue is  there as well!
+
+Cheers,
+
+Hugh
+
+Test script:
+---------------
+&lt;?php
+$phar = new PharData($argv[1]);
+var_dump($phar);
+$meta = $phar-&gt;getMetadata();
+var_dump($meta);
+?&gt;
+
+Expected result:
+----------------
+No crash or memory leaked.
+
+Actual result:
+--------------
+When compiled with ASAN
+
+(gdb) bt
+#0  0x00007ffff4e5a651 in memcmp () from /usr/lib/x86_64-linux-gnu/libasan.so.0
+#1  0x0000000001338f6c in phar_make_dirstream (dir=0x7ffff7f75ac8 &quot;/&quot;, manifest=0x7ffff7f756f0) at /root/php-src/ext/phar/dirstream.c:216
+#2  0x000000000133abb9 in phar_wrapper_open_dir (wrapper=&lt;optimized out&gt;, path=&lt;optimized out&gt;, mode=&lt;optimized out&gt;, options=0, opened_path=&lt;optimized out&gt;, 
+    context=0x0) at /root/php-src/ext/phar/dirstream.c:359
+#3  0x0000000001a0a26d in _php_stream_opendir (path=path@entry=0x7ffff7f759c8 &quot;phar:///root/fuzz-test.zip/&quot;, options=options@entry=8, context=0x0)
+    at /root/php-src/main/streams/streams.c:1986
+#4  0x000000000155528e in spl_filesystem_dir_open (intern=intern@entry=0x7ffff7f76f40, path=0x7ffff7f759c8 &quot;phar:///root/fuzz-test.zip/&quot;)
+    at /root/php-src/ext/spl/spl_directory.c:250
+#5  0x00000000015642d2 in spl_filesystem_object_construct (ctor_flags=1, return_value_used=&lt;optimized out&gt;, this_ptr=0x7ffff7f74808, return_value_ptr=&lt;optimized out&gt;, 
+    return_value=&lt;optimized out&gt;, ht=&lt;optimized out&gt;) at /root/php-src/ext/spl/spl_directory.c:731
+#6  zim_spl_RecursiveDirectoryIterator___construct (ht=&lt;optimized out&gt;, return_value=&lt;optimized out&gt;, return_value_ptr=&lt;optimized out&gt;, this_ptr=0x7ffff7f74808, 
+    return_value_used=&lt;optimized out&gt;) at /root/php-src/ext/spl/spl_directory.c:1596
+#7  0x0000000001c0bdf8 in zend_call_function (fci=fci@entry=0x7fffffff9fd0, fci_cache=0x7fffffff9f70) at /root/php-src/Zend/zend_execute_API.c:847
+#8  0x0000000001d4596a in zend_call_method (object_pp=object_pp@entry=0x7fffffffa450, obj_ce=&lt;optimized out&gt;, fn_proxy=fn_proxy@entry=0x60360001f360, 
+    function_name=function_name@entry=0x27a36c0 &quot;__construct&quot;, function_name_len=function_name_len@entry=11, retval_ptr_ptr=retval_ptr_ptr@entry=0x0, 
+    param_count=param_count@entry=2, arg1=arg1@entry=0x7fffffffa490, arg2=arg2@entry=0x7fffffffa4d0) at /root/php-src/Zend/zend_interfaces.c:97
+#9  0x0000000001376f7e in zim_Phar___construct (ht=&lt;optimized out&gt;, return_value=&lt;optimized out&gt;, return_value_ptr=&lt;optimized out&gt;, this_ptr=&lt;optimized out&gt;, 
+    return_value_used=&lt;optimized out&gt;) at /root/php-src/ext/phar/phar_object.c:1255
+#10 0x00000000022b4886 in zend_do_fcall_common_helper_SPEC (execute_data=0x7ffff7f419e0) at /root/php-src/Zend/zend_vm_execute.h:558
+#11 0x0000000001e6bd72 in execute_ex (execute_data=0x7ffff7f419e0) at /root/php-src/Zend/zend_vm_execute.h:363
+#12 0x0000000001c9602f in zend_execute_scripts (type=type@entry=8, retval=retval@entry=0x0, file_count=file_count@entry=3) at /root/php-src/Zend/zend.c:1341
+#13 0x0000000001956e42 in php_execute_script (primary_file=primary_file@entry=0x7fffffffd290) at /root/php-src/main/main.c:2597
+#14 0x00000000022c0715 in do_cli (argc=3, argv=0x60060000ec80) at /root/php-src/sapi/cli/php_cli.c:994
+#15 0x000000000046d184 in main (argc=3, argv=0x60060000ec80) at /root/php-src/sapi/cli/php_cli.c:1378
+(gdb) frame 1
+#1  0x0000000001338f6c in phar_make_dirstream (dir=0x7ffff7f75ac8 &quot;/&quot;, manifest=0x7ffff7f756f0) at /root/php-src/ext/phar/dirstream.c:216
+216                             if (keylen &gt;= sizeof(&quot;.phar&quot;)-1 &amp;&amp; !memcmp(str_key, &quot;.phar&quot;, sizeof(&quot;.phar&quot;)-1)) {
+(gdb) print str_key
+$1 = 0x0
+(gdb) print keylen
+$2 = 28369926                                                                      
+
+When compiled without optimization and with hardening options
+(gdb) bt
+#0  __memcmp_sse4_1 () at ../sysdeps/x86_64/multiarch/memcmp-sse4.S:878
+#1  0x00000000007a79b2 in phar_make_dirstream (dir=0x7ffff7fe1e48 &quot;/&quot;, 
+    manifest=0x7ffff7fe1a70) at /root/php-src/ext/phar/dirstream.c:216
+#2  0x00000000007a8c60 in phar_wrapper_open_dir (
+    wrapper=0x14943e0 &lt;php_stream_phar_wrapper&gt;, 
+    path=0x7ffff7fe1d48 &quot;phar:///root/fuzz-test.zip/&quot;, mode=0x122529d &quot;r&quot;, 
+    options=0, opened_path=0x0, context=0x0)
+    at /root/php-src/ext/phar/dirstream.c:367
+#3  0x0000000000b5ad9b in _php_stream_opendir (
+    path=0x7ffff7fe1d48 &quot;phar:///root/fuzz-test.zip/&quot;, options=8, context=0x0)
+    at /root/php-src/main/streams/streams.c:1986
+#4  0x0000000000893374 in spl_filesystem_dir_open (intern=0x7ffff7fe32c0, 
+    path=0x7ffff7fe1d48 &quot;phar:///root/fuzz-test.zip/&quot;)
+    at /root/php-src/ext/spl/spl_directory.c:250
+#5  0x0000000000897b17 in spl_filesystem_object_construct (ht=2, 
+    return_value=0x7ffff7fe1da8, return_value_ptr=0x7fffffffaa40, 
+    this_ptr=0x7ffff7fe0bd8, return_value_used=1, ctor_flags=1)
+    at /root/php-src/ext/spl/spl_directory.c:731
+#6  0x000000000089ff8c in zim_spl_RecursiveDirectoryIterator___construct (ht=2, 
+    return_value=0x7ffff7fe1da8, return_value_ptr=0x7fffffffaa40, 
+    this_ptr=0x7ffff7fe0bd8, return_value_used=1)
+    at /root/php-src/ext/spl/spl_directory.c:1596
+#7  0x0000000000ca83c5 in zend_call_function (fci=0x7fffffffaab0, 
+    fci_cache=0x7fffffffaa80) at /root/php-src/Zend/zend_execute_API.c:847
+#8  0x0000000000d69dd1 in zend_call_method (object_pp=0x7fffffffabe8, 
+    obj_ce=0x15af210, fn_proxy=0x154cad0, function_name=0x119a752 &quot;__construct&quot;, 
+    function_name_len=11, retval_ptr_ptr=0x0, param_count=2, arg1=0x7fffffffac10, 
+    arg2=0x7fffffffac30) at /root/php-src/Zend/zend_interfaces.c:97
+#9  0x00000000007dc5f5 in zim_Phar___construct (ht=1, return_value=0x7ffff7fe0b78, 
+    return_value_ptr=0x7ffff7fae178, this_ptr=0x7ffff7fe0bd8, return_value_used=0)
+    at /root/php-src/ext/phar/phar_object.c:1255
+#10 0x0000000000dee160 in zend_do_fcall_common_helper_SPEC (
+    execute_data=0x7ffff7fae1f0) at /root/php-src/Zend/zend_vm_execute.h:558
+#11 0x0000000000df09c9 in ZEND_DO_FCALL_BY_NAME_SPEC_HANDLER (
+    execute_data=0x7ffff7fae1f0) at /root/php-src/Zend/zend_vm_execute.h:693
+#12 0x0000000000de9a05 in execute_ex (execute_data=0x7ffff7fae1f0)
+    at /root/php-src/Zend/zend_vm_execute.h:363
+#13 0x0000000000deae41 in zend_execute (op_array=0x7ffff7fe13f8)
+    at /root/php-src/Zend/zend_vm_execute.h:388
+#14 0x0000000000cf8d99 in zend_execute_scripts (type=8, retval=0x0, file_count=3)
+    at /root/php-src/Zend/zend.c:1341
+#15 0x0000000000ae8697 in php_execute_script (primary_file=0x7fffffffd5b0)
+    at /root/php-src/main/main.c:2597
+#16 0x00000000010799cf in do_cli (argc=3, argv=0x14b67a0)
+    at /root/php-src/sapi/cli/php_cli.c:994
+#17 0x000000000107c553 in main (argc=3, argv=0x14b67a0)
+    at /root/php-src/sapi/cli/php_cli.c:1378
+(gdb) frame 1
+#1  0x00000000007a79b2 in phar_make_dirstream (dir=0x7ffff7fe1e48 &quot;/&quot;, 
+    manifest=0x7ffff7fe1a70) at /root/php-src/ext/phar/dirstream.c:226
+216                             if (keylen &gt;= sizeof(&quot;.phar&quot;)-1 &amp;&amp; !memcmp(str_key, &quot;.phar&quot;, sizeof(&quot;.phar&quot;)-1)) {
+(gdb) p str_key
+$1 = 0xcc164cd7fef0fc00 &lt;error: Cannot access memory at address 0xcc164cd7fef0fc00&gt;
+(gdb) p keylen
+$2 = 19
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=70433'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=70433'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1441453844">&nbsp;</a><strong>[2015-09-05 11:50 UTC] hugh &#x61;&#116; allthethings &#x64;&#111;&#x74; co &#x64;&#111;&#x74; nz</strong>
+<pre class='note'>Forgot to give some output of bad memory returned to userland:
+
+07:48 $ ./php-no-hard-no-opt ~/fuzzing/php/phar.php fuzz-test.zip
+object(PharData)#1 (4) {
+  [&quot;pathName&quot;:&quot;SplFileInfo&quot;:private]=&gt;
+  string(37) &quot;phar:///root/php-src/fuzz-test.zip/¿&quot;
+  [&quot;fileName&quot;:&quot;SplFileInfo&quot;:private]=&gt;
+  string(2) &quot;¿&quot;
+  [&quot;glob&quot;:&quot;DirectoryIterator&quot;:private]=&gt;
+  bool(false)
+  [&quot;subPathName&quot;:&quot;RecursiveDirectoryIterator&quot;:private]=&gt;
+  string(0) &quot;&quot;
+}
+NULL
+
+07:49 $ ./php-no-hard-no-opt ~/fuzzing/php/phar.php fuzz-test.zip
+object(PharData)#1 (4) {
+  [&quot;pathName&quot;:&quot;SplFileInfo&quot;:private]=&gt;
+  string(37) &quot;phar:///root/php-src/fuzz-test.zip/Pj&quot;
+  [&quot;fileName&quot;:&quot;SplFileInfo&quot;:private]=&gt;
+  string(2) &quot;Pj&quot;
+  [&quot;glob&quot;:&quot;DirectoryIterator&quot;:private]=&gt;
+  bool(false)
+  [&quot;subPathName&quot;:&quot;RecursiveDirectoryIterator&quot;:private]=&gt;
+  string(0) &quot;&quot;
+}
+NULL
+</pre>
+</div><div class='comment type_comment' ><a name="1441454129">&nbsp;</a><strong>[2015-09-05 11:55 UTC] hugh &#x61;&#116; allthethings &#x64;&#111;&#x74; co &#x64;&#111;&#x74; nz</strong>
+<pre class='note'>Looks like ext/phar/tar.c does the decrement on line 420 or 440 then stored on line 493, so that will have the same issue.
+</pre>
+</div><div class='comment type_comment' ><a name="1441770965">&nbsp;</a><strong>[2015-09-09 03:56 UTC] hugh &#x61;&#116; allthethings &#x64;&#111;&#x74; co &#x64;&#111;&#x74; nz</strong>
+<pre class='note'>Hey,
+
+Just checking that someone has seen this?
+
+Cheers,
+
+Hugh
+</pre>
+</div><div class='comment type_comment' ><a name="1442908509">&nbsp;</a><strong>[2015-09-22 07:55 UTC] hugh &#x61;&#116; allthethings &#x64;&#111;&#x74; co &#x64;&#111;&#x74; nz</strong>
+<pre class='note'>Hey,
+
+Just checking that someone has seen this?
+
+Cheers,
+
+Hugh
+</pre>
+</div><div class='comment type_comment' ><a name="1443482287">&nbsp;</a><strong>[2015-09-28 23:18 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The URL <a href="https://transfer.sh/VULId/fuzz-test.zip" rel="nofollow">https://transfer.sh/VULId/fuzz-test.zip</a> doesn't seem to work
+</pre>
+</div><div class='comment type_svn' ><a name="1443498387">&nbsp;</a><strong>[2015-09-29 03:46 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=e78ac461dbefb7c4a3e9fde78d50fbc56b7b0183" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=e78ac461dbefb7c4a3e9fde78d50fbc56b7b0183</a>
+Log: FIx <a href='bug.php?id=70433'>bug #70433</a> - Uninitialized pointer in phar_make_dirstream when zip entry filename is &amp;quot;/&amp;quot;
+</pre>
+</div><div class='comment type_log' ><a name="1443498387">&nbsp;</a><strong>[2015-09-29 03:46 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Open</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1443532235">&nbsp;</a><strong>[2015-09-29 13:10 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=e78ac461dbefb7c4a3e9fde78d50fbc56b7b0183" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=e78ac461dbefb7c4a3e9fde78d50fbc56b7b0183</a>
+Log: FIx <a href='bug.php?id=70433'>bug #70433</a> - Uninitialized pointer in phar_make_dirstream when zip entry filename is &amp;quot;/&amp;quot;
+</pre>
+</div><div class='comment type_log' ><a name="1444560835">&nbsp;</a><strong>[2015-10-11 10:53 UTC] <a href="//people.php.net/kaplan">kaplan@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: kaplan</span>
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID:      2015-7804</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

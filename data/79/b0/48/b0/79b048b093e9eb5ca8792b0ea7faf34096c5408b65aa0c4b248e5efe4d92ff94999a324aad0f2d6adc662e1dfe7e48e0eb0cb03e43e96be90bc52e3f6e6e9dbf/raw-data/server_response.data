@@ -1,0 +1,37 @@
+(*) Heap-buffer overflow in dlls/gdi32/enhmetafile.c:1950 (last commit: dd2624a24fba400bf59b9396e496d16c43d399d9):
+
+If the mr parameter points to a user controlled EMF record in an EMF file, then
+the structure pAlphaBlend at line 1931 is completely user controlled. This
+leads to a heap-buffer overflow due to a memcpy call in line 1950, after a
+successfull bits buffer has been allocated in the function CreateDIBSection()
+at line 1949. The allocation size of bits (coming from
+pbi->bmiHeader.biSizeImage) is also user controlled.
+
+
+ 749 BOOL WINAPI PlayEnhMetaFileRecord(
+ 750      HDC hdc,                   /* [in] device context in which to render EMF record */
+ 751      LPHANDLETABLE handletable, /* [in] array of handles to be used in rendering record */
+ 752      const ENHMETARECORD *mr,   /* [in] EMF record to render */
+ 753      UINT handles               /* [in] size of handle array */
+ 754      )
+ 755 {
+ 756   int type;
+ ...
+ 764   type = mr->iType;
+ ...
+ 767   switch(type)
+ 768     {
+ ...
+1929     case EMR_ALPHABLEND:
+1930     {
+1931     const EMRALPHABLEND *pAlphaBlend = (const EMRALPHABLEND *)mr;                              // <== mr is user controlled
+....
+1938         if(pAlphaBlend->offBmiSrc == 0) {
+1939             FIXME("EMR_ALPHABLEND: offBmiSrc == 0\n");
+1940         } else {
+....
+1943             const BITMAPINFO *pbi = (const BITMAPINFO *)((const BYTE *)mr + pAlphaBlend->offBmiSrc);
+1944             void *bits;
+....
+1949             hBmp = CreateDIBSection(hdc, pbi, pAlphaBlend->iUsageSrc, &bits, NULL, 0);             // <= allocate bits buffer in CreateDIBSection
+1950             memcpy(bits, (const BYTE *)mr + pAlphaBlend->offBitsSrc, pAlphaBlend->cbBitsSrc);      // <= heap buffer overflow: mr, offBitsSrc and cbBitsSrc fields are user controlled.

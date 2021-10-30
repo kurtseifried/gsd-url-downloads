@@ -1,0 +1,2413 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en" dir="ltr">
+  <head>
+<base href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+index" />
+
+    <meta charset="UTF-8" />
+    <title>Bug #979373 “heap overflows in nvidia driver” : Bugs : nvidia-graphics-drivers package : Ubuntu</title>
+    <link rel="shortcut icon" href="/@@/launchpad.png" />
+    <link rel="canonical" href="https://bugs.launchpad.net/bugs/979373" />
+    
+      <link rel="alternate" type="application/atom+xml" href="http://feeds.launchpad.net/bugs/979373/bug.atom" title="Bug 979373 Feed" />
+    
+
+    
+  
+  <link type="text/css" rel="stylesheet" media="screen, print" href="/+icing/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/combo.css" />
+
+
+    
+
+    
+      <meta name="description" content="Hello,
+
+While I haven't had time to prove these out, they seem to be problems.
+
+1) Race, available only to uid 0 (but uid 0 should not mean ring-0 access): /proc/driver/nvidia/registry is vulnerable to a write race that can result in a limited heap overflow.
+nv_procfs_write_registry does not perform locking on nvfp-&gt;off, so two writers (of the same fd) could race to confuse the bytes_left and proc_buffer locations, leading to heap overflow:
+
+writer 1: bytes_left = (NV_PROC_WRITE_BUFFER_SIZE -..." />
+      <meta property="og:description" content="Hello,
+
+While I haven't had time to prove these out, they seem to be problems.
+
+1) Race, available only to uid 0 (but uid 0 should not mean ring-0 access): /proc/driver/nvidia/registry is vulnerable to a write race that can result in a limited heap overflow.
+nv_procfs_write_registry does not perform locking on nvfp-&gt;off, so two writers (of the same fd) could race to confuse the bytes_left and proc_buffer locations, leading to heap overflow:
+
+writer 1: bytes_left = (NV_PROC_WRITE_BUFFER_SIZE -..." />
+    
+
+    
+    
+      <meta property="og:title" content="Bug #979373 “heap overflows in nvidia driver” : Bugs : nvidia-graphics-drivers package : Ubuntu" />
+      <meta property="og:type" content="website" />
+      <meta property="og:image" content="/@@/launchpad.png" />
+      <meta property="og:url" content="https://bugs.launchpad.net/bugs/979373" />
+      <meta property="og:site_name" content="Launchpad" />
+    
+
+    
+
+    
+  
+
+  
+  
+  <script type="text/javascript">
+    var LP = {
+        cache: {},
+        links: {}
+    };
+  </script>
+
+  
+
+  <script type="text/javascript">var cookie_scope = '; Path=/; Secure; Domain=.launchpad.net';</script>
+
+   <script type="text/javascript" src="/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?yui/yui/yui-min.js&amp;lp/meta.js&amp;yui/loader/loader-min.js"></script>
+   <script type="text/javascript">
+        var raw = null;
+        if (LP.devmode) {
+           raw = 'raw';
+        }
+        YUI.GlobalConfig = {
+            combine: true,
+            comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+            root: 'yui/',
+            filter: raw,
+            debug: false,
+            fetchCSS: false,
+            maxURLLength: 2000,
+            groups: {
+                lp: {
+                    combine: true,
+                    base: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?lp/',
+                    comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+                    root: 'lp/',
+                    // comes from including lp/meta.js
+                    modules: LP_MODULES,
+                    fetchCSS: false
+                }
+            }
+        }</script>
+
+  <script type="text/javascript">
+      // we need this to create a single YUI instance all events and code
+      // talks across. All instances of YUI().use should be based off of
+      // LPJS instead.
+      var LPJS = new YUI();
+  </script>
+
+
+
+    <script id="base-layout-load-scripts" type="text/javascript">
+        //<![CDATA[
+        LPJS.use('base', 'node', 'console', 'event',
+            'oop', 'lp', 'lp.app.foldables','lp.app.sorttable',
+            'lp.app.inlinehelp', 'lp.app.links',
+            'lp.bugs.bugtask_index', 'lp.bugs.subscribers',
+            'lp.app.ellipsis', 'lp.code.branchmergeproposal.diff',
+            'lp.views.global',
+             function(Y) {
+
+            Y.on("domready", function () {
+                var global_view = new Y.lp.views.Global();
+                global_view.render();
+
+                Y.lp.app.sorttable.SortTable.init();
+                Y.lp.app.inlinehelp.init_help();
+                Y.lp.activate_collapsibles();
+                Y.lp.app.foldables.activate();
+                Y.lp.app.links.check_valid_lp_links();
+            });
+
+            Y.on('lp:context:web_link:changed', function(e) {
+                  window.location = e.new_value;
+            });
+        });
+        //]]>
+    </script>
+    <script id="base-helper-functions" type="text/javascript">
+         //<![CDATA[
+        // This code is pulled from lp.js that needs to be available on every
+        // request. Pulling here to get it outside the scope of the YUI block.
+        function setFocusByName(name) {
+            // Focus the first element matching the given name which can be focused.
+            var nodes = document.getElementsByName(name);
+            var i, node;
+            for (i = 0; i < nodes.length; i++) {
+                node = nodes[i];
+                if (node.focus) {
+                    try {
+                        // Trying to focus a hidden element throws an error in IE8.
+                        if (node.offsetHeight !== 0) {
+                            node.focus();
+                        }
+                    } catch (e) {
+                        LPJS.use('console', function(Y) {
+                            Y.log('In setFocusByName(<' +
+                                node.tagName + ' type=' + node.type + '>): ' + e);
+                        });
+                    }
+                    break;
+                }
+            }
+        }
+
+        function selectWidget(widget_name, event) {
+          if (event && (event.keyCode === 9 || event.keyCode === 13)) {
+              // Avoid firing if user is tabbing through or simply pressing
+              // enter to submit the form.
+              return;
+          }
+          document.getElementById(widget_name).checked = true;
+        }
+        //]]>
+    </script>
+
+    
+      
+      <script type="text/javascript" id="available-official-tags-js">var available_official_tags = ["a11y", "appstream", "bionic", "bisect-done", "bitesize", "cherry-pick", "community-security", "desktop-file", "disco", "dist-upgrade", "focal", "ftbfs", "groovy", "hirsute", "hw-specific", "impish", "jammy", "kernel-bug", "manpage", "metabug", "multiarch", "needs-bisect", "needs-design", "needs-packaging", "needs-reassignment", "package-conflict", "packaging", "patch", "patch-accepted-debian", "patch-accepted-upstream", "patch-forwarded-debian", "patch-forwarded-upstream", "patch-needswork", "patch-rejected", "patch-rejected-debian", "patch-rejected-upstream", "performing-bisect", "py2-removal", "qt4-removal", "regression-proposed", "regression-release", "regression-update", "string-fix", "suspend-resume", "systemd-boot", "testcase", "touch", "unmetdeps", "upgrade-software-version", "verification-done-bionic", "verification-done-focal", "verification-done-groovy", "verification-done-hirsute", "verification-done-impish", "verification-done-xenial", "verification-failed-bionic", "verification-failed-groovy", "verification-failed-impish", "verification-failed-xenial", "verification-needed-bionic", "verification-needed-focal", "verification-needed-groovy", "verification-needed-hirsute", "verification-needed-impish", "verification-needed-trusty", "verification-needed-xenial", "wayland", "xenial"];</script>
+      <script type="text/javascript">
+        LPJS.use('base', 'node', 'oop', 'event', 'lp.bugs.bugtask_index',
+                  'lp.bugs.subscribers', 'lp.code.branchmergeproposal.diff',
+                  'lp.app.comment', 'lp.services.messages.edit', function(Y) {
+            Y.on('domready', function() {
+                Y.lp.code.branchmergeproposal.diff.connect_diff_links();
+                Y.lp.bugs.bugtask_index.setup_bugtask_index();
+                Y.lp.bugs.bugtask_index.setup_bugtask_table();
+                LP.cache.comment_context = LP.cache.bug;
+                var cl = new Y.lp.app.comment.CommentList();
+                cl.render();
+                var sl = new Y.lp.bugs.subscribers.createBugSubscribersLoader({
+                    container_box: '#other-bug-subscribers',
+                    subscribers_details_view:
+                        '/+bug-portlet-subscribers-details',
+                    subscribe_someone_else_link: '.menu-link-addsubscriber'
+                }, window);
+
+                Y.lp.services.messages.edit.setup();
+            });
+         });
+      </script>
+      <style type="text/css">
+        /* Align the 'add comment' link to the right of the comment box. */
+        #add-comment-form textarea { width: 100%; }
+        #add-comment-form { max-width: 60em; padding-bottom: 4em; }
+        #add-comment-form .actions {float: right;}
+        .buglink-summary dd { font-size: 10px; }
+        a#privacy-link:link:hover, a#privacy-link:visited:hover {text-decoration:none;}
+      </style>
+      <style type="text/css">
+        .yui3-overlay .value label  {
+          /* It normally makes sense for form labels to be bold, but since
+          this form consists only of radio buttons, there's nothing but labels
+          so we just get wall-to-wall bold. */
+          font-weight: normal !important;
+        }
+      </style>
+    
+    
+  </head>
+
+  <body id="document" itemscope="" itemtype="http://schema.org/WebPage" class="tab-bugs
+      main_side
+      public
+      yui3-skin-sam">
+          
+          
+    <div class="yui-d0">
+      <div id="locationbar" class="login-logout">
+        
+
+<div id="logincontrol"><a href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+login">Log in / Register</a></div>
+
+
+
+      </div><!--id="locationbar"-->
+
+      <div id="watermark" class="watermark-apps-portlet">
+        <div>
+          <a href="https://launchpad.net/ubuntu"><img alt="" width="64" height="64" src="https://launchpadlibrarian.net/49558155/64_logo.png" /></a>
+        </div>
+        <div class="wide">
+          <h2 id="watermark-heading"><a href="https://launchpad.net/ubuntu">Ubuntu</a><br /><a href="https://launchpad.net/ubuntu/+source/nvidia-graphics-drivers">nvidia-graphics-drivers package</a></h2>
+        </div>
+        
+  <!-- Application Menu -->
+  <ul class="facetmenu">
+    
+      
+      <li class="overview"><a href="https://launchpad.net/ubuntu/+source/nvidia-graphics-drivers">Overview</a></li>
+      
+    
+    
+      
+      <li class="branches"><a href="https://code.launchpad.net/ubuntu/+source/nvidia-graphics-drivers">Code</a></li>
+      
+    
+    
+      <li class="bugs active"><a href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers">Bugs</a></li>
+      
+      
+    
+    
+      
+      
+      <li class="specifications disabled-tab"><span>Blueprints</span></li>
+    
+    
+      
+      <li class="translations"><a href="https://translations.launchpad.net/ubuntu/+source/nvidia-graphics-drivers">Translations</a></li>
+      
+    
+    
+      
+      <li class="answers"><a href="https://answers.launchpad.net/ubuntu/+source/nvidia-graphics-drivers">Answers</a></li>
+      
+    
+  </ul>
+
+      </div>
+
+      <div class="yui-t4">
+        <div id="maincontent" class="yui-main">
+          <div class="yui-b" dir="ltr">
+            <div class="context-publication">
+              
+      <h1 id="edit-title">
+<span class="yui3-editable_text-text ellipsis" style="max-width: 95%;">
+    heap overflows in nvidia driver
+</span>
+  
+</h1>
+
+
+
+    
+              
+
+              <div id="registration" class="registering">
+                
+      Bug #979373 reported by
+      <a href="https://launchpad.net/~kees" class="sprite person">Kees Cook</a>
+      <time title="2012-04-11 21:30:06 UTC" datetime="2012-04-11T21:30:06.873250+00:00">on 2012-04-11</time>
+    
+              </div>
+            </div>
+
+            
+            <div id="request-notifications">
+              
+            </div>
+
+            
+              <div>
+
+      
+
+      <div id="bug-is-duplicate">
+          
+      </div>
+      
+
+      <div style="float: right;">
+        <span><a href="/+help-bugs/bug-heat.html" target="help" class="sprite flame">278</a></span>
+      </div>
+
+      
+
+
+  
+  
+    <div class="actions">
+      <span id="affectsmetoo" style="display: inline">This bug affects 2 people</span>
+    </div>
+  
+
+
+
+    <table id="affected-software" class="listing">
+      <thead>
+        <tr>
+          <th colspan="2">Affects</th>
+          <th>Status</th>
+          <th>Importance</th>
+          <th>Assigned to</th>
+          <th>Milestone</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        
+          
+  <tr class="highlight" id="tasksummary1169269">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary1169269">
+        <span class="yui3-activator-data-box">
+            <a class="sprite package-source" href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers" title="Latest release: 304.88-0ubuntu0.0.2, uploaded to restricted on 2013-04-08 17:55:14.669856+00:00 by Marc Deslauriers (mdeslaur), maintained by Ubuntu Developers (ubuntu-devel-discuss-lists)">nvidia-graphics-drivers (Ubuntu)</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1169269">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1169269">
+     <td colspan="7"><form action="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/+source/nvidia-graphics-drivers">nvidia-graphics-drivers (Ubuntu)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~kees" class="sprite person">Kees Cook</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2012-04-11 21:30:06 UTC" datetime="2012-04-11T21:30:06.873250+00:00">2012-04-11</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2012-05-07 21:30:31 UTC" datetime="2012-05-07T21:30:31.424296+00:00">2012-05-07</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2013-09-09 12:26:15 UTC" datetime="2013-09-09T12:26:15.644210+00:00">2013-09-09</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2013-09-09 12:26:15 UTC" datetime="2013-09-09T12:26:15.644210+00:00">2013-09-09</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_nvidia-graphics-drivers.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="ubuntu_nvidia-graphics-drivers.target.option.package" name="ubuntu_nvidia-graphics-drivers.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="ubuntu_nvidia-graphics-drivers.target.distribution" name="ubuntu_nvidia-graphics-drivers.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="ubuntu_nvidia-graphics-drivers.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="ubuntu_nvidia-graphics-drivers.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="nvidia-graphics-drivers" id="ubuntu_nvidia-graphics-drivers.target.package"
+                         name="ubuntu_nvidia-graphics-drivers.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;ubuntu_nvidia-graphics-drivers.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_nvidia-graphics-drivers.target.package');
+              var select_menu = Y.DOM.byId('ubuntu_nvidia-graphics-drivers.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_nvidia-graphics-drivers-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_assign_me_button": false, "extra_no_results_message": null, "picker_type": "default", "selected_value_metadata": null, "remove_team_text": "Remove team", "selected_value": "nvidia-graphics-drivers", "step_title": "Search by name", "header": "Select a package", "vocabulary_filters": [], "show_create_team": false, "input_element": "ubuntu_nvidia-graphics-drivers.target.package", "assign_me_text": "Pick me", "remove_person_text": "Remove person", "show_remove_button": false, "vocabulary_name": "DistributionPackage", "show_widget_id": "show-widget-ubuntu_nvidia-graphics-drivers-target-package"};
+        var show_widget_id = 'show-widget-ubuntu_nvidia-graphics-drivers-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="ubuntu_nvidia-graphics-drivers.target.option.product" name="ubuntu_nvidia-graphics-drivers.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="ubuntu_nvidia-graphics-drivers.target.product"
+                         name="ubuntu_nvidia-graphics-drivers.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;ubuntu_nvidia-graphics-drivers.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_nvidia-graphics-drivers.target.product');
+              var select_menu = Y.DOM.byId('ubuntu_nvidia-graphics-drivers.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_nvidia-graphics-drivers-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_assign_me_button": false, "extra_no_results_message": null, "picker_type": "default", "selected_value_metadata": null, "remove_team_text": "Remove team", "selected_value": null, "step_title": "Search", "header": "Select a project", "vocabulary_filters": [], "show_create_team": false, "input_element": "ubuntu_nvidia-graphics-drivers.target.product", "assign_me_text": "Pick me", "remove_person_text": "Remove person", "show_remove_button": false, "vocabulary_name": "Product", "show_widget_id": "show-widget-ubuntu_nvidia-graphics-drivers-target-product"};
+        var show_widget_id = 'show-widget-ubuntu_nvidia-graphics-drivers-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_nvidia-graphics-drivers.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_nvidia-graphics-drivers.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_nvidia-graphics-drivers.status" name="ubuntu_nvidia-graphics-drivers.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_nvidia-graphics-drivers.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_nvidia-graphics-drivers.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="ubuntu_nvidia-graphics-drivers.assignee.assign_to_nobody" name="ubuntu_nvidia-graphics-drivers.assignee.option" value="ubuntu_nvidia-graphics-drivers.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_nvidia-graphics-drivers.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_nvidia-graphics-drivers.assignee.assign_to_me" name="ubuntu_nvidia-graphics-drivers.assignee.option" value="ubuntu_nvidia-graphics-drivers.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_nvidia-graphics-drivers.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_nvidia-graphics-drivers.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_nvidia-graphics-drivers.comment_on_change" name="ubuntu_nvidia-graphics-drivers.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+      </tbody>
+
+    </table>
+
+
+
+<div class="actions">
+  
+    <span id="also-affects-product" class="">
+    <a class="menu-link-addupstream sprite add" href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+choose-affected-product">Also affects project</a>
+        <a href="/+help-bugs/also-affects-project-help.html" target="help" class="sprite maybe action-icon">(?)</a>
+    </span>
+    <span id="also-affects-package" class="">
+    <a class="menu-link-adddistro sprite add" href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+distrotask">Also affects distribution/package</a>
+    </span>
+    <a class="menu-link-nominate sprite milestone" href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+nominate">Nominate for series</a>
+    
+  
+
+</div>
+
+
+
+
+      <div id="maincontentsub">
+        <div class="top-portlet">
+
+      <div itemprop="mainContentOfPage" class="report">
+        
+
+        <div>
+  <div class="lazr-multiline-edit" id="edit-description">
+  <div class="clearfix">
+    
+
+    <h3>Bug Description</h3>
+  </div>
+
+  <div class="yui3-editable_text-text"><p>Hello,</p>
+<p>While I haven&#x27;t had time to prove these out, they seem to be problems.</p>
+<p>1) Race, available only to uid 0 (but uid 0 should not mean ring-0 access): /proc/driver/<wbr />nvidia/<wbr />registry is vulnerable to a write race that can result in a limited heap overflow.<br />
+nv_procfs_<wbr />write_registry does not perform locking on nvfp-&gt;off, so two writers (of the same fd) could race to confuse the bytes_left and proc_buffer locations, leading to heap overflow:</p>
+<p>writer 1: bytes_left = (NV_PROC_<wbr />WRITE_BUFFER_<wbr />SIZE - nvfp-&gt;off - 1);<br />
+writer 1: ...<br />
+writer 1: copy_from_<wbr />user(proc_<wbr />buffer, buffer, count))<br />
+writer 2: bytes_left = (NV_PROC_<wbr />WRITE_BUFFER_<wbr />SIZE - nvfp-&gt;off - 1);<br />
+writer 1: nvfp-&gt;off += count;<br />
+writer 2: ...<br />
+writer 2: proc_buffer = &amp;((char *)nvfp-<wbr />&gt;data)[<wbr />nvfp-&gt;off]<wbr />;<br />
+writer 2: copy_from_<wbr />user(proc_<wbr />buffer, buffer, count)</p>
+<p>writer 2&#x27;s count was checked against nvfp-&gt;off before it was moved, and writer 2&#x27;s proc_buffer is now offset by nvfp-&gt;off, allowing a write past the end of the heap buffer, by at most NV_PROC_<wbr />WRITE_BUFFER_<wbr />SIZE (64k) - 2 bytes.</p>
+<p>2) Heap overflow in control device ioctl: minimum size of the ioctl buffer is not checked for NV_ESC_CARD_INFO, which will write 50 bytes per device to the allocated kernel buffer (which was sized to the input buffer), before attempting to then write it back to the user buffer. With a minimum 1 byte buffer, this is a 49 byte overflow, since the rm_api-&gt;magic check doesn&#x27;t actually abort the ioctl.</p>
+<p>I expect there are additional heap overflows in the rm_ioctl function since it is not passed arg_size as a parameter, but I didn&#x27;t have time to examine the binary module. Seems like enforcing a minimum allocation size when calling rm_ioctl would be the simplest fix.</p>
+<p>3) Kernel heap contents leak race in ioctl handler: the ioctl will copy the contents of kernel heap back to the user buffer even on failure. By racing the ioctl with a change in VMA protections, it should be possible to extract uncleared kernel heap memory:</p>
+<p>thread 1: set VMA for arg_ptr to PROT_NONE<br />
+thread 1: NV_KMALLOC(<wbr />arg_copy, arg_size);<br />
+thread 1: copy_from_<wbr />user(arg_<wbr />copy, arg_ptr, arg_size) &lt;- fails and jumps to &quot;done&quot;<br />
+thread 2: set VMA for arg_ptr to PROT_WRITE<br />
+thread 1: if (arg_copy != NULL) ... copy_to_<wbr />user(arg_<wbr />ptr, arg_copy, arg_size)</p></div>
+  </div>
+
+  
+</div>
+
+
+        <div style="margin:-10px 0 20px 5px" class="clearfix">
+          
+        </div>
+
+        <div id="bug-tags">
+          <span id="tags-heading">
+            Tags:
+          </span>
+          <span id="tag-list">
+            <a class="official-tag" href="/ubuntu/+source/nvidia-graphics-drivers/+bugs?field.tag=patch">patch</a>
+          </span>
+          
+          <a href="+edit" title="Edit tags" id="tags-trigger" class="sprite edit action-icon">Edit</a>
+          <a href="/+help-bugs/tag-help.html" target="help" class="sprite maybe action-icon">Tag help</a>
+        </div>
+
+        <script type="text/javascript">
+          LPJS.use('event', 'node', 'lp.bugs.tags_entry', function(Y) {
+              Y.on('domready',
+                   function(e) {
+                       Y.lp.bugs.tags_entry.setup_tag_entry(
+                           available_official_tags);
+                   },
+                   window);
+          });
+        </script>
+
+        <div class="clearfix"></div>
+      </div>
+
+      <div id="branches-and-cves">
+        <div id="bug-branches-container" style="float: left">
+          
+        </div><!-- bug-branch-container -->
+
+        <div class="cves">
+          <h2>CVE References</h2>
+          <ul>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2012-0951" title="A Memory Corruption Vulnerability exi...">2012-0951</a>
+            </li>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2012-0952" title="A heap buffer overflow was discovered...">2012-0952</a>
+            </li>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2012-0953" title="A race condition was discovered in th...">2012-0953</a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="clearfix"></div>
+      </div> <!-- branches and CVEs -->
+
+      </div>
+
+      <div>
+      
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/1" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~bryce" class="sprite person">Bryce Harrington (bryce)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-12T00:34:57.803710+00:00" title="2012-04-12 00:34:57 UTC">on 2012-04-12</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/1"> #1</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>@Alberto, please escalate with NVIDIA as soon as possible.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">@Alberto, please escalate with NVIDIA as soon as possible.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/2" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~jdstrand" class="sprite person">Jamie Strandboge (jdstrand)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-20T14:31:01.921848+00:00" title="2012-04-20 14:31:01 UTC">on 2012-04-20</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/2"> #2</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Is there any word on this?</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Is there any word on this?</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/3" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ddadap" class="sprite person">Daniel Dadap (ddadap)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-27T23:08:28.169705+00:00" title="2012-04-27 23:08:28 UTC">on 2012-04-27</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/3"> #3</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Thanks for reporting these issues. We are investigating each of the three reported issues separately.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Thanks for reporting these issues. We are investigating each of the three reported issues separately.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~bryce" class="sprite person">Bryce Harrington (bryce)</a>
+    
+    <time title="2012-05-07 21:30:26 UTC" datetime="2012-05-07T21:30:26.077371+00:00">on 2012-05-07</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in nvidia-graphics-drivers (Ubuntu): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>importance</b>:
+      </td>
+      <td>
+        Undecided &#8594; High
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Triaged
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/4" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ddadap" class="sprite person">Daniel Dadap (ddadap)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-05-17T15:30:16.558469+00:00" title="2012-05-17 15:30:16 UTC">on 2012-05-17</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/4"> #4</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Hi everybody,</p>
+<p>All three of these potential races/overflows should be resolved in the new 295.53 driver. Please have the original reporter verify that the resolution is satisfactory for all three issues.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Hi everybody,
+
+All three of these potential races/overflows should be resolved in the new 295.53 driver. Please have the original reporter verify that the resolution is satisfactory for all three issues.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/5" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kees" class="sprite person">Kees Cook (kees)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-05-17T17:15:15.066192+00:00" title="2012-05-17 17:15:15 UTC">on 2012-05-17</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/5"> #5</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Thanks for working on this! Is there a patch I can review?</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Thanks for working on this! Is there a patch I can review?</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/6" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ddadap" class="sprite person">Daniel Dadap (ddadap)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-05-22T18:38:28.584615+00:00" title="2012-05-22 18:38:28 UTC">on 2012-05-22</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/6"> #6</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>You should be able to just diff the kernel module interface layer sources between 295.49 and 295.53. I&#x27;ll pull the actual individual changes to make review easier, and to filter away any unrelated changes.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">You should be able to just diff the kernel module interface layer sources between 295.49 and 295.53. I'll pull the actual individual changes to make review easier, and to filter away any unrelated changes.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/7" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ddadap" class="sprite person">Daniel Dadap (ddadap)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-06-06T18:54:42.360695+00:00" title="2012-06-06 18:54:42 UTC">on 2012-06-06</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/7"> #7</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Sorry, it turned out that one of the changes required changes to non open-source portions of the driver code. They are pretty basic changes, but I&#x27;m not authorized to release the complete patch. I will post sanitized patches, which only include the open-source changes, shortly.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Sorry, it turned out that one of the changes required changes to non open-source portions of the driver code. They are pretty basic changes, but I'm not authorized to release the complete patch. I will post sanitized patches, which only include the open-source changes, shortly.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/8" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ddadap" class="sprite person">Daniel Dadap (ddadap)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-06-06T19:36:31.422574+00:00" title="2012-06-06 19:36:31 UTC">on 2012-06-06</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/8"> #8</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+attachment/3178006/+files/proclock.diff">Patch for problem (1)</a>
+        <a class="sprite edit action-icon" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+attachment/3178006">Edit</a>
+        (2.7 KiB,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>The patch &quot;proclock.diff&quot; addresses problem (1) identified here.</p>
+<p>The patch &quot;ioctl.diff&quot; addresses problems (2) and (3). Unfortunately, this patch is heavily redacted, due to the bulk of the changes having been made in non-open source parts of the driver. Note that changes to the Solaris interface layer are also redacted, due to the licensing for the Solaris driver: the Solaris interface layer changes are functionally equivalent to the Linux and FreeBSD changes.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">The patch "proclock.diff" addresses problem (1) identified here.
+
+The patch "ioctl.diff" addresses problems (2) and (3). Unfortunately, this patch is heavily redacted, due to the bulk of the changes having been made in non-open source parts of the driver. Note that changes to the Solaris interface layer are also redacted, due to the licensing for the Solaris driver: the Solaris interface layer changes are functionally equivalent to the Linux and FreeBSD changes.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/9" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ddadap" class="sprite person">Daniel Dadap (ddadap)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-06-06T19:37:36.765424+00:00" title="2012-06-06 19:37:36 UTC">on 2012-06-06</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/9"> #9</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+attachment/3178007/+files/ioctl.diff">Patch for problems (2) and (3)</a>
+        <a class="sprite edit action-icon" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+attachment/3178007">Edit</a>
+        (8.3 KiB,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Second patch, since launchpad only allows one attachment per comment</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Second patch, since launchpad only allows one attachment per comment</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/10" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kees" class="sprite person">Kees Cook (kees)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-06-06T19:56:05+00:00" title="2012-06-06 19:56:05 UTC">on 2012-06-06</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/10">
+                <strong>Re: [Bug 979373] Re: heap overflows in nvidia driver</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/10"> #10</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Thanks very much for getting these fixed and providing the patches for<br />
+review. :)</p>
+<p><span class="foldable">--<br />
+Kees Cook
+</span></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Thanks very much for getting these fixed and providing the patches for
+review. :)
+
+-- 
+Kees Cook
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/11" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-06-07T00:17:28.445302+00:00" title="2012-06-07 00:17:28 UTC">on 2012-06-07</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/11"> #11</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>(1) is CVE-2012-0951:<br />
+/proc/driver/<wbr />nvidia/<wbr />registry is vulnerable to a write race that can result in a limited heap overflow.</p>
+<p>(2) is CVE-2012-0952:<br />
+Heap overflow in control device ioctl</p>
+<p>(3) is CVE-2012-0953:<br />
+Kernel heap contents leak race in ioctl handler</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">(1) is CVE-2012-0951:
+/proc/driver/nvidia/registry is vulnerable to a write race that can result in a limited heap overflow.
+
+(2) is CVE-2012-0952:
+Heap overflow in control device ioctl
+
+(3) is CVE-2012-0953:
+Kernel heap contents leak race in ioctl handler</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/12" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-06-20T15:17:55.833867+00:00" title="2012-06-20 15:17:55 UTC">on 2012-06-20</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/12"> #12</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>@Daniel:</p>
+<p>So, have these been fixed in 295.59 now? Should we update all Ubuntu releases to that version?</p>
+<p>What about the legacy GPU trees, have they been updated also?</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">@Daniel:
+
+So, have these been fixed in 295.59 now? Should we update all Ubuntu releases to that version?
+
+What about the legacy GPU trees, have they been updated also?</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~kees" class="sprite person">Kees Cook (kees)</a>
+    
+    <time title="2012-07-13 17:07:48 UTC" datetime="2012-07-13T17:07:48.099722+00:00">on 2012-07-13</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>visibility</b>:
+      </td>
+      <td>
+        private &#8594; public
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/13" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~crichton" class="sprite person">Ubuntu Foundations Team Bug Bot (crichton)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-07-13T20:21:50.695308+00:00" title="2012-07-13 20:21:50 UTC">on 2012-07-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/13">
+                <strong></strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/13"> #13</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>The attachment &quot;Patch for problem (1)&quot; of this bug report has been identified as being a patch.  The ubuntu-reviewers team has been subscribed to the bug report so that they can review the patch.  In the event that this is in fact not a patch you can resolve this situation by removing the tag &#x27;patch&#x27; from the bug report and editing the attachment so that it is not flagged as a patch.  Additionally, if you are member of the ubuntu-reviewers team please also unsubscribe the team from this bug report.</p>
+<p>[This is an automated message performed by a Launchpad user owned by Brian Murray.  Please contact him regarding any issues with the action taken in this bug report.]</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">The attachment "Patch for problem (1)" of this bug report has been identified as being a patch.  The ubuntu-reviewers team has been subscribed to the bug report so that they can review the patch.  In the event that this is in fact not a patch you can resolve this situation by removing the tag 'patch' from the bug report and editing the attachment so that it is not flagged as a patch.  Additionally, if you are member of the ubuntu-reviewers team please also unsubscribe the team from this bug report.
+
+[This is an automated message performed by a Launchpad user owned by Brian Murray.  Please contact him regarding any issues with the action taken in this bug report.]</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>tags</b>:
+      </td>
+      <td>
+        added: patch
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/14" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-09-09T12:26:10.064140+00:00" title="2013-09-09 12:26:10 UTC">on 2013-09-09</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/comments/14"> #14</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>All supported releases have been bumped to the 304.x drivers, so this is fix now. Closing.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">All supported releases have been bumped to the 304.x drivers, so this is fix now. Closing.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in nvidia-graphics-drivers (Ubuntu): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Triaged &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        <div style="float: right;">
+          <a class="menu-link-activitylog" href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+activity">See full activity log</a>
+        </div>
+        <div class="clearfix"></div>
+
+        
+          
+
+          
+            <div align="center" id="add-comment-login-first">
+              To post a comment you must <a href="+login?comments=all">log in</a>.
+            </div>
+          
+        
+        
+      
+
+      </div><!-- class="top-portlet" -->
+      </div><!--- id="maincontentsub"-->
+      <div>
+        <div id="duplicate-form-container"></div>
+        <div id="privacy-form-container"></div>
+      </div>
+    </div>
+            
+            
+          </div><!-- yui-b -->
+        </div><!-- yui-main -->
+
+        
+          <div id="side-portlets" class="yui-b side">
+            
+      <div id="involvement" class="portlet">
+        <ul class="involvement">
+          <li class="single">
+            <a class="sprite bugs" href="/ubuntu/+source/nvidia-graphics-drivers/+filebug">
+              Report a bug
+            </a>
+          </li>
+        </ul>
+      </div>
+      <div id="privacy" class="first portlet public">
+  <div id="privacy-text">
+     <span id="information-type-summary" class="sprite public">This report contains
+         <strong id="information-type">Public Security</strong>
+         information
+     </span>&nbsp;<a class="sprite edit action-icon" id="privacy-link" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+secrecy">Edit</a>
+
+     <div id="information-type-description" style="padding-top: 5px">Everyone can see this security related information.
+</div>
+  </div>
+</div>
+
+      <div id="portlet-actions" class="portlet vertical">
+  <ul id="duplicate-actions">
+    <li class="sprite bug-dupe">
+    <span id="mark-duplicate-text">
+    <a class="menu-link-mark-dupe" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+duplicate">Mark as duplicate</a>
+    </span>
+    </li>
+    
+    <li><a class="menu-link-createquestion sprite add" href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+create-question">Convert to a question</a></li>
+    
+    <li><a class="menu-link-addbranch sprite add" href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+addbranch">Link a related branch</a></li>
+    <li><a class="menu-link-linktocve sprite add" href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+linkcve">Link to <abbr title="Common Vulnerabilities and Exposures Index">CVE</abbr></a></li>
+    <li><a class="menu-link-unlinkcve sprite modify remove" href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+unlinkcve">Remove CVE link</a></li>
+  </ul>
+</div>
+
+      
+
+      <div class="portlet vertical" id="portlet-subscription">
+  <div class="section">
+    <div id="current_user_subscription" class="False">
+      
+        <span>You are</span>
+        
+        <a class="menu-link-subscription sprite modify edit" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+subscribe">
+           
+           
+           
+           not directly subscribed to this bug's notifications.
+        </a>
+      
+      
+    </div>
+    <div id="sub-unsub-spinner">Subscribing...</div>
+    <ul>
+      
+      <li><a class="menu-link-editsubscriptions sprite modify edit" href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+subscriptions" title="View and change your subscriptions to this bug">Edit bug mail</a></li>
+    </ul>
+  </div>
+  <script type="text/javascript">
+    LPJS.use('io-base', 'node',
+            'lp.bugs.bugtask_index.portlets.subscription', function(Y) {
+        Y.on('domready', function() {
+            Y.lp.bugs.bugtask_index.portlets.subscription.initialize();
+        });
+    });
+  </script>
+</div>
+
+      <div class="portlet vertical" id="portlet-subscribers">
+  <h2>Other bug subscribers</h2>
+  <div>
+    <div><a class="menu-link-addsubscriber sprite add" href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+addsubscriber" title="Launchpad will email that person whenever this bugs changes">Subscribe someone else</a></div>
+  </div>
+  <div id="other-bug-subscribers"></div>
+</div>
+
+      
+
+      
+
+      
+  <div class="portlet" id="portlet-patches">
+    <h2>Patches</h2>
+    <ul>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+attachment/3178006/+files/proclock.diff">Patch for problem (1)</a>
+        <small>
+          (<a href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+attachment/3178006">edit</a>)
+        </small>
+      </li>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+attachment/3178007/+files/ioctl.diff">Patch for problems (2) and (3)</a>
+        <small>
+          (<a href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+attachment/3178007">edit</a>)
+        </small>
+      </li>
+    </ul>
+    <ul>
+      <li>
+        <a class="sprite add" href="/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+addcomment?field.patch=on">Add patch</a>
+      </li>
+    </ul>
+  </div>
+  
+
+
+      
+
+    
+          </div><!-- yui-b side -->
+        
+      </div><!-- yui-t4 -->
+
+      
+  <div id="footer" class="footer">
+    <div class="lp-arcana">
+        <div class="lp-branding">
+          <a href="https://launchpad.net/"><img src="/@@/launchpad-logo-and-name-hierarchy.png" alt="Launchpad" /></a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://launchpad.net/+tour">Take the tour</a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://help.launchpad.net/">Read the guide</a>
+          &nbsp;
+          <form id="globalsearch" method="get" accept-charset="UTF-8" action="https://launchpad.net/+search">
+            <input type="search" id="search-text" name="field.text" />
+            <input type="image" src="/@@/search" style="vertical-align:5%" alt="Search Launchpad" />
+          </form>
+        </div>
+        
+  
+
+    </div>
+
+    <div class="colophon">
+      &copy; 2004-2021
+      <a href="http://canonical.com/">Canonical&nbsp;Ltd.</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://launchpad.net/legal">Terms of use</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://www.ubuntu.com/legal/dataprivacy">Data privacy</a>
+      &nbsp;&bull;&nbsp;
+      <a href="/feedback">Contact Launchpad Support</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="http://blog.launchpad.net/">Blog</a>
+      
+	&nbsp;&bull;&nbsp;
+	<a href="https://canonical.com/careers">Careers</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="https://twitter.com/launchpadstatus">System status</a>
+      <span id="lp-version">
+      &nbsp;&bull;&nbsp;
+        r0d8de2b
+        
+        
+        (<a href="https://dev.launchpad.net/">Get the code!</a>)
+      </span>
+    </div>
+  </div>
+
+    </div><!-- yui-d0-->
+
+    
+  
+  
+  <script id="json-cache-script">LP.cache = {"subscribers_portlet_url_data": {"web_link": "https://bugs.launchpad.net/bugs/979373", "self_link": "https://bugs.launchpad.net/api/devel/bugs/979373"}, "information_type_data": {"PUBLIC": {"description": "Everyone can see this information.\n", "name": "Public", "is_private": false, "order": 0, "description_css_class": "choice-description", "value": "PUBLIC"}, "PUBLICSECURITY": {"description": "Everyone can see this security related information.\n", "name": "Public Security", "is_private": false, "order": 1, "description_css_class": "choice-description", "value": "PUBLICSECURITY"}, "USERDATA": {"description": "Only shared with users permitted to see private user information.\n", "name": "Private", "is_private": true, "order": 3, "description_css_class": "choice-description", "value": "USERDATA"}, "PRIVATESECURITY": {"description": "Only the security group can see this information.\n ", "name": "Private Security", "is_private": true, "order": 2, "description_css_class": "choice-description", "value": "PRIVATESECURITY"}}, "total_comments_and_activity": 36, "bug_is_private": false, "related_features": {}, "first visible_recent_comment": -26, "bug": {"self_link": "https://bugs.launchpad.net/api/devel/bugs/979373", "web_link": "https://bugs.launchpad.net/bugs/979373", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug", "id": 979373, "private": false, "information_type": "Public Security", "name": null, "title": "heap overflows in nvidia driver", "description": "Hello,\n\nWhile I haven't had time to prove these out, they seem to be problems.\n\n1) Race, available only to uid 0 (but uid 0 should not mean ring-0 access): /proc/driver/nvidia/registry is vulnerable to a write race that can result in a limited heap overflow.\nnv_procfs_write_registry does not perform locking on nvfp-\u003eoff, so two writers (of the same fd) could race to confuse the bytes_left and proc_buffer locations, leading to heap overflow:\n\nwriter 1: bytes_left = (NV_PROC_WRITE_BUFFER_SIZE - nvfp-\u003eoff - 1);\nwriter 1: ...\nwriter 1: copy_from_user(proc_buffer, buffer, count))\nwriter 2: bytes_left = (NV_PROC_WRITE_BUFFER_SIZE - nvfp-\u003eoff - 1);\nwriter 1: nvfp-\u003eoff += count;\nwriter 2: ...\nwriter 2: proc_buffer = \u0026((char *)nvfp-\u003edata)[nvfp-\u003eoff];\nwriter 2: copy_from_user(proc_buffer, buffer, count)\n\nwriter 2's count was checked against nvfp-\u003eoff before it was moved, and writer 2's proc_buffer is now offset by nvfp-\u003eoff, allowing a write past the end of the heap buffer, by at most NV_PROC_WRITE_BUFFER_SIZE (64k) - 2 bytes.\n\n\n2) Heap overflow in control device ioctl: minimum size of the ioctl buffer is not checked for NV_ESC_CARD_INFO, which will write 50 bytes per device to the allocated kernel buffer (which was sized to the input buffer), before attempting to then write it back to the user buffer. With a minimum 1 byte buffer, this is a 49 byte overflow, since the rm_api-\u003emagic check doesn't actually abort the ioctl.\n\nI expect there are additional heap overflows in the rm_ioctl function since it is not passed arg_size as a parameter, but I didn't have time to examine the binary module. Seems like enforcing a minimum allocation size when calling rm_ioctl would be the simplest fix.\n\n\n3) Kernel heap contents leak race in ioctl handler: the ioctl will copy the contents of kernel heap back to the user buffer even on failure. By racing the ioctl with a change in VMA protections, it should be possible to extract uncleared kernel heap memory:\n\nthread 1: set VMA for arg_ptr to PROT_NONE\nthread 1: NV_KMALLOC(arg_copy, arg_size);\nthread 1: copy_from_user(arg_copy, arg_ptr, arg_size) \u003c- fails and jumps to \"done\"\nthread 2: set VMA for arg_ptr to PROT_WRITE\nthread 1: if (arg_copy != NULL) ... copy_to_user(arg_ptr, arg_copy, arg_size)", "owner_link": "https://bugs.launchpad.net/api/devel/~kees", "bug_tasks_collection_link": "https://bugs.launchpad.net/api/devel/bugs/979373/bug_tasks", "duplicate_of_link": null, "date_created": "2012-04-11T21:30:06.873250+00:00", "activity_collection_link": "https://bugs.launchpad.net/api/devel/bugs/979373/activity", "subscriptions_collection_link": "https://bugs.launchpad.net/api/devel/bugs/979373/subscriptions", "date_last_updated": "2013-09-09T12:26:16.732215+00:00", "who_made_private_link": null, "date_made_private": null, "heat": 278, "bug_watches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/979373/bug_watches", "cves_collection_link": "https://bugs.launchpad.net/api/devel/bugs/979373/cves", "duplicates_collection_link": "https://bugs.launchpad.net/api/devel/bugs/979373/duplicates", "attachments_collection_link": "https://bugs.launchpad.net/api/devel/bugs/979373/attachments", "security_related": true, "latest_patch_uploaded": "2012-06-06T19:37:36.765424+00:00", "tags": ["patch"], "date_last_message": "2013-09-09T12:26:10.064140+00:00", "number_of_duplicates": 0, "message_count": 15, "users_affected_count": 2, "users_unaffected_count": 0, "users_affected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/979373/users_affected", "users_unaffected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/979373/users_unaffected", "users_affected_count_with_dupes": 2, "other_users_affected_count_with_dupes": 2, "users_affected_with_dupes_collection_link": "https://bugs.launchpad.net/api/devel/bugs/979373/users_affected_with_dupes", "messages_collection_link": "https://bugs.launchpad.net/api/devel/bugs/979373/messages", "linked_branches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/979373/linked_branches", "linked_merge_proposals_collection_link": "https://bugs.launchpad.net/api/devel/bugs/979373/linked_merge_proposals", "http_etag": "\"11c990cddb3a5363215533e15417798bfadf95d0-adbcae81d7a550d1cb8dcf601d34a3f1724e33fb\""}, "bugtask_data": {"1169269": {"assignee_vocabulary": "AllUserTeamsParticipation", "user_can_unassign": false, "bugtask_path": "/ubuntu/+source/nvidia-graphics-drivers/+bug/979373", "assignee_value": null, "user_can_edit_status": true, "bug_title": "heap overflows in nvidia driver", "user_can_edit_milestone": false, "prefix": "ubuntu_nvidia-graphics-drivers", "form_row_id": "task1169269", "target_is_product": false, "user_can_edit_importance": false, "assignee_is_team": null, "delete_link": "https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/+delete", "user_can_edit_assignee": false, "milestone_widget_items": "[]", "status_widget_items": "[]", "status_value": "Fix Released", "importance_value": "High", "hide_assignee_team_selection": true, "user_can_delete": false, "row_id": "tasksummary1169269", "assignee_vocabulary_filters": [], "targetname": "nvidia-graphics-drivers (Ubuntu)", "importance_widget_items": "[]", "milestone_value": null, "id": 1169269}}, "context": {"self_link": "https://bugs.launchpad.net/api/devel/ubuntu/+source/nvidia-graphics-drivers/+bug/979373", "web_link": "https://bugs.launchpad.net/ubuntu/+source/nvidia-graphics-drivers/+bug/979373", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug_task", "bug_link": "https://bugs.launchpad.net/api/devel/bugs/979373", "milestone_link": null, "status": "Fix Released", "importance": "High", "assignee_link": null, "bug_target_display_name": "nvidia-graphics-drivers (Ubuntu)", "bug_target_name": "nvidia-graphics-drivers (Ubuntu)", "bug_watch_link": null, "date_assigned": null, "date_created": "2012-04-11T21:30:06.873250+00:00", "date_confirmed": "2012-05-07T21:30:31.424296+00:00", "date_incomplete": null, "date_in_progress": "2013-09-09T12:26:15.644210+00:00", "date_closed": "2013-09-09T12:26:15.644210+00:00", "date_left_new": "2012-05-07T21:30:31.424296+00:00", "date_triaged": "2012-05-07T21:30:31.424296+00:00", "date_fix_committed": "2013-09-09T12:26:15.644210+00:00", "date_fix_released": "2013-09-09T12:26:15.644210+00:00", "date_left_closed": null, "owner_link": "https://bugs.launchpad.net/api/devel/~kees", "target_link": "https://bugs.launchpad.net/api/devel/ubuntu/+source/nvidia-graphics-drivers", "title": "Bug #979373 in nvidia-graphics-drivers (Ubuntu): \"heap overflows in nvidia driver\"", "related_tasks_collection_link": "https://bugs.launchpad.net/api/devel/ubuntu/+source/nvidia-graphics-drivers/+bug/979373/related_tasks", "is_complete": true, "http_etag": "\"efe636dd68ad911b9ce580e2f53acc3def75a894-f069fd9a03b21bbdeabf293294edcd98c4031c94\""}, "initial_comment_batch_offset": 41};</script>
+
+    
+  
+
+    
+  </body>
+
+
+  <!--
+    Facet name: bugs
+    Page type: main_side
+    Has global search: True
+    Has application tabs: True
+    Has side portlets: True
+
+    At least 62 queries/external actions issued in 1.01 seconds
+
+    Features: {'app.maintenance_message': None, 'visible_render_time': None, 'bugs.affected_count_includes_dupes.disabled': None, 'app.mainsite_only.canonical_url': None, 'disclosure.dsp_picker.enabled': 'on', 'bugs.nominations.bug_supervisors_can_target': 'on', 'baselayout.careers_link.disabled': None, 'hard_timeout': '9000', 'js.yui_version': None, 'profiling.enabled': None}
+
+    r0d8de2b
+
+    -->
+
+</html>
+

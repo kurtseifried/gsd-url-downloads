@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en-us">
+
+<head>
+
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <meta name="author" content="">
+
+    <title>Privilege Escalation vulnerability in CrashPlan -- Vetle&#39;s HackShack</title>
+
+    
+
+    
+    <link href="https://bordplate.no/blog/en/css/bootstrap.min.css" rel="stylesheet">
+
+    
+    <link href="https://bordplate.no/blog/en/css/clean-blog.min.css" rel="stylesheet">
+
+    
+    <link href="//maxcdn.bootstrapcdn.com/font-awesome/4.1.0/css/font-awesome.min.css" rel="stylesheet" type="text/css">
+    <link href='//fonts.googleapis.com/css?family=Lora:400,700,400italic,700italic' rel='stylesheet' type='text/css'>
+    <link href='//fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800' rel='stylesheet' type='text/css'>
+
+    
+    
+    
+
+</head>
+
+<body>
+
+    
+    <nav class="navbar navbar-default navbar-custom navbar-fixed-top">
+        <div class="container-fluid">
+            
+            <div class="navbar-header page-scroll">
+                <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#bs-example-navbar-collapse-1">
+                    <span class="sr-only">Toggle navigation</span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                    <span class="icon-bar"></span>
+                </button>
+                <a class="navbar-brand" href="https://bordplate.no/blog/en">Vetle&#39;s HackShack</a>
+            </div>
+
+                       
+            <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
+                <ul class="nav navbar-nav navbar-right">
+                    
+                    <li>
+                        <a href="https://bordplate.no/blog/en/">Home</a>
+                    </li>
+                    
+                    <li>
+                        <a href="https://bordplate.no/blog/en/post/">Archive</a>
+                    </li>
+                    
+                  </ul>
+            </div>
+           
+
+        </div>
+        
+    </nav>
+
+
+    
+    
+    <header class="intro-header" style="background-image: url('https://bordplate.no/blog/en//images/elevator-security-background.jpg')">
+      
+      <div class="container">
+        <div class="row">
+           <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+             <div class="post-heading">
+               <h1>Privilege Escalation vulnerability in CrashPlan</h1>
+               <h2 class="subheading">CVE-2019-11552</h2>
+               <span class="meta">
+                 
+Posted by <a href="#">Vetle Økland</a> on Fri, Jun 21, 2019
+<br />
+In <a href="https://bordplate.no/blog/en/categories/bug-hunting">Bug Hunting</a>
+
+<br />
+Tags <a href="https://bordplate.no/blog/en/tags/pentesting">pentesting</a>, <a href="https://bordplate.no/blog/en/tags/hacking">hacking</a>, <a href="https://bordplate.no/blog/en/tags/windows">windows</a>, <a href="https://bordplate.no/blog/en/tags/crashplan">crashplan</a>, <a href="https://bordplate.no/blog/en/tags/exploit">exploit</a>, <a href="https://bordplate.no/blog/en/tags/cve">cve</a>, <a href="https://bordplate.no/blog/en/tags/privesc">privesc</a>
+
+               </span>
+             </div>
+           </div>
+        </div>
+      </div>
+    </header>
+    
+    
+    <article>
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+                  
+
+<p>Recently, I enountered a vulnerability in the <a href="https://www.crashplan.com/en-us/">CrashPlan</a> clients for Windows, Mac (and possibly Linux, but I didn&rsquo;t bother to test it there) that allows for privilege escalation.</p>
+
+<p>The vulnerability is in the handling of <a href="https://en.wikipedia.org/wiki/Proxy_auto-config">Proxy Auto-Config (PAC)</a> files. PAC-files are used for automatic proxy-configuration and is widely deployed in various software and operating systems. In short, PAC-files are JavaScript-files with a function whose return-value dictates the URL to the relevant proxy server. In CrashPlan, the JavaScript runtime, Rhino, allow for bridging JavaScript into Java, or &ldquo;<a href="https://developer.mozilla.org/en-US/docs/Mozilla/Projects/Rhino/Scripting_Java">Scripting Java</a>&rdquo; as Mozilla calls it. Ultimately, this means that if we introduce a line of code into this file with <code>new java.lang.ProcessBuilder[&quot;(java.lang.String[])&quot;]([&quot;cmd.exe&quot;], [&quot;/c \&quot;SomeCommand\&quot;&quot;]).start();</code> we can execute arbitrary commands in the context of CrashPlan&rsquo;s service, which is running as <code>SYSTEM</code>.</p>
+
+<h2 id="exploitation:1feaf08d81959d478476040a4d9254fd">Exploitation</h2>
+
+<p>This vulnerability can be exploited from any user on the system, regardless of weather that user has CrashPlan configured or not. I will explain step-by-step how to exploit it on a limited user without CrashPlan configured. The flow of this exploit resets the CrashPlan configuration to factory defaults.</p>
+
+<p>This is a PoC for Windows, exploitation on macOS and Linux will differ in implementation, but the techniques are the same.</p>
+
+<h3 id="creating-the-pac-file:1feaf08d81959d478476040a4d9254fd">Creating the PAC-file</h3>
+
+<p>First of all, we need to create a PAC-file that will somehow elevate our privileges. I chose to execute the command <code>net localgroup Administrators limited /add</code> which will add user <code>limited</code> to the <code>Administrators</code> group. Contents of PAC-file will thus be:</p>
+
+<pre><code class="language-javascript">function FindProxyForURL(url, host) {
+    new java.lang.ProcessBuilder[&quot;(java.lang.String[])&quot;]([&quot;cmd.exe&quot;], [&quot;/c \&quot;net localgroup Administrators limited /add\&quot;&quot;]).start();
+
+    return &quot;DIRECT&quot;;
+}
+</code></pre>
+
+<p>In PAC-files the <code>FindProxyForURL</code>-function will automatically be called when the process is trying to automatically configure proxy. As CrashPlan is using Mozilla&rsquo;s Rhino JavaScript runtime/interpreter, we can tie (or bridge) native Java code. Since Rhino is automatically exposing most Java classes to us, we can just call <code>ProcessBuilder</code>. In this case we&rsquo;re adding our user <code>limited</code> to the <code>Administrators</code>-group.</p>
+
+<h3 id="getting-crashplan-to-load-the-file:1feaf08d81959d478476040a4d9254fd">Getting CrashPlan to load the file</h3>
+
+<p>Users logged in to the CrashPlan desktop UI can configure a custom URL to load PAC-files from, but unauthenticated users can not. Thus, if you have CrashPlan installed and you&rsquo;re authenticated to the desktop UI, you can set the PAC-URL to any path with your exploit code, local or remote, skipping any other potential necessary steps.</p>
+
+<p>By default, CrashPlan attempts to load the PAC-file from <code>C:\ProgramData\CrashPlan\conf\service.pac</code>. This path is writable for any user on the system, thus if the file does not exist already we can create that file. Then, next time CrashPlan attempts to load this file it will execute our code. Normally, CrashPlan does not attempt to load this file very often, it seems to be at certain checkpoints or when the service is initially loaded.</p>
+
+<h3 id="forcing-crashplan-to-load-the-file:1feaf08d81959d478476040a4d9254fd">Forcing CrashPlan to load the file</h3>
+
+<p>Forcing a restart of the system would make CrashPlan reload the file (limited users can&rsquo;t reload the service, so a system restart would force the reload of the service), but not all systems allow for limited users to restart the machine. We&rsquo;re not all out of luck though, because CrashPlan runs a Windows service as <code>SYSTEM</code> and a desktop UI client running as the current logged in user. For inter-process communication, the <code>SYSTEM</code> service runs a somwhat RESTful HTTPS server on localhost at port 4244. Through this RESTful API we are able to execute some commands.</p>
+
+<p>The CrashPlan service API also does not allow unauthenticated users to restart the service, however at <code>https://127.0.0.1:4244/v1/ResetService</code> it does allow unauthorized users to reset the service to factory defaults. Right before resetting the settings, CrashPlan loads our PAC-file before it deletes it.</p>
+
+<p>Also note that even if a file already exists at  <code>C:\ProgramData\CrashPlan\conf\service.pac</code>, we can force CrashPlan to delete it and then we can create our file there again.</p>
+
+<h2 id="timeline:1feaf08d81959d478476040a4d9254fd">Timeline</h2>
+
+<p>April 1, 2019: Reported to CrashPlan.</p>
+
+<p>April 4, 2019: CrashPlan has successfully reproduced the vulnerability and has started working on a remediation plan.</p>
+
+<p>April 11, 2019: CrashPlan confirms they have a fix for the vulnerability and that it will be a part of next update (version 6.9.4)</p>
+
+<p>April 16, 2019: Patched version 6.9.4 is released.</p>
+
+<p>April 24, 2019: CrashPlan says they will backport the fix to the 6.8.x and 6.7.x clients, but this will take some extra time.</p>
+
+<p>April 26, 2019: CrashPlan reports CVE-2019-11552 is reserved for this vulnerability.</p>
+
+<p>May 24, 2019: CrashPlan confirms they have finished backporting the fixes to 6.8.x and 6.7.x.</p>
+
+<h2 id="windows-poc-code:1feaf08d81959d478476040a4d9254fd">Windows PoC Code</h2>
+
+<p>This PoC code will exploit CrashPlan &lt; 9.6.4. Adds current user to local administrators group.</p>
+
+<script src="https://gist.github.com/bordplate/6f167c06c5325a7a87c24a8242f6e651.js"></script>
+
+                  
+
+                </div>
+            </div>
+        </div>
+    </article>
+
+    <hr>
+    
+    <footer>
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-8 col-lg-offset-2 col-md-10 col-md-offset-1">
+                  <ul class="list-inline text-center">
+                    
+                      <li>
+                        <a href="mailto:vetle@bordplate.no">
+                          <span class="fa-stack fa-lg">
+                            <i class="fa fa-circle fa-stack-2x"></i>
+                            <i class="fa fa-envelope-o fa-stack-1x fa-inverse"></i>
+                          </span>
+                        </a>
+                      </li>
+                    
+                    
+                    <li>
+                      <a href="https://twitter.com/bordplate">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-twitter fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                    <li>
+                      <a href="https://github.com/bordplate">
+                        <span class="fa-stack fa-lg">
+                          <i class="fa fa-circle fa-stack-2x"></i>
+                          <i class="fa fa-github fa-stack-1x fa-inverse"></i>
+                        </span>
+                      </a>
+                    </li>
+                    
+                  </ul>
+                  <p class="copyright text-muted"></p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    
+    <script src="https://bordplate.no/blog/en/js/jquery.min.js"></script>
+
+    
+    <script src="https://bordplate.no/blog/en/js/bootstrap.min.js"></script>
+
+    
+    <script src="https://bordplate.no/blog/en/js/clean-blog.js"></script>
+
+    
+
+</body>
+
+</html>
+

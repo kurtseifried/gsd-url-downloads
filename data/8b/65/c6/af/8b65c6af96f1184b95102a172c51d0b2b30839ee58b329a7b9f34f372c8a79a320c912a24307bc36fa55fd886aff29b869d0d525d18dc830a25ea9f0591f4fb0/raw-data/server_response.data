@@ -1,0 +1,3866 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en" dir="ltr">
+  <head>
+<base href="https://bugs.launchpad.net/horizon/+bug/977944/+index" />
+
+    <meta charset="UTF-8" />
+    <title>Bug #977944 “refreshing in log viewer interprets html and javasc...” : Bugs : OpenStack Dashboard (Horizon)</title>
+    <link rel="shortcut icon" href="/@@/launchpad.png" />
+    <link rel="canonical" href="https://bugs.launchpad.net/bugs/977944" />
+    
+      <link rel="alternate" type="application/atom+xml" href="http://feeds.launchpad.net/bugs/977944/bug.atom" title="Bug 977944 Feed" />
+    
+
+    
+  
+  <link type="text/css" rel="stylesheet" media="screen, print" href="/+icing/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/combo.css" />
+
+
+    
+
+    
+      <meta name="description" content="In the log viewer the refreshing mechanism does not escape the fetched log data.
+This means that HTML with Javascript code gets interpreted as such and thus code can be injected in a dashboard session.
+
+A harmless test for this is this command run inside a VM:
+# echo &quot;&lt;b&gt;test&lt;/b&gt;&quot; &gt; /dev/ttyS0
+
+This opens up even more creativity:
+# echo &quot;&lt;script&gt;alert('test foobar')&lt;/script&gt;&quot;  &gt; /dev/ttyS0
+
+After loading the log you just have to wait (a few seconds) for the first refresh." />
+      <meta property="og:description" content="In the log viewer the refreshing mechanism does not escape the fetched log data.
+This means that HTML with Javascript code gets interpreted as such and thus code can be injected in a dashboard session.
+
+A harmless test for this is this command run inside a VM:
+# echo &quot;&lt;b&gt;test&lt;/b&gt;&quot; &gt; /dev/ttyS0
+
+This opens up even more creativity:
+# echo &quot;&lt;script&gt;alert('test foobar')&lt;/script&gt;&quot;  &gt; /dev/ttyS0
+
+After loading the log you just have to wait (a few seconds) for the first refresh." />
+    
+
+    
+    
+      <meta property="og:title" content="Bug #977944 “refreshing in log viewer interprets html and javasc...” : Bugs : OpenStack Dashboard (Horizon)" />
+      <meta property="og:type" content="website" />
+      <meta property="og:image" content="/@@/launchpad.png" />
+      <meta property="og:url" content="https://bugs.launchpad.net/bugs/977944" />
+      <meta property="og:site_name" content="Launchpad" />
+    
+
+    
+
+    
+  
+
+  
+  
+  <script type="text/javascript">
+    var LP = {
+        cache: {},
+        links: {}
+    };
+  </script>
+
+  
+
+  <script type="text/javascript">var cookie_scope = '; Path=/; Secure; Domain=.launchpad.net';</script>
+
+   <script type="text/javascript" src="/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?yui/yui/yui-min.js&amp;lp/meta.js&amp;yui/loader/loader-min.js"></script>
+   <script type="text/javascript">
+        var raw = null;
+        if (LP.devmode) {
+           raw = 'raw';
+        }
+        YUI.GlobalConfig = {
+            combine: true,
+            comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+            root: 'yui/',
+            filter: raw,
+            debug: false,
+            fetchCSS: false,
+            maxURLLength: 2000,
+            groups: {
+                lp: {
+                    combine: true,
+                    base: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?lp/',
+                    comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+                    root: 'lp/',
+                    // comes from including lp/meta.js
+                    modules: LP_MODULES,
+                    fetchCSS: false
+                }
+            }
+        }</script>
+
+  <script type="text/javascript">
+      // we need this to create a single YUI instance all events and code
+      // talks across. All instances of YUI().use should be based off of
+      // LPJS instead.
+      var LPJS = new YUI();
+  </script>
+
+
+
+    <script id="base-layout-load-scripts" type="text/javascript">
+        //<![CDATA[
+        LPJS.use('base', 'node', 'console', 'event',
+            'oop', 'lp', 'lp.app.foldables','lp.app.sorttable',
+            'lp.app.inlinehelp', 'lp.app.links',
+            'lp.bugs.bugtask_index', 'lp.bugs.subscribers',
+            'lp.app.ellipsis', 'lp.code.branchmergeproposal.diff',
+            'lp.views.global',
+             function(Y) {
+
+            Y.on("domready", function () {
+                var global_view = new Y.lp.views.Global();
+                global_view.render();
+
+                Y.lp.app.sorttable.SortTable.init();
+                Y.lp.app.inlinehelp.init_help();
+                Y.lp.activate_collapsibles();
+                Y.lp.app.foldables.activate();
+                Y.lp.app.links.check_valid_lp_links();
+            });
+
+            Y.on('lp:context:web_link:changed', function(e) {
+                  window.location = e.new_value;
+            });
+        });
+        //]]>
+    </script>
+    <script id="base-helper-functions" type="text/javascript">
+         //<![CDATA[
+        // This code is pulled from lp.js that needs to be available on every
+        // request. Pulling here to get it outside the scope of the YUI block.
+        function setFocusByName(name) {
+            // Focus the first element matching the given name which can be focused.
+            var nodes = document.getElementsByName(name);
+            var i, node;
+            for (i = 0; i < nodes.length; i++) {
+                node = nodes[i];
+                if (node.focus) {
+                    try {
+                        // Trying to focus a hidden element throws an error in IE8.
+                        if (node.offsetHeight !== 0) {
+                            node.focus();
+                        }
+                    } catch (e) {
+                        LPJS.use('console', function(Y) {
+                            Y.log('In setFocusByName(<' +
+                                node.tagName + ' type=' + node.type + '>): ' + e);
+                        });
+                    }
+                    break;
+                }
+            }
+        }
+
+        function selectWidget(widget_name, event) {
+          if (event && (event.keyCode === 9 || event.keyCode === 13)) {
+              // Avoid firing if user is tabbing through or simply pressing
+              // enter to submit the form.
+              return;
+          }
+          document.getElementById(widget_name).checked = true;
+        }
+        //]]>
+    </script>
+
+    
+      
+      <script type="text/javascript" id="available-official-tags-js">var available_official_tags = ["accessibility", "angularjs", "branding", "ceilometer", "ceph", "cinder", "dashboard-core", "django-bug", "django22", "documentation", "error-reporting", "glance", "heat", "horizon-core", "i18n", "ie", "integration-tests", "keystone", "large-scale", "low-hanging-fruit", "material", "neutron", "nova", "ocata-backport-potential", "ops", "pagination", "performance", "pike-backport-potential", "python3", "queens-backport-potential", "rbac", "rocky-backport-potential", "security", "stein-backport-potential", "swift", "topology-view", "train-backport-potential", "train-rc-potential", "uncaught-403", "unittest", "ussuri-backport-potential", "ux", "victoria-backport-potential"];</script>
+      <script type="text/javascript">
+        LPJS.use('base', 'node', 'oop', 'event', 'lp.bugs.bugtask_index',
+                  'lp.bugs.subscribers', 'lp.code.branchmergeproposal.diff',
+                  'lp.app.comment', 'lp.services.messages.edit', function(Y) {
+            Y.on('domready', function() {
+                Y.lp.code.branchmergeproposal.diff.connect_diff_links();
+                Y.lp.bugs.bugtask_index.setup_bugtask_index();
+                Y.lp.bugs.bugtask_index.setup_bugtask_table();
+                LP.cache.comment_context = LP.cache.bug;
+                var cl = new Y.lp.app.comment.CommentList();
+                cl.render();
+                var sl = new Y.lp.bugs.subscribers.createBugSubscribersLoader({
+                    container_box: '#other-bug-subscribers',
+                    subscribers_details_view:
+                        '/+bug-portlet-subscribers-details',
+                    subscribe_someone_else_link: '.menu-link-addsubscriber'
+                }, window);
+
+                Y.lp.services.messages.edit.setup();
+            });
+         });
+      </script>
+      <style type="text/css">
+        /* Align the 'add comment' link to the right of the comment box. */
+        #add-comment-form textarea { width: 100%; }
+        #add-comment-form { max-width: 60em; padding-bottom: 4em; }
+        #add-comment-form .actions {float: right;}
+        .buglink-summary dd { font-size: 10px; }
+        a#privacy-link:link:hover, a#privacy-link:visited:hover {text-decoration:none;}
+      </style>
+      <style type="text/css">
+        .yui3-overlay .value label  {
+          /* It normally makes sense for form labels to be bold, but since
+          this form consists only of radio buttons, there's nothing but labels
+          so we just get wall-to-wall bold. */
+          font-weight: normal !important;
+        }
+      </style>
+    
+    
+  </head>
+
+  <body id="document" itemscope="" itemtype="http://schema.org/WebPage" class="tab-bugs
+      main_side
+      public
+      yui3-skin-sam">
+          
+          
+    <div class="yui-d0">
+      <div id="locationbar" class="login-logout">
+        
+
+<div id="logincontrol"><a href="https://bugs.launchpad.net/horizon/+bug/977944/+login">Log in / Register</a></div>
+
+
+
+      </div><!--id="locationbar"-->
+
+      <div id="watermark" class="watermark-apps-portlet">
+        <div>
+          <a href="https://launchpad.net/horizon"><img alt="" width="64" height="64" src="https://launchpadlibrarian.net/62132867/os64.png" /></a>
+        </div>
+        <div class="wide">
+          <h2 id="watermark-heading"><a href="https://launchpad.net/horizon">OpenStack Dashboard (Horizon)</a></h2>
+        </div>
+        
+  <!-- Application Menu -->
+  <ul class="facetmenu">
+    
+      
+      <li class="overview"><a href="https://launchpad.net/horizon">Overview</a></li>
+      
+    
+    
+      
+      <li class="branches"><a href="https://code.launchpad.net/horizon">Code</a></li>
+      
+    
+    
+      <li class="bugs active"><a href="https://bugs.launchpad.net/horizon">Bugs</a></li>
+      
+      
+    
+    
+      
+      <li class="specifications"><a href="https://blueprints.launchpad.net/horizon">Blueprints</a></li>
+      
+    
+    
+      
+      <li class="translations"><a href="https://translations.launchpad.net/horizon">Translations</a></li>
+      
+    
+    
+      
+      <li class="answers"><a href="https://answers.launchpad.net/horizon">Answers</a></li>
+      
+    
+  </ul>
+
+      </div>
+
+      <div class="yui-t4">
+        <div id="maincontent" class="yui-main">
+          <div class="yui-b" dir="ltr">
+            <div class="context-publication">
+              
+      <h1 id="edit-title">
+<span class="yui3-editable_text-text ellipsis" style="max-width: 95%;">
+    refreshing in log viewer interprets html and javascript
+</span>
+  
+</h1>
+
+
+
+    
+              
+
+              <div id="registration" class="registering">
+                
+      Bug #977944 reported by
+      <a href="https://launchpad.net/~jdsn" class="sprite person">J. Daniel Schmidt</a>
+      <time title="2012-04-10 11:11:31 UTC" datetime="2012-04-10T11:11:31.051525+00:00">on 2012-04-10</time>
+    
+              </div>
+            </div>
+
+            
+            <div id="request-notifications">
+              
+            </div>
+
+            
+              <div>
+
+      
+
+      <div id="bug-is-duplicate">
+          
+      </div>
+      
+
+      <div style="float: right;">
+        <span><a href="/+help-bugs/bug-heat.html" target="help" class="sprite flame">270</a></span>
+      </div>
+
+      
+
+
+  
+  
+    <div class="actions">
+      <span id="affectsmetoo" style="display: inline">This bug affects 2 people</span>
+    </div>
+  
+
+
+
+    <table id="affected-software" class="listing">
+      <thead>
+        <tr>
+          <th colspan="2">Affects</th>
+          <th>Status</th>
+          <th>Importance</th>
+          <th>Assigned to</th>
+          <th>Milestone</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        
+          
+  <tr class="highlight" id="tasksummary1167560">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/horizon/+bug/977944/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary1167560">
+        <span class="yui3-activator-data-box">
+            <a class="sprite product" href="https://bugs.launchpad.net/horizon">OpenStack Dashboard (Horizon)</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/horizon/+bug/977944/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/horizon/+bug/977944/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceCRITICAL">Critical</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1167560">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/horizon/+milestone/2012.2">OpenStack Dashboard (Horizon) 2012.2 "folsom"</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1167560">
+     <td colspan="7"><form action="/horizon/+bug/977944/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/horizon">OpenStack Dashboard (Horizon)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~jdsn" class="sprite person">J. Daniel Schmidt</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2012-04-10 11:11:31 UTC" datetime="2012-04-10T11:11:31.051525+00:00">2012-04-10</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2012-04-10 21:15:26 UTC" datetime="2012-04-10T21:15:26.266542+00:00">2012-04-10</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2012-04-23 17:38:17 UTC" datetime="2012-04-23T17:38:17.510316+00:00">2012-04-23</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2012-05-23 08:56:30 UTC" datetime="2012-05-23T08:56:30.205169+00:00">2012-05-23</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="horizon.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="horizon.target.option.package" name="horizon.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="horizon.target.distribution" name="horizon.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="horizon.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="horizon.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="horizon.target.package"
+                         name="horizon.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;horizon.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('horizon.target.package');
+              var select_menu = Y.DOM.byId('horizon.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-horizon-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_remove_button": false, "header": "Select a package", "vocabulary_filters": [], "remove_team_text": "Remove team", "remove_person_text": "Remove person", "selected_value_metadata": null, "show_create_team": false, "picker_type": "default", "vocabulary_name": "DistributionPackage", "extra_no_results_message": null, "selected_value": null, "show_assign_me_button": false, "show_widget_id": "show-widget-horizon-target-package", "step_title": "Search by name", "assign_me_text": "Pick me", "input_element": "horizon.target.package"};
+        var show_widget_id = 'show-widget-horizon-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="horizon.target.option.product" name="horizon.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="horizon" id="horizon.target.product"
+                         name="horizon.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;horizon.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('horizon.target.product');
+              var select_menu = Y.DOM.byId('horizon.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-horizon-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_remove_button": false, "header": "Select a project", "vocabulary_filters": [], "remove_team_text": "Remove team", "remove_person_text": "Remove person", "selected_value_metadata": null, "show_create_team": false, "picker_type": "default", "vocabulary_name": "Product", "extra_no_results_message": null, "selected_value": "horizon", "show_assign_me_button": false, "show_widget_id": "show-widget-horizon-target-product", "step_title": "Search", "assign_me_text": "Pick me", "input_element": "horizon.target.product"};
+        var show_widget_id = 'show-widget-horizon-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="horizon.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="horizon.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="horizon.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="horizon.status" name="horizon.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="horizon.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceCRITICAL">Critical</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          OpenStack Dashboard (Horizon) 2012.2
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="horizon.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="horizon.assignee.assign_to_nobody" name="horizon.assignee.option" value="horizon.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="horizon.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="horizon.assignee.assign_to_me" name="horizon.assignee.option" value="horizon.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="horizon.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="horizon.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="horizon.comment_on_change" name="horizon.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1168111">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/horizon/essex/+bug/977944/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/horizon/essex">Essex</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/horizon/essex/+bug/977944/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/horizon/essex/+bug/977944/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceCRITICAL">Critical</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1168111">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/horizon/+milestone/2012.1.1">OpenStack Dashboard (Horizon) 2012.1.1</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1168111">
+     <td colspan="7"><form action="/horizon/essex/+bug/977944/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/horizon/essex">OpenStack Dashboard (Horizon) essex</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~devcamcar" class="sprite person">Devin Carlen</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2012-04-10 21:33:00 UTC" datetime="2012-04-10T21:33:00.536953+00:00">2012-04-10</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2012-04-10 21:33:06 UTC" datetime="2012-04-10T21:33:06.569636+00:00">2012-04-10</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2012-04-24 06:51:23 UTC" datetime="2012-04-24T06:51:23.446847+00:00">2012-04-24</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2012-06-22 00:08:57 UTC" datetime="2012-06-22T00:08:57.517565+00:00">2012-06-22</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="horizon_essex.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="horizon_essex.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="horizon_essex.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="horizon_essex.status" name="horizon_essex.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="horizon_essex.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceCRITICAL">Critical</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          OpenStack Dashboard (Horizon) 2012.1.1
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="horizon_essex.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="horizon_essex.assignee.assign_to_nobody" name="horizon_essex.assignee.option" value="horizon_essex.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="horizon_essex.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="horizon_essex.assignee.assign_to_me" name="horizon_essex.assignee.option" value="horizon_essex.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="horizon_essex.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="horizon_essex.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="horizon_essex.comment_on_change" name="horizon_essex.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+      </tbody>
+
+    </table>
+
+
+
+<div class="actions">
+  
+    <span id="also-affects-product" class="">
+    <a class="menu-link-addupstream sprite add" href="https://bugs.launchpad.net/horizon/+bug/977944/+choose-affected-product">Also affects project</a>
+        <a href="/+help-bugs/also-affects-project-help.html" target="help" class="sprite maybe action-icon">(?)</a>
+    </span>
+    <span id="also-affects-package" class="">
+    <a class="menu-link-adddistro sprite add" href="https://bugs.launchpad.net/horizon/+bug/977944/+distrotask">Also affects distribution/package</a>
+    </span>
+    <a class="menu-link-nominate sprite milestone" href="https://bugs.launchpad.net/horizon/+bug/977944/+nominate">Nominate for series</a>
+    
+  
+
+</div>
+
+
+
+
+      <div id="maincontentsub">
+        <div class="top-portlet">
+
+      <div itemprop="mainContentOfPage" class="report">
+        
+
+        <div>
+  <div class="lazr-multiline-edit" id="edit-description">
+  <div class="clearfix">
+    
+
+    <h3>Bug Description</h3>
+  </div>
+
+  <div class="yui3-editable_text-text"><p>In the log viewer the refreshing mechanism does not escape the fetched log data.<br />
+This means that HTML with Javascript code gets interpreted as such and thus code can be injected in a dashboard session.</p>
+<p>A harmless test for this is this command run inside a VM:<br />
+# echo &quot;&lt;b&gt;test&lt;/b&gt;&quot; &gt; /dev/ttyS0</p>
+<p>This opens up even more creativity:<br />
+# echo &quot;&lt;script&gt;<wbr />alert(&#x27;<wbr />test foobar&#x27;)&lt;/script&gt;&quot;  &gt; /dev/ttyS0</p>
+<p>After loading the log you just have to wait (a few seconds) for the first refresh.</p></div>
+  </div>
+
+  
+</div>
+
+
+        <div style="margin:-10px 0 20px 5px" class="clearfix">
+          
+        </div>
+
+        <div id="bug-tags">
+          <span id="tags-heading">
+            Tags:
+          </span>
+          <span id="tag-list">
+            <a class="unofficial-tag" href="/horizon/+bugs?field.tag=essex-backport-potential">essex-backport-potential</a>
+            <a class="unofficial-tag" href="/horizon/+bugs?field.tag=in-stable-essex">in-stable-essex</a>
+          </span>
+          
+          <a href="+edit" title="Edit tags" id="tags-trigger" class="sprite edit action-icon">Edit</a>
+          <a href="/+help-bugs/tag-help.html" target="help" class="sprite maybe action-icon">Tag help</a>
+        </div>
+
+        <script type="text/javascript">
+          LPJS.use('event', 'node', 'lp.bugs.tags_entry', function(Y) {
+              Y.on('domready',
+                   function(e) {
+                       Y.lp.bugs.tags_entry.setup_tag_entry(
+                           available_official_tags);
+                   },
+                   window);
+          });
+        </script>
+
+        <div class="clearfix"></div>
+      </div>
+
+      <div id="branches-and-cves">
+        <div id="bug-branches-container" style="float: left">
+          
+        </div><!-- bug-branch-container -->
+
+        <div class="cves">
+          <h2>CVE References</h2>
+          <ul>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2012-2094" title="Cross-site scripting (XSS) vulnerabil...">2012-2094</a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="clearfix"></div>
+      </div> <!-- branches and CVEs -->
+
+      </div>
+
+      <div>
+      
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~jdsn" class="sprite person">J. Daniel Schmidt (jdsn)</a>
+    
+    <time title="2012-04-10 11:14:43 UTC" datetime="2012-04-10T11:14:43.701592+00:00">on 2012-04-10</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>summary</b>:
+      </td>
+      <td>
+        - refreshing in log viewer interprets html<br />+ refreshing in log viewer interprets html and javascript
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/1" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mweckbecker" class="sprite person">Matthias Weckbecker (mweckbecker)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-10T11:33:23.715922+00:00" title="2012-04-10 11:33:23 UTC">on 2012-04-10</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/1"> #1</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Thanks for your report, jdsn.</p>
+<p>In other words this is a Cross-Site Scripting flaw which could be used to steal the session id of the logged in user viewing the logs.</p>
+<p>I would recommend getting a CVE for it if this affects released products / software.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Thanks for your report, jdsn.
+
+In other words this is a Cross-Site Scripting flaw which could be used to steal the session id of the logged in user viewing the logs.
+
+I would recommend getting a CVE for it if this affects released products / software.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/2" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~robert-clark" class="sprite person">Robert Clark (robert-clark)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-10T12:16:25.197728+00:00" title="2012-04-10 12:16:25 UTC">on 2012-04-10</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/2"> #2</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Lots of interesting attacks could leverage this.</p>
+<p>Definitely needs a CVE in my opinion.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Lots of interesting attacks could leverage this.
+
+Definitely needs a CVE in my opinion. </textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/3" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mweckbecker" class="sprite person">Matthias Weckbecker (mweckbecker)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-10T12:43:35.201759+00:00" title="2012-04-10 12:43:35 UTC">on 2012-04-10</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/3"> #3</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Robert, I agree with you. I will take care and get us one.</p>
+<p>Since I have found the issue I guess according to the unwritten rule I have to suggest a CRD / disclosing date. Would 2012/04/20? be acceptable?</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Robert, I agree with you. I will take care and get us one.
+
+Since I have found the issue I guess according to the unwritten rule I have to suggest a CRD / disclosing date. Would 2012/04/20? be acceptable? </textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/4" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~jdsn" class="sprite person">J. Daniel Schmidt (jdsn)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-10T12:59:50.104705+00:00" title="2012-04-10 12:59:50 UTC">on 2012-04-10</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/4"> #4</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/horizon/+bug/977944/+attachment/3040000/+files/fix-html-injection">fix-html-injection</a>
+        <a class="sprite edit action-icon" href="/horizon/+bug/977944/+attachment/3040000">Edit</a>
+        (776 bytes,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Proposed fix for this issue.<br />
+As this will be a CVE I attach it here rather than sending it directly to gerrit.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Proposed fix for this issue.
+As this will be a CVE I attach it here rather than sending it directly to gerrit.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/5" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~russellb" class="sprite person">Russell Bryant (russellb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-10T15:20:14.667066+00:00" title="2012-04-10 15:20:14 UTC">on 2012-04-10</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/5"> #5</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Subscribed Horizon PTL to the bug.</p>
+<p>For reference, here is the process we follow for vulnerability management in OpenStack: <a rel="nofollow" href="http://wiki.openstack.org/VulnerabilityManagement">http://<wbr />wiki.openstack.<wbr />org/Vulnerabili<wbr />tyManagement</a></p>
+<p>I&#x27;d like to hold off on deciding on a CRD until we&#x27;re ready to send out an advance notification of the issue.  Next steps:</p>
+<p>1) We will need a patch for both master and stable/essex.  I suspect that the same patch will apply fine to both in this case.</p>
+<p>2) The patch(es) need to be pre-approved on this bug by two members of horizon-core.  Devin, can you handle that?</p>
+<p>3) Once all of that is done, we can decide on a CRD and one of the VMT members can send out the advance notification.  (I don&#x27;t mind doing it.)</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Subscribed Horizon PTL to the bug.
+
+For reference, here is the process we follow for vulnerability management in OpenStack: http://wiki.openstack.org/VulnerabilityManagement
+
+I'd like to hold off on deciding on a CRD until we're ready to send out an advance notification of the issue.  Next steps:
+
+1) We will need a patch for both master and stable/essex.  I suspect that the same patch will apply fine to both in this case.
+
+2) The patch(es) need to be pre-approved on this bug by two members of horizon-core.  Devin, can you handle that?
+
+3) Once all of that is done, we can decide on a CRD and one of the VMT members can send out the advance notification.  (I don't mind doing it.)</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/6" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~devcamcar" class="sprite person">Devin Carlen (devcamcar)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-10T21:17:19.297346+00:00" title="2012-04-10 21:17:19 UTC">on 2012-04-10</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/6"> #6</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>+2 for the patch</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">+2 for the patch</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>tags</b>:
+      </td>
+      <td>
+        added: essex-backport-potential
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in horizon: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>milestone</b>:
+      </td>
+      <td>
+        none &#8594; folsom-1
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Triaged
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>importance</b>:
+      </td>
+      <td>
+        Undecided &#8594; Critical
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; Nebula (nebula)
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/7" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~gabriel-hurley" class="sprite person">Gabriel Hurley (gabriel-hurley)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-10T21:37:55.787291+00:00" title="2012-04-10 21:37:55 UTC">on 2012-04-10</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/7"> #7</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed, +2, and I&#x27;m reasonably satisified this type of problem isn&#x27;t exposed similarly elsewhere at the moment.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed, +2, and I'm reasonably satisified this type of problem isn't exposed similarly elsewhere at the moment.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/8" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~russellb" class="sprite person">Russell Bryant (russellb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-10T21:48:58.304461+00:00" title="2012-04-10 21:48:58 UTC">on 2012-04-10</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/8"> #8</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Thanks!  Can you help clarify the scope of the vulnerability?  What all is this log viewer used for?  Is it just for viewing output from VM consoles?  Anything more than that?</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Thanks!  Can you help clarify the scope of the vulnerability?  What all is this log viewer used for?  Is it just for viewing output from VM consoles?  Anything more than that?</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/9" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~russellb" class="sprite person">Russell Bryant (russellb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-10T21:56:22.067051+00:00" title="2012-04-10 21:56:22 UTC">on 2012-04-10</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/9"> #9</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Regarding the CRD (coordinated release date), I would normally propose a day next week.  Given that a significant portion of the people responsible for getting the patch merged or updating packages will be busy at the OpenStack conference, we could do it 2 weeks out: Tuesday, April 24th.  Would you consider this critical enough that we just do what it takes to get it released next week?  If so, I&#x27;d say Tuesday, April 17th.  I&#x27;m fine either way.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Regarding the CRD (coordinated release date), I would normally propose a day next week.  Given that a significant portion of the people responsible for getting the patch merged or updating packages will be busy at the OpenStack conference, we could do it 2 weeks out: Tuesday, April 24th.  Would you consider this critical enough that we just do what it takes to get it released next week?  If so, I'd say Tuesday, April 17th.  I'm fine either way.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/10" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~devcamcar" class="sprite person">Devin Carlen (devcamcar)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-10T21:56:53.487649+00:00" title="2012-04-10 21:56:53 UTC">on 2012-04-10</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/10"> #10</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Hi Russel, you are correct - the log viewer allows you to tail the logs of the guest consoles.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Hi Russel, you are correct - the log viewer allows you to tail the logs of the guest consoles. </textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/11" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~russellb" class="sprite person">Russell Bryant (russellb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-10T22:01:42.448975+00:00" title="2012-04-10 22:01:42 UTC">on 2012-04-10</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/11"> #11</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Proposed description.  Feedback welcome.</p>
+<p>Title: XSS vulnerability in Horizon log viewer<br />
+Impact: High<br />
+Reporter: J. Daniel Schmidt &lt;email address hidden&gt;<br />
+Products: Horizon<br />
+Affects: All versions</p>
+<p>Description:<br />
+J. Daniel Schmidt reported a vulnerability in Horizon. He noted that the log viewer refreshing mechanism does not escape the data fetched from guest consoles. This means that HTML with Javascript code gets interpreted as such, resulting in the ability to inject code into a dashboard session.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Proposed description.  Feedback welcome.
+
+Title: XSS vulnerability in Horizon log viewer
+Impact: High
+Reporter: J. Daniel Schmidt &lt;jdsn@suse.de&gt;
+Products: Horizon
+Affects: All versions
+
+Description:
+J. Daniel Schmidt reported a vulnerability in Horizon. He noted that the log viewer refreshing mechanism does not escape the data fetched from guest consoles. This means that HTML with Javascript code gets interpreted as such, resulting in the ability to inject code into a dashboard session.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/12" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~devcamcar" class="sprite person">Devin Carlen (devcamcar)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-10T22:03:31.947582+00:00" title="2012-04-10 22:03:31 UTC">on 2012-04-10</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/12"> #12</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This description is accurate.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This description is accurate.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/13" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~devcamcar" class="sprite person">Devin Carlen (devcamcar)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-10T22:04:05.818434+00:00" title="2012-04-10 22:04:05 UTC">on 2012-04-10</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/13"> #13</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Let&#x27;s do Tuesday April 17th.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Let's do Tuesday April 17th.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/14" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~paul-mcmillan" class="sprite person">Paul McMillan (paul-mcmillan)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-11T00:00:43.280411+00:00" title="2012-04-11 00:00:43 UTC">on 2012-04-11</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/14"> #14</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>+2 on the fix, it looks good.</p>
+<p>Agree on the earlier release date. This is absolutely critical, since it can relatively easily be exploited to gain administrator privileges in many cases.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">+2 on the fix, it looks good.
+
+Agree on the earlier release date. This is absolutely critical, since it can relatively easily be exploited to gain administrator privileges in many cases.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/15" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~russellb" class="sprite person">Russell Bryant (russellb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-11T13:43:13.285621+00:00" title="2012-04-11 13:43:13 UTC">on 2012-04-11</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/15"> #15</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>As requested, here is the updated description that reflects Matthias as the reporter since he originally found the issue :</p>
+<p>Title: XSS vulnerability in Horizon log viewer<br />
+Impact: High<br />
+Reporter: Matthias Weckbecker &lt;email address hidden&gt;<br />
+Products: Horizon<br />
+Affects: All versions</p>
+<p>Description:<br />
+Matthias Weckbecker reported a vulnerability in Horizon. He noted that the log viewer refreshing mechanism does not escape the data fetched from guest consoles. This means that HTML with Javascript code gets interpreted as such, resulting in the ability to inject code into a dashboard session.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">As requested, here is the updated description that reflects Matthias as the reporter since he originally found the issue :
+
+
+Title: XSS vulnerability in Horizon log viewer
+Impact: High
+Reporter: Matthias Weckbecker &lt;mweckbecker@suse.de&gt;
+Products: Horizon
+Affects: All versions
+
+Description:
+Matthias Weckbecker reported a vulnerability in Horizon. He noted that the log viewer refreshing mechanism does not escape the data fetched from guest consoles. This means that HTML with Javascript code gets interpreted as such, resulting in the ability to inject code into a dashboard session.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/16" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ubuntubmw" class="sprite person">Bernhard M. Wiedemann (ubuntubmw)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-17T15:19:55.490152+00:00" title="2012-04-17 15:19:55 UTC">on 2012-04-17</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/16"> #16</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p><a rel="nofollow" href="https://review.openstack.org/6618">https:/<wbr />/review.<wbr />openstack.<wbr />org/6618</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">https://review.openstack.org/6618</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>visibility</b>:
+      </td>
+      <td>
+        private &#8594; public
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/17" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-17T15:41:58.158324+00:00" title="2012-04-17 15:41:58 UTC">on 2012-04-17</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/horizon/+bug/977944/comments/17">
+                <strong>Fix proposed to horizon (stable/essex)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/17"> #17</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Fix proposed to branch: stable/essex<br />
+Review: <a rel="nofollow" href="https://review.openstack.org/6621">https:/<wbr />/review.<wbr />openstack.<wbr />org/6621</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Fix proposed to branch: stable/essex
+Review: https://review.openstack.org/6621</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/18" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~russellb" class="sprite person">Russell Bryant (russellb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-17T15:42:16.554920+00:00" title="2012-04-17 15:42:16 UTC">on 2012-04-17</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/18"> #18</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>and for stable/essex:  <a rel="nofollow" href="https://review.openstack.org/6621">https:/<wbr />/review.<wbr />openstack.<wbr />org/6621</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">and for stable/essex:  https://review.openstack.org/6621</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/19" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-23T17:38:19.011384+00:00" title="2012-04-23 17:38:19 UTC">on 2012-04-23</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/horizon/+bug/977944/comments/19">
+                <strong>Fix merged to horizon (master)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/19"> #19</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://review.openstack.org/6618">https:/<wbr />/review.<wbr />openstack.<wbr />org/6618</a><br />
+Committed: <a rel="nofollow" href="http://github.com/openstack/horizon/commit/ab2e27522aaeb0268fcc121bd3eff5a4485f313c">http://<wbr />github.<wbr />com/openstack/<wbr />horizon/<wbr />commit/<wbr />ab2e27522aaeb02<wbr />68fcc121bd3eff5<wbr />a4485f313c</a><br />
+Submitter: Jenkins<br />
+Branch:    master</p>
+<p>commit ab2e27522aaeb02<wbr />68fcc121bd3eff5<wbr />a4485f313c<br />
+Author: J. Daniel Schmidt &lt;email address hidden&gt;<br />
+Date:   Tue Apr 10 14:56:37 2012 +0200</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;html escape the console log in refresh</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;fixes <a href="/bugs/977944" class="bug-link">bug 977944</a></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Change-Id: I89089155d10833<wbr />32d02ae90398982<wbr />27cbab42d07</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://review.openstack.org/6618
+Committed: http://github.com/openstack/horizon/commit/ab2e27522aaeb0268fcc121bd3eff5a4485f313c
+Submitter: Jenkins
+Branch:    master
+
+commit ab2e27522aaeb0268fcc121bd3eff5a4485f313c
+Author: J. Daniel Schmidt &lt;jdsn@suse.de&gt;
+Date:   Tue Apr 10 14:56:37 2012 +0200
+
+    html escape the console log in refresh
+    
+    fixes bug 977944
+    
+    Change-Id: I89089155d1083332d02ae9039898227cbab42d07
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in horizon: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Triaged &#8594; Fix Committed
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/20" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-25T12:22:01.767893+00:00" title="2012-04-25 12:22:01 UTC">on 2012-04-25</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/20"> #20</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Essex fix is still missing. Review 6621 is blocked until 6676 is backported, and the current attempt (6727) has been abandoned by devcamcar.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Essex fix is still missing. Review 6621 is blocked until 6676 is backported, and the current attempt (6727) has been abandoned by devcamcar.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/21" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ubuntubmw" class="sprite person">Bernhard M. Wiedemann (ubuntubmw)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-25T12:49:50.322187+00:00" title="2012-04-25 12:49:50 UTC">on 2012-04-25</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/21"> #21</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p><a rel="nofollow" href="https://review.openstack.org/6676">https:/<wbr />/review.<wbr />openstack.<wbr />org/6676</a> seems not to be the thing that needs backporting for this.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">https://review.openstack.org/6676 seems not to be the thing that needs backporting for this.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/22" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-25T15:19:53.952649+00:00" title="2012-04-25 15:19:53 UTC">on 2012-04-25</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/22"> #22</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Actually this bug needs 6621 (which is the backport of 6618)... but that needs the equivalent of *6626* (not 6676) being present in the branch before it can hit.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Actually this bug needs 6621 (which is the backport of 6618)... but that needs the equivalent of *6626* (not 6676) being present in the branch before it can hit.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/23" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~devcamcar" class="sprite person">Devin Carlen (devcamcar)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-25T19:43:19.383838+00:00" title="2012-04-25 19:43:19 UTC">on 2012-04-25</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/23"> #23</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p><a rel="nofollow" href="https://review.openstack.org/#/c/6727/">https:/<wbr />/review.<wbr />openstack.<wbr />org/#/c/<wbr />6727/</a> is proposed again</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">https://review.openstack.org/#/c/6727/ is proposed again</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/24" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~devcamcar" class="sprite person">Devin Carlen (devcamcar)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-25T19:43:36.579438+00:00" title="2012-04-25 19:43:36 UTC">on 2012-04-25</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/24"> #24</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>oops, meant: <a rel="nofollow" href="https://review.openstack.org/#/c/6621/">https:/<wbr />/review.<wbr />openstack.<wbr />org/#/c/<wbr />6621/</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">oops, meant: https://review.openstack.org/#/c/6621/</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/25" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-04-26T13:53:35.357897+00:00" title="2012-04-26 13:53:35 UTC">on 2012-04-26</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/horizon/+bug/977944/comments/25">
+                <strong>Fix merged to horizon (stable/essex)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/25"> #25</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://review.openstack.org/6621">https:/<wbr />/review.<wbr />openstack.<wbr />org/6621</a><br />
+Committed: <a rel="nofollow" href="http://github.com/openstack/horizon/commit/7f8c788aa70db98ac904f37fa4197fcabb802942">http://<wbr />github.<wbr />com/openstack/<wbr />horizon/<wbr />commit/<wbr />7f8c788aa70db98<wbr />ac904f37fa4197f<wbr />cabb802942</a><br />
+Submitter: Jenkins<br />
+Branch:    stable/essex</p>
+<p>commit 7f8c788aa70db98<wbr />ac904f37fa4197f<wbr />cabb802942<br />
+Author: J. Daniel Schmidt &lt;email address hidden&gt;<br />
+Date:   Tue Apr 10 14:56:37 2012 +0200</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;html escape the console log in refresh</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;fixes <a href="/bugs/977944" class="bug-link">bug 977944</a></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;(cherry picked from commit ab2e27522aaeb02<wbr />68fcc121bd3eff5<wbr />a4485f313c)</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Change-Id: Ic6135ebc58b6c4<wbr />5d6336f08337170<wbr />86e43d7cccb</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://review.openstack.org/6621
+Committed: http://github.com/openstack/horizon/commit/7f8c788aa70db98ac904f37fa4197fcabb802942
+Submitter: Jenkins
+Branch:    stable/essex
+
+commit 7f8c788aa70db98ac904f37fa4197fcabb802942
+Author: J. Daniel Schmidt &lt;jdsn@suse.de&gt;
+Date:   Tue Apr 10 14:56:37 2012 +0200
+
+    html escape the console log in refresh
+    
+    fixes bug 977944
+    
+    (cherry picked from commit ab2e27522aaeb0268fcc121bd3eff5a4485f313c)
+    
+    Change-Id: Ic6135ebc58b6c45d6336f0833717086e43d7cccb
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>tags</b>:
+      </td>
+      <td>
+        added: in-stable-essex
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/horizon/+bug/977944/comments/26" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2012-05-01T19:53:19.111791+00:00" title="2012-05-01 19:53:19 UTC">on 2012-05-01</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/horizon/+bug/977944/comments/26"> #26</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Should be marked released only if we do a 2012.1.1 release that includes the fix.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Should be marked released only if we do a 2012.1.1 release that includes the fix.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+    
+    <time title="2012-05-23 08:56:29 UTC" datetime="2012-05-23T08:56:29.749591+00:00">on 2012-05-23</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in horizon: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Fix Committed &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+    
+    <time title="2012-09-27 14:54:59 UTC" datetime="2012-09-27T14:54:59.240914+00:00">on 2012-09-27</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in horizon: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>milestone</b>:
+      </td>
+      <td>
+        folsom-1 &#8594; 2012.2
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~sinzui" class="sprite person">Curtis Hovey (sinzui)</a>
+    
+    <time title="2016-07-29 13:43:10 UTC" datetime="2016-07-29T13:43:10.268049+00:00">on 2016-07-29</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in horizon: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        Registry Administrators (registry) &#8594; nobody
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        <div style="float: right;">
+          <a class="menu-link-activitylog" href="https://bugs.launchpad.net/horizon/+bug/977944/+activity">See full activity log</a>
+        </div>
+        <div class="clearfix"></div>
+
+        
+          
+
+          
+            <div align="center" id="add-comment-login-first">
+              To post a comment you must <a href="+login?comments=all">log in</a>.
+            </div>
+          
+        
+        
+      
+
+      </div><!-- class="top-portlet" -->
+      </div><!--- id="maincontentsub"-->
+      <div>
+        <div id="duplicate-form-container"></div>
+        <div id="privacy-form-container"></div>
+      </div>
+    </div>
+            
+            
+          </div><!-- yui-b -->
+        </div><!-- yui-main -->
+
+        
+          <div id="side-portlets" class="yui-b side">
+            
+      <div id="involvement" class="portlet">
+        <ul class="involvement">
+          <li class="single">
+            <a class="sprite bugs" href="/horizon/+filebug">
+              Report a bug
+            </a>
+          </li>
+        </ul>
+      </div>
+      <div id="privacy" class="first portlet public">
+  <div id="privacy-text">
+     <span id="information-type-summary" class="sprite public">This report contains
+         <strong id="information-type">Public Security</strong>
+         information
+     </span>&nbsp;<a class="sprite edit action-icon" id="privacy-link" href="/horizon/+bug/977944/+secrecy">Edit</a>
+
+     <div id="information-type-description" style="padding-top: 5px">Everyone can see this security related information.
+</div>
+  </div>
+</div>
+
+      <div id="portlet-actions" class="portlet vertical">
+  <ul id="duplicate-actions">
+    <li class="sprite bug-dupe">
+    <span id="mark-duplicate-text">
+    <a class="menu-link-mark-dupe" href="/horizon/+bug/977944/+duplicate">Mark as duplicate</a>
+    </span>
+    </li>
+    
+    <li><a class="menu-link-createquestion sprite add" href="https://bugs.launchpad.net/horizon/+bug/977944/+create-question">Convert to a question</a></li>
+    
+    <li><a class="menu-link-addbranch sprite add" href="https://bugs.launchpad.net/horizon/+bug/977944/+addbranch">Link a related branch</a></li>
+    <li><a class="menu-link-linktocve sprite add" href="https://bugs.launchpad.net/horizon/+bug/977944/+linkcve">Link to <abbr title="Common Vulnerabilities and Exposures Index">CVE</abbr></a></li>
+    <li><a class="menu-link-unlinkcve sprite modify remove" href="https://bugs.launchpad.net/horizon/+bug/977944/+unlinkcve">Remove CVE link</a></li>
+  </ul>
+</div>
+
+      
+
+      <div class="portlet vertical" id="portlet-subscription">
+  <div class="section">
+    <div id="current_user_subscription" class="False">
+      
+        <span>You are</span>
+        
+        <a class="menu-link-subscription sprite modify edit" href="/horizon/+bug/977944/+subscribe">
+           
+           
+           
+           not directly subscribed to this bug's notifications.
+        </a>
+      
+      
+    </div>
+    <div id="sub-unsub-spinner">Subscribing...</div>
+    <ul>
+      
+      <li><a class="menu-link-editsubscriptions sprite modify edit" href="https://bugs.launchpad.net/horizon/+bug/977944/+subscriptions" title="View and change your subscriptions to this bug">Edit bug mail</a></li>
+    </ul>
+  </div>
+  <script type="text/javascript">
+    LPJS.use('io-base', 'node',
+            'lp.bugs.bugtask_index.portlets.subscription', function(Y) {
+        Y.on('domready', function() {
+            Y.lp.bugs.bugtask_index.portlets.subscription.initialize();
+        });
+    });
+  </script>
+</div>
+
+      <div class="portlet vertical" id="portlet-subscribers">
+  <h2>Other bug subscribers</h2>
+  <div>
+    <div><a class="menu-link-addsubscriber sprite add" href="https://bugs.launchpad.net/horizon/+bug/977944/+addsubscriber" title="Launchpad will email that person whenever this bugs changes">Subscribe someone else</a></div>
+  </div>
+  <div id="other-bug-subscribers"></div>
+</div>
+
+      
+
+      
+
+      
+  <div class="portlet" id="portlet-patches">
+    <h2>Patches</h2>
+    <ul>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/horizon/+bug/977944/+attachment/3040000/+files/fix-html-injection">fix-html-injection</a>
+        <small>
+          (<a href="/horizon/+bug/977944/+attachment/3040000">edit</a>)
+        </small>
+      </li>
+    </ul>
+    <ul>
+      <li>
+        <a class="sprite add" href="/horizon/+bug/977944/+addcomment?field.patch=on">Add patch</a>
+      </li>
+    </ul>
+  </div>
+  
+
+
+      
+
+    
+          </div><!-- yui-b side -->
+        
+      </div><!-- yui-t4 -->
+
+      
+  <div id="footer" class="footer">
+    <div class="lp-arcana">
+        <div class="lp-branding">
+          <a href="https://launchpad.net/"><img src="/@@/launchpad-logo-and-name-hierarchy.png" alt="Launchpad" /></a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://launchpad.net/+tour">Take the tour</a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://help.launchpad.net/">Read the guide</a>
+          &nbsp;
+          <form id="globalsearch" method="get" accept-charset="UTF-8" action="https://launchpad.net/+search">
+            <input type="search" id="search-text" name="field.text" />
+            <input type="image" src="/@@/search" style="vertical-align:5%" alt="Search Launchpad" />
+          </form>
+        </div>
+        
+  
+
+    </div>
+
+    <div class="colophon">
+      &copy; 2004-2021
+      <a href="http://canonical.com/">Canonical&nbsp;Ltd.</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://launchpad.net/legal">Terms of use</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://www.ubuntu.com/legal/dataprivacy">Data privacy</a>
+      &nbsp;&bull;&nbsp;
+      <a href="/feedback">Contact Launchpad Support</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="http://blog.launchpad.net/">Blog</a>
+      
+	&nbsp;&bull;&nbsp;
+	<a href="https://canonical.com/careers">Careers</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="https://twitter.com/launchpadstatus">System status</a>
+      <span id="lp-version">
+      &nbsp;&bull;&nbsp;
+        r0d8de2b
+        
+        
+        (<a href="https://dev.launchpad.net/">Get the code!</a>)
+      </span>
+    </div>
+  </div>
+
+    </div><!-- yui-d0-->
+
+    
+  
+  
+  <script id="json-cache-script">LP.cache = {"bug_is_private": false, "bug": {"self_link": "https://bugs.launchpad.net/api/devel/bugs/977944", "web_link": "https://bugs.launchpad.net/bugs/977944", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug", "id": 977944, "private": false, "information_type": "Public Security", "name": null, "title": "refreshing in log viewer interprets html and javascript", "description": "In the log viewer the refreshing mechanism does not escape the fetched log data.\nThis means that HTML with Javascript code gets interpreted as such and thus code can be injected in a dashboard session.\n\nA harmless test for this is this command run inside a VM:\n# echo \"\u003cb\u003etest\u003c/b\u003e\" \u003e /dev/ttyS0\n\nThis opens up even more creativity:\n# echo \"\u003cscript\u003ealert('test foobar')\u003c/script\u003e\"  \u003e /dev/ttyS0\n\nAfter loading the log you just have to wait (a few seconds) for the first refresh.", "owner_link": "https://bugs.launchpad.net/api/devel/~jdsn", "bug_tasks_collection_link": "https://bugs.launchpad.net/api/devel/bugs/977944/bug_tasks", "duplicate_of_link": null, "date_created": "2012-04-10T11:11:31.051525+00:00", "activity_collection_link": "https://bugs.launchpad.net/api/devel/bugs/977944/activity", "subscriptions_collection_link": "https://bugs.launchpad.net/api/devel/bugs/977944/subscriptions", "date_last_updated": "2016-07-29T13:43:12.319192+00:00", "who_made_private_link": null, "date_made_private": null, "heat": 270, "bug_watches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/977944/bug_watches", "cves_collection_link": "https://bugs.launchpad.net/api/devel/bugs/977944/cves", "duplicates_collection_link": "https://bugs.launchpad.net/api/devel/bugs/977944/duplicates", "attachments_collection_link": "https://bugs.launchpad.net/api/devel/bugs/977944/attachments", "security_related": true, "latest_patch_uploaded": "2012-04-10T12:59:50.104705+00:00", "tags": ["essex-backport-potential", "in-stable-essex"], "date_last_message": "2012-05-01T19:53:19.111791+00:00", "number_of_duplicates": 0, "message_count": 27, "users_affected_count": 2, "users_unaffected_count": 0, "users_affected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/977944/users_affected", "users_unaffected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/977944/users_unaffected", "users_affected_count_with_dupes": 2, "other_users_affected_count_with_dupes": 2, "users_affected_with_dupes_collection_link": "https://bugs.launchpad.net/api/devel/bugs/977944/users_affected_with_dupes", "messages_collection_link": "https://bugs.launchpad.net/api/devel/bugs/977944/messages", "linked_branches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/977944/linked_branches", "linked_merge_proposals_collection_link": "https://bugs.launchpad.net/api/devel/bugs/977944/linked_merge_proposals", "http_etag": "\"65796d9b40f6d230fbd2a31b17055a61ad21da86-a07d7dd939e567de70ea685b4b699c9fdfab305d\""}, "total_comments_and_activity": 58, "related_features": {}, "information_type_data": {"PUBLIC": {"is_private": false, "name": "Public", "order": 0, "description": "Everyone can see this information.\n", "value": "PUBLIC", "description_css_class": "choice-description"}, "PRIVATESECURITY": {"is_private": true, "name": "Private Security", "order": 2, "description": "Only the security group can see this information.\n ", "value": "PRIVATESECURITY", "description_css_class": "choice-description"}, "PUBLICSECURITY": {"is_private": false, "name": "Public Security", "order": 1, "description": "Everyone can see this security related information.\n", "value": "PUBLICSECURITY", "description_css_class": "choice-description"}, "USERDATA": {"is_private": true, "name": "Private", "order": 3, "description": "Only shared with users permitted to see private user information.\n", "value": "USERDATA", "description_css_class": "choice-description"}}, "context": {"self_link": "https://bugs.launchpad.net/api/devel/horizon/+bug/977944", "web_link": "https://bugs.launchpad.net/horizon/+bug/977944", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug_task", "bug_link": "https://bugs.launchpad.net/api/devel/bugs/977944", "milestone_link": "https://bugs.launchpad.net/api/devel/horizon/+milestone/2012.2", "status": "Fix Released", "importance": "Critical", "assignee_link": null, "bug_target_display_name": "OpenStack Dashboard (Horizon)", "bug_target_name": "horizon", "bug_watch_link": null, "date_assigned": null, "date_created": "2012-04-10T11:11:31.051525+00:00", "date_confirmed": "2012-04-10T21:15:26.266542+00:00", "date_incomplete": null, "date_in_progress": "2012-04-23T17:38:17.510316+00:00", "date_closed": "2012-05-23T08:56:30.205169+00:00", "date_left_new": "2012-04-10T21:15:26.266542+00:00", "date_triaged": "2012-04-10T21:15:26.266542+00:00", "date_fix_committed": "2012-04-23T17:38:17.510316+00:00", "date_fix_released": "2012-05-23T08:56:30.205169+00:00", "date_left_closed": null, "owner_link": "https://bugs.launchpad.net/api/devel/~jdsn", "target_link": "https://bugs.launchpad.net/api/devel/horizon", "title": "Bug #977944 in OpenStack Dashboard (Horizon): \"refreshing in log viewer interprets html and javascript\"", "related_tasks_collection_link": "https://bugs.launchpad.net/api/devel/horizon/+bug/977944/related_tasks", "is_complete": true, "http_etag": "\"608e7b607831f8dfab9d2a6b24e82da1f642953f-0a3b1fa097b28b00ed9b178db5ef9bbeffd6a96d\""}, "bugtask_data": {"1167560": {"delete_link": "https://bugs.launchpad.net/horizon/+bug/977944/+delete", "bug_title": "refreshing in log viewer interprets html and javascript", "user_can_unassign": false, "importance_value": "Critical", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary1167560", "target_is_product": true, "user_can_edit_milestone": false, "prefix": "horizon", "bugtask_path": "/horizon/+bug/977944", "id": 1167560, "milestone_value": "https://bugs.launchpad.net/api/devel/horizon/+milestone/2012.2", "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task1167560", "targetname": "OpenStack Dashboard (Horizon)", "assignee_is_team": null, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": null, "status_value": "Fix Released"}, "1168111": {"delete_link": "https://bugs.launchpad.net/horizon/essex/+bug/977944/+delete", "bug_title": "refreshing in log viewer interprets html and javascript", "user_can_unassign": false, "importance_value": "Critical", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary1168111", "target_is_product": false, "user_can_edit_milestone": false, "prefix": "horizon_essex", "bugtask_path": "/horizon/essex/+bug/977944", "id": 1168111, "milestone_value": "https://bugs.launchpad.net/api/devel/horizon/+milestone/2012.1.1", "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task1168111", "targetname": "OpenStack Dashboard (Horizon) essex", "assignee_is_team": null, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": null, "status_value": "Fix Released"}}, "subscribers_portlet_url_data": {"self_link": "https://bugs.launchpad.net/api/devel/bugs/977944", "web_link": "https://bugs.launchpad.net/bugs/977944"}, "initial_comment_batch_offset": 41, "first visible_recent_comment": -14};</script>
+
+    
+  
+
+    
+  </body>
+
+
+  <!--
+    Facet name: bugs
+    Page type: main_side
+    Has global search: True
+    Has application tabs: True
+    Has side portlets: True
+
+    At least 61 queries/external actions issued in 1.06 seconds
+
+    Features: {'app.maintenance_message': None, 'hard_timeout': '9000', 'js.yui_version': None, 'app.mainsite_only.canonical_url': None, 'disclosure.dsp_picker.enabled': 'on', 'baselayout.careers_link.disabled': None, 'bugs.affected_count_includes_dupes.disabled': None, 'visible_render_time': None, 'profiling.enabled': None, 'bugs.nominations.bug_supervisors_can_target': 'on'}
+
+    r0d8de2b
+
+    -->
+
+</html>
+

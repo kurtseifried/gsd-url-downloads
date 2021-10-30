@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='Filesystem function related Bug #72742 - RDF' href='rss/bug.php?id=72742'>
+        <link rel='alternate' type='application/rss+xml' title='Filesystem function related Bug #72742 - RSS 2.0' href='rss/bug.php?id=72742&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #72742 :: memory allocator fails to realloc small block to large one</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=72742">Sec Bug</a>&nbsp;#72742</th>
+            <td id="summary" colspan="5">memory allocator fails to realloc small block to large one</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-08-03 06:20 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-09-05 15:29 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>tinduong &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=Filesystem+function+related">Filesystem function related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>7.0.9</td>
+            <th class="details">OS:</th>
+            <td>*</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-7133" target="_blank">2016-7133</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=72742&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=72742&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=72742&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1470205204">&nbsp;</a><strong>[2016-08-03 06:20 UTC] tinduong &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</strong>
+<pre class='note'>Description:
+------------
+PHPAPI php_check_specific_open_basedir in php-src/main/fopen_wrappers.c has a integer overflow vulnerability leads to buffer overflow if open_basedir is set.
+
+&lt;snippet php-src/main/fopen_wrappers.c:138&gt;
+```
+PHPAPI int php_check_specific_open_basedir(const char *basedir, const char *path)
+{
+	char resolved_name[MAXPATHLEN];
+&lt;...&gt;
+	path_len = (int)strlen(path);
+	if (path_len &gt; (MAXPATHLEN - 1)) { /*path_len can be overflow to negative value and pass this check */
+		/* empty and too long paths are invalid */
+		return -1;
+	}
+	/* normalize and expand path */
+	if (expand_filepath(path, resolved_name) == NULL) {
+		return -1;
+	}
+
+	path_len = (int)strlen(resolved_name);
+	memcpy(path_tmp, resolved_name, path_len + 1); /* safe */
+```
+&lt;/snippet&gt;
+
+PoC here using fopen, but it is not the only way since many functions are affected by open_basedir
+
+I propose the following patch:
+
+--- a/main/fopen_wrappers.c
++++ b/main/fopen_wrappers.c
+@@ -154,7 +154,7 @@ PHPAPI int php_check_specific_open_basedir(const char *basedir, const char *path
+        }
+
+        path_len = (int)strlen(path);
+-       if (path_len &gt; (MAXPATHLEN - 1)) {
++       if (path_len &lt;= 0 || path_len &gt; (MAXPATHLEN - 1)) {
+                /* empty and too long paths are invalid */
+                return -1;
+        }
+
+
+
+Test script:
+---------------
+&lt;?php
+	ini_set('memory_limit', -1);
+	ini_set('open_basedir', '/');
+	fopen(str_repeat('a', 0xfffffff0), 'r');
+?&gt;
+
+Expected result:
+----------------
+No crash
+
+Actual result:
+--------------
+Stopped reason: SIGSEGV
+#0  __memcpy_sse2_unaligned () at ../sysdeps/x86_64/multiarch/memcpy-sse2-unaligned.S:37
+#1  0x00000000007bf277 in xbuf_format_converter (xbuf=0x7fffffffac10, is_char=0x1, fmt=0xd70849 &quot;s&quot;, ap=0x7fffffffad58)
+    at /home/vps/git/php-src/main/spprintf.c:814
+#2  0x00000000007bf60d in vspprintf (pbuf=0x7fffffffac90, max_len=0x0,
+    format=0xd707f8 &quot;File name is longer than the maximum allowed path length on this platform (%d): %s&quot;, ap=0x7fffffffad58)
+    at /home/vps/git/php-src/main/spprintf.c:843
+#3  0x00000000007b4f7b in php_verror (docref=0x0, params=0xd6eff1 &quot;&quot;, type=0x2,
+    format=0xd707f8 &quot;File name is longer than the maximum allowed path length on this platform (%d): %s&quot;, args=0x7fffffffad58)
+    at /home/vps/git/php-src/main/main.c:756
+#4  0x00000000007b59d8 in php_error_docref0 (docref=0x0, type=0x2,
+    format=0xd707f8 &quot;File name is longer than the maximum allowed path length on this platform (%d): %s&quot;)
+    at /home/vps/git/php-src/main/main.c:943
+#5  0x00000000007c0144 in php_check_open_basedir_ex (path=0x7ffef5a00018 'a' &lt;repeats 200 times&gt;..., warn=0x1)
+    at /home/vps/git/php-src/main/fopen_wrappers.c:295
+#6  0x00000000007c00ce in php_check_open_basedir (path=0x7ffef5a00018 'a' &lt;repeats 200 times&gt;...)
+    at /home/vps/git/php-src/main/fopen_wrappers.c:279
+#7  0x00000000007e12b9 in php_plain_files_stream_opener (wrapper=0x10a7980 &lt;php_plain_files_wrapper&gt;,
+    path=0x7ffef5a00018 'a' &lt;repeats 200 times&gt;..., mode=0x7ffff6858e58 &quot;r&quot;, options=0x0, opened_path=0x0, context=0x7ffff6858d40,
+    php_stream_call_depth=0x1, zend_filename=0xd723f8 &quot;/home/vps/git/php-src/main/streams/streams.c&quot;, __zend_lineno=0x809,
+    zend_orig_filename=0xd550d0 &quot;/home/vps/git/php-src/ext/standard/file.c&quot;, zend_orig_lineno=0x366)
+    at /home/vps/git/php-src/main/streams/plain_wrapper.c:1058
+#8  0x00000000007da8db in _php_stream_open_wrapper_ex (path=0x7ffef5a00018 'a' &lt;repeats 200 times&gt;..., mode=0x7ffff6858e58 &quot;r&quot;, options=0x8,
+    opened_path=0x0, context=0x7ffff6858d40, __php_stream_call_depth=0x0,
+    zend_filename=0xd550d0 &quot;/home/vps/git/php-src/ext/standard/file.c&quot;, zend_lineno=0x366, __zend_orig_filename=0x0,
+    __zend_orig_lineno=0x0) at /home/vps/git/php-src/main/streams/streams.c:2055
+#9  0x0000000000730e32 in php_if_fopen (execute_data=0x7ffff6814100, return_value=0x7ffff68140e0)
+    at /home/vps/git/php-src/ext/standard/file.c:870
+#10 0x0000000000670167 in phar_fopen (execute_data=0x7ffff6814100, return_value=0x7ffff68140e0)
+    at /home/vps/git/php-src/ext/phar/func_interceptors.c:427
+#11 0x00000000008ae50b in ZEND_DO_ICALL_SPEC_RETVAL_USED_HANDLER () at /home/vps/git/php-src/Zend/zend_vm_execute.h:675
+#12 0x00000000008adc2e in execute_ex (ex=0x7ffff6814030) at /home/vps/git/php-src/Zend/zend_vm_execute.h:429
+#13 0x00000000008add40 in zend_execute (op_array=0x7ffff687c000, return_value=0x0) at /home/vps/git/php-src/Zend/zend_vm_execute.h:474
+#14 0x000000000084e490 in zend_execute_scripts (type=0x8, retval=0x0, file_count=0x3) at /home/vps/git/php-src/Zend/zend.c:1447
+#15 0x00000000007b9126 in php_execute_script (primary_file=0x7fffffffd6c0) at /home/vps/git/php-src/main/main.c:2533
+#16 0x000000000092d910 in do_cli (argc=0x2, argv=0x10d5770) at /home/vps/git/php-src/sapi/cli/php_cli.c:990
+#17 0x000000000092ead4 in main (argc=0x2, argv=0x10d5770) at /home/vps/git/php-src/sapi/cli/php_cli.c:1378
+#18 0x00007ffff6faaf45 in __libc_start_main (main=0x92e2cc &lt;main&gt;, argc=0x2, argv=0x7fffffffea68, init=&lt;optimized out&gt;, fini=&lt;optimized out&gt;,
+    rtld_fini=&lt;optimized out&gt;, stack_end=0x7fffffffea58) at libc-start.c:287
+#19 0x0000000000422ca9 in _start ()
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=72742'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=72742'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1470206695">&nbsp;</a><strong>[2016-08-03 06:44 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Type: Security</span>
+<span class="added">+Type: Bug</span>
+</div></div></div><div class='comment type_comment' ><a name="1470206695">&nbsp;</a><strong>[2016-08-03 06:44 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>This sounds rather artificial to be security issue.
+</pre>
+</div><div class='comment type_comment' ><a name="1470207302">&nbsp;</a><strong>[2016-08-03 06:55 UTC] tinduong &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</strong>
+<pre class='note'>There is CVE-2010-3436 releated to open_basedir, so I think this is a security issue as well. Please review it.
+</pre>
+</div><div class='comment type_log' ><a name="1470209097">&nbsp;</a><strong>[2016-08-03 07:24 UTC] tinduong &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Type:           Bug</span>
+<span class="added">+Type:           Security</span>
+<span class="removed">-Private report: No</span>
+<span class="added">+Private report: Yes</span>
+</div></div></div><div class='comment type_comment' ><a name="1470209097">&nbsp;</a><strong>[2016-08-03 07:24 UTC] tinduong &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</strong>
+<pre class='note'>There is CVE-2010-3436 releated to open_basedir, so I think this is a security issue as well. Please review it
+</pre>
+</div><div class='comment type_comment' ><a name="1470209585">&nbsp;</a><strong>[2016-08-03 07:33 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>I'm not sure how existance of CVE-2010-3436 changes anything.
+</pre>
+</div><div class='comment type_comment' ><a name="1470211090">&nbsp;</a><strong>[2016-08-03 07:58 UTC] tinduong &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</strong>
+<pre class='note'>As I mentioned before, fopen is not the only way. If an user has ability to use any function that open/read/write a file on server with an arbitraty length, this vulnerability can leads to DoS or RCE in some situations. include, file_get_contents are also vulnerable for instance.
+</pre>
+</div><div class='comment type_log' ><a name="1470891922">&nbsp;</a><strong>[2016-08-11 05:05 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Open</span>
+<span class="added">+Status: Feedback</span>
+</div></div></div><div class='comment type_comment' ><a name="1470891922">&nbsp;</a><strong>[2016-08-11 05:05 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>In your example, the error is not in the code you were talking about. It actually would never get there, as before that it'd get to php_check_open_basedir_ex which checks the length. Your backtrace shows crash in the error message printing.
+
+The crash seems to be happening because of some problem in allocation routines, I'll dig deeper to see what's going on.
+</pre>
+</div><div class='comment type_log' ><a name="1470892766">&nbsp;</a><strong>[2016-08-11 05:19 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Feedback</span>
+<span class="added">+Status: Open</span>
+</div></div></div><div class='comment type_comment' ><a name="1470899336">&nbsp;</a><strong>[2016-08-11 07:08 UTC] tinduong &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</strong>
+<pre class='note'>You are correct ! The error is not occurred in php_check_specific_open_basedir. Sorry for the mistake.
+The error in fact occurred in xbuf_format_converter (which is called by vspprintf() in php_verror() ) while trying to print error message contains my large input. 
+In the below debugging result, it seems like memcpy() tries to read an unmapped memory location, which causes segment fault.
+Although the root cause is not what I mentioned in the previous comments, I do think this a security issue.
+
+Debugging result:
+-------------------
+Continuing.
+[----------------------------------registers-----------------------------------]
+RAX: 0x7ffef6600018 ('a' &lt;repeats 200 times&gt;...)
+RBX: 0x1
+RCX: 0x7ffff687f252 --&gt; 0x5060000000000000 ('')
+RDX: 0xfffffff0
+RSI: 0x7ffef6600018 ('a' &lt;repeats 200 times&gt;...)
+RDI: 0x7ffff687f252 --&gt; 0x5060000000000000 ('')
+RBP: 0x7fffffffa800 --&gt; 0x7fffffffa850 --&gt; 0x7fffffffa940 --&gt; 0x7fffffffaa40 --&gt; 0x7fffffffaa80 --&gt; 0x7fffffffaaa0 (--&gt; ...)
+RSP: 0x7fffffffa2c0 --&gt; 0x0
+RIP: 0x7b6545 (&lt;xbuf_format_converter+10062&gt;:	call   0x422a80 &lt;memcpy@plt&gt;)
+R8 : 0xd65060 (&quot;/home/ubuntu/php-src/main/spprintf.c&quot;)
+R9 : 0x32e
+R10: 0x7d8555 (&lt;php_plain_files_stream_opener&gt;:	push   rbp)
+R11: 0x7ffff6858898 --&gt; 0x72 ('r')
+R12: 0x422c80 (&lt;_start&gt;:	xor    ebp,ebp)
+R13: 0x7fffffffe680 --&gt; 0x2
+R14: 0x7ffff6814030 --&gt; 0x7ffff68691e0 --&gt; 0x8a5593 (&lt;ZEND_DO_ICALL_SPEC_RETVAL_UNUSED_HANDLER&gt;:	push   rbp)
+R15: 0x7ffff68691e0 --&gt; 0x8a5593 (&lt;ZEND_DO_ICALL_SPEC_RETVAL_UNUSED_HANDLER&gt;:	push   rbp)
+EFLAGS: 0x202 (carry parity adjust zero sign trap INTERRUPT direction overflow)
+[-------------------------------------code-------------------------------------]
+   0x7b6538 &lt;xbuf_format_converter+10049&gt;:	mov    rax,QWORD PTR [rbp-0x4b0]
+   0x7b653f &lt;xbuf_format_converter+10056&gt;:	mov    rsi,rax
+   0x7b6542 &lt;xbuf_format_converter+10059&gt;:	mov    rdi,rcx
+=&gt; 0x7b6545 &lt;xbuf_format_converter+10062&gt;:	call   0x422a80 &lt;memcpy@plt&gt;
+   0x7b654a &lt;xbuf_format_converter+10067&gt;:	mov    rax,QWORD PTR [rbp-0x460]
+   0x7b6551 &lt;xbuf_format_converter+10074&gt;:	mov    rdx,QWORD PTR [rbp-0x470]
+   0x7b6558 &lt;xbuf_format_converter+10081&gt;:	mov    QWORD PTR [rax+0x8],rdx
+   0x7b655c &lt;xbuf_format_converter+10085&gt;:	jmp    0x7b6580 &lt;xbuf_format_converter+10121&gt;
+Guessed arguments:
+arg[0]: 0x7ffff687f252 --&gt; 0x5060000000000000 ('')
+arg[1]: 0x7ffef6600018 ('a' &lt;repeats 200 times&gt;...)
+arg[2]: 0xfffffff0
+arg[3]: 0x7ffff687f252 --&gt; 0x5060000000000000 ('')
+[------------------------------------stack-------------------------------------]
+0000| 0x7fffffffa2c0 --&gt; 0x0
+0008| 0x7fffffffa2c8 --&gt; 0x0
+0016| 0x7fffffffa2d0 --&gt; 0x0
+0024| 0x7fffffffa2d8 --&gt; 0x0
+0032| 0x7fffffffa2e0 --&gt; 0x7fffffffa978 --&gt; 0x3000000028 ('(')
+0040| 0x7fffffffa2e8 --&gt; 0xd65501 --&gt; 0x6f00000000000073 ('s')
+0048| 0x7fffffffa2f0 --&gt; 0x100000000
+0056| 0x7fffffffa2f8 --&gt; 0x7fffffffa830 --&gt; 0x7ffff687f200 (&quot;File name is longer than the maximum allowed path length on this platform (4096): &quot;)
+[------------------------------------------------------------------------------]
+Legend: code, data, rodata, value
+
+Breakpoint 2, 0x00000000007b6545 in xbuf_format_converter (xbuf=0x7fffffffa830, is_char=0x1, fmt=0xd65501 &quot;s&quot;, ap=0x7fffffffa978)
+    at /home/ubuntu/php-src/main/spprintf.c:814
+814				INS_STRING(xbuf, s, s_len, is_char);
+gdb-peda$ c
+Continuing.
+
+Program received signal SIGSEGV, Segmentation fault.
+[----------------------------------registers-----------------------------------]
+RAX: 0xfffffffdffd80dd6
+RBX: 0x1
+RCX: 0x1ffffffe0
+RDX: 0xfffffff0
+RSI: 0x7ffef6600018 ('a' &lt;repeats 200 times&gt;...)
+RDI: 0x7ffff687f252 ('a' &lt;repeats 16 times&gt;)
+RBP: 0x7fffffffa800 --&gt; 0x7fffffffa850 --&gt; 0x7fffffffa940 --&gt; 0x7fffffffaa40 --&gt; 0x7fffffffaa80 --&gt; 0x7fffffffaaa0 (--&gt; ...)
+RSP: 0x7fffffffa2b8 --&gt; 0x7b654a (&lt;xbuf_format_converter+10067&gt;:	mov    rax,QWORD PTR [rbp-0x460])
+RIP: 0x7ffff7020ef5 (movdqu XMMWORD PTR [rdi+rdx*1-0x10],xmm8)
+R8 : 0xd65060 (&quot;/home/ubuntu/php-src/main/spprintf.c&quot;)
+R9 : 0x32e
+R10: 0x7d8555 (&lt;php_plain_files_stream_opener&gt;:	push   rbp)
+R11: 0x7ffff6858898 --&gt; 0x72 ('r')
+R12: 0x422c80 (&lt;_start&gt;:	xor    ebp,ebp)
+R13: 0x7fffffffe680 --&gt; 0x2
+R14: 0x7ffff6814030 --&gt; 0x7ffff68691e0 --&gt; 0x8a5593 (&lt;ZEND_DO_ICALL_SPEC_RETVAL_UNUSED_HANDLER&gt;:	push   rbp)
+R15: 0x7ffff68691e0 --&gt; 0x8a5593 (&lt;ZEND_DO_ICALL_SPEC_RETVAL_UNUSED_HANDLER&gt;:	push   rbp)
+EFLAGS: 0x10202 (carry parity adjust zero sign trap INTERRUPT direction overflow)
+[-------------------------------------code-------------------------------------]
+   0x7ffff7020ee5:	cmp    rdx,0x20
+   0x7ffff7020ee9:	movdqu XMMWORD PTR [rdi],xmm8
+   0x7ffff7020eee:	movdqu xmm8,XMMWORD PTR [rsi+rdx*1-0x10]
+=&gt; 0x7ffff7020ef5:	movdqu XMMWORD PTR [rdi+rdx*1-0x10],xmm8
+   0x7ffff7020efc:	ja     0x7ffff7020f10
+   0x7ffff7020efe:	mov    rax,rdi
+   0x7ffff7020f01:	ret
+   0x7ffff7020f02:	data16 data16 data16 data16 nop WORD PTR cs:[rax+rax*1+0x0]
+[------------------------------------stack-------------------------------------]
+0000| 0x7fffffffa2b8 --&gt; 0x7b654a (&lt;xbuf_format_converter+10067&gt;:	mov    rax,QWORD PTR [rbp-0x460])
+0008| 0x7fffffffa2c0 --&gt; 0x0
+0016| 0x7fffffffa2c8 --&gt; 0x0
+0024| 0x7fffffffa2d0 --&gt; 0x0
+0032| 0x7fffffffa2d8 --&gt; 0x0
+0040| 0x7fffffffa2e0 --&gt; 0x7fffffffa978 --&gt; 0x3000000028 ('(')
+0048| 0x7fffffffa2e8 --&gt; 0xd65501 --&gt; 0x6f00000000000073 ('s')
+0056| 0x7fffffffa2f0 --&gt; 0x100000000
+[------------------------------------------------------------------------------]
+Legend: code, data, rodata, value
+Stopped reason: SIGSEGV
+0x00007ffff7020ef5 in ?? () from /lib/x86_64-linux-gnu/libc.so.6
+</pre>
+</div><div class='comment type_log' ><a name="1471227312">&nbsp;</a><strong>[2016-08-15 02:15 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Operating System:</span>
+<span class="added">+Operating System: *</span>
+<span class="removed">-PHP Version:      7.1Git-2016-08-03 (Git)</span>
+<span class="added">+PHP Version:      7.0.9</span>
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To:      stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1471227312">&nbsp;</a><strong>[2016-08-15 02:15 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The problem is that memory allocator fails to reallocate block properly if old block was small but new block is huge. 
+
+The fix is in security repo as c2a13ced4272f2e65d2773e2ea6ca11c1ce4a911 and in <a href="https://gist.github.com/97abe94b25f99e6426e37b8693f46063" rel="nofollow">https://gist.github.com/97abe94b25f99e6426e37b8693f46063</a> (patch by nikic)
+
+please verify
+</pre>
+</div><div class='comment type_log' ><a name="1471240942">&nbsp;</a><strong>[2016-08-15 06:02 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: needed</span>
+</div></div></div><div class='comment type_comment' ><a name="1471245796">&nbsp;</a><strong>[2016-08-15 07:23 UTC] tinduong &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</strong>
+<pre class='note'>It seems to be fixed. I can't reproduce it anymore. 
+
+May I ask for a CVE number ?
+
+Thanks for your time.
+</pre>
+</div><div class='comment type_svn' ><a name="1471422231">&nbsp;</a><strong>[2016-08-17 08:23 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=c2a13ced4272f2e65d2773e2ea6ca11c1ce4a911" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=c2a13ced4272f2e65d2773e2ea6ca11c1ce4a911</a>
+Log: Fix <a href='bug.php?id=72742'>bug #72742</a> - memory allocator fails to realloc small block to large one
+</pre>
+</div><div class='comment type_log' ><a name="1471422232">&nbsp;</a><strong>[2016-08-17 08:23 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_log' ><a name="1471424234">&nbsp;</a><strong>[2016-08-17 08:57 UTC] tinduong &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Summary: Stack-based buffer overflow vulnerability in
+          php_check_specific_open_basedir</span>
+<span class="added">+Summary: memory allocator fails to realloc small block to
+          large one</span>
+</div></div></div><div class='comment type_comment' ><a name="1471424234">&nbsp;</a><strong>[2016-08-17 08:57 UTC] tinduong &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</strong>
+<pre class='note'>correct bug name
+</pre>
+</div><div class='comment type_svn' ><a name="1471425348">&nbsp;</a><strong>[2016-08-17 09:15 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=c2a13ced4272f2e65d2773e2ea6ca11c1ce4a911" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=c2a13ced4272f2e65d2773e2ea6ca11c1ce4a911</a>
+Log: Fix <a href='bug.php?id=72742'>bug #72742</a> - memory allocator fails to realloc small block to large one
+</pre>
+</div><div class='comment type_svn' ><a name="1471435451">&nbsp;</a><strong>[2016-08-17 12:04 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=326ac100ac016cd5fc2c7367c97d64fa4b6932df" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=326ac100ac016cd5fc2c7367c97d64fa4b6932df</a>
+Log: Fix <a href='bug.php?id=72742'>bug #72742</a> - memory allocator fails to realloc small block to large one
+</pre>
+</div><div class='comment type_log' ><a name="1473089375">&nbsp;</a><strong>[2016-09-05 15:29 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID: needed</span>
+<span class="added">+CVE-ID: 2016-7133</span>
+</div></div></div><div class='comment type_svn' ><a name="1476698993">&nbsp;</a><strong>[2016-10-17 10:09 UTC] <a href="//people.php.net/bwoebi">bwoebi@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=c2a13ced4272f2e65d2773e2ea6ca11c1ce4a911" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=c2a13ced4272f2e65d2773e2ea6ca11c1ce4a911</a>
+Log: Fix <a href='bug.php?id=72742'>bug #72742</a> - memory allocator fails to realloc small block to large one
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

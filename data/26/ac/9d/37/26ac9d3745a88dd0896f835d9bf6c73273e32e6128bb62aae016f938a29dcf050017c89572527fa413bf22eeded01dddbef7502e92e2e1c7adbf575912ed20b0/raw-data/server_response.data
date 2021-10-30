@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='WDDX related Bug #73631 - RDF' href='rss/bug.php?id=73631'>
+        <link rel='alternate' type='application/rss+xml' title='WDDX related Bug #73631 - RSS 2.0' href='rss/bug.php?id=73631&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #73631 :: Invalid read when wddx decodes empty boolean element</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=73631">Sec Bug</a>&nbsp;#73631</th>
+            <td id="summary" colspan="5">Invalid read when wddx decodes empty boolean element</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-12-01 03:52 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-12-13 11:51 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>bughunter &#x61;&#116; fosec &#x64;&#111;&#x74; vn</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=WDDX+related">WDDX related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.6.28</td>
+            <th class="details">OS:</th>
+            <td>Linux</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-9935" target="_blank">2016-9935</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=73631&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=73631&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=73631&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1480564329">&nbsp;</a><strong>[2016-12-01 03:52 UTC] bughunter &#x61;&#116; fosec &#x64;&#111;&#x74; vn</strong>
+<pre class='note'>Description:
+------------
+I have found some vulnerable code in wddx extension. The trouble happens when trying to process 'boolean' tag. If I open '&lt;boolean&gt;' tag without data, new st_entry item WILL NOT be pushed into stack. When '&lt;boolean&gt;' tag is closed and stack-&gt;top is greater than 1, st_entry item at top of stack WILL be popped out of stack.
+
+Look at following snip code, a new st_entry will be pushed into stack if 'atts' is not NULL. If I open &lt;boolean&gt; tag by using '&lt;boolean/&gt;', 'atts' is NULL.
+
+static void php_wddx_push_element(void *user_data, const XML_Char *name, const XML_Char **atts)
+{
+	.....
+    
+	} else if (!strcmp((char *)name, EL_BOOLEAN)) {
+		int i;
+
+		if (atts) for (i = 0; atts[i]; i++) {
+			if (!strcmp((char *)atts[i], EL_VALUE) &amp;&amp; atts[i+1] &amp;&amp; atts[i+1][0]) {
+				ent.type = ST_BOOLEAN;
+				SET_STACK_VARNAME;
+
+				ZVAL_TRUE(&amp;ent.data);
+				wddx_stack_push((wddx_stack *)stack, &amp;ent, sizeof(st_entry));
+				php_wddx_process_data(user_data, atts[i+1], strlen((char *)atts[i+1]));
+				break;
+			}
+		}
+	} 
+    .....
+}
+
+
+Look at the other snip code, I see &quot;boolean&quot; tag is popped and freed without checking anything:
+
+static void php_wddx_pop_element(void *user_data, const XML_Char *name)
+{
+	st_entry 			*ent1, *ent2;
+	wddx_stack 			*stack = (wddx_stack *)user_data;
+
+
+	if (!strcmp((char *)name, EL_STRING) || !strcmp((char *)name, EL_NUMBER) ||
+		!strcmp((char *)name, EL_BOOLEAN) || !strcmp((char *)name, EL_NULL) ||
+	  	!strcmp((char *)name, EL_ARRAY) || !strcmp((char *)name, EL_STRUCT) ||
+		!strcmp((char *)name, EL_RECORDSET) || !strcmp((char *)name, EL_BINARY) ||
+		!strcmp((char *)name, EL_DATETIME)) {
+		wddx_stack_top(stack, (void**)&amp;ent1);
+
+		...
+
+		if (stack-&gt;top &gt; 1) {
+			stack-&gt;top--;
+			wddx_stack_top(stack, (void**)&amp;ent2);
+            .....
+			
+			efree(ent1);
+		} else {
+			stack-&gt;done = 1;
+		}
+	} 
+    ....
+}
+
+I have written a small test script to demostrate this issue:
+&lt;?php
+$xml = &lt;&lt;&lt;EOF
+&lt;?xml version=&quot;1.0&quot; ?&gt;
+&lt;wddxPacket version=&quot;1.0&quot;&gt;
+&lt;number&gt;2261634.5098039215&lt;/number&gt;
+&lt;binary&gt;&lt;boolean/&gt;&lt;/binary&gt;
+&lt;/wddxPacket&gt;
+EOF;
+$wddx = wddx_deserialize($xml);
+var_dump($wddx);
+
+When processing 'binary' tag, a 'st_entry' which describes 'binary' tag is pushed to stack. '&lt;boolean/&gt;' will lead to st_entry of 'binary' tag is popped out. When processing '&lt;/binary&gt;', php_wddx_pop_element() function is called. 'php_wddx_pop_element' will take top of stack and use it as a string object, try to decode it. We can use this issue to read anything at anywhere. If this value is not a valid memory address, it will lead to memory corruption.
+
+Below backtrace of gdb will give you details.
+
+[-------------------------------------code-------------------------------------]
+   0x82cf418 &lt;php_wddx_pop_element+440&gt;:        mov    eax,DWORD PTR [ebx]
+=&gt; 0x82cf41a &lt;php_wddx_pop_element+442&gt;:        mov    edx,DWORD PTR [eax+0xc]
+   0x82cf41d &lt;php_wddx_pop_element+445&gt;:        add    eax,0x10
+   0x82cf420 &lt;php_wddx_pop_element+448&gt;:        mov    DWORD PTR [esp],eax
+   0x82cf423 &lt;php_wddx_pop_element+451&gt;:        mov    DWORD PTR [esp+0x4],edx
+   0x82cf427 &lt;php_wddx_pop_element+455&gt;:        call   0x82702f0 &lt;php_base64_decode&gt;
+[------------------------------------stack-------------------------------------]
+0000| 0xbfffbce0 --&gt; 0x89b92d4 (&quot;boolean&quot;)
+0004| 0xbfffbce4 --&gt; 0xb7870080 --&gt; 0x0
+0008| 0xbfffbce8 --&gt; 0x89b8568 --&gt; 0x8931938 --&gt; 0x0
+0012| 0xbfffbcec --&gt; 0xb7c66458 (&lt;__GI___libc_malloc+8&gt;:        add    ebx,0x140ba8)
+0016| 0xbfffbcf0 --&gt; 0xb7f1e000 --&gt; 0x15adac
+0020| 0xbfffbcf4 --&gt; 0xb7d371bf (&lt;__memcpy_ssse3_rep+31&gt;:       add    ebx,0x31501)
+0024| 0xbfffbcf8 --&gt; 0xb7f1e000 --&gt; 0x15adac
+0028| 0xbfffbcfc --&gt; 0xb7e6409b (&lt;xmlStrndup__internal_alias+75&gt;:       mov    eax,edi)
+[------------------------------------------------------------------------------]
+Legend: code, data, rodata, value
+Stopped reason: SIGSEGV
+php_wddx_pop_element (user_data=0xbfffbf6c, name=&lt;optimized out&gt;) at /root/fuzzer/PHP-7.1/ext/wddx/wddx.c:905
+905                             zend_string *new_str = php_base64_decode(
+gdb-peda$ bt
+#0  php_wddx_pop_element (user_data=0xbfffbf6c, name=&lt;optimized out&gt;) at /root/fuzzer/PHP-7.1/ext/wddx/wddx.c:905
+#1  0x082d602b in _end_element_handler (user=0xb7870080, name=0x89b92cd &quot;binary&quot;) at /root/fuzzer/PHP-7.1/ext/xml/compat.c:219
+#2  0xb7df9302 in xmlParseEndTag1 (ctxt=ctxt@entry=0x89b8568, line=line@entry=0x0) at parser.c:8796
+#3  0xb7e01c89 in xmlParseTryOrFinish (ctxt=ctxt@entry=0x89b8568, terminate=terminate@entry=0x1) at parser.c:11743
+#4  0xb7e02da3 in xmlParseChunk__internal_alias (ctxt=0x89b8568,
+    chunk=chunk@entry=0xb78661f0 &quot;&lt;?xml version=\&quot;1.0\&quot; ?&gt;\r\n&lt;wddxPacket version=\&quot;1.0\&quot;&gt;\r\n&lt;number&gt;2261634.5098039215&lt;/number&gt;\r\n&lt;binary&gt;&lt;boolean/&gt;&lt;/binary&gt;\r\n&lt;/wddxPacket&gt;&quot;, size=size@entry=0x83,
+    terminate=terminate@entry=0x1) at parser.c:12446
+#5  0x082d6336 in php_XML_Parse (parser=parser@entry=0xb7870080,
+    data=data@entry=0xb78661f0 &quot;&lt;?xml version=\&quot;1.0\&quot; ?&gt;\r\n&lt;wddxPacket version=\&quot;1.0\&quot;&gt;\r\n&lt;number&gt;2261634.5098039215&lt;/number&gt;\r\n&lt;binary&gt;&lt;boolean/&gt;&lt;/binary&gt;\r\n&lt;/wddxPacket&gt;&quot;, data_len=data_len@entry=0x83,
+    is_final=is_final@entry=0x1) at /root/fuzzer/PHP-7.1/ext/xml/compat.c:600
+#6  0x082d1904 in php_wddx_deserialize_ex (
+    value=value@entry=0xb78661f0 &quot;&lt;?xml version=\&quot;1.0\&quot; ?&gt;\r\n&lt;wddxPacket version=\&quot;1.0\&quot;&gt;\r\n&lt;number&gt;2261634.5098039215&lt;/number&gt;\r\n&lt;binary&gt;&lt;boolean/&gt;&lt;/binary&gt;\r\n&lt;/wddxPacket&gt;&quot;, vallen=0x83,
+    return_value=return_value@entry=0xb7814080) at /root/fuzzer/PHP-7.1/ext/wddx/wddx.c:1095
+#7  0x082d1ba7 in zif_wddx_deserialize (execute_data=0xb78140b0, return_value=0xb7814080) at /root/fuzzer/PHP-7.1/ext/wddx/wddx.c:1313
+#8  0x0838b6c6 in ZEND_DO_ICALL_SPEC_RETVAL_USED_HANDLER () at /root/fuzzer/PHP-7.1/Zend/zend_vm_execute.h:675
+#9  0x0837c322 in execute_ex (ex=0xb7814020) at /root/fuzzer/PHP-7.1/Zend/zend_vm_execute.h:429
+#10 0x083cb3bb in zend_execute (op_array=op_array@entry=0xb7865180, return_value=return_value@entry=0x0) at /root/fuzzer/PHP-7.1/Zend/zend_vm_execute.h:474
+#11 0x0833bb40 in zend_execute_scripts (type=type@entry=0x8, retval=retval@entry=0x0, file_count=file_count@entry=0x3) at /root/fuzzer/PHP-7.1/Zend/zend.c:1474
+#12 0x082dd0cb in php_execute_script (primary_file=primary_file@entry=0xbfffe2b8) at /root/fuzzer/PHP-7.1/main/main.c:2533
+#13 0x083cd70a in do_cli (argc=argc@entry=0x3, argv=argv@entry=0x88eca80) at /root/fuzzer/PHP-7.1/sapi/cli/php_cli.c:990
+#14 0x0806d544 in main (argc=0x3, argv=0x88eca80) at /root/fuzzer/PHP-7.1/sapi/cli/php_cli.c:1378
+#15 0xb7c07943 in __libc_start_main (main=0x806d070 &lt;main&gt;, argc=0x3, ubp_av=0xbffff564, init=0x83d5260 &lt;__libc_csu_init&gt;, fini=0x83d52d0 &lt;__libc_csu_fini&gt;, rtld_fini=0xb7fee700 &lt;_dl_fini&gt;,
+    stack_end=0xbffff55c) at libc-start.c:274
+#16 0x0806d5d1 in _start ()
+gdb-peda$ i r $eax
+eax            0x41414141       0x41414141
+gdb-peda$
+
+
+Test script:
+---------------
+&lt;?php
+$xml = &lt;&lt;&lt;EOF
+&lt;?xml version=&quot;1.0&quot; ?&gt;
+&lt;wddxPacket version=&quot;1.0&quot;&gt;
+&lt;number&gt;2261634.5098039215&lt;/number&gt;
+&lt;binary&gt;&lt;boolean/&gt;&lt;/binary&gt;
+&lt;/wddxPacket&gt;
+EOF;
+$wddx = wddx_deserialize($xml);
+var_dump($wddx);
+?&gt;
+
+Expected result:
+----------------
+no SIGSEGV
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=73631'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=73631'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1480564508">&nbsp;</a><strong>[2016-12-01 03:55 UTC] bughunter &#x61;&#116; fosec &#x64;&#111;&#x74; vn</strong>
+<pre class='note'>Patch to fix this issue:
+
+diff --git a/ext/wddx/wddx.c b/ext/wddx/wddx.c
+index f3d72dd..275bd73 100644
+--- a/ext/wddx/wddx.c
++++ b/ext/wddx/wddx.c
+@@ -773,6 +773,12 @@ static void php_wddx_push_element(void *user_data, const XML_Char *name, const X
+ 				break;
+ 			}
+ 		}
++		else {
++			ent.type = ST_BOOLEAN;
++			SET_STACK_VARNAME;
++			ZVAL_FALSE(&amp;ent.data);
++			wddx_stack_push((wddx_stack *)stack, &amp;ent, sizeof(st_entry));
++		}
+ 	} else if (!strcmp((char *)name, EL_NULL)) {
+ 		ent.type = ST_NULL;
+ 		SET_STACK_VARNAME;
+</pre>
+</div><div class='comment type_log' ><a name="1481001669">&nbsp;</a><strong>[2016-12-06 05:21 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 7.1Git-2016-12-01 (Git)</span>
+<span class="added">+PHP Version: 5.6.28</span>
+</div></div></div><div class='comment type_comment' ><a name="1481001669">&nbsp;</a><strong>[2016-12-06 05:21 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The patch doesn't work for me, still segfaults.
+</pre>
+</div><div class='comment type_comment' ><a name="1481002206">&nbsp;</a><strong>[2016-12-06 05:30 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Ignore that, I applied patch incorrectly. It works.
+</pre>
+</div><div class='comment type_log' ><a name="1481002922">&nbsp;</a><strong>[2016-12-06 05:42 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Summary: Memory leak due to invalid wddx stack processing</span>
+<span class="added">+Summary: Invalid read when wddx decodes empty boolean element</span>
+</div></div></div><div class='comment type_log' ><a name="1481002935">&nbsp;</a><strong>[2016-12-06 05:42 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_log' ><a name="1481003973">&nbsp;</a><strong>[2016-12-06 05:59 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: needed</span>
+</div></div></div><div class='comment type_log' ><a name="1481004013">&nbsp;</a><strong>[2016-12-06 06:00 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+<span class="removed">-Type:   Security</span>
+<span class="added">+Type:   Bug</span>
+</div></div></div><div class='comment type_comment' ><a name="1481004013">&nbsp;</a><strong>[2016-12-06 06:00 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The fix for this bug has been committed.
+
+Snapshots of the sources are packaged every three hours; this change
+will be in the next snapshot. You can grab the snapshot at
+<a href="http://snaps.php.net/" rel="nofollow">http://snaps.php.net/</a>.
+
+ For Windows:
+
+<a href="http://windows.php.net/snapshots/" rel="nofollow">http://windows.php.net/snapshots/</a>
+ 
+Thank you for the report, and for helping us make PHP better.
+
+
+</pre>
+</div><div class='comment type_log' ><a name="1481004024">&nbsp;</a><strong>[2016-12-06 06:00 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Type: Bug</span>
+<span class="added">+Type: Security</span>
+</div></div></div><div class='comment type_svn' ><a name="1481177274">&nbsp;</a><strong>[2016-12-08 06:07 UTC] <a href="//people.php.net/tyrael">tyrael@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=66fd44209d5ffcb9b3d1bc1b9fd8e35b485040c0" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=66fd44209d5ffcb9b3d1bc1b9fd8e35b485040c0</a>
+Log: Fix <a href='bug.php?id=73631'>bug #73631</a> - Invalid read when wddx decodes empty boolean element
+</pre>
+</div><div class='comment type_log' ><a name="1481629895">&nbsp;</a><strong>[2016-12-13 11:51 UTC] <a href="//people.php.net/kaplan">kaplan@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID: needed</span>
+<span class="added">+CVE-ID: 2016-9935</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

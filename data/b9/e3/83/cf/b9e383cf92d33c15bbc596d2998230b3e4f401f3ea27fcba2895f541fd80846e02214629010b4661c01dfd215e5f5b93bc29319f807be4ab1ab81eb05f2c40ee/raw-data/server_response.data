@@ -1,0 +1,3496 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en" dir="ltr">
+  <head>
+<base href="https://bugs.launchpad.net/nova/+bug/1125378/+index" />
+
+    <meta charset="UTF-8" />
+    <title>Bug #1125378 “[OSSA-2013-006] VNC proxy can be made to connect t...” : Bugs : OpenStack Compute (nova)</title>
+    <link rel="shortcut icon" href="/@@/launchpad.png" />
+    <link rel="canonical" href="https://bugs.launchpad.net/bugs/1125378" />
+    
+      <link rel="alternate" type="application/atom+xml" href="http://feeds.launchpad.net/bugs/1125378/bug.atom" title="Bug 1125378 Feed" />
+    
+
+    
+  
+  <link type="text/css" rel="stylesheet" media="screen, print" href="/+icing/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/combo.css" />
+
+
+    
+
+    
+      <meta name="description" content="Suppose a user requests a VNC token, and then deletes the VM right away, as I understand, the token is still valid not having yet exceeded the TTL. During this time if a new VM is spawned on the host and kvm reuses the port to bind the vncserver, it's possible for the user to use the old token to get access to this new VM, which could be owned by someone else.
+
+I have seen this happening in Essex code and was wondering if this is still the case. The possible solutions are to flush the tokens ..." />
+      <meta property="og:description" content="Suppose a user requests a VNC token, and then deletes the VM right away, as I understand, the token is still valid not having yet exceeded the TTL. During this time if a new VM is spawned on the host and kvm reuses the port to bind the vncserver, it's possible for the user to use the old token to get access to this new VM, which could be owned by someone else.
+
+I have seen this happening in Essex code and was wondering if this is still the case. The possible solutions are to flush the tokens ..." />
+    
+
+    
+    
+      <meta property="og:title" content="Bug #1125378 “[OSSA-2013-006] VNC proxy can be made to connect t...” : Bugs : OpenStack Compute (nova)" />
+      <meta property="og:type" content="website" />
+      <meta property="og:image" content="/@@/launchpad.png" />
+      <meta property="og:url" content="https://bugs.launchpad.net/bugs/1125378" />
+      <meta property="og:site_name" content="Launchpad" />
+    
+
+    
+
+    
+  
+
+  
+  
+  <script type="text/javascript">
+    var LP = {
+        cache: {},
+        links: {}
+    };
+  </script>
+
+  
+
+  <script type="text/javascript">var cookie_scope = '; Path=/; Secure; Domain=.launchpad.net';</script>
+
+   <script type="text/javascript" src="/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?yui/yui/yui-min.js&amp;lp/meta.js&amp;yui/loader/loader-min.js"></script>
+   <script type="text/javascript">
+        var raw = null;
+        if (LP.devmode) {
+           raw = 'raw';
+        }
+        YUI.GlobalConfig = {
+            combine: true,
+            comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+            root: 'yui/',
+            filter: raw,
+            debug: false,
+            fetchCSS: false,
+            maxURLLength: 2000,
+            groups: {
+                lp: {
+                    combine: true,
+                    base: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?lp/',
+                    comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+                    root: 'lp/',
+                    // comes from including lp/meta.js
+                    modules: LP_MODULES,
+                    fetchCSS: false
+                }
+            }
+        }</script>
+
+  <script type="text/javascript">
+      // we need this to create a single YUI instance all events and code
+      // talks across. All instances of YUI().use should be based off of
+      // LPJS instead.
+      var LPJS = new YUI();
+  </script>
+
+
+
+    <script id="base-layout-load-scripts" type="text/javascript">
+        //<![CDATA[
+        LPJS.use('base', 'node', 'console', 'event',
+            'oop', 'lp', 'lp.app.foldables','lp.app.sorttable',
+            'lp.app.inlinehelp', 'lp.app.links',
+            'lp.bugs.bugtask_index', 'lp.bugs.subscribers',
+            'lp.app.ellipsis', 'lp.code.branchmergeproposal.diff',
+            'lp.views.global',
+             function(Y) {
+
+            Y.on("domready", function () {
+                var global_view = new Y.lp.views.Global();
+                global_view.render();
+
+                Y.lp.app.sorttable.SortTable.init();
+                Y.lp.app.inlinehelp.init_help();
+                Y.lp.activate_collapsibles();
+                Y.lp.app.foldables.activate();
+                Y.lp.app.links.check_valid_lp_links();
+            });
+
+            Y.on('lp:context:web_link:changed', function(e) {
+                  window.location = e.new_value;
+            });
+        });
+        //]]>
+    </script>
+    <script id="base-helper-functions" type="text/javascript">
+         //<![CDATA[
+        // This code is pulled from lp.js that needs to be available on every
+        // request. Pulling here to get it outside the scope of the YUI block.
+        function setFocusByName(name) {
+            // Focus the first element matching the given name which can be focused.
+            var nodes = document.getElementsByName(name);
+            var i, node;
+            for (i = 0; i < nodes.length; i++) {
+                node = nodes[i];
+                if (node.focus) {
+                    try {
+                        // Trying to focus a hidden element throws an error in IE8.
+                        if (node.offsetHeight !== 0) {
+                            node.focus();
+                        }
+                    } catch (e) {
+                        LPJS.use('console', function(Y) {
+                            Y.log('In setFocusByName(<' +
+                                node.tagName + ' type=' + node.type + '>): ' + e);
+                        });
+                    }
+                    break;
+                }
+            }
+        }
+
+        function selectWidget(widget_name, event) {
+          if (event && (event.keyCode === 9 || event.keyCode === 13)) {
+              // Avoid firing if user is tabbing through or simply pressing
+              // enter to submit the form.
+              return;
+          }
+          document.getElementById(widget_name).checked = true;
+        }
+        //]]>
+    </script>
+
+    
+      
+      <script type="text/javascript" id="available-official-tags-js">var available_official_tags = ["api", "api-ref", "availability-zones", "cells", "ceph", "cinder", "compute", "conductor", "config", "console", "cyborg", "db", "doc", "ec2", "evacuate", "fault-injection", "gate-failure", "glance", "hyper-v", "i18n", "image-cache", "in-stable-liberty", "in-stable-newton", "in-stable-ocata", "ironic", "kilo-backport-potential", "liberty-backport-potential", "libvirt", "live-migration", "low-hanging-fruit", "lxc", "metadata", "mitaka-backport-potential", "needs-attention", "needs-functional-test", "needs.openstack-version", "network", "neutron", "newton-backport-potential", "nfs", "notifications", "nova-manage", "nova-network", "numa", "ocata-backport-potential", "openstack-version.grizzly", "openstack-version.havana", "openstack-version.icehouse", "openstack-version.juno", "openstack-version.kilo", "openstack-version.liberty", "openstack-version.mitaka", "openstack-version.newton", "openstack-version.ocata", "openstack-version.pike", "ops", "oslo", "pci", "performance", "pike-backport-potential", "placement", "policy", "postgresql", "powervm", "privsep", "queens-backport-potential", "quotas", "race-condition", "reboot", "rebuild", "rescue", "resize", "resource-tracker", "rootwrap", "s390x", "scheduler", "security", "security-groups", "serviceability", "shared-storage", "shelve", "snapshot", "stacktrace", "stein-rc-potential", "testing", "train-rc-potential", "unified-objects", "upgrade", "ussuri-backport-potential", "ussuri-rc-potential", "vgpu", "victoria-rc-potential", "vmware", "volumes", "wallaby-rc-potential", "xen", "xena-rc-potential", "xenserver", "zvm"];</script>
+      <script type="text/javascript">
+        LPJS.use('base', 'node', 'oop', 'event', 'lp.bugs.bugtask_index',
+                  'lp.bugs.subscribers', 'lp.code.branchmergeproposal.diff',
+                  'lp.app.comment', 'lp.services.messages.edit', function(Y) {
+            Y.on('domready', function() {
+                Y.lp.code.branchmergeproposal.diff.connect_diff_links();
+                Y.lp.bugs.bugtask_index.setup_bugtask_index();
+                Y.lp.bugs.bugtask_index.setup_bugtask_table();
+                LP.cache.comment_context = LP.cache.bug;
+                var cl = new Y.lp.app.comment.CommentList();
+                cl.render();
+                var sl = new Y.lp.bugs.subscribers.createBugSubscribersLoader({
+                    container_box: '#other-bug-subscribers',
+                    subscribers_details_view:
+                        '/+bug-portlet-subscribers-details',
+                    subscribe_someone_else_link: '.menu-link-addsubscriber'
+                }, window);
+
+                Y.lp.services.messages.edit.setup();
+            });
+         });
+      </script>
+      <style type="text/css">
+        /* Align the 'add comment' link to the right of the comment box. */
+        #add-comment-form textarea { width: 100%; }
+        #add-comment-form { max-width: 60em; padding-bottom: 4em; }
+        #add-comment-form .actions {float: right;}
+        .buglink-summary dd { font-size: 10px; }
+        a#privacy-link:link:hover, a#privacy-link:visited:hover {text-decoration:none;}
+      </style>
+      <style type="text/css">
+        .yui3-overlay .value label  {
+          /* It normally makes sense for form labels to be bold, but since
+          this form consists only of radio buttons, there's nothing but labels
+          so we just get wall-to-wall bold. */
+          font-weight: normal !important;
+        }
+      </style>
+    
+    
+  </head>
+
+  <body id="document" itemscope="" itemtype="http://schema.org/WebPage" class="tab-bugs
+      main_side
+      public
+      yui3-skin-sam">
+          
+          
+    <div class="yui-d0">
+      <div id="locationbar" class="login-logout">
+        
+
+<div id="logincontrol"><a href="https://bugs.launchpad.net/nova/+bug/1125378/+login">Log in / Register</a></div>
+
+
+
+      </div><!--id="locationbar"-->
+
+      <div id="watermark" class="watermark-apps-portlet">
+        <div>
+          <a href="https://launchpad.net/nova"><img alt="" width="64" height="64" src="https://launchpadlibrarian.net/324577028/nova64.png" /></a>
+        </div>
+        <div class="wide">
+          <h2 id="watermark-heading"><a href="https://launchpad.net/nova">OpenStack Compute (nova)</a></h2>
+        </div>
+        
+  <!-- Application Menu -->
+  <ul class="facetmenu">
+    
+      
+      <li class="overview"><a href="https://launchpad.net/nova">Overview</a></li>
+      
+    
+    
+      
+      <li class="branches"><a href="https://code.launchpad.net/nova">Code</a></li>
+      
+    
+    
+      <li class="bugs active"><a href="https://bugs.launchpad.net/nova">Bugs</a></li>
+      
+      
+    
+    
+      
+      <li class="specifications"><a href="https://blueprints.launchpad.net/nova">Blueprints</a></li>
+      
+    
+    
+      
+      <li class="translations"><a href="https://translations.launchpad.net/nova">Translations</a></li>
+      
+    
+    
+      
+      <li class="answers"><a href="https://answers.launchpad.net/nova">Answers</a></li>
+      
+    
+  </ul>
+
+      </div>
+
+      <div class="yui-t4">
+        <div id="maincontent" class="yui-main">
+          <div class="yui-b" dir="ltr">
+            <div class="context-publication">
+              
+      <h1 id="edit-title">
+<span class="yui3-editable_text-text ellipsis" style="max-width: 95%;">
+    [OSSA-2013-006] VNC proxy can be made to connect to wrong VM
+</span>
+  
+</h1>
+
+
+
+    
+              
+
+              <div id="registration" class="registering">
+                
+      Bug #1125378 reported by
+      <a href="https://launchpad.net/~parthipan" class="sprite person">Loganathan Parthipan</a>
+      <time title="2013-02-14 17:12:03 UTC" datetime="2013-02-14T17:12:03.331625+00:00">on 2013-02-14</time>
+    
+              </div>
+            </div>
+
+            
+            <div id="request-notifications">
+              
+            </div>
+
+            
+              <div>
+
+      
+
+      <div id="bug-is-duplicate">
+          
+      </div>
+      
+
+      <div style="float: right;">
+        <span><a href="/+help-bugs/bug-heat.html" target="help" class="sprite flame">302</a></span>
+      </div>
+
+      
+
+
+  
+  
+    <div class="actions">
+      <span id="affectsmetoo" style="display: inline">This bug affects 6 people</span>
+    </div>
+  
+
+
+
+    <table id="affected-software" class="listing">
+      <thead>
+        <tr>
+          <th colspan="2">Affects</th>
+          <th>Status</th>
+          <th>Importance</th>
+          <th>Assigned to</th>
+          <th>Milestone</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        
+          
+  <tr class="highlight" id="tasksummary1349119">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/nova/+bug/1125378/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary1349119">
+        <span class="yui3-activator-data-box">
+            <a class="sprite product" href="https://bugs.launchpad.net/nova">OpenStack Compute (nova)</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/nova/+bug/1125378/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/nova/+bug/1125378/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1349119">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~john-herndon">John Herndon</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/nova/+milestone/2013.1">OpenStack Compute (nova) 2013.1 "grizzly"</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1349119">
+     <td colspan="7"><form action="/nova/+bug/1125378/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/nova">OpenStack Compute (nova)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~parthipan" class="sprite person">Loganathan Parthipan</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2013-02-14 17:12:03 UTC" datetime="2013-02-14T17:12:03.331625+00:00">2013-02-14</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2013-02-15 23:20:23 UTC" datetime="2013-02-15T23:20:23.324425+00:00">2013-02-15</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2013-02-14 19:49:09 UTC" datetime="2013-02-14T19:49:09.244400+00:00">2013-02-14</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2013-02-15 23:20:23 UTC" datetime="2013-02-15T23:20:23.324425+00:00">2013-02-15</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2013-02-21 22:45:40 UTC" datetime="2013-02-21T22:45:40.172934+00:00">2013-02-21</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="nova.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="nova.target.option.package" name="nova.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="nova.target.distribution" name="nova.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="nova.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="nova.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="nova.target.package"
+                         name="nova.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;nova.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('nova.target.package');
+              var select_menu = Y.DOM.byId('nova.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-nova-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_assign_me_button": false, "extra_no_results_message": null, "picker_type": "default", "selected_value_metadata": null, "remove_team_text": "Remove team", "selected_value": null, "step_title": "Search by name", "header": "Select a package", "vocabulary_filters": [], "show_create_team": false, "input_element": "nova.target.package", "assign_me_text": "Pick me", "remove_person_text": "Remove person", "show_remove_button": false, "vocabulary_name": "DistributionPackage", "show_widget_id": "show-widget-nova-target-package"};
+        var show_widget_id = 'show-widget-nova-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="nova.target.option.product" name="nova.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="nova" id="nova.target.product"
+                         name="nova.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;nova.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('nova.target.product');
+              var select_menu = Y.DOM.byId('nova.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-nova-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_assign_me_button": false, "extra_no_results_message": null, "picker_type": "default", "selected_value_metadata": null, "remove_team_text": "Remove team", "selected_value": "nova", "step_title": "Search", "header": "Select a project", "vocabulary_filters": [], "show_create_team": false, "input_element": "nova.target.product", "assign_me_text": "Pick me", "remove_person_text": "Remove person", "show_remove_button": false, "vocabulary_name": "Product", "show_widget_id": "show-widget-nova-target-product"};
+        var show_widget_id = 'show-widget-nova-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="nova.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="nova.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="nova.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="nova.status" name="nova.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="nova.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          OpenStack Compute (nova) 2013.1
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="nova.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="nova.assignee.assign_to_me" name="nova.assignee.option" value="nova.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="nova.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="nova.assignee.assigned_to" name="nova.assignee.option" value="nova.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="nova.assignee.assigned_to">
+              John Herndon (john-herndon)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="nova.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="nova.comment_on_change" name="nova.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1353477">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/nova/folsom/+bug/1125378/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/nova/folsom">Folsom</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/nova/folsom/+bug/1125378/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/nova/folsom/+bug/1125378/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1353477">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~john-herndon">John Herndon</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/nova/+milestone/2012.2.4">OpenStack Compute (nova) 2012.2.4</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1353477">
+     <td colspan="7"><form action="/nova/folsom/+bug/1125378/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/nova/folsom">OpenStack Compute (nova) folsom</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2013-02-21 17:23:19 UTC" datetime="2013-02-21T17:23:19.047163+00:00">2013-02-21</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2013-02-22 12:37:51 UTC" datetime="2013-02-22T12:37:51.160003+00:00">2013-02-22</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2013-02-22 23:12:56 UTC" datetime="2013-02-22T23:12:56.990661+00:00">2013-02-22</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2013-02-22 23:12:57 UTC" datetime="2013-02-22T23:12:57.081346+00:00">2013-02-22</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2013-04-11 19:54:14 UTC" datetime="2013-04-11T19:54:14.261574+00:00">2013-04-11</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="nova_folsom.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="nova_folsom.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="nova_folsom.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="nova_folsom.status" name="nova_folsom.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="nova_folsom.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          OpenStack Compute (nova) 2012.2.4
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="nova_folsom.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="nova_folsom.assignee.assign_to_me" name="nova_folsom.assignee.option" value="nova_folsom.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="nova_folsom.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="nova_folsom.assignee.assigned_to" name="nova_folsom.assignee.option" value="nova_folsom.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="nova_folsom.assignee.assigned_to">
+              John Herndon (john-herndon)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="nova_folsom.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="nova_folsom.comment_on_change" name="nova_folsom.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1408791">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ossa/+bug/1125378/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary1408791">
+        <span class="yui3-activator-data-box">
+            <a class="sprite product" href="https://bugs.launchpad.net/ossa">OpenStack Security Advisory</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ossa/+bug/1125378/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ossa/+bug/1125378/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1408791">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~russellb">Russell Bryant</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1408791">
+     <td colspan="7"><form action="/ossa/+bug/1125378/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ossa">OpenStack Security Advisory</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2013-05-24 12:52:50 UTC" datetime="2013-05-24T12:52:50.621352+00:00">2013-05-24</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2013-05-24 12:53:11 UTC" datetime="2013-05-24T12:53:11.785694+00:00">2013-05-24</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2013-05-24 12:53:11 UTC" datetime="2013-05-24T12:53:11.842204+00:00">2013-05-24</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2013-05-24 12:53:11 UTC" datetime="2013-05-24T12:53:11.785694+00:00">2013-05-24</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2013-05-24 12:53:11 UTC" datetime="2013-05-24T12:53:11.785694+00:00">2013-05-24</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="ossa.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="ossa.target.option.package" name="ossa.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="ossa.target.distribution" name="ossa.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="ossa.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="ossa.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="ossa.target.package"
+                         name="ossa.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;ossa.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ossa.target.package');
+              var select_menu = Y.DOM.byId('ossa.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ossa-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_assign_me_button": false, "extra_no_results_message": null, "picker_type": "default", "selected_value_metadata": null, "remove_team_text": "Remove team", "selected_value": null, "step_title": "Search by name", "header": "Select a package", "vocabulary_filters": [], "show_create_team": false, "input_element": "ossa.target.package", "assign_me_text": "Pick me", "remove_person_text": "Remove person", "show_remove_button": false, "vocabulary_name": "DistributionPackage", "show_widget_id": "show-widget-ossa-target-package"};
+        var show_widget_id = 'show-widget-ossa-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="ossa.target.option.product" name="ossa.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="ossa" id="ossa.target.product"
+                         name="ossa.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;ossa.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ossa.target.product');
+              var select_menu = Y.DOM.byId('ossa.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ossa-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_assign_me_button": false, "extra_no_results_message": null, "picker_type": "default", "selected_value_metadata": null, "remove_team_text": "Remove team", "selected_value": "ossa", "step_title": "Search", "header": "Select a project", "vocabulary_filters": [], "show_create_team": false, "input_element": "ossa.target.product", "assign_me_text": "Pick me", "remove_person_text": "Remove person", "show_remove_button": false, "vocabulary_name": "Product", "show_widget_id": "show-widget-ossa-target-product"};
+        var show_widget_id = 'show-widget-ossa-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ossa.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ossa.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ossa.status" name="ossa.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ossa.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceUNDECIDED">Undecided</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ossa.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ossa.assignee.assign_to_me" name="ossa.assignee.option" value="ossa.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ossa.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="ossa.assignee.assigned_to" name="ossa.assignee.option" value="ossa.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="ossa.assignee.assigned_to">
+              Russell Bryant (russellb)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ossa.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ossa.comment_on_change" name="ossa.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+      </tbody>
+
+    </table>
+
+
+
+<div class="actions">
+  
+    <span id="also-affects-product" class="">
+    <a class="menu-link-addupstream sprite add" href="https://bugs.launchpad.net/nova/+bug/1125378/+choose-affected-product">Also affects project</a>
+        <a href="/+help-bugs/also-affects-project-help.html" target="help" class="sprite maybe action-icon">(?)</a>
+    </span>
+    <span id="also-affects-package" class="">
+    <a class="menu-link-adddistro sprite add" href="https://bugs.launchpad.net/nova/+bug/1125378/+distrotask">Also affects distribution/package</a>
+    </span>
+    <a class="menu-link-nominate sprite milestone" href="https://bugs.launchpad.net/nova/+bug/1125378/+nominate">Nominate for series</a>
+    
+  
+
+</div>
+
+
+
+
+      <div id="maincontentsub">
+        <div class="top-portlet">
+
+      <div itemprop="mainContentOfPage" class="report">
+        
+
+        <div>
+  <div class="lazr-multiline-edit" id="edit-description">
+  <div class="clearfix">
+    
+
+    <h3>Bug Description</h3>
+  </div>
+
+  <div class="yui3-editable_text-text"><p>Suppose a user requests a VNC token, and then deletes the VM right away, as I understand, the token is still valid not having yet exceeded the TTL. During this time if a new VM is spawned on the host and kvm reuses the port to bind the vncserver, it&#x27;s possible for the user to use the old token to get access to this new VM, which could be owned by someone else.</p>
+<p>I have seen this happening in Essex code and was wondering if this is still the case. The possible solutions are to flush the tokens on vm delete, hard reboot etc or to have a password protected VNC session.</p></div>
+  </div>
+
+  
+</div>
+
+
+        <div style="margin:-10px 0 20px 5px" class="clearfix">
+          
+        </div>
+
+        <div id="bug-tags">
+          <span id="tags-heading">
+            
+          </span>
+          <span id="tag-list">
+          </span>
+          <a href="+edit" title="Add tags" id="tags-trigger" class="sprite add">Add tags</a>
+          
+          <a href="/+help-bugs/tag-help.html" target="help" class="sprite maybe action-icon">Tag help</a>
+        </div>
+
+        <script type="text/javascript">
+          LPJS.use('event', 'node', 'lp.bugs.tags_entry', function(Y) {
+              Y.on('domready',
+                   function(e) {
+                       Y.lp.bugs.tags_entry.setup_tag_entry(
+                           available_official_tags);
+                   },
+                   window);
+          });
+        </script>
+
+        <div class="clearfix"></div>
+      </div>
+
+      <div id="branches-and-cves">
+        <div id="bug-branches-container" style="float: left">
+          
+
+            <div id="bug-branches">
+              <h2>Related branches</h2>
+
+              
+                
+
+ 
+
+ <div class="buglink-summary">
+
+  <a href="https://code.launchpad.net/~ubuntu-branches/ubuntu/quantal/nova/quantal-security" class="sprite branch">lp:ubuntu/quantal-security/nova</a>
+  
+  
+</div>
+
+
+
+              
+              
+                
+
+ 
+
+ <div class="buglink-summary">
+
+  <a href="https://code.launchpad.net/~ubuntu-branches/ubuntu/precise/nova/precise-updates" class="sprite branch">lp:ubuntu/precise-updates/nova</a>
+  
+  
+</div>
+
+
+
+              
+              
+                
+
+ 
+
+ <div class="buglink-summary">
+
+  <a href="https://code.launchpad.net/~james-page/nova/folsom-resync" class="sprite branch">lp:~james-page/nova/folsom-resync</a>
+  
+  
+  <div class="reviews">
+    
+
+  <div>
+    
+
+  <img src="/@@/merge-proposal-icon" />
+  <a href="https://code.launchpad.net/~james-page/nova/folsom-resync/+merge/154955" title="">Merged</a>
+  
+  into
+  
+    <a href="https://code.launchpad.net/~openstack-ubuntu-testing/nova/folsom">lp:~openstack-ubuntu-testing/nova/folsom</a>
+  
+  
+    
+      at
+      <a href="https://bazaar.launchpad.net/~openstack-ubuntu-testing/nova/folsom/revision/479">
+        revision 479
+      </a>
+    
+  
+
+
+  </div>
+  
+
+  
+
+<dl class="reviews">
+  
+  <dd id="review-openstack-ubuntu-testing">
+    <a href="https://launchpad.net/~openstack-ubuntu-testing" class="sprite team">Openstack Ubuntu Testers</a>:
+
+    <span class="votePENDING">Pending</span>
+    
+    requested
+    <time title="2013-03-22 13:40:12 UTC" datetime="2013-03-22T13:40:12.212991+00:00">2013-03-22</time>
+  </dd>
+  <dd class="popup-diff mp-154955">
+    Diff: <a href="https://code.launchpad.net/~james-page/nova/folsom-resync/+merge/154955/+preview-diff/354863/+files/preview.diff" class="diff-link">922 lines (+887/-0)</a><div class="collapsible"><span>4 files modified</span><div>debian/changelog (+31/-0)<br/>debian/patches/CVE-2013-0335.patch (+378/-0)<br/>debian/patches/CVE-2013-1838.patch (+476/-0)<br/>debian/patches/series (+2/-0)</div></div>
+    <a class="api-ref hidden" href="/~james-page/nova/folsom-resync/+merge/154955/+preview-diff/354863">api</a>
+  </dd>
+
+</dl>
+
+
+
+
+
+  </div>
+</div>
+
+
+
+              
+              
+                
+
+ 
+
+ <div class="buglink-summary">
+
+  <a href="https://code.launchpad.net/~openstack-ubuntu-testing/nova/folsom" class="sprite branch">lp:~openstack-ubuntu-testing/nova/folsom</a>
+  
+  
+</div>
+
+
+
+              
+            </div>
+          
+        </div><!-- bug-branch-container -->
+
+        <div class="cves">
+          <h2>CVE References</h2>
+          <ul>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2013-0335" title="OpenStack Compute (Nova) Grizzly, Fol...">2013-0335</a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="clearfix"></div>
+      </div> <!-- branches and CVEs -->
+
+      </div>
+
+      <div>
+      
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~parthipan" class="sprite person">Loganathan Parthipan (parthipan)</a>
+    
+    <time title="2013-02-14 17:13:14 UTC" datetime="2013-02-14T17:13:14.079469+00:00">on 2013-02-14</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>information type</b>:
+      </td>
+      <td>
+        Private Security &#8594; Public
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~john-herndon" class="sprite person">John Herndon (john-herndon)</a>
+    
+    <time title="2013-02-14 19:49:08 UTC" datetime="2013-02-14T19:49:08.631412+00:00">on 2013-02-14</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in nova: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; John Herndon (john-herndon)
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1125378/comments/1" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~john-herndon" class="sprite person">John Herndon (john-herndon)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-02-15T15:52:44.308910+00:00" title="2013-02-15 15:52:44 UTC">on 2013-02-15</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1125378/comments/1"> #1</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This is easily reproducible in devstack with the latest code. I have devstack configured to use only one compute node, so the instance always lands in the same place. It appears libvirt reuses the same port, which is what causes the problem.</p>
+<p>Steps to repro:<br />
+1) nova boot server1 --image &lt;xxx&gt; --flavor &lt;yyy&gt;...<br />
+2) nova get-vnc-console server1 novnc - keep the URL<br />
+3) nova delete server1<br />
+4)  nova boot server1 --image &lt;xxx&gt; --flavor &lt;yyy&gt;...<br />
+5) Connect to the vnc console from step 2. This is the console for server2, not server1</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This is easily reproducible in devstack with the latest code. I have devstack configured to use only one compute node, so the instance always lands in the same place. It appears libvirt reuses the same port, which is what causes the problem.
+
+
+Steps to repro:
+1) nova boot server1 --image &lt;xxx&gt; --flavor &lt;yyy&gt;...
+2) nova get-vnc-console server1 novnc - keep the URL
+3) nova delete server1
+4)  nova boot server1 --image &lt;xxx&gt; --flavor &lt;yyy&gt;...
+5) Connect to the vnc console from step 2. This is the console for server2, not server1</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1125378/comments/2" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-02-15T23:20:24.943396+00:00" title="2013-02-15 23:20:24 UTC">on 2013-02-15</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/nova/+bug/1125378/comments/2">
+                <strong>Fix proposed to nova (master)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1125378/comments/2"> #2</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Fix proposed to branch: master<br />
+Review: <a rel="nofollow" href="https://review.openstack.org/22086">https:/<wbr />/review.<wbr />openstack.<wbr />org/22086</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Fix proposed to branch: master
+Review: https://review.openstack.org/22086</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in nova: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; In Progress
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1125378/comments/3" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~parthipan" class="sprite person">Loganathan Parthipan (parthipan)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-02-18T10:18:16.720879+00:00" title="2013-02-18 10:18:16 UTC">on 2013-02-18</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/nova/+bug/1125378/comments/3">
+                <strong>Re: VNC proxy can be made to connect to wrong VM</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1125378/comments/3"> #3</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Step 4 of &#x27;Steps to reproduce&#x27; should be &#x27;nova boot server2 ..&#x27; and ideally from a different user and will still be reachable with the URL from step 2 by the first user.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Step 4 of 'Steps to reproduce' should be 'nova boot server2 ..' and ideally from a different user and will still be reachable with the URL from step 2 by the first user.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+    
+    <time title="2013-02-21 17:20:17 UTC" datetime="2013-02-21T17:20:17.462552+00:00">on 2013-02-21</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in nova: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>importance</b>:
+      </td>
+      <td>
+        Undecided &#8594; High
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~vishvananda" class="sprite person">Vish Ishaya (vishvananda)</a>
+    
+    <time title="2013-02-21 17:20:21 UTC" datetime="2013-02-21T17:20:21.940263+00:00">on 2013-02-21</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in nova: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>milestone</b>:
+      </td>
+      <td>
+        none &#8594; grizzly-3
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1125378/comments/4" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-02-21T21:49:44.618254+00:00" title="2013-02-21 21:49:44 UTC">on 2013-02-21</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/nova/+bug/1125378/comments/4">
+                <strong>Fix merged to nova (master)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1125378/comments/4"> #4</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://review.openstack.org/22086">https:/<wbr />/review.<wbr />openstack.<wbr />org/22086</a><br />
+Committed: <a rel="nofollow" href="http://github.com/openstack/nova/commit/3b0f4cf6bea33e6ee1893f6e872d968b0c309f88">http://<wbr />github.<wbr />com/openstack/<wbr />nova/commit/<wbr />3b0f4cf6bea33e6<wbr />ee1893f6e872d96<wbr />8b0c309f88</a><br />
+Submitter: Jenkins<br />
+Branch:    master</p>
+<p>commit 3b0f4cf6bea33e6<wbr />ee1893f6e872d96<wbr />8b0c309f88<br />
+Author: John Herndon &lt;email address hidden&gt;<br />
+Date:   Tue Feb 19 22:53:49 2013 +0000</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Flush tokens on instance delete</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Force console auth service to flush all tokens<br />
+&nbsp;&nbsp;&nbsp;&nbsp;associated with an instance when it is deleted.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;This will fix <a href="/bugs/1125378" class="bug-link">bug 1125378</a>, where the console for<br />
+&nbsp;&nbsp;&nbsp;&nbsp;the wrong instance can be connected to via the<br />
+&nbsp;&nbsp;&nbsp;&nbsp;console if the correct circumstances occur. This<br />
+&nbsp;&nbsp;&nbsp;&nbsp;change also adds a call to validate the token<br />
+&nbsp;&nbsp;&nbsp;&nbsp;when it is used. This check will ensure that all<br />
+&nbsp;&nbsp;&nbsp;&nbsp;tokens are valid for their target instances.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;Tokens can become scrambled when a compute node is<br />
+&nbsp;&nbsp;&nbsp;&nbsp;restarted, because the virt driver may not<br />
+&nbsp;&nbsp;&nbsp;&nbsp;assign ports in the same way.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Change-Id: I0d83ec6c4dbfef<wbr />1af912a200ee15f<wbr />8052f72da96<br />
+&nbsp;&nbsp;&nbsp;&nbsp;fixes: <a href="/bugs/1125378" class="bug-link">bug 1125378</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://review.openstack.org/22086
+Committed: http://github.com/openstack/nova/commit/3b0f4cf6bea33e6ee1893f6e872d968b0c309f88
+Submitter: Jenkins
+Branch:    master
+
+commit 3b0f4cf6bea33e6ee1893f6e872d968b0c309f88
+Author: John Herndon &lt;john.herndon@hp.com&gt;
+Date:   Tue Feb 19 22:53:49 2013 +0000
+
+    Flush tokens on instance delete
+    
+    Force console auth service to flush all tokens
+    associated with an instance when it is deleted.
+    This will fix bug 1125378, where the console for
+    the wrong instance can be connected to via the
+    console if the correct circumstances occur. This
+    change also adds a call to validate the token
+    when it is used. This check will ensure that all
+    tokens are valid for their target instances.
+    Tokens can become scrambled when a compute node is
+    restarted, because the virt driver may not
+    assign ports in the same way.
+    
+    Change-Id: I0d83ec6c4dbfef1af912a200ee15f8052f72da96
+    fixes: bug 1125378
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in nova: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        In Progress &#8594; Fix Committed
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1125378/comments/5" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-02-21T22:03:14.996521+00:00" title="2013-02-21 22:03:14 UTC">on 2013-02-21</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/nova/+bug/1125378/comments/5">
+                <strong>Fix proposed to nova (milestone-proposed)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1125378/comments/5"> #5</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Fix proposed to branch: milestone-proposed<br />
+Review: <a rel="nofollow" href="https://review.openstack.org/22616">https:/<wbr />/review.<wbr />openstack.<wbr />org/22616</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Fix proposed to branch: milestone-proposed
+Review: https://review.openstack.org/22616</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1125378/comments/6" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-02-21T22:45:43.034352+00:00" title="2013-02-21 22:45:43 UTC">on 2013-02-21</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/nova/+bug/1125378/comments/6">
+                <strong>Fix merged to nova (milestone-proposed)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1125378/comments/6"> #6</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://review.openstack.org/22616">https:/<wbr />/review.<wbr />openstack.<wbr />org/22616</a><br />
+Committed: <a rel="nofollow" href="http://github.com/openstack/nova/commit/ad94a90202193335f011888db017e557b07faf8a">http://<wbr />github.<wbr />com/openstack/<wbr />nova/commit/<wbr />ad94a9020219333<wbr />5f011888db017e5<wbr />57b07faf8a</a><br />
+Submitter: Jenkins<br />
+Branch:    milestone-proposed</p>
+<p>commit ad94a9020219333<wbr />5f011888db017e5<wbr />57b07faf8a<br />
+Author: John Herndon &lt;email address hidden&gt;<br />
+Date:   Tue Feb 19 22:53:49 2013 +0000</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Flush tokens on instance delete</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Force console auth service to flush all tokens<br />
+&nbsp;&nbsp;&nbsp;&nbsp;associated with an instance when it is deleted.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;This will fix <a href="/bugs/1125378" class="bug-link">bug 1125378</a>, where the console for<br />
+&nbsp;&nbsp;&nbsp;&nbsp;the wrong instance can be connected to via the<br />
+&nbsp;&nbsp;&nbsp;&nbsp;console if the correct circumstances occur. This<br />
+&nbsp;&nbsp;&nbsp;&nbsp;change also adds a call to validate the token<br />
+&nbsp;&nbsp;&nbsp;&nbsp;when it is used. This check will ensure that all<br />
+&nbsp;&nbsp;&nbsp;&nbsp;tokens are valid for their target instances.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;Tokens can become scrambled when a compute node is<br />
+&nbsp;&nbsp;&nbsp;&nbsp;restarted, because the virt driver may not<br />
+&nbsp;&nbsp;&nbsp;&nbsp;assign ports in the same way.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Change-Id: I0d83ec6c4dbfef<wbr />1af912a200ee15f<wbr />8052f72da96<br />
+&nbsp;&nbsp;&nbsp;&nbsp;fixes: <a href="/bugs/1125378" class="bug-link">bug 1125378</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;(cherry picked from commit 3b0f4cf6bea33e6<wbr />ee1893f6e872d96<wbr />8b0c309f88)</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://review.openstack.org/22616
+Committed: http://github.com/openstack/nova/commit/ad94a90202193335f011888db017e557b07faf8a
+Submitter: Jenkins
+Branch:    milestone-proposed
+
+commit ad94a90202193335f011888db017e557b07faf8a
+Author: John Herndon &lt;john.herndon@hp.com&gt;
+Date:   Tue Feb 19 22:53:49 2013 +0000
+
+    Flush tokens on instance delete
+    
+    Force console auth service to flush all tokens
+    associated with an instance when it is deleted.
+    This will fix bug 1125378, where the console for
+    the wrong instance can be connected to via the
+    console if the correct circumstances occur. This
+    change also adds a call to validate the token
+    when it is used. This check will ensure that all
+    tokens are valid for their target instances.
+    Tokens can become scrambled when a compute node is
+    restarted, because the virt driver may not
+    assign ports in the same way.
+    
+    Change-Id: I0d83ec6c4dbfef1af912a200ee15f8052f72da96
+    fixes: bug 1125378
+    (cherry picked from commit 3b0f4cf6bea33e6ee1893f6e872d968b0c309f88)
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in nova: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Fix Committed &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+    
+    <time title="2013-02-22 12:36:36 UTC" datetime="2013-02-22T12:36:36.744253+00:00">on 2013-02-22</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>information type</b>:
+      </td>
+      <td>
+        Public &#8594; Public Security
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1125378/comments/7" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-02-22T23:12:58.587461+00:00" title="2013-02-22 23:12:58 UTC">on 2013-02-22</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/nova/+bug/1125378/comments/7">
+                <strong>Fix proposed to nova (stable/folsom)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1125378/comments/7"> #7</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Fix proposed to branch: stable/folsom<br />
+Review: <a rel="nofollow" href="https://review.openstack.org/22758">https:/<wbr />/review.<wbr />openstack.<wbr />org/22758</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Fix proposed to branch: stable/folsom
+Review: https://review.openstack.org/22758</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1125378/comments/8" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-02-25T11:12:07.924546+00:00" title="2013-02-25 11:12:07 UTC">on 2013-02-25</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/nova/+bug/1125378/comments/8">
+                <strong>Fix proposed to nova (stable/essex)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1125378/comments/8"> #8</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Fix proposed to branch: stable/essex<br />
+Review: <a rel="nofollow" href="https://review.openstack.org/22835">https:/<wbr />/review.<wbr />openstack.<wbr />org/22835</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Fix proposed to branch: stable/essex
+Review: https://review.openstack.org/22835</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1125378/comments/9" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-02-25T12:31:31.412570+00:00" title="2013-02-25 12:31:31 UTC">on 2013-02-25</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1125378/comments/9"> #9</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Fix proposed to branch: stable/essex<br />
+Review: <a rel="nofollow" href="https://review.openstack.org/22840">https:/<wbr />/review.<wbr />openstack.<wbr />org/22840</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Fix proposed to branch: stable/essex
+Review: https://review.openstack.org/22840</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1125378/comments/10" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-02-25T16:40:08.153329+00:00" title="2013-02-25 16:40:08 UTC">on 2013-02-25</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1125378/comments/10"> #10</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Fix proposed to branch: stable/essex<br />
+Review: <a rel="nofollow" href="https://review.openstack.org/22872">https:/<wbr />/review.<wbr />openstack.<wbr />org/22872</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Fix proposed to branch: stable/essex
+Review: https://review.openstack.org/22872</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1125378/comments/11" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-02-26T14:20:08.450209+00:00" title="2013-02-26 14:20:08 UTC">on 2013-02-26</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/nova/+bug/1125378/comments/11">
+                <strong>Fix merged to nova (stable/essex)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1125378/comments/11"> #11</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://review.openstack.org/22872">https:/<wbr />/review.<wbr />openstack.<wbr />org/22872</a><br />
+Committed: <a rel="nofollow" href="http://github.com/openstack/nova/commit/e98928cf77645fdc309da894f3bd332e99482e0d">http://<wbr />github.<wbr />com/openstack/<wbr />nova/commit/<wbr />e98928cf77645fd<wbr />c309da894f3bd33<wbr />2e99482e0d</a><br />
+Submitter: Jenkins<br />
+Branch:    stable/essex</p>
+<p>commit e98928cf77645fd<wbr />c309da894f3bd33<wbr />2e99482e0d<br />
+Author: Loganathan Parthipan &lt;email address hidden&gt;<br />
+Date:   Sat Feb 23 05:42:10 2013 +0000</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Flush tokens on instance delete</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Force console auth service to flush all tokens<br />
+&nbsp;&nbsp;&nbsp;&nbsp;associated with an instance when it is deleted.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;This will fix <a href="/bugs/1125378" class="bug-link">bug 1125378</a>, where the console for<br />
+&nbsp;&nbsp;&nbsp;&nbsp;the wrong instance can be connected to via the<br />
+&nbsp;&nbsp;&nbsp;&nbsp;console if the correct circumstances occur. This<br />
+&nbsp;&nbsp;&nbsp;&nbsp;change also adds a call to validate the token<br />
+&nbsp;&nbsp;&nbsp;&nbsp;when it is used. This check will ensure that all<br />
+&nbsp;&nbsp;&nbsp;&nbsp;tokens are valid for their target instances.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;Tokens can become scrambled when a compute node is<br />
+&nbsp;&nbsp;&nbsp;&nbsp;restarted, because the virt driver may not<br />
+&nbsp;&nbsp;&nbsp;&nbsp;assign ports in the same way.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Change-Id: I0d83ec6c4dbfef<wbr />1af912a200ee15f<wbr />8052f72da96<br />
+&nbsp;&nbsp;&nbsp;&nbsp;Fixes: <a href="/bugs/1125378" class="bug-link">bug #1125378</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://review.openstack.org/22872
+Committed: http://github.com/openstack/nova/commit/e98928cf77645fdc309da894f3bd332e99482e0d
+Submitter: Jenkins
+Branch:    stable/essex
+
+commit e98928cf77645fdc309da894f3bd332e99482e0d
+Author: Loganathan Parthipan &lt;parthipan@hp.com&gt;
+Date:   Sat Feb 23 05:42:10 2013 +0000
+
+    Flush tokens on instance delete
+    
+    Force console auth service to flush all tokens
+    associated with an instance when it is deleted.
+    This will fix bug 1125378, where the console for
+    the wrong instance can be connected to via the
+    console if the correct circumstances occur. This
+    change also adds a call to validate the token
+    when it is used. This check will ensure that all
+    tokens are valid for their target instances.
+    Tokens can become scrambled when a compute node is
+    restarted, because the virt driver may not
+    assign ports in the same way.
+    
+    Change-Id: I0d83ec6c4dbfef1af912a200ee15f8052f72da96
+    Fixes: bug #1125378
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1125378/comments/12" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-03-06T01:00:35.148485+00:00" title="2013-03-06 01:00:35 UTC">on 2013-03-06</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/nova/+bug/1125378/comments/12">
+                <strong>Fix merged to nova (stable/folsom)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1125378/comments/12"> #12</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://review.openstack.org/22758">https:/<wbr />/review.<wbr />openstack.<wbr />org/22758</a><br />
+Committed: <a rel="nofollow" href="http://github.com/openstack/nova/commit/05a3374992bc8ba53ddc9c491b51c4b59eed0a72">http://<wbr />github.<wbr />com/openstack/<wbr />nova/commit/<wbr />05a3374992bc8ba<wbr />53ddc9c491b51c4<wbr />b59eed0a72</a><br />
+Submitter: Jenkins<br />
+Branch:    stable/folsom</p>
+<p>commit 05a3374992bc8ba<wbr />53ddc9c491b51c4<wbr />b59eed0a72<br />
+Author: John Herndon &lt;email address hidden&gt;<br />
+Date:   Fri Feb 22 20:43:58 2013 +0000</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;VNC Token Validation</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Force console auth service to flush all tokens<br />
+&nbsp;&nbsp;&nbsp;&nbsp;associated with an instance when it is deleted.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;This will fix a bug where the console for the<br />
+&nbsp;&nbsp;&nbsp;&nbsp;wrong instance can be connected to via the console<br />
+&nbsp;&nbsp;&nbsp;&nbsp;if the correct circumstances occur. This change also<br />
+&nbsp;&nbsp;&nbsp;&nbsp;makes a call to veriry vnc console tokens when a<br />
+&nbsp;&nbsp;&nbsp;&nbsp;user attempts to connect to a console. This ensures<br />
+&nbsp;&nbsp;&nbsp;&nbsp;the user is connecting to the correct console.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<a href="/bugs/1125378" class="bug-link">bug 1125378</a><br />
+&nbsp;&nbsp;&nbsp;&nbsp;Change-Id: I0d83ec6c4dbfef<wbr />1af912a200ee15f<wbr />8052f72da96</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://review.openstack.org/22758
+Committed: http://github.com/openstack/nova/commit/05a3374992bc8ba53ddc9c491b51c4b59eed0a72
+Submitter: Jenkins
+Branch:    stable/folsom
+
+commit 05a3374992bc8ba53ddc9c491b51c4b59eed0a72
+Author: John Herndon &lt;john.herndon@hp.com&gt;
+Date:   Fri Feb 22 20:43:58 2013 +0000
+
+    VNC Token Validation
+    
+    Force console auth service to flush all tokens
+    associated with an instance when it is deleted.
+    This will fix a bug where the console for the
+    wrong instance can be connected to via the console
+    if the correct circumstances occur. This change also
+    makes a call to veriry vnc console tokens when a
+    user attempts to connect to a console. This ensures
+    the user is connecting to the correct console.
+    
+    bug 1125378
+    Change-Id: I0d83ec6c4dbfef1af912a200ee15f8052f72da96
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1125378/comments/13" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-03-07T00:24:57.852515+00:00" title="2013-03-07 00:24:57 UTC">on 2013-03-07</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/nova/+bug/1125378/comments/13">
+                <strong>Fix proposed to nova (stable/essex)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1125378/comments/13"> #13</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Fix proposed to branch: stable/essex<br />
+Review: <a rel="nofollow" href="https://review.openstack.org/23768">https:/<wbr />/review.<wbr />openstack.<wbr />org/23768</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Fix proposed to branch: stable/essex
+Review: https://review.openstack.org/23768</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1125378/comments/14" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-03-25T18:01:25.125219+00:00" title="2013-03-25 18:01:25 UTC">on 2013-03-25</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/nova/+bug/1125378/comments/14">
+                <strong>Fix merged to nova (stable/essex)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1125378/comments/14"> #14</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://review.openstack.org/23768">https:/<wbr />/review.<wbr />openstack.<wbr />org/23768</a><br />
+Committed: <a rel="nofollow" href="http://github.com/openstack/nova/commit/48e81f1554ce41c3d4f7445421d19f4a8128e98d">http://<wbr />github.<wbr />com/openstack/<wbr />nova/commit/<wbr />48e81f1554ce41c<wbr />3d4f7445421d19f<wbr />4a8128e98d</a><br />
+Submitter: Jenkins<br />
+Branch:    stable/essex</p>
+<p>commit 48e81f1554ce41c<wbr />3d4f7445421d19f<wbr />4a8128e98d<br />
+Author: Rafi Khardalian &lt;email address hidden&gt;<br />
+Date:   Thu Mar 7 00:19:08 2013 +0000</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Fixed broken vncproxy flush tokens patch</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;<a href="/bugs/1125378" class="bug-link">Bug 1125378</a> (continued)</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;This review (<a rel="nofollow" href="https://review.openstack.org/22872">https:/<wbr />/review.<wbr />openstack.<wbr />org/22872</a>) attempted to<br />
+&nbsp;&nbsp;&nbsp;&nbsp;resolve a critical security issue but ended up completely breaking<br />
+&nbsp;&nbsp;&nbsp;&nbsp;the vncproxy. The wrong dict keys were being used for Essex and the<br />
+&nbsp;&nbsp;&nbsp;&nbsp;API calls were incomplete. This patch makes the proxy work again.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Change-Id: I093d522abd5be2<wbr />0d2792c83792437<wbr />b1ef580d4c6</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://review.openstack.org/23768
+Committed: http://github.com/openstack/nova/commit/48e81f1554ce41c3d4f7445421d19f4a8128e98d
+Submitter: Jenkins
+Branch:    stable/essex
+
+commit 48e81f1554ce41c3d4f7445421d19f4a8128e98d
+Author: Rafi Khardalian &lt;rafi@metacloud.com&gt;
+Date:   Thu Mar 7 00:19:08 2013 +0000
+
+    Fixed broken vncproxy flush tokens patch
+    
+    Bug 1125378 (continued)
+    
+    This review (https://review.openstack.org/22872) attempted to
+    resolve a critical security issue but ended up completely breaking
+    the vncproxy. The wrong dict keys were being used for Essex and the
+    API calls were incomplete. This patch makes the proxy work again.
+    
+    Change-Id: I093d522abd5be20d2792c83792437b1ef580d4c6
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+    
+    <time title="2013-04-04 11:09:25 UTC" datetime="2013-04-04T11:09:25.184443+00:00">on 2013-04-04</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in nova: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>milestone</b>:
+      </td>
+      <td>
+        grizzly-3 &#8594; 2013.1
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+    
+    <time title="2013-05-24 12:52:40 UTC" datetime="2013-05-24T12:52:40.456391+00:00">on 2013-05-24</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>summary</b>:
+      </td>
+      <td>
+        - VNC proxy can be made to connect to wrong VM<br />+ [OSSA-2013-006] VNC proxy can be made to connect to wrong VM
+      </td>
+    </tr>
+  
+  
+    
+      <tr>
+        <td colspan="2">Changed in ossa: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; Russell Bryant (russellb)
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~sdague" class="sprite person">Sean Dague (sdague)</a>
+    
+    <time title="2014-09-19 10:55:36 UTC" datetime="2014-09-19T10:55:36.926832+00:00">on 2014-09-19</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>no longer affects</b>:
+      </td>
+      <td>
+        nova/essex
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        <div style="float: right;">
+          <a class="menu-link-activitylog" href="https://bugs.launchpad.net/nova/+bug/1125378/+activity">See full activity log</a>
+        </div>
+        <div class="clearfix"></div>
+
+        
+          
+
+          
+            <div align="center" id="add-comment-login-first">
+              To post a comment you must <a href="+login?comments=all">log in</a>.
+            </div>
+          
+        
+        
+      
+
+      </div><!-- class="top-portlet" -->
+      </div><!--- id="maincontentsub"-->
+      <div>
+        <div id="duplicate-form-container"></div>
+        <div id="privacy-form-container"></div>
+      </div>
+    </div>
+            
+            
+          </div><!-- yui-b -->
+        </div><!-- yui-main -->
+
+        
+          <div id="side-portlets" class="yui-b side">
+            
+      <div id="involvement" class="portlet">
+        <ul class="involvement">
+          <li class="single">
+            <a class="sprite bugs" href="/nova/+filebug">
+              Report a bug
+            </a>
+          </li>
+        </ul>
+      </div>
+      <div id="privacy" class="first portlet public">
+  <div id="privacy-text">
+     <span id="information-type-summary" class="sprite public">This report contains
+         <strong id="information-type">Public Security</strong>
+         information
+     </span>&nbsp;<a class="sprite edit action-icon" id="privacy-link" href="/nova/+bug/1125378/+secrecy">Edit</a>
+
+     <div id="information-type-description" style="padding-top: 5px">Everyone can see this security related information.
+</div>
+  </div>
+</div>
+
+      <div id="portlet-actions" class="portlet vertical">
+  <ul id="duplicate-actions">
+    <li class="sprite bug-dupe">
+    <span id="mark-duplicate-text">
+    <a class="menu-link-mark-dupe" href="/nova/+bug/1125378/+duplicate">Mark as duplicate</a>
+    </span>
+    </li>
+    
+    <li><a class="menu-link-createquestion sprite add" href="https://bugs.launchpad.net/nova/+bug/1125378/+create-question">Convert to a question</a></li>
+    
+    <li><a class="menu-link-addbranch sprite add" href="https://bugs.launchpad.net/nova/+bug/1125378/+addbranch">Link a related branch</a></li>
+    <li><a class="menu-link-linktocve sprite add" href="https://bugs.launchpad.net/nova/+bug/1125378/+linkcve">Link to <abbr title="Common Vulnerabilities and Exposures Index">CVE</abbr></a></li>
+    <li><a class="menu-link-unlinkcve sprite modify remove" href="https://bugs.launchpad.net/nova/+bug/1125378/+unlinkcve">Remove CVE link</a></li>
+  </ul>
+</div>
+
+      <div class="portlet" id="portlet-duplicates">
+  <h2>Duplicates of this bug</h2>
+  <ul>
+    <li>
+      <a class="sprite bug" href="https://bugs.launchpad.net/nova/+bug/1058077" title="User gets access to VNC console of an instance of another tenant"> Bug #1058077</a>
+    </li>
+  </ul>
+</div>
+
+      <div class="portlet vertical" id="portlet-subscription">
+  <div class="section">
+    <div id="current_user_subscription" class="False">
+      
+        <span>You are</span>
+        
+        <a class="menu-link-subscription sprite modify edit" href="/nova/+bug/1125378/+subscribe">
+           
+           
+           
+           not directly subscribed to this bug's notifications.
+        </a>
+      
+      
+    </div>
+    <div id="sub-unsub-spinner">Subscribing...</div>
+    <ul>
+      
+      <li><a class="menu-link-editsubscriptions sprite modify edit" href="https://bugs.launchpad.net/nova/+bug/1125378/+subscriptions" title="View and change your subscriptions to this bug">Edit bug mail</a></li>
+    </ul>
+  </div>
+  <script type="text/javascript">
+    LPJS.use('io-base', 'node',
+            'lp.bugs.bugtask_index.portlets.subscription', function(Y) {
+        Y.on('domready', function() {
+            Y.lp.bugs.bugtask_index.portlets.subscription.initialize();
+        });
+    });
+  </script>
+</div>
+
+      <div class="portlet vertical" id="portlet-subscribers">
+  <h2>Other bug subscribers</h2>
+  <div>
+    <div><a class="menu-link-addsubscriber sprite add" href="https://bugs.launchpad.net/nova/+bug/1125378/+addsubscriber" title="Launchpad will email that person whenever this bugs changes">Subscribe someone else</a></div>
+  </div>
+  <div id="other-bug-subscribers"></div>
+</div>
+
+      
+
+      
+
+      
+  
+  
+
+
+      
+
+    
+          </div><!-- yui-b side -->
+        
+      </div><!-- yui-t4 -->
+
+      
+  <div id="footer" class="footer">
+    <div class="lp-arcana">
+        <div class="lp-branding">
+          <a href="https://launchpad.net/"><img src="/@@/launchpad-logo-and-name-hierarchy.png" alt="Launchpad" /></a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://launchpad.net/+tour">Take the tour</a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://help.launchpad.net/">Read the guide</a>
+          &nbsp;
+          <form id="globalsearch" method="get" accept-charset="UTF-8" action="https://launchpad.net/+search">
+            <input type="search" id="search-text" name="field.text" />
+            <input type="image" src="/@@/search" style="vertical-align:5%" alt="Search Launchpad" />
+          </form>
+        </div>
+        
+  
+
+    </div>
+
+    <div class="colophon">
+      &copy; 2004-2021
+      <a href="http://canonical.com/">Canonical&nbsp;Ltd.</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://launchpad.net/legal">Terms of use</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://www.ubuntu.com/legal/dataprivacy">Data privacy</a>
+      &nbsp;&bull;&nbsp;
+      <a href="/feedback">Contact Launchpad Support</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="http://blog.launchpad.net/">Blog</a>
+      
+	&nbsp;&bull;&nbsp;
+	<a href="https://canonical.com/careers">Careers</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="https://twitter.com/launchpadstatus">System status</a>
+      <span id="lp-version">
+      &nbsp;&bull;&nbsp;
+        r0d8de2b
+        
+        
+        (<a href="https://dev.launchpad.net/">Get the code!</a>)
+      </span>
+    </div>
+  </div>
+
+    </div><!-- yui-d0-->
+
+    
+  
+  
+  <script id="json-cache-script">LP.cache = {"subscribers_portlet_url_data": {"web_link": "https://bugs.launchpad.net/bugs/1125378", "self_link": "https://bugs.launchpad.net/api/devel/bugs/1125378"}, "information_type_data": {"PUBLIC": {"description": "Everyone can see this information.\n", "name": "Public", "is_private": false, "order": 0, "description_css_class": "choice-description", "value": "PUBLIC"}, "PUBLICSECURITY": {"description": "Everyone can see this security related information.\n", "name": "Public Security", "is_private": false, "order": 1, "description_css_class": "choice-description", "value": "PUBLICSECURITY"}, "USERDATA": {"description": "Only shared with users permitted to see private user information.\n", "name": "Private", "is_private": true, "order": 3, "description_css_class": "choice-description", "value": "USERDATA"}, "PRIVATESECURITY": {"description": "Only the security group can see this information.\n ", "name": "Private Security", "is_private": true, "order": 2, "description_css_class": "choice-description", "value": "PRIVATESECURITY"}}, "total_comments_and_activity": 53, "bug_is_private": false, "related_features": {}, "first visible_recent_comment": -26, "bug": {"self_link": "https://bugs.launchpad.net/api/devel/bugs/1125378", "web_link": "https://bugs.launchpad.net/bugs/1125378", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug", "id": 1125378, "private": false, "information_type": "Public Security", "name": null, "title": "[OSSA-2013-006] VNC proxy can be made to connect to wrong VM", "description": "Suppose a user requests a VNC token, and then deletes the VM right away, as I understand, the token is still valid not having yet exceeded the TTL. During this time if a new VM is spawned on the host and kvm reuses the port to bind the vncserver, it's possible for the user to use the old token to get access to this new VM, which could be owned by someone else.\n\nI have seen this happening in Essex code and was wondering if this is still the case. The possible solutions are to flush the tokens on vm delete, hard reboot etc or to have a password protected VNC session.", "owner_link": "https://bugs.launchpad.net/api/devel/~parthipan", "bug_tasks_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1125378/bug_tasks", "duplicate_of_link": null, "date_created": "2013-02-14T17:12:03.331625+00:00", "activity_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1125378/activity", "subscriptions_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1125378/subscriptions", "date_last_updated": "2013-05-24T12:53:14.225896+00:00", "who_made_private_link": null, "date_made_private": null, "heat": 302, "bug_watches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1125378/bug_watches", "cves_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1125378/cves", "duplicates_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1125378/duplicates", "attachments_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1125378/attachments", "security_related": true, "latest_patch_uploaded": null, "tags": [], "date_last_message": "2013-03-25T18:01:25.125219+00:00", "number_of_duplicates": 1, "message_count": 15, "users_affected_count": 4, "users_unaffected_count": 0, "users_affected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1125378/users_affected", "users_unaffected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1125378/users_unaffected", "users_affected_count_with_dupes": 6, "other_users_affected_count_with_dupes": 6, "users_affected_with_dupes_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1125378/users_affected_with_dupes", "messages_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1125378/messages", "linked_branches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1125378/linked_branches", "linked_merge_proposals_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1125378/linked_merge_proposals", "http_etag": "\"83aac72e8b2656a0d6516b7d05c9b2d9c9aa7337-a7ad0a165d20beaf2324f1dc0f800bad1ca08411\""}, "bugtask_data": {"1349119": {"assignee_vocabulary": "AllUserTeamsParticipation", "user_can_unassign": false, "bugtask_path": "/nova/+bug/1125378", "assignee_value": "john-herndon", "user_can_edit_status": true, "bug_title": "[OSSA-2013-006] VNC proxy can be made to connect to wrong VM", "user_can_edit_milestone": false, "prefix": "nova", "form_row_id": "task1349119", "target_is_product": true, "user_can_edit_importance": false, "assignee_is_team": false, "delete_link": "https://bugs.launchpad.net/nova/+bug/1125378/+delete", "user_can_edit_assignee": false, "milestone_widget_items": "[]", "status_widget_items": "[]", "status_value": "Fix Released", "importance_value": "High", "hide_assignee_team_selection": true, "user_can_delete": false, "row_id": "tasksummary1349119", "assignee_vocabulary_filters": [], "targetname": "OpenStack Compute (nova)", "importance_widget_items": "[]", "milestone_value": "https://bugs.launchpad.net/api/devel/nova/+milestone/2013.1", "id": 1349119}, "1353477": {"assignee_vocabulary": "AllUserTeamsParticipation", "user_can_unassign": false, "bugtask_path": "/nova/folsom/+bug/1125378", "assignee_value": "john-herndon", "user_can_edit_status": true, "bug_title": "[OSSA-2013-006] VNC proxy can be made to connect to wrong VM", "user_can_edit_milestone": false, "prefix": "nova_folsom", "form_row_id": "task1353477", "target_is_product": false, "user_can_edit_importance": false, "assignee_is_team": false, "delete_link": "https://bugs.launchpad.net/nova/folsom/+bug/1125378/+delete", "user_can_edit_assignee": false, "milestone_widget_items": "[]", "status_widget_items": "[]", "status_value": "Fix Released", "importance_value": "High", "hide_assignee_team_selection": true, "user_can_delete": false, "row_id": "tasksummary1353477", "assignee_vocabulary_filters": [], "targetname": "OpenStack Compute (nova) folsom", "importance_widget_items": "[]", "milestone_value": "https://bugs.launchpad.net/api/devel/nova/+milestone/2012.2.4", "id": 1353477}, "1408791": {"assignee_vocabulary": "AllUserTeamsParticipation", "user_can_unassign": false, "bugtask_path": "/ossa/+bug/1125378", "assignee_value": "russellb", "user_can_edit_status": true, "bug_title": "[OSSA-2013-006] VNC proxy can be made to connect to wrong VM", "user_can_edit_milestone": false, "prefix": "ossa", "form_row_id": "task1408791", "target_is_product": true, "user_can_edit_importance": false, "assignee_is_team": false, "delete_link": "https://bugs.launchpad.net/ossa/+bug/1125378/+delete", "user_can_edit_assignee": false, "milestone_widget_items": "[]", "status_widget_items": "[]", "status_value": "Fix Released", "importance_value": "Undecided", "hide_assignee_team_selection": true, "user_can_delete": false, "row_id": "tasksummary1408791", "assignee_vocabulary_filters": [], "targetname": "OpenStack Security Advisory", "importance_widget_items": "[]", "milestone_value": null, "id": 1408791}}, "context": {"self_link": "https://bugs.launchpad.net/api/devel/nova/+bug/1125378", "web_link": "https://bugs.launchpad.net/nova/+bug/1125378", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug_task", "bug_link": "https://bugs.launchpad.net/api/devel/bugs/1125378", "milestone_link": "https://bugs.launchpad.net/api/devel/nova/+milestone/2013.1", "status": "Fix Released", "importance": "High", "assignee_link": "https://bugs.launchpad.net/api/devel/~john-herndon", "bug_target_display_name": "OpenStack Compute (nova)", "bug_target_name": "nova", "bug_watch_link": null, "date_assigned": "2013-02-14T19:49:09.244400+00:00", "date_created": "2013-02-14T17:12:03.331625+00:00", "date_confirmed": "2013-02-15T23:20:23.324425+00:00", "date_incomplete": null, "date_in_progress": "2013-02-15T23:20:23.324425+00:00", "date_closed": "2013-02-21T22:45:40.172934+00:00", "date_left_new": "2013-02-15T23:20:23.324425+00:00", "date_triaged": "2013-02-15T23:20:23.324425+00:00", "date_fix_committed": "2013-02-21T21:49:43.087828+00:00", "date_fix_released": "2013-02-21T22:45:40.172934+00:00", "date_left_closed": null, "owner_link": "https://bugs.launchpad.net/api/devel/~parthipan", "target_link": "https://bugs.launchpad.net/api/devel/nova", "title": "Bug #1125378 in OpenStack Compute (nova): \"[OSSA-2013-006] VNC proxy can be made to connect to wrong VM\"", "related_tasks_collection_link": "https://bugs.launchpad.net/api/devel/nova/+bug/1125378/related_tasks", "is_complete": true, "http_etag": "\"9aad2edef08956911652d856d5ac6c105ef112f5-4b84c0c5c396def080edf55fc4cf9778a1c6bd6a\""}, "initial_comment_batch_offset": 41};</script>
+
+    
+  
+
+    
+  </body>
+
+
+  <!--
+    Facet name: bugs
+    Page type: main_side
+    Has global search: True
+    Has application tabs: True
+    Has side portlets: True
+
+    At least 100 queries/external actions issued in 1.22 seconds
+
+    Features: {'app.maintenance_message': None, 'visible_render_time': None, 'bugs.affected_count_includes_dupes.disabled': None, 'app.mainsite_only.canonical_url': None, 'disclosure.dsp_picker.enabled': 'on', 'bugs.nominations.bug_supervisors_can_target': 'on', 'baselayout.careers_link.disabled': None, 'hard_timeout': '9000', 'js.yui_version': None, 'profiling.enabled': None}
+
+    r0d8de2b
+
+    -->
+
+</html>
+

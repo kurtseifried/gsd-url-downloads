@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='HTTP related Bug #69364 - RDF' href='rss/bug.php?id=69364'>
+        <link rel='alternate' type='application/rss+xml' title='HTTP related Bug #69364 - RSS 2.0' href='rss/bug.php?id=69364&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #69364 :: PHP Multipart/form-data remote dos Vulnerability </title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=69364">Sec Bug</a>&nbsp;#69364</th>
+            <td id="summary" colspan="5">PHP Multipart/form-data remote dos Vulnerability </td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2015-04-03 07:16 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2015-05-21 05:00 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>liushusheng &#x61;&#116; baidu &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=HTTP+related">HTTP related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>Irrelevant</td>
+            <th class="details">OS:</th>
+            <td>all</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2015-4024" target="_blank">2015-4024</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=69364&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=69364&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=69364&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1428045361">&nbsp;</a><strong>[2015-04-03 07:16 UTC] liushusheng &#x61;&#116; baidu &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+PHP Multipart/form-data remote dos Vulnerability 
+Author: Shusheng Liu, The Department of Security Cloud, Baidu,China
+
+1. Description: 
+    PHP is vulnerable to a remote denial of service, caused by repeatedly allocate memory、concatenate string、copy string and free memory when PHP parses header areas of body part of HTTP request with multipart/form-data. By sending multiple HTTP multipart requests to an affected application containing malicious header area of body part, a remote attacker could exploit this vulnerability to cause the consumption of CPU resources. 
+
+2. Analysis 
+
+2.1. Entry-point of The Remote Denial of Service Vulnerability 
+The vulnerable function is multipart_buffer_headers that is called internally by the function SAPI_POST_HANDLER_FUNC in main/rfc1867.c. SAPI_POST_HANDLER_FUNC is the entry-point function which parses body parts of HTTP request with multipart/form-data. 
+
+There is a remote denial of service vulnerability when multipart_buffer_headers is called. The source code of the multipart_buffer_headers function is shown as follows: 
+------------------------------------------------------------------------------------------------------------------- 
+/* parse headers */ 
+static int multipart_buffer_headers(multipart_buffer *self, zend_llist *header TSRMLS_DC) 
+{ 
+char *line; 
+mime_header_entry prev_entry = {0}, entry; 
+int prev_len, cur_len; 
+
+/* didn't find boundary, abort */ 
+if (!find_boundary(self, self-&gt;boundary TSRMLS_CC)) { 
+return 0; 
+} 
+
+/* get lines of text, or CRLF_CRLF */ 
+
+while( (line = get_line(self TSRMLS_CC)) &amp;&amp; line[0] != '\0' ) 
+{ 
+/* add header to table */ 
+char *key = line; 
+char *value = NULL; 
+
+if (php_rfc1867_encoding_translation(TSRMLS_C)) { 
+self-&gt;input_encoding = zend_multibyte_encoding_detector(line, strlen(line), self-&gt;detect_order, self-&gt;detect_order_size TSRMLS_CC); 
+} 
+
+/* space in the beginning means same header */ 
+if (!isspace(line[0])) { 
+value = strchr(line, ':'); 
+} 
+
+if (value) { 
+*value = 0; 
+do { value++; } while(isspace(*value)); 
+
+entry.value = estrdup(value); 
+entry.key = estrdup(key); 
+
+} else if (zend_llist_count(header)) { /* If no ':' on the line, add to previous line */ 
+
+prev_len = strlen(prev_entry.value); 
+cur_len = strlen(line); 
+
+entry.value = emalloc(prev_len + cur_len + 1); 
+memcpy(entry.value, prev_entry.value, prev_len); 
+memcpy(entry.value + prev_len, line, cur_len); 
+entry.value[cur_len + prev_len] = '\0'; 
+
+entry.key = estrdup(prev_entry.key); 
+
+zend_llist_remove_tail(header); 
+} else { 
+continue; 
+} 
+
+zend_llist_add_element(header, &amp;entry); 
+prev_entry = entry; 
+} 
+
+return 1; 
+} 
+--------------------------------------------------------------------------------------------------------------- 
+
+2.2 Analyze The Vulnerable Function 
+Now, we detailedly analyze logic of multipart_buffer_headers, and then we prove denial of service vulnerability of multipart_buffer_headers. 
+Step 1. The multipart_buffer_headers executes while loop cycle to parse current body part headers, if the boundary string was found. 
+while( (line = get_line(self TSRMLS_CC)) &amp;&amp; line[0] != '\0') 
+Step 2. 
+Step 2.1. When parseing current body part headers which is represented as (header, value), the multipart_buffer_headers function firstly call get_line function to read a line of characters, but get_line return a line when it meets character '\n', not '\r\n'. After getting a line which is stored in the variable 'line', the multipart_buffer_headers function parses the variable line. 
+
+Step 2.2. If the first character of the line is blank character (corresponding code &quot;if (!isspace(line[0]))&quot;), or the variable line contains character ':', the multipart_buffer_headers function successfully parse a header pair that is represented as entry=(header,value). And then, it calls zend_llist_add_element function to store entry, and use variable prev_entry to record lastest parsed name value pair entry. After that , it go to next cycle. 
+
+Step 2.3. In this step, the multipart_buffer_headers function thinks current line is not a new header, and current line should be append to value of prev_entry. Thus, prev_entry and current line merge into a new entry by executing the following codes: 
+------------------------------------------------------------------------------------------------------------------------ 
+prev_len = strlen(prev_entry.value); 
+cur_len = strlen(line); 
+
+entry.value = emalloc(prev_len + cur_len + 1); //allocate (prev_len + cur_len) bytes memory. 
+memcpy(entry.value, prev_entry.value, prev_len); //copy prev_len bytes. 
+memcpy(entry.value + prev_len, line, cur_len); // cope (prev_len + cur_len) bytes memory. 
+entry.value[cur_len + prev_len] = '\0'; 
+
+entry.key = estrdup(prev_entry.key); 
+
+zend_llist_remove_tail(header); // free memory 
+---------------------------------------------------------------------------------------------------------------------- 
+
+2.3 The Remote Denial of Service Vulnerability 
+If value of body part header consists of n lines, and first character of each line is not blank character, and each line did constains character ':', the multipart_buffer_headers function executes Step 2.3 (n-1) times when 
+the multipart_buffer_headers function parse the header. The block of code allocates memory once, executes string copy operation twice, frees memory once. Each time mergence of entry.value increase length of body part header's value, thus string copy operations will cause the consumption of CPU resources, and then the service is not available. If n is the length of body part header's value, and copying one byte is the unit time complexity，the time complexity of multipart_buffer_headers function is O(n*m). 
+
+For example： 
+------WebKitFormBoundarypE33TmSNWwsMphqz 
+Content-Disposition: form-data; name=&quot;file&quot;; filename=&quot;s 
+a 
+a 
+a 
+a&quot; 
+Content-Type: application/octet-stream 
+
+&lt;?php phpinfo();?&gt; 
+------WebKitFormBoundarypE33TmSNWwsMphqz 
+
+The value of Content-Disposition consists of 5 lines, and the length of the value of Content-Disposition is 5. The multipart_buffer_headers function executes Step 2.3 4 times. The first time execution copys 2 bytes, The second execution copys 3 bytes, The third time execution copys 4 bytes, The fourth time execution copys 5 bytes. Thus, the multipart_buffer_headers function executes 14 times byte copy operation. 
+
+Default maximum size of body part is 2097152 bytes (2M), It is enough to cause the consumption of CPU resources by sending multiple HTTP multipart requests to an affected application containing malicious header area of body part.
+
+Test script:
+---------------
+The poc was sent to the email security@php.net by liushusheng@baidu.com.
+
+
+Expected result:
+----------------
+Poc prints response time of a dos-attack request。response time of the dos-attack request more than 5 seconds.
+
+
+</pre>
+</div><h2>Patches</h2>
+<a href="patch-display.php?bug_id=69364&amp;patch=patch-5.4&amp;revision=latest" >patch-5.4</a>
+(last revision 2015-05-10 06:00 UTC by stas@php.net)
+<br><p><a href='patch-add.php?bug_id=69364'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=69364'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1430984747">&nbsp;</a><strong>[2015-05-07 07:45 UTC] liushusheng &#x61;&#116; baidu &#x64;&#111;&#x74; com</strong>
+<pre class='note'>what is state of the vulnerability?
+</pre>
+</div><div class='comment type_comment' ><a name="1430984989">&nbsp;</a><strong>[2015-05-07 07:49 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Nobody had time to look into it yet, but I'll try to do it soon.
+</pre>
+</div><div class='comment type_patch' ><a name="1431237650">&nbsp;</a><strong>[2015-05-10 06:00 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The following patch has been added/updated:
+
+Patch Name: patch-5.4
+Revision:   1431237650
+URL:        <a href="https://bugs.php.net/patch-display.php?bug=69364&amp;patch=patch-5.4&amp;revision=1431237650" rel="nofollow">https://bugs.php.net/patch-display.php?bug=69364&amp;patch=patch-5.4&amp;revision=1431237650</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1431237799">&nbsp;</a><strong>[2015-05-10 06:03 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Patch at <a href="https://gist.github.com/smalyshev/da7fce7fdebed433184b" rel="nofollow">https://gist.github.com/smalyshev/da7fce7fdebed433184b</a> should fix the issue, please verify. This applies to 5.4, should also work with 5.5 and 5.6.
+</pre>
+</div><div class='comment type_comment' ><a name="1431406184">&nbsp;</a><strong>[2015-05-12 04:49 UTC] liushusheng &#x61;&#116; baidu &#x64;&#111;&#x74; com</strong>
+<pre class='note'>I had verified that patch at <a href="https://gist.github.com/smalyshev/da7fce7fdebed433184b" rel="nofollow">https://gist.github.com/smalyshev/da7fce7fdebed433184b</a> fixes the vulnerability of 5.5.20 Basically, but not perfectly. Using smart_str as buffer, the smart_str_appends function will not copy header value every line repeatly. But the total length of smart_str always increases 128-byte multiples, the smart_str_appends function will repeatly copy header value each 128 bytes. 
+
+After patched, testing shows that 520000-bytes header value will cost 51 ms. If a Multipart/form-data request consist of n body parts，patched php 5.5.20 will costs (51 * n) ms. In the default configuration of php, maximal of n is 20. Thus, patched php 5.5.20 pay 1020ms to deal a malicious requests without considering limitation of post body size.
+
+Moreover, &quot;buf_value.c = NULL;&quot; lead to memory leak, if  smart_str do not have automatic memory recovery mechanism.
+</pre>
+</div><div class='comment type_comment' ><a name="1431407706">&nbsp;</a><strong>[2015-05-12 05:15 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Nor sure I understand, why you're saying buf_value.c = NULL leads to memory leak? Which memory is leaked? How did you reproduce the memory leak, with which tool and what was the output of the tool?
+</pre>
+</div><div class='comment type_comment' ><a name="1431409395">&nbsp;</a><strong>[2015-05-12 05:43 UTC] liushusheng &#x61;&#116; baidu &#x64;&#111;&#x74; com</strong>
+<pre class='note'>sorry , i am fault, memory leak is not exist.
+</pre>
+</div><div class='comment type_svn' ><a name="1431459621">&nbsp;</a><strong>[2015-05-12 19:40 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=4605d536d23b00813d11cc906bb48d39bdcf5f25" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=4605d536d23b00813d11cc906bb48d39bdcf5f25</a>
+Log: Fixed <a href='bug.php?id=69364'>bug #69364</a> - use smart_str to assemble strings
+</pre>
+</div><div class='comment type_log' ><a name="1431459621">&nbsp;</a><strong>[2015-05-12 19:40 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Open</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1431471528">&nbsp;</a><strong>[2015-05-12 22:58 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=4605d536d23b00813d11cc906bb48d39bdcf5f25" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=4605d536d23b00813d11cc906bb48d39bdcf5f25</a>
+Log: Fixed <a href='bug.php?id=69364'>bug #69364</a> - use smart_str to assemble strings
+</pre>
+</div><div class='comment type_svn' ><a name="1431514411">&nbsp;</a><strong>[2015-05-13 10:53 UTC] <a href="//people.php.net/jpauli">jpauli@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=676e0c0f7b294f8948f77a213d22ce9cdd014e4f" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=676e0c0f7b294f8948f77a213d22ce9cdd014e4f</a>
+Log: Fixed <a href='bug.php?id=69364'>bug #69364</a> - use smart_str to assemble strings
+</pre>
+</div><div class='comment type_log' ><a name="1431668267">&nbsp;</a><strong>[2015-05-15 05:37 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: laruence</span>
+</div></div></div><div class='comment type_comment' ><a name="1431668267">&nbsp;</a><strong>[2015-05-15 05:37 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<pre class='note'>does this needs a CVE id?
+</pre>
+</div><div class='comment type_comment' ><a name="1431668563">&nbsp;</a><strong>[2015-05-15 05:42 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>yes,
+</pre>
+</div><div class='comment type_comment' ><a name="1431668729">&nbsp;</a><strong>[2015-05-15 05:45 UTC] liushusheng &#x61;&#116; baidu &#x64;&#111;&#x74; com</strong>
+<pre class='note'>yes , i need CVE-ID. Why this vulnerability did have cve-id.
+</pre>
+</div><div class='comment type_comment' ><a name="1431668793">&nbsp;</a><strong>[2015-05-15 05:46 UTC] liushusheng &#x61;&#116; baidu &#x64;&#111;&#x74; com</strong>
+<pre class='note'>yes , i need CVE-ID. Why this vulnerability did not have cve-id.
+</pre>
+</div><div class='comment type_log' ><a name="1431697207">&nbsp;</a><strong>[2015-05-15 13:40 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To: laruence</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1431697207">&nbsp;</a><strong>[2015-05-15 13:40 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<pre class='note'>please apply a CVE ID for this, I don't know how to. .thanks :)
+</pre>
+</div><div class='comment type_comment' ><a name="1431702440">&nbsp;</a><strong>[2015-05-15 15:07 UTC] <a href="//people.php.net/kaplan">kaplan@php.net</a></strong>
+<pre class='note'>We already asked for a CVE.
+</pre>
+</div><div class='comment type_comment' ><a name="1432004641">&nbsp;</a><strong>[2015-05-19 03:04 UTC] welpher &#x64;&#111;&#x74; yu &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>what about 5.3?
+</pre>
+</div><div class='comment type_comment' ><a name="1432007260">&nbsp;</a><strong>[2015-05-19 03:47 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>5.3 is EOL since last year: <a href="http://php.net/supported-versions.php" rel="nofollow">http://php.net/supported-versions.php</a>
+</pre>
+</div><div class='comment type_log' ><a name="1432013568">&nbsp;</a><strong>[2015-05-19 05:32 UTC] <a href="//people.php.net/laruence">laruence@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2015-4024</span>
+</div></div></div><div class='comment type_comment' ><a name="1432091249">&nbsp;</a><strong>[2015-05-20 03:07 UTC] mrbaiwei &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>we need php-5.3.29/php-5.2.17 patch for this bug,can you additional provide it?
+</pre>
+</div><div class='comment type_comment' ><a name="1432093090">&nbsp;</a><strong>[2015-05-20 03:38 UTC] czxin788 &#x61;&#116; qq &#x64;&#111;&#x74; com</strong>
+<pre class='note'>I have download the path from <a href="https://bugs.php.net/patch-display.php?bug_id=69364&amp;patch=patch-5.4&amp;revision=1431237650&amp;download=1,but" rel="nofollow">https://bugs.php.net/patch-display.php?bug_id=69364&amp;patch=patch-5.4&amp;revision=1431237650&amp;download=1,but</a> I don't know how to install the path.I found it is a text.
+ Expect your answer,thank you!
+</pre>
+</div><div class='comment type_comment' ><a name="1432110047">&nbsp;</a><strong>[2015-05-20 08:20 UTC] lishaobang &#x61;&#116; nawang &#x64;&#111;&#x74; cn</strong>
+<pre class='note'>#cd php-5.4.12
+#patch -p1 &lt; patch-5.4.patch.txt
+./configure --prefix=/usr/local/php --with-config-file-path=/usr/local/php/etc --with-mysql=/usr/local/mysql/ --with-mysqli=/usr/local/mysql/bin/mysql_config --with-pdo-mysql=/usr/local/mysql/ --with-iconv-dir=/usr/local --enable-fpm --disable-phar --with-fpm-user=www --with-fpm-group=www --with-pcre-regex --with-config-file-scan-dir=/usr/local/php/etc/php.d --with-zlib --with-bz2 --enable-calendar --with-curl --enable-dba --with-libxml-dir --enable-ftp --with-gd --with-jpeg-dir --with-png-dir --with-zlib-dir --with-freetype-dir --enable-gd-native-ttf --enable-gd-jis-conv --with-mhash --enable-mbstring --with-mcrypt --enable-pcntl --enable-xml --disable-rpath --enable-shmop --enable-sockets --enable-zip --enable-bcmath --enable-ipv6 --with-xmlrpc --enable-exif --enable-soap --enable-pdo --with-pdo-mysql --enable-sysvsem --enable-inline-optimization --with-curlwrappers
+#make ZEND_EXTRA_LIBS='-liconv'
+then it come error:
+/root/soft/soft/php5.4/php-5.4.12/main/rfc1867.c: 在函数‘multipart_buffer_headers’中:
+/root/soft/soft/php5.4/php-5.4.12/main/rfc1867.c:427: 错误：‘buf_value’未声明(在此函数内第一次使用)
+/root/soft/soft/php5.4/php-5.4.12/main/rfc1867.c:427: 错误：(即使在一个函数内多次出现，每个未声明的标识符在其
+/root/soft/soft/php5.4/php-5.4.12/main/rfc1867.c:427: 错误：所在的函数内也只报告一次。)
+/root/soft/soft/php5.4/php-5.4.12/main/rfc1867.c:427: 错误：‘key’未声明(在此函数内第一次使用)
+make: *** [main/rfc1867.lo] 错误 1
+</pre>
+</div><div class='comment type_comment' ><a name="1432173905">&nbsp;</a><strong>[2015-05-21 02:05 UTC] 376166899 &#x61;&#116; qq &#x64;&#111;&#x74; com</strong>
+<pre class='note'>what about PHP-4.4? I do not know how to text it
+</pre>
+</div><div class='comment type_comment' ><a name="1432184432">&nbsp;</a><strong>[2015-05-21 05:00 UTC] <a href="//people.php.net/rasmus">rasmus@php.net</a></strong>
+<pre class='note'>There will be no further releases of PHP 4
+</pre>
+</div><div class='comment type_comment' ><a name="1432191695">&nbsp;</a><strong>[2015-05-21 07:01 UTC] blackhat2014 &#x61;&#116; 163 &#x64;&#111;&#x74; com</strong>
+<pre class='note'>patching file main/rfc1867.c
+Hunk #2 FAILED at 399.
+1 out of 5 hunks FAILED -- saving rejects to file main/rfc1867.c.rej
+
+php5.4.13 how to fix it!
+I use the patch.
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

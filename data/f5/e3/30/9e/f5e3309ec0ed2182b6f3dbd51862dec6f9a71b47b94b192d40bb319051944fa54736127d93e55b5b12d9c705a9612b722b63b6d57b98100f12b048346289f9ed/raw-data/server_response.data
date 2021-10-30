@@ -1,0 +1,4811 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en" dir="ltr">
+  <head>
+<base href="https://bugs.launchpad.net/designate/+bug/1471161/+index" />
+
+    <meta charset="UTF-8" />
+    <title>Bug #1471161 “Designate mDNS DoS through incorrect handling of l...” : Bugs : Designate</title>
+    <link rel="shortcut icon" href="/@@/launchpad.png" />
+    <link rel="canonical" href="https://bugs.launchpad.net/bugs/1471161" />
+    
+      <link rel="alternate" type="application/atom+xml" href="http://feeds.launchpad.net/bugs/1471161/bug.atom" title="Bug 1471161 Feed" />
+    
+
+    
+  
+  <link type="text/css" rel="stylesheet" media="screen, print" href="/+icing/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/combo.css" />
+
+
+    
+
+    
+      <meta name="description" content="Designate does not enforce the DNS protocol limit concerning record set sizes when adding records for a domain name.  The protocol limit is slightly less than 2**16 bytes because of some data that must accompany any record set, as part of the zone file transfer.
+
+As a result, the rendering loop in desginate-mdns can does not make progress because the problematic record set at rrsets[i] will never fit (per designate/mdns/handler.py:RequestHandler._handle_axfr):
+
+        # Render the results, y..." />
+      <meta property="og:description" content="Designate does not enforce the DNS protocol limit concerning record set sizes when adding records for a domain name.  The protocol limit is slightly less than 2**16 bytes because of some data that must accompany any record set, as part of the zone file transfer.
+
+As a result, the rendering loop in desginate-mdns can does not make progress because the problematic record set at rrsets[i] will never fit (per designate/mdns/handler.py:RequestHandler._handle_axfr):
+
+        # Render the results, y..." />
+    
+
+    
+    
+      <meta property="og:title" content="Bug #1471161 “Designate mDNS DoS through incorrect handling of l...” : Bugs : Designate" />
+      <meta property="og:type" content="website" />
+      <meta property="og:image" content="/@@/launchpad.png" />
+      <meta property="og:url" content="https://bugs.launchpad.net/bugs/1471161" />
+      <meta property="og:site_name" content="Launchpad" />
+    
+
+    
+
+    
+  
+
+  
+  
+  <script type="text/javascript">
+    var LP = {
+        cache: {},
+        links: {}
+    };
+  </script>
+
+  
+
+  <script type="text/javascript">var cookie_scope = '; Path=/; Secure; Domain=.launchpad.net';</script>
+
+   <script type="text/javascript" src="/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?yui/yui/yui-min.js&amp;lp/meta.js&amp;yui/loader/loader-min.js"></script>
+   <script type="text/javascript">
+        var raw = null;
+        if (LP.devmode) {
+           raw = 'raw';
+        }
+        YUI.GlobalConfig = {
+            combine: true,
+            comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+            root: 'yui/',
+            filter: raw,
+            debug: false,
+            fetchCSS: false,
+            maxURLLength: 2000,
+            groups: {
+                lp: {
+                    combine: true,
+                    base: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?lp/',
+                    comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+                    root: 'lp/',
+                    // comes from including lp/meta.js
+                    modules: LP_MODULES,
+                    fetchCSS: false
+                }
+            }
+        }</script>
+
+  <script type="text/javascript">
+      // we need this to create a single YUI instance all events and code
+      // talks across. All instances of YUI().use should be based off of
+      // LPJS instead.
+      var LPJS = new YUI();
+  </script>
+
+
+
+    <script id="base-layout-load-scripts" type="text/javascript">
+        //<![CDATA[
+        LPJS.use('base', 'node', 'console', 'event',
+            'oop', 'lp', 'lp.app.foldables','lp.app.sorttable',
+            'lp.app.inlinehelp', 'lp.app.links',
+            'lp.bugs.bugtask_index', 'lp.bugs.subscribers',
+            'lp.app.ellipsis', 'lp.code.branchmergeproposal.diff',
+            'lp.views.global',
+             function(Y) {
+
+            Y.on("domready", function () {
+                var global_view = new Y.lp.views.Global();
+                global_view.render();
+
+                Y.lp.app.sorttable.SortTable.init();
+                Y.lp.app.inlinehelp.init_help();
+                Y.lp.activate_collapsibles();
+                Y.lp.app.foldables.activate();
+                Y.lp.app.links.check_valid_lp_links();
+            });
+
+            Y.on('lp:context:web_link:changed', function(e) {
+                  window.location = e.new_value;
+            });
+        });
+        //]]>
+    </script>
+    <script id="base-helper-functions" type="text/javascript">
+         //<![CDATA[
+        // This code is pulled from lp.js that needs to be available on every
+        // request. Pulling here to get it outside the scope of the YUI block.
+        function setFocusByName(name) {
+            // Focus the first element matching the given name which can be focused.
+            var nodes = document.getElementsByName(name);
+            var i, node;
+            for (i = 0; i < nodes.length; i++) {
+                node = nodes[i];
+                if (node.focus) {
+                    try {
+                        // Trying to focus a hidden element throws an error in IE8.
+                        if (node.offsetHeight !== 0) {
+                            node.focus();
+                        }
+                    } catch (e) {
+                        LPJS.use('console', function(Y) {
+                            Y.log('In setFocusByName(<' +
+                                node.tagName + ' type=' + node.type + '>): ' + e);
+                        });
+                    }
+                    break;
+                }
+            }
+        }
+
+        function selectWidget(widget_name, event) {
+          if (event && (event.keyCode === 9 || event.keyCode === 13)) {
+              // Avoid firing if user is tabbing through or simply pressing
+              // enter to submit the form.
+              return;
+          }
+          document.getElementById(widget_name).checked = true;
+        }
+        //]]>
+    </script>
+
+    
+      
+      <script type="text/javascript" id="available-official-tags-js">var available_official_tags = ["a11y", "api", "appstream", "backend", "bind", "bionic", "bisect-done", "bitesize", "breaks-gate", "central", "cherry-pick", "community-security", "dashboard", "database", "designate-dashboard", "desktop-file", "disco", "dist-upgrade", "docs", "dynect", "elastic-recheck-added", "focal", "ftbfs", "groovy", "hirsute", "hw-specific", "impish", "intermittent-gate-issue", "jammy", "kernel-bug", "low-hanging-fruit", "manpage", "metabug", "mitaka-rc-potential", "multiarch", "needs-bisect", "needs-design", "needs-packaging", "needs-reassignment", "neutron", "nsd4", "objects", "package-conflict", "packaging", "patch", "patch-accepted-debian", "patch-accepted-upstream", "patch-forwarded-debian", "patch-forwarded-upstream", "patch-needswork", "patch-rejected", "patch-rejected-debian", "patch-rejected-upstream", "performing-bisect", "powerdns", "py2-removal", "qt4-removal", "regression-proposed", "regression-release", "regression-update", "sink", "storage", "string-fix", "suspend-resume", "systemd-boot", "testcase", "touch", "unmetdeps", "upgrade-software-version", "verification-done-bionic", "verification-done-focal", "verification-done-groovy", "verification-done-hirsute", "verification-done-impish", "verification-done-xenial", "verification-failed-bionic", "verification-failed-groovy", "verification-failed-impish", "verification-failed-xenial", "verification-needed-bionic", "verification-needed-focal", "verification-needed-groovy", "verification-needed-hirsute", "verification-needed-impish", "verification-needed-trusty", "verification-needed-xenial", "wayland", "xenial"];</script>
+      <script type="text/javascript">
+        LPJS.use('base', 'node', 'oop', 'event', 'lp.bugs.bugtask_index',
+                  'lp.bugs.subscribers', 'lp.code.branchmergeproposal.diff',
+                  'lp.app.comment', 'lp.services.messages.edit', function(Y) {
+            Y.on('domready', function() {
+                Y.lp.code.branchmergeproposal.diff.connect_diff_links();
+                Y.lp.bugs.bugtask_index.setup_bugtask_index();
+                Y.lp.bugs.bugtask_index.setup_bugtask_table();
+                LP.cache.comment_context = LP.cache.bug;
+                var cl = new Y.lp.app.comment.CommentList();
+                cl.render();
+                var sl = new Y.lp.bugs.subscribers.createBugSubscribersLoader({
+                    container_box: '#other-bug-subscribers',
+                    subscribers_details_view:
+                        '/+bug-portlet-subscribers-details',
+                    subscribe_someone_else_link: '.menu-link-addsubscriber'
+                }, window);
+
+                Y.lp.services.messages.edit.setup();
+            });
+         });
+      </script>
+      <style type="text/css">
+        /* Align the 'add comment' link to the right of the comment box. */
+        #add-comment-form textarea { width: 100%; }
+        #add-comment-form { max-width: 60em; padding-bottom: 4em; }
+        #add-comment-form .actions {float: right;}
+        .buglink-summary dd { font-size: 10px; }
+        a#privacy-link:link:hover, a#privacy-link:visited:hover {text-decoration:none;}
+      </style>
+      <style type="text/css">
+        .yui3-overlay .value label  {
+          /* It normally makes sense for form labels to be bold, but since
+          this form consists only of radio buttons, there's nothing but labels
+          so we just get wall-to-wall bold. */
+          font-weight: normal !important;
+        }
+      </style>
+    
+    
+  </head>
+
+  <body id="document" itemscope="" itemtype="http://schema.org/WebPage" class="tab-bugs
+      main_side
+      public
+      yui3-skin-sam">
+          
+          
+    <div class="yui-d0">
+      <div id="locationbar" class="login-logout">
+        
+
+<div id="logincontrol"><a href="https://bugs.launchpad.net/designate/+bug/1471161/+login">Log in / Register</a></div>
+
+
+
+      </div><!--id="locationbar"-->
+
+      <div id="watermark" class="watermark-apps-portlet">
+        <div>
+          <a href="https://launchpad.net/designate"><img alt="" width="64" height="64" src="https://launchpadlibrarian.net/360467553/designate_64.jpg" /></a>
+        </div>
+        <div class="wide">
+          <h2 id="watermark-heading"><a href="https://launchpad.net/designate">Designate</a></h2>
+        </div>
+        
+  <!-- Application Menu -->
+  <ul class="facetmenu">
+    
+      
+      <li class="overview"><a href="https://launchpad.net/designate">Overview</a></li>
+      
+    
+    
+      
+      <li class="branches"><a href="https://code.launchpad.net/designate">Code</a></li>
+      
+    
+    
+      <li class="bugs active"><a href="https://bugs.launchpad.net/designate">Bugs</a></li>
+      
+      
+    
+    
+      
+      <li class="specifications"><a href="https://blueprints.launchpad.net/designate">Blueprints</a></li>
+      
+    
+    
+      
+      <li class="translations"><a href="https://translations.launchpad.net/designate">Translations</a></li>
+      
+    
+    
+      
+      <li class="answers"><a href="https://answers.launchpad.net/designate">Answers</a></li>
+      
+    
+  </ul>
+
+      </div>
+
+      <div class="yui-t4">
+        <div id="maincontent" class="yui-main">
+          <div class="yui-b" dir="ltr">
+            <div class="context-publication">
+              
+      <h1 id="edit-title">
+<span class="yui3-editable_text-text ellipsis" style="max-width: 95%;">
+    Designate mDNS DoS through incorrect handling of large RecordSets
+</span>
+  
+</h1>
+
+
+
+    
+              
+
+              <div id="registration" class="registering">
+                
+      Bug #1471161 reported by
+      <a href="https://launchpad.net/~fweimer" class="sprite person">Florian Weimer</a>
+      <time title="2015-07-03 09:27:39 UTC" datetime="2015-07-03T09:27:39.923266+00:00">on 2015-07-03</time>
+    
+              </div>
+            </div>
+
+            
+            <div id="request-notifications">
+              
+            </div>
+
+            
+              <div>
+
+      
+
+      <div id="bug-is-duplicate">
+          
+      </div>
+      
+
+      <div style="float: right;">
+        <span><a href="/+help-bugs/bug-heat.html" target="help" class="sprite flame">264</a></span>
+      </div>
+
+      
+
+
+  
+  
+    <div class="actions">
+      <span id="affectsmetoo" style="display: inline">This bug affects 1 person</span>
+    </div>
+  
+
+
+
+    <table id="affected-software" class="listing">
+      <thead>
+        <tr>
+          <th colspan="2">Affects</th>
+          <th>Status</th>
+          <th>Importance</th>
+          <th>Assigned to</th>
+          <th>Milestone</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        
+          
+  <tr class="highlight" id="tasksummary1869050">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/designate/+bug/1471161/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary1869050">
+        <span class="yui3-activator-data-box">
+            <a class="sprite product" href="https://bugs.launchpad.net/designate">Designate</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/designate/+bug/1471161/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/designate/+bug/1471161/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceCRITICAL">Critical</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1869050">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~kiall">Kiall Mac Innes</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/designate/+milestone/1.0.0">Designate 1.0.0 "liberty"</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1869050">
+     <td colspan="7"><form action="/designate/+bug/1471161/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/designate">Designate</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~fweimer" class="sprite person">Florian Weimer</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2015-07-03 09:27:39 UTC" datetime="2015-07-03T09:27:39.923266+00:00">2015-07-03</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2015-07-09 16:15:42 UTC" datetime="2015-07-09T16:15:42.187348+00:00">2015-07-09</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2015-07-13 13:20:31 UTC" datetime="2015-07-13T13:20:31.851486+00:00">2015-07-13</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2015-07-28 09:42:44 UTC" datetime="2015-07-28T09:42:44.297788+00:00">2015-07-28</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2015-07-29 13:47:12 UTC" datetime="2015-07-29T13:47:12.748168+00:00">2015-07-29</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="designate.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="designate.target.option.package" name="designate.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="designate.target.distribution" name="designate.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="designate.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="designate.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="designate.target.package"
+                         name="designate.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;designate.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('designate.target.package');
+              var select_menu = Y.DOM.byId('designate.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-designate-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_remove_button": false, "header": "Select a package", "vocabulary_filters": [], "remove_team_text": "Remove team", "remove_person_text": "Remove person", "selected_value_metadata": null, "show_create_team": false, "picker_type": "default", "vocabulary_name": "DistributionPackage", "extra_no_results_message": null, "selected_value": null, "show_assign_me_button": false, "show_widget_id": "show-widget-designate-target-package", "step_title": "Search by name", "assign_me_text": "Pick me", "input_element": "designate.target.package"};
+        var show_widget_id = 'show-widget-designate-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="designate.target.option.product" name="designate.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="designate" id="designate.target.product"
+                         name="designate.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;designate.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('designate.target.product');
+              var select_menu = Y.DOM.byId('designate.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-designate-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_remove_button": false, "header": "Select a project", "vocabulary_filters": [], "remove_team_text": "Remove team", "remove_person_text": "Remove person", "selected_value_metadata": null, "show_create_team": false, "picker_type": "default", "vocabulary_name": "Product", "extra_no_results_message": null, "selected_value": "designate", "show_assign_me_button": false, "show_widget_id": "show-widget-designate-target-product", "step_title": "Search", "assign_me_text": "Pick me", "input_element": "designate.target.product"};
+        var show_widget_id = 'show-widget-designate-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="designate.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="designate.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="designate.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="designate.status" name="designate.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="designate.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceCRITICAL">Critical</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          Designate 1.0.0
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="designate.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="designate.assignee.assign_to_me" name="designate.assignee.option" value="designate.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="designate.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="designate.assignee.assigned_to" name="designate.assignee.option" value="designate.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="designate.assignee.assigned_to">
+              Kiall Mac Innes (kiall)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="designate.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="designate.comment_on_change" name="designate.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1872417">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/designate/kilo/+bug/1471161/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/designate/kilo">Kilo</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/designate/kilo/+bug/1471161/+editstatus" style="float: left" class="value statusFIXCOMMITTED">Fix Committed</a>
+          <a href="https://bugs.launchpad.net/designate/kilo/+bug/1471161/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceCRITICAL">Critical</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1872417">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~kiall">Kiall Mac Innes</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1872417">
+     <td colspan="7"><form action="/designate/kilo/+bug/1471161/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/designate/kilo">Designate kilo</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~grahamhayes" class="sprite person">Graham Hayes</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2015-07-09 16:46:19 UTC" datetime="2015-07-09T16:46:19.252496+00:00">2015-07-09</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2015-07-09 16:50:39 UTC" datetime="2015-07-09T16:50:39.391027+00:00">2015-07-09</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2015-07-13 13:20:33 UTC" datetime="2015-07-13T13:20:33.703940+00:00">2015-07-13</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2015-07-28 09:42:46 UTC" datetime="2015-07-28T09:42:46.059264+00:00">2015-07-28</time>
+      </td>
+    </tr>
+    
+  </table>
+  <div class="field">
+    
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="designate_kilo.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="designate_kilo.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="designate_kilo.status" name="designate_kilo.status" size="1" >
+<option selected="selected" value="Fix Committed">Fix Committed</option>
+</select>
+</div>
+<input name="designate_kilo.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceCRITICAL">Critical</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="designate_kilo.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="designate_kilo.assignee.assign_to_me" name="designate_kilo.assignee.option" value="designate_kilo.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="designate_kilo.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="designate_kilo.assignee.assigned_to" name="designate_kilo.assignee.option" value="designate_kilo.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="designate_kilo.assignee.assigned_to">
+              Kiall Mac Innes (kiall)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="designate_kilo.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="designate_kilo.comment_on_change" name="designate_kilo.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1882160">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ubuntu/+source/designate/+bug/1471161/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary1882160">
+        <span class="yui3-activator-data-box">
+            <a class="sprite package-source" href="https://bugs.launchpad.net/ubuntu/+source/designate" title="Latest release: 1:13.0.0-0ubuntu1, uploaded to main on 2021-10-07 06:28:18.150464+00:00 by Chris MacNaughton (chris.macnaughton), maintained by Ubuntu Developers (ubuntu-devel-discuss-lists)">designate (Ubuntu)</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ubuntu/+source/designate/+bug/1471161/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ubuntu/+source/designate/+bug/1471161/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceUNDECIDED">Undecided</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1882160">
+          <span class="yui3-activator-data-box">
+            
+            
+              Unassigned
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href=""></a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1882160">
+     <td colspan="7"><form action="/ubuntu/+source/designate/+bug/1471161/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ubuntu/+source/designate">designate (Ubuntu)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2015-07-29 13:43:05 UTC" datetime="2015-07-29T13:43:05.131204+00:00">2015-07-29</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2015-09-09 14:16:42 UTC" datetime="2015-09-09T14:16:42.982705+00:00">2015-09-09</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2015-10-02 12:25:16 UTC" datetime="2015-10-02T12:25:16.585301+00:00">2015-10-02</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2015-10-02 12:25:16 UTC" datetime="2015-10-02T12:25:16.585301+00:00">2015-10-02</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="ubuntu_designate.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="ubuntu_designate.target.option.package" name="ubuntu_designate.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="ubuntu_designate.target.distribution" name="ubuntu_designate.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="ubuntu_designate.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="ubuntu_designate.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="designate" id="ubuntu_designate.target.package"
+                         name="ubuntu_designate.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;ubuntu_designate.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_designate.target.package');
+              var select_menu = Y.DOM.byId('ubuntu_designate.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_designate-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_remove_button": false, "header": "Select a package", "vocabulary_filters": [], "remove_team_text": "Remove team", "remove_person_text": "Remove person", "selected_value_metadata": null, "show_create_team": false, "picker_type": "default", "vocabulary_name": "DistributionPackage", "extra_no_results_message": null, "selected_value": "designate", "show_assign_me_button": false, "show_widget_id": "show-widget-ubuntu_designate-target-package", "step_title": "Search by name", "assign_me_text": "Pick me", "input_element": "ubuntu_designate.target.package"};
+        var show_widget_id = 'show-widget-ubuntu_designate-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="ubuntu_designate.target.option.product" name="ubuntu_designate.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="ubuntu_designate.target.product"
+                         name="ubuntu_designate.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;ubuntu_designate.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ubuntu_designate.target.product');
+              var select_menu = Y.DOM.byId('ubuntu_designate.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ubuntu_designate-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"show_remove_button": false, "header": "Select a project", "vocabulary_filters": [], "remove_team_text": "Remove team", "remove_person_text": "Remove person", "selected_value_metadata": null, "show_create_team": false, "picker_type": "default", "vocabulary_name": "Product", "extra_no_results_message": null, "selected_value": null, "show_assign_me_button": false, "show_widget_id": "show-widget-ubuntu_designate-target-product", "step_title": "Search", "assign_me_text": "Pick me", "input_element": "ubuntu_designate.target.product"};
+        var show_widget_id = 'show-widget-ubuntu_designate-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_designate.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_designate.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ubuntu_designate.status" name="ubuntu_designate.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ubuntu_designate.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceUNDECIDED">Undecided</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ubuntu_designate.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" checked="checked" id="ubuntu_designate.assignee.assign_to_nobody" name="ubuntu_designate.assignee.option" value="ubuntu_designate.assignee.assign_to_nobody" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_designate.assignee.assign_to_nobody">
+          Nobody
+        </label>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ubuntu_designate.assignee.assign_to_me" name="ubuntu_designate.assignee.option" value="ubuntu_designate.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ubuntu_designate.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ubuntu_designate.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ubuntu_designate.comment_on_change" name="ubuntu_designate.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+      </tbody>
+
+    </table>
+
+
+
+<div class="actions">
+  
+    <span id="also-affects-product" class="">
+    <a class="menu-link-addupstream sprite add" href="https://bugs.launchpad.net/designate/+bug/1471161/+choose-affected-product">Also affects project</a>
+        <a href="/+help-bugs/also-affects-project-help.html" target="help" class="sprite maybe action-icon">(?)</a>
+    </span>
+    <span id="also-affects-package" class="">
+    <a class="menu-link-adddistro sprite add" href="https://bugs.launchpad.net/designate/+bug/1471161/+distrotask">Also affects distribution/package</a>
+    </span>
+    <a class="menu-link-nominate sprite milestone" href="https://bugs.launchpad.net/designate/+bug/1471161/+nominate">Nominate for series</a>
+    
+  
+
+</div>
+
+
+
+
+      <div id="maincontentsub">
+        <div class="top-portlet">
+
+      <div itemprop="mainContentOfPage" class="report">
+        
+
+        <div>
+  <div class="lazr-multiline-edit" id="edit-description">
+  <div class="clearfix">
+    
+
+    <h3>Bug Description</h3>
+  </div>
+
+  <div class="yui3-editable_text-text"><p>Designate does not enforce the DNS protocol limit concerning record set sizes when adding records for a domain name.  The protocol limit is slightly less than 2**16 bytes because of some data that must accompany any record set, as part of the zone file transfer.</p>
+<p>As a result, the rendering loop in desginate-mdns can does not make progress because the problematic record set at rrsets[i] will never fit (per designate/<wbr />mdns/handler.<wbr />py:RequestHandl<wbr />er._handle_<wbr />axfr):</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# Render the results, yielding a packet after each TooBig exception.<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;i, renderer = 0, None<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;while i &lt; len(rrsets):<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# No renderer? Build one<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if renderer is None:<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;renderer = dns.renderer.<wbr />Renderer(<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;response.<wbr />id, response.flags, max_message_size)<br />
+…<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;try:<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;renderer.<wbr />add_rrset(<wbr />dns.renderer.<wbr />ANSWER, rrsets[i])<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;i += 1<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;except dns.exception.<wbr />TooBig:<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;renderer.<wbr />write_header(<wbr />)<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;if request.had_tsig:<br />
+…<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;yield renderer<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<wbr />&nbsp;&nbsp;renderer = None</p>
+<p>When this happens, designate-mdns will keep sending SOA records over and over again:</p>
+<p>sendto(37, &quot;\0\35&lt;<wbr />{\204\0\<wbr />0\1\0\0\<wbr />0\0\0\0\<wbr />7example\<wbr />3org\0\<wbr />0\374\0\<wbr />1&quot;, 31, 0, NULL, 0) = 31<br />
+sendto(37, &quot;\0\35&lt;<wbr />{\204\0\<wbr />0\1\0\0\<wbr />0\0\0\0\<wbr />7example\<wbr />3org\0\<wbr />0\374\0\<wbr />1&quot;, 31, 0, NULL, 0) = 31<br />
+sendto(37, &quot;\0\35&lt;<wbr />{\204\0\<wbr />0\1\0\0\<wbr />0\0\0\0\<wbr />7example\<wbr />3org\0\<wbr />0\374\0\<wbr />1&quot;, 31, 0, NULL, 0) = 31</p>
+<p>Here is how I triggered this.  I created a domain example.org:</p>
+<p>+------<wbr />-------<wbr />-------<wbr />-------<wbr />-------<wbr />----+--<wbr />-------<wbr />-----+-<wbr />-------<wbr />----+<br />
+| id                                   | name         |     serial |<br />
++------<wbr />-------<wbr />-------<wbr />-------<wbr />-------<wbr />----+--<wbr />-------<wbr />-----+-<wbr />-------<wbr />----+<br />
+| ded903fc-<wbr />60ef-4b5e-<wbr />a37c-f3181baf95<wbr />16 | example.org. | 1435315435 |<br />
++------<wbr />-------<wbr />-------<wbr />-------<wbr />-------<wbr />----+--<wbr />-------<wbr />-----+-<wbr />-------<wbr />----+</p>
+<p>Then I added several hundred NS records for the same subdomain, using this shell command:</p>
+<p>for x in {1..304} ; do<br />
+&nbsp;&nbsp;designate record-create --name &#x27;sub.example.org.&#x27; --type NS --data \<br />
+$x&#x27;.xxxxxxxxxxx<wbr />xxxxxxxxxxxxxxx<wbr />xxxxxxxxxxxxxxx<wbr />xxxxxxxxxxxxxxx<wbr />xxxxxxx.<wbr />xxxxxxxxxxxxxxx<wbr />xxxxxxxxxxxxxxx<wbr />xxxxxxxxxxxxxxx<wbr />xxxxxxxxxxxxxxx<wbr />xxx.xxxxxxxxxxx<wbr />xxxxxxxxxxxxxxx<wbr />xxxxxxxxxxxxxxx<wbr />xxxxxxxxxxxxxxx<wbr />xxxxxxx.<wbr />&#x27;$x. \<br />
+&nbsp;&nbsp;ded903fc-<wbr />60ef-4b5e-<wbr />a37c-f3181baf95<wbr />16<br />
+done</p>
+<p>In the tested configuration, PowerDNS will attempt a zone file transfer, and trigger the bug.  Because it keeps receiving data, it does not seem it will ever run into a timeout (and if it does, it will try again).</p>
+<p>Downstream bug report: <a rel="nofollow" href="https://bugzilla.redhat.com/show_bug.cgi?id=1236014">https:/<wbr />/bugzilla.<wbr />redhat.<wbr />com/show_<wbr />bug.cgi?<wbr />id=1236014</a></p></div>
+  </div>
+
+  
+</div>
+
+
+        <div style="margin:-10px 0 20px 5px" class="clearfix">
+          
+        </div>
+
+        <div id="bug-tags">
+          <span id="tags-heading">
+            Tags:
+          </span>
+          <span id="tag-list">
+            <a class="official-tag" href="/designate/+bugs?field.tag=patch">patch</a>
+            <a class="unofficial-tag" href="/designate/+bugs?field.tag=in-stable-kilo">in-stable-kilo</a>
+          </span>
+          
+          <a href="+edit" title="Edit tags" id="tags-trigger" class="sprite edit action-icon">Edit</a>
+          <a href="/+help-bugs/tag-help.html" target="help" class="sprite maybe action-icon">Tag help</a>
+        </div>
+
+        <script type="text/javascript">
+          LPJS.use('event', 'node', 'lp.bugs.tags_entry', function(Y) {
+              Y.on('domready',
+                   function(e) {
+                       Y.lp.bugs.tags_entry.setup_tag_entry(
+                           available_official_tags);
+                   },
+                   window);
+          });
+        </script>
+
+        <div class="clearfix"></div>
+      </div>
+
+      <div id="branches-and-cves">
+        <div id="bug-branches-container" style="float: left">
+          
+        </div><!-- bug-branch-container -->
+
+        <div class="cves">
+          <h2>CVE References</h2>
+          <ul>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2015-5694" title="Designate does not enforce the DNS pr...">2015-5694</a>
+            </li>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2015-5695" title="Designate 2015.1.0 through 1.0.0.0b1 ...">2015-5695</a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="clearfix"></div>
+      </div> <!-- branches and CVEs -->
+
+      </div>
+
+      <div>
+      
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~timsim" class="sprite person">Tim Simmons (timsim)</a>
+    
+    <time title="2015-07-08 17:13:46 UTC" datetime="2015-07-08T17:13:46.314848+00:00">on 2015-07-08</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>no longer affects</b>:
+      </td>
+      <td>
+        designate/kilo
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+    
+    <time title="2015-07-09 16:15:41 UTC" datetime="2015-07-09T16:15:41.767863+00:00">on 2015-07-09</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in designate: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Triaged
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>importance</b>:
+      </td>
+      <td>
+        Undecided &#8594; Critical
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>milestone</b>:
+      </td>
+      <td>
+        none &#8594; liberty-2
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/1" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-09T22:35:32.162185+00:00" title="2015-07-09 22:35:32 UTC">on 2015-07-09</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/1"> #1</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Attached a patch providing an initial candidate fix, based off master.</p>
+<p>Tests are passing, but this has not yet been validated with BIND/PowerDNS etc</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Attached a patch providing an initial candidate fix, based off master.
+
+Tests are passing, but this has not yet been validated with BIND/PowerDNS etc</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/2" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-09T22:36:59.104653+00:00" title="2015-07-09 22:36:59 UTC">on 2015-07-09</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/2"> #2</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Apologies, patch is based off <a rel="nofollow" href="https://review.openstack.org/200230">https:/<wbr />/review.<wbr />openstack.<wbr />org/200230</a> rather than master</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Apologies, patch is based off https://review.openstack.org/200230 rather than master </textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/3" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-09T22:53:04.303999+00:00" title="2015-07-09 22:53:04 UTC">on 2015-07-09</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/3"> #3</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Finally, this fixes the DOS - Not the failure to apply quotas..</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Finally, this fixes the DOS - Not the failure to apply quotas..</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/4" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-10T13:04:30.291900+00:00" title="2015-07-10 13:04:30 UTC">on 2015-07-10</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/4"> #4</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Affects debian: <a rel="nofollow" href="https://packages.debian.org/stretch/designate">https:/<wbr />/packages.<wbr />debian.<wbr />org/stretch/<wbr />designate</a><br />
+Affects ubuntu: <a rel="nofollow" href="http://packages.ubuntu.com/vivid/designate">http://<wbr />packages.<wbr />ubuntu.<wbr />com/vivid/<wbr />designate</a></p>
+<p>RedHat doesn&#x27;t seem to have an equivalent package search site, but I&#x27;m assuming since they filed this issue, it affects RedHat too.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Affects debian: https://packages.debian.org/stretch/designate
+Affects ubuntu: http://packages.ubuntu.com/vivid/designate
+
+RedHat doesn't seem to have an equivalent package search site, but I'm assuming since they filed this issue, it affects RedHat too.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/5" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~grahamhayes" class="sprite person">Graham Hayes (grahamhayes)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-10T14:35:25.405106+00:00" title="2015-07-10 14:35:25 UTC">on 2015-07-10</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/5"> #5</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>I think there is 2 parts to this bug:</p>
+<p>1: Quotas were being bypassed as part of the v1 API.<br />
+2. If there was enough RRs in a RRSet MiniDNS went into a loop.<br />
+3. MiniDNS does not have a timeout.</p>
+<p>1 is not really relevant - 2 should not happen in anycase.</p>
+<p>The patch fixes 2, but not 3 - should we be include that in the fix?</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">I think there is 2 parts to this bug:
+
+1: Quotas were being bypassed as part of the v1 API.
+2. If there was enough RRs in a RRSet MiniDNS went into a loop.
+3. MiniDNS does not have a timeout.
+
+1 is not really relevant - 2 should not happen in anycase.
+
+The patch fixes 2, but not 3 - should we be include that in the fix?</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/6" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-13T09:29:26.606914+00:00" title="2015-07-13 09:29:26 UTC">on 2015-07-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/6"> #6</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/designate/+bug/1471161/+attachment/4428196/+files/bug-1471161-master.patch">Master Branch Patch</a>
+        <a class="sprite edit action-icon" href="/designate/+bug/1471161/+attachment/4428196">Edit</a>
+        (12.1 KiB,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10"></textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/8" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-13T10:15:14.548671+00:00" title="2015-07-13 10:15:14 UTC">on 2015-07-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/8"> #8</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/designate/+bug/1471161/+attachment/4428243/+files/bug-1471161-quotas-master.patch">Master Branch Quotas Patch</a>
+        <a class="sprite edit action-icon" href="/designate/+bug/1471161/+attachment/4428243">Edit</a>
+        (4.4 KiB,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10"></textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/9" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-13T10:15:31.930700+00:00" title="2015-07-13 10:15:31 UTC">on 2015-07-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/9"> #9</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/designate/+bug/1471161/+attachment/4428244/+files/bug-1471161-quotas-kilo.patch">Kilo Branch Quotas Patch</a>
+        <a class="sprite edit action-icon" href="/designate/+bug/1471161/+attachment/4428244">Edit</a>
+        (4.4 KiB,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10"></textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/10" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-13T10:18:52.966265+00:00" title="2015-07-13 10:18:52 UTC">on 2015-07-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/10"> #10</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>I&#x27;ve gone and implemented the RRSet related quota enforcement for Master and Kilo, this was not previously implemented. I&#x27;ve included them in this bug, as publishing them now might indicate there&#x27;s an issue with RRset sizes, but I don&#x27;t consider them directly part of this DoS vulnerability.</p>
+<p>i.e. An operator could choose to have infinite quotas  (a valid use case), and we should support that.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">I've gone and implemented the RRSet related quota enforcement for Master and Kilo, this was not previously implemented. I've included them in this bug, as publishing them now might indicate there's an issue with RRset sizes, but I don't consider them directly part of this DoS vulnerability.
+
+i.e. An operator could choose to have infinite quotas  (a valid use case), and we should support that.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/11" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-13T10:22:19.393691+00:00" title="2015-07-13 10:22:19 UTC">on 2015-07-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/11"> #11</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite download-icon" href="https://bugs.launchpad.net/designate/+bug/1471161/+attachment/4428246/+files/ossa.yaml">ossa.yaml</a>
+        <a class="sprite edit action-icon" href="/designate/+bug/1471161/+attachment/4428246">Edit</a>
+        (973 bytes,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Attached initial OSSA yaml based on existing documents from <a rel="nofollow" href="https://github.com/openstack/ossa/tree/master/ossa">https:/<wbr />/github.<wbr />com/openstack/<wbr />ossa/tree/<wbr />master/<wbr />ossa</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Attached initial OSSA yaml based on existing documents from https://github.com/openstack/ossa/tree/master/ossa</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/12" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~grahamhayes" class="sprite person">Graham Hayes (grahamhayes)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-13T12:38:57.835601+00:00" title="2015-07-13 12:38:57 UTC">on 2015-07-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/12"> #12</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/designate/+bug/1471161/+attachment/4428289/+files/bug-1471161-kilo.patch">Kilo Branch Patch</a>
+        <a class="sprite edit action-icon" href="/designate/+bug/1471161/+attachment/4428289">Edit</a>
+        (13.3 KiB,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Updated Kilo patch</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Updated Kilo patch</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/13" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-13T12:47:58.478289+00:00" title="2015-07-13 12:47:58 UTC">on 2015-07-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/13"> #13</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>All patches have now been validated as fixing the DoS.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">All patches have now been validated as fixing the DoS.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/14" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~grahamhayes" class="sprite person">Graham Hayes (grahamhayes)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-13T12:49:53.949678+00:00" title="2015-07-13 12:49:53 UTC">on 2015-07-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/14"> #14</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Main Patch:</p>
+<p>Bind9 + Master   - Fix Verified<br />
+Bind9 + Kilo         - Fix Verified</p>
+<p>I have not tested the Quotas patch yet, but it should be DNS Server agnostic.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Main Patch:
+
+Bind9 + Master   - Fix Verified
+Bind9 + Kilo         - Fix Verified
+
+I have not tested the Quotas patch yet, but it should be DNS Server agnostic. </textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/15" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-13T12:50:38.771488+00:00" title="2015-07-13 12:50:38 UTC">on 2015-07-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/15"> #15</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite download-icon" href="https://bugs.launchpad.net/designate/+bug/1471161/+attachment/4428290/+files/reproduce.sh">reproduce.sh</a>
+        <a class="sprite edit action-icon" href="/designate/+bug/1471161/+attachment/4428290">Edit</a>
+        (841 bytes,
+        text/x-sh)
+      </li>
+    </ul>
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Attached reproduction script used.</p>
+<p>Ran before applying patches, mDNS will consume 100% CPU once it&#x27;s completed and zones will not propagate to the nameservers.</p>
+<p>Ran after applying patches, mDNS will correctly propagate zones to the nameservers.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Attached reproduction script used.
+
+Ran before applying patches, mDNS will consume 100% CPU once it's completed and zones will not propagate to the nameservers.
+
+Ran after applying patches, mDNS will correctly propagate zones to the nameservers.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+    
+    <time title="2015-07-13 13:20:31 UTC" datetime="2015-07-13T13:20:31.675032+00:00">on 2015-07-13</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in designate: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; Kiall Mac Innes (kiall)
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/16" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~timsim" class="sprite person">Tim Simmons (timsim)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-13T14:57:47.614449+00:00" title="2015-07-13 14:57:47 UTC">on 2015-07-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/16"> #16</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Verified main fix with:<br />
+Bind9 + Master<br />
+Bind9 + Kilo</p>
+<p>Verified quotas fix on:<br />
+Master<br />
+Kilo</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Verified main fix with:
+Bind9 + Master
+Bind9 + Kilo
+
+Verified quotas fix on:
+Master
+Kilo</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+    
+    <time title="2015-07-13 16:55:56 UTC" datetime="2015-07-13T16:55:56.021542+00:00">on 2015-07-13</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>summary</b>:
+      </td>
+      <td>
+        - Lack of record set size checking leads to denial of service<br />+ Designate mDNS DoS through incorrect handling of large RecordSets
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/17" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-13T17:57:51.276556+00:00" title="2015-07-13 17:57:51 UTC">on 2015-07-13</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/17"> #17</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>CVE # Allocation request sent, based on VMT template. Copy of email:</p>
+<p>A vulnerability was discovered in OpenStack Designate (see below).<br />
+In order to ensure full traceability, we need a CVE number assigned<br />
+that we can attach to private and public notifications. Please treat<br />
+the following information as confidential until further public<br />
+disclosure.</p>
+<p>Title: Designate mDNS DoS through incorrect handling of large RecordSets<br />
+Reporter: Florian Weimer (Red Hat)<br />
+Products: OpenStack Designate<br />
+Affects: OpenStack Designate version 2015.1.0</p>
+<p>Description:<br />
+Florian Weimer from Red Hat reported a vulnerability in Designate.<br />
+By creating a single RecordSet that exceeds the configured max<br />
+allowed DNS packet size, an authenticated user may cause the<br />
+Designate mDNS service to enter an infinite loop, triggering a DoS.</p>
+<p>Thanks in advance,<br />
+Kiall Mac Innes</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">CVE # Allocation request sent, based on VMT template. Copy of email:
+
+A vulnerability was discovered in OpenStack Designate (see below).
+In order to ensure full traceability, we need a CVE number assigned
+that we can attach to private and public notifications. Please treat
+the following information as confidential until further public
+disclosure.
+
+Title: Designate mDNS DoS through incorrect handling of large RecordSets
+Reporter: Florian Weimer (Red Hat)
+Products: OpenStack Designate
+Affects: OpenStack Designate version 2015.1.0
+
+Description:
+Florian Weimer from Red Hat reported a vulnerability in Designate.
+By creating a single RecordSet that exceeds the configured max
+allowed DNS packet size, an authenticated user may cause the
+Designate mDNS service to enter an infinite loop, triggering a DoS.
+
+Thanks in advance,
+Kiall Mac Innes
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/18" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-21T14:08:32.804587+00:00" title="2015-07-21 14:08:32 UTC">on 2015-07-21</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/18"> #18</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>No CVE number yet, went ahead and notified downstreams. Disclosure date set for 2015-07-28, 1500UTC.</p>
+<p>Copy of email below:</p>
+<p>This is an advance warning of a vulnerability discovered in OpenStack<br />
+Designate, to give you, as downstream stakeholders, a chance to coordinate<br />
+the release of fixes and reduce the vulnerability window. Please treat the<br />
+following information as confidential until the proposed public<br />
+disclosure date.</p>
+<p>Title: Designate mDNS DoS through incorrect handling of large RecordSets<br />
+Reporter: Florian Weimer (Red Hat)<br />
+Products: Designate<br />
+Affects: 2015.1.0 through 1.0.0.0b1</p>
+<p>Description:<br />
+Florian Weimer from Red Hat reported a vulnerability in Designate.<br />
+By creating a single RecordSet that exceeds the configured max allowed DNS<br />
+packet size, an authenticated user may cause the Designate mDNS service<br />
+to enter an infinite loop, triggering a DoS.</p>
+<p>Proposed patch:<br />
+See attached patches. Unless a flaw is discovered in them, these patches<br />
+will be merged to stable/kilo and master on the public disclosure date.</p>
+<p>CVE: TBA<br />
+Launchpad Bug #: 1471161<br />
+RedHat Bug #: 1236014</p>
+<p>Proposed public disclosure date/time: 2015-07-28, 1500UTC</p>
+<p>Please do not make the issue public (or release public patches) before<br />
+this coordinated embargo date.</p>
+<p>Regards,</p>
+<p><span class="foldable">--<br />
+Kiall Mac Innes<br />
+OpenStack Designate PTL
+</span></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">No CVE number yet, went ahead and notified downstreams. Disclosure date set for 2015-07-28, 1500UTC.
+
+Copy of email below:
+
+This is an advance warning of a vulnerability discovered in OpenStack
+Designate, to give you, as downstream stakeholders, a chance to coordinate
+the release of fixes and reduce the vulnerability window. Please treat the
+following information as confidential until the proposed public
+disclosure date.
+
+Title: Designate mDNS DoS through incorrect handling of large RecordSets
+Reporter: Florian Weimer (Red Hat)
+Products: Designate
+Affects: 2015.1.0 through 1.0.0.0b1
+
+Description:
+Florian Weimer from Red Hat reported a vulnerability in Designate.
+By creating a single RecordSet that exceeds the configured max allowed DNS
+packet size, an authenticated user may cause the Designate mDNS service
+to enter an infinite loop, triggering a DoS.
+
+Proposed patch:
+See attached patches. Unless a flaw is discovered in them, these patches
+will be merged to stable/kilo and master on the public disclosure date.
+
+CVE: TBA
+Launchpad Bug #: 1471161
+RedHat Bug #: 1236014
+
+Proposed public disclosure date/time: 2015-07-28, 1500UTC
+
+Please do not make the issue public (or release public patches) before
+this coordinated embargo date.
+
+Regards,
+
+--
+Kiall Mac Innes
+OpenStack Designate PTL
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+    
+    <time title="2015-07-28 09:42:44 UTC" datetime="2015-07-28T09:42:44.081884+00:00">on 2015-07-28</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in designate: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Triaged &#8594; In Progress
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+    
+    <time title="2015-07-28 15:03:40 UTC" datetime="2015-07-28T15:03:40.962233+00:00">on 2015-07-28</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>information type</b>:
+      </td>
+      <td>
+        Private Security &#8594; Public Security
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/19" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-28T15:04:11.321562+00:00" title="2015-07-28 15:04:11 UTC">on 2015-07-28</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/designate/+bug/1471161/comments/19">
+                <strong>Fix proposed to designate (master)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/19"> #19</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Fix proposed to branch: master<br />
+Review: <a rel="nofollow" href="https://review.openstack.org/206578">https:/<wbr />/review.<wbr />openstack.<wbr />org/206578</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Fix proposed to branch: master
+Review: https://review.openstack.org/206578</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/20" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-28T15:04:18.578709+00:00" title="2015-07-28 15:04:18 UTC">on 2015-07-28</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/20"> #20</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Fix proposed to branch: master<br />
+Review: <a rel="nofollow" href="https://review.openstack.org/206579">https:/<wbr />/review.<wbr />openstack.<wbr />org/206579</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Fix proposed to branch: master
+Review: https://review.openstack.org/206579</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/21" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-28T15:04:26.811205+00:00" title="2015-07-28 15:04:26 UTC">on 2015-07-28</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/designate/+bug/1471161/comments/21">
+                <strong>Fix proposed to designate (stable/kilo)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/21"> #21</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Fix proposed to branch: stable/kilo<br />
+Review: <a rel="nofollow" href="https://review.openstack.org/206580">https:/<wbr />/review.<wbr />openstack.<wbr />org/206580</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Fix proposed to branch: stable/kilo
+Review: https://review.openstack.org/206580</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/22" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-28T15:04:34.798165+00:00" title="2015-07-28 15:04:34 UTC">on 2015-07-28</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/22"> #22</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Fix proposed to branch: stable/kilo<br />
+Review: <a rel="nofollow" href="https://review.openstack.org/206581">https:/<wbr />/review.<wbr />openstack.<wbr />org/206581</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Fix proposed to branch: stable/kilo
+Review: https://review.openstack.org/206581</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/23" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-28T15:09:14.890504+00:00" title="2015-07-28 15:09:14 UTC">on 2015-07-28</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/23"> #23</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Public disclosure date/time (2015-07-28, 1500UTC) reached, bug has been marked public, patches uploaded + approved, and going through gate now.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Public disclosure date/time (2015-07-28, 1500UTC) reached, bug has been marked public, patches uploaded + approved, and going through gate now.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/24" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-28T15:31:34.861389+00:00" title="2015-07-28 15:31:34 UTC">on 2015-07-28</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/designate/+bug/1471161/comments/24">
+                <strong>Fix merged to designate (stable/kilo)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/24"> #24</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://review.openstack.org/206580">https:/<wbr />/review.<wbr />openstack.<wbr />org/206580</a><br />
+Committed: <a rel="nofollow" href="https://git.openstack.org/cgit/openstack/designate/commit/?id=969db41bf6d4c14d9925b801c36685e6b7d3f246">https:/<wbr />/git.openstack.<wbr />org/cgit/<wbr />openstack/<wbr />designate/<wbr />commit/<wbr />?id=969db41bf6d<wbr />4c14d9925b801c3<wbr />6685e6b7d3f246</a><br />
+Submitter: Jenkins<br />
+Branch:    stable/kilo</p>
+<p>commit 969db41bf6d4c14<wbr />d9925b801c36685<wbr />e6b7d3f246<br />
+Author: Kiall Mac Innes &lt;email address hidden&gt;<br />
+Date:   Thu Jul 9 21:39:17 2015 +0100</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Ensure a single RRSet over max_packet_size doesn&#x27;t loop forever</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;A single RRSet exceeding the max_packet_size configuration option would<br />
+&nbsp;&nbsp;&nbsp;&nbsp;result in mDNS entering a infinite loop, causing a Denial of Service.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Change-Id: Icab7cfe18a0e46<wbr />cf3ec5d7087eb87<wbr />8e9d8653a4b<br />
+&nbsp;&nbsp;&nbsp;&nbsp;Closes-Bug: 1471161</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://review.openstack.org/206580
+Committed: https://git.openstack.org/cgit/openstack/designate/commit/?id=969db41bf6d4c14d9925b801c36685e6b7d3f246
+Submitter: Jenkins
+Branch:    stable/kilo
+
+commit 969db41bf6d4c14d9925b801c36685e6b7d3f246
+Author: Kiall Mac Innes &lt;kiall@macinnes.ie&gt;
+Date:   Thu Jul 9 21:39:17 2015 +0100
+
+    Ensure a single RRSet over max_packet_size doesn't loop forever
+    
+    A single RRSet exceeding the max_packet_size configuration option would
+    result in mDNS entering a infinite loop, causing a Denial of Service.
+    
+    Change-Id: Icab7cfe18a0e46cf3ec5d7087eb878e9d8653a4b
+    Closes-Bug: 1471161
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/25" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-28T15:50:26.877552+00:00" title="2015-07-28 15:50:26 UTC">on 2015-07-28</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/designate/+bug/1471161/comments/25">
+                <strong>Fix merged to designate (master)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/25"> #25</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://review.openstack.org/206578">https:/<wbr />/review.<wbr />openstack.<wbr />org/206578</a><br />
+Committed: <a rel="nofollow" href="https://git.openstack.org/cgit/openstack/designate/commit/?id=dac3fbc1f78dcd49dadebbd990db7b2d1a68e8c0">https:/<wbr />/git.openstack.<wbr />org/cgit/<wbr />openstack/<wbr />designate/<wbr />commit/<wbr />?id=dac3fbc1f78<wbr />dcd49dadebbd990<wbr />db7b2d1a68e8c0</a><br />
+Submitter: Jenkins<br />
+Branch:    master</p>
+<p>commit dac3fbc1f78dcd4<wbr />9dadebbd990db7b<wbr />2d1a68e8c0<br />
+Author: Kiall Mac Innes &lt;email address hidden&gt;<br />
+Date:   Thu Jul 9 21:39:17 2015 +0100</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Ensure a single RRSet over max_packet_size doesn&#x27;t loop forever</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;A single RRSet exceeding the max_packet_size configuration option would<br />
+&nbsp;&nbsp;&nbsp;&nbsp;result in mDNS entering a infinite loop, causing a Denial of Service.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Change-Id: Icab7cfe18a0e46<wbr />cf3ec5d7087eb87<wbr />8e9d8653a4b<br />
+&nbsp;&nbsp;&nbsp;&nbsp;Closes-Bug: 1471161</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://review.openstack.org/206578
+Committed: https://git.openstack.org/cgit/openstack/designate/commit/?id=dac3fbc1f78dcd49dadebbd990db7b2d1a68e8c0
+Submitter: Jenkins
+Branch:    master
+
+commit dac3fbc1f78dcd49dadebbd990db7b2d1a68e8c0
+Author: Kiall Mac Innes &lt;kiall@macinnes.ie&gt;
+Date:   Thu Jul 9 21:39:17 2015 +0100
+
+    Ensure a single RRSet over max_packet_size doesn't loop forever
+    
+    A single RRSet exceeding the max_packet_size configuration option would
+    result in mDNS entering a infinite loop, causing a Denial of Service.
+    
+    Change-Id: Icab7cfe18a0e46cf3ec5d7087eb878e9d8653a4b
+    Closes-Bug: 1471161
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in designate: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        In Progress &#8594; Fix Committed
+      </td>
+    </tr>
+  
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>tags</b>:
+      </td>
+      <td>
+        added: in-stable-kilo
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/26" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-28T15:50:32.417217+00:00" title="2015-07-28 15:50:32 UTC">on 2015-07-28</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/designate/+bug/1471161/comments/26">
+                <strong>Fix merged to designate (stable/kilo)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/26"> #26</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://review.openstack.org/206581">https:/<wbr />/review.<wbr />openstack.<wbr />org/206581</a><br />
+Committed: <a rel="nofollow" href="https://git.openstack.org/cgit/openstack/designate/commit/?id=46f187f53506de1237cdd14b5d2a69e73fd8f720">https:/<wbr />/git.openstack.<wbr />org/cgit/<wbr />openstack/<wbr />designate/<wbr />commit/<wbr />?id=46f187f5350<wbr />6de1237cdd14b5d<wbr />2a69e73fd8f720</a><br />
+Submitter: Jenkins<br />
+Branch:    stable/kilo</p>
+<p>commit 46f187f53506de1<wbr />237cdd14b5d2a69<wbr />e73fd8f720<br />
+Author: Kiall Mac Innes &lt;email address hidden&gt;<br />
+Date:   Mon Jul 13 10:53:04 2015 +0100</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Ensure RecordSet quotas are enforced</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Implement RecordSet&#x27;s per domain, and Records per RecordSet<br />
+&nbsp;&nbsp;&nbsp;&nbsp;quota enforcement.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Change-Id: If7afc70cd1ebe2<wbr />e18864859de51c6<wbr />ccd15c6a43c<br />
+&nbsp;&nbsp;&nbsp;&nbsp;Partial-Bug: 1471161</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://review.openstack.org/206581
+Committed: https://git.openstack.org/cgit/openstack/designate/commit/?id=46f187f53506de1237cdd14b5d2a69e73fd8f720
+Submitter: Jenkins
+Branch:    stable/kilo
+
+commit 46f187f53506de1237cdd14b5d2a69e73fd8f720
+Author: Kiall Mac Innes &lt;kiall@macinnes.ie&gt;
+Date:   Mon Jul 13 10:53:04 2015 +0100
+
+    Ensure RecordSet quotas are enforced
+    
+    Implement RecordSet's per domain, and Records per RecordSet
+    quota enforcement.
+    
+    Change-Id: If7afc70cd1ebe2e18864859de51c6ccd15c6a43c
+    Partial-Bug: 1471161
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/27" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-28T15:50:36.387841+00:00" title="2015-07-28 15:50:36 UTC">on 2015-07-28</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/designate/+bug/1471161/comments/27">
+                <strong>Fix merged to designate (master)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/27"> #27</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://review.openstack.org/206579">https:/<wbr />/review.<wbr />openstack.<wbr />org/206579</a><br />
+Committed: <a rel="nofollow" href="https://git.openstack.org/cgit/openstack/designate/commit/?id=789709f1db081222c2e4d21d287781e437b76a95">https:/<wbr />/git.openstack.<wbr />org/cgit/<wbr />openstack/<wbr />designate/<wbr />commit/<wbr />?id=789709f1db0<wbr />81222c2e4d21d28<wbr />7781e437b76a95</a><br />
+Submitter: Jenkins<br />
+Branch:    master</p>
+<p>commit 789709f1db08122<wbr />2c2e4d21d287781<wbr />e437b76a95<br />
+Author: Kiall Mac Innes &lt;email address hidden&gt;<br />
+Date:   Mon Jul 13 10:53:04 2015 +0100</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Ensure RecordSet quotas are enforced</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Implement RecordSet&#x27;s per domain, and Records per RecordSet<br />
+&nbsp;&nbsp;&nbsp;&nbsp;quota enforcement.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Change-Id: If7afc70cd1ebe2<wbr />e18864859de51c6<wbr />ccd15c6a43c<br />
+&nbsp;&nbsp;&nbsp;&nbsp;Partial-Bug: 1471161</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://review.openstack.org/206579
+Committed: https://git.openstack.org/cgit/openstack/designate/commit/?id=789709f1db081222c2e4d21d287781e437b76a95
+Submitter: Jenkins
+Branch:    master
+
+commit 789709f1db081222c2e4d21d287781e437b76a95
+Author: Kiall Mac Innes &lt;kiall@macinnes.ie&gt;
+Date:   Mon Jul 13 10:53:04 2015 +0100
+
+    Ensure RecordSet quotas are enforced
+    
+    Implement RecordSet's per domain, and Records per RecordSet
+    quota enforcement.
+    
+    Change-Id: If7afc70cd1ebe2e18864859de51c6ccd15c6a43c
+    Partial-Bug: 1471161
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/28" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~kiall" class="sprite person">Kiall Mac Innes (kiall)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-29T13:30:09.704063+00:00" title="2015-07-29 13:30:09 UTC">on 2015-07-29</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/28"> #28</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Two CVE numbers have been assigned to track the two parts of this:</p>
+<p>CVE-2015-5694 and CVE-2015-5695</p>
+<p><a rel="nofollow" href="https://security-tracker.debian.org/tracker/CVE-2015-5694">https:/<wbr />/security-<wbr />tracker.<wbr />debian.<wbr />org/tracker/<wbr />CVE-2015-<wbr />5694</a><br />
+<a rel="nofollow" href="https://security-tracker.debian.org/tracker/CVE-2015-5695">https:/<wbr />/security-<wbr />tracker.<wbr />debian.<wbr />org/tracker/<wbr />CVE-2015-<wbr />5695</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Two CVE numbers have been assigned to track the two parts of this:
+
+CVE-2015-5694 and CVE-2015-5695
+
+https://security-tracker.debian.org/tracker/CVE-2015-5694
+https://security-tracker.debian.org/tracker/CVE-2015-5695
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+    
+    <time title="2015-07-29 13:47:11 UTC" datetime="2015-07-29T13:47:11.517962+00:00">on 2015-07-29</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in designate: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Fix Committed &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/designate/+bug/1471161/comments/29" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~crichton" class="sprite person">Ubuntu Foundations Team Bug Bot (crichton)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2015-07-29T16:24:36.393211+00:00" title="2015-07-29 16:24:36 UTC">on 2015-07-29</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/designate/+bug/1471161/comments/29"> #29</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>The attachment &quot;Master Branch Patch&quot; seems to be a patch.  If it isn&#x27;t, please remove the &quot;patch&quot; flag from the attachment, remove the &quot;patch&quot; tag, and if you are a member of the ~ubuntu-reviewers, unsubscribe the team.</p>
+<p>[This is an automated message performed by a Launchpad user owned by ~brian-murray, for any issues please contact him.]</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">The attachment "Master Branch Patch" seems to be a patch.  If it isn't, please remove the "patch" flag from the attachment, remove the "patch" tag, and if you are a member of the ~ubuntu-reviewers, unsubscribe the team.
+
+[This is an automated message performed by a Launchpad user owned by ~brian-murray, for any issues please contact him.]</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>tags</b>:
+      </td>
+      <td>
+        added: patch
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~mdeslaur" class="sprite person">Marc Deslauriers (mdeslaur)</a>
+    
+    <time title="2015-09-09 14:16:42 UTC" datetime="2015-09-09T14:16:42.393063+00:00">on 2015-09-09</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in designate (Ubuntu): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Confirmed
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~james-page" class="sprite person">James Page (james-page)</a>
+    
+    <time title="2015-10-02 12:25:15 UTC" datetime="2015-10-02T12:25:15.665247+00:00">on 2015-10-02</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in designate (Ubuntu): </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Confirmed &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+    
+    <time title="2015-10-15 08:29:37 UTC" datetime="2015-10-15T08:29:37.666380+00:00">on 2015-10-15</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in designate: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>milestone</b>:
+      </td>
+      <td>
+        liberty-2 &#8594; 1.0.0
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        <div style="float: right;">
+          <a class="menu-link-activitylog" href="https://bugs.launchpad.net/designate/+bug/1471161/+activity">See full activity log</a>
+        </div>
+        <div class="clearfix"></div>
+
+        
+          
+
+          
+            <div align="center" id="add-comment-login-first">
+              To post a comment you must <a href="+login?comments=all">log in</a>.
+            </div>
+          
+        
+        
+      
+
+      </div><!-- class="top-portlet" -->
+      </div><!--- id="maincontentsub"-->
+      <div>
+        <div id="duplicate-form-container"></div>
+        <div id="privacy-form-container"></div>
+      </div>
+    </div>
+            
+            
+          </div><!-- yui-b -->
+        </div><!-- yui-main -->
+
+        
+          <div id="side-portlets" class="yui-b side">
+            
+      <div id="involvement" class="portlet">
+        <ul class="involvement">
+          <li class="single">
+            <a class="sprite bugs" href="/designate/+filebug">
+              Report a bug
+            </a>
+          </li>
+        </ul>
+      </div>
+      <div id="privacy" class="first portlet public">
+  <div id="privacy-text">
+     <span id="information-type-summary" class="sprite public">This report contains
+         <strong id="information-type">Public Security</strong>
+         information
+     </span>&nbsp;<a class="sprite edit action-icon" id="privacy-link" href="/designate/+bug/1471161/+secrecy">Edit</a>
+
+     <div id="information-type-description" style="padding-top: 5px">Everyone can see this security related information.
+</div>
+  </div>
+</div>
+
+      <div id="portlet-actions" class="portlet vertical">
+  <ul id="duplicate-actions">
+    <li class="sprite bug-dupe">
+    <span id="mark-duplicate-text">
+    <a class="menu-link-mark-dupe" href="/designate/+bug/1471161/+duplicate">Mark as duplicate</a>
+    </span>
+    </li>
+    
+    <li><a class="menu-link-createquestion sprite add" href="https://bugs.launchpad.net/designate/+bug/1471161/+create-question">Convert to a question</a></li>
+    
+    <li><a class="menu-link-addbranch sprite add" href="https://bugs.launchpad.net/designate/+bug/1471161/+addbranch">Link a related branch</a></li>
+    <li><a class="menu-link-linktocve sprite add" href="https://bugs.launchpad.net/designate/+bug/1471161/+linkcve">Link to <abbr title="Common Vulnerabilities and Exposures Index">CVE</abbr></a></li>
+    <li><a class="menu-link-unlinkcve sprite modify remove" href="https://bugs.launchpad.net/designate/+bug/1471161/+unlinkcve">Remove CVE link</a></li>
+  </ul>
+</div>
+
+      
+
+      <div class="portlet vertical" id="portlet-subscription">
+  <div class="section">
+    <div id="current_user_subscription" class="False">
+      
+        <span>You are</span>
+        
+        <a class="menu-link-subscription sprite modify edit" href="/designate/+bug/1471161/+subscribe">
+           
+           
+           
+           not directly subscribed to this bug's notifications.
+        </a>
+      
+      
+    </div>
+    <div id="sub-unsub-spinner">Subscribing...</div>
+    <ul>
+      
+      <li><a class="menu-link-editsubscriptions sprite modify edit" href="https://bugs.launchpad.net/designate/+bug/1471161/+subscriptions" title="View and change your subscriptions to this bug">Edit bug mail</a></li>
+    </ul>
+  </div>
+  <script type="text/javascript">
+    LPJS.use('io-base', 'node',
+            'lp.bugs.bugtask_index.portlets.subscription', function(Y) {
+        Y.on('domready', function() {
+            Y.lp.bugs.bugtask_index.portlets.subscription.initialize();
+        });
+    });
+  </script>
+</div>
+
+      <div class="portlet vertical" id="portlet-subscribers">
+  <h2>Other bug subscribers</h2>
+  <div>
+    <div><a class="menu-link-addsubscriber sprite add" href="https://bugs.launchpad.net/designate/+bug/1471161/+addsubscriber" title="Launchpad will email that person whenever this bugs changes">Subscribe someone else</a></div>
+  </div>
+  <div id="other-bug-subscribers"></div>
+</div>
+
+      
+
+      
+
+      
+  <div class="portlet" id="portlet-patches">
+    <h2>Patches</h2>
+    <ul>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/designate/+bug/1471161/+attachment/4428196/+files/bug-1471161-master.patch">Master Branch Patch</a>
+        <small>
+          (<a href="/designate/+bug/1471161/+attachment/4428196">edit</a>)
+        </small>
+      </li>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/designate/+bug/1471161/+attachment/4428243/+files/bug-1471161-quotas-master.patch">Master Branch Quotas Patch</a>
+        <small>
+          (<a href="/designate/+bug/1471161/+attachment/4428243">edit</a>)
+        </small>
+      </li>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/designate/+bug/1471161/+attachment/4428244/+files/bug-1471161-quotas-kilo.patch">Kilo Branch Quotas Patch</a>
+        <small>
+          (<a href="/designate/+bug/1471161/+attachment/4428244">edit</a>)
+        </small>
+      </li>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/designate/+bug/1471161/+attachment/4428289/+files/bug-1471161-kilo.patch">Kilo Branch Patch</a>
+        <small>
+          (<a href="/designate/+bug/1471161/+attachment/4428289">edit</a>)
+        </small>
+      </li>
+    </ul>
+    <ul>
+      <li>
+        <a class="sprite add" href="/designate/+bug/1471161/+addcomment?field.patch=on">Add patch</a>
+      </li>
+    </ul>
+  </div>
+  <div class="portlet" id="portlet-attachments">
+    <h2>Bug attachments</h2>
+    <ul>
+      <li class="download-attachment">
+        <a class="sprite download-icon" href="https://bugs.launchpad.net/designate/+bug/1471161/+attachment/4428246/+files/ossa.yaml">ossa.yaml</a>
+        <small>
+          (<a href="/designate/+bug/1471161/+attachment/4428246">edit</a>)
+        </small>
+      </li>
+      <li class="download-attachment">
+        <a class="sprite download-icon" href="https://bugs.launchpad.net/designate/+bug/1471161/+attachment/4428290/+files/reproduce.sh">reproduce.sh</a>
+        <small>
+          (<a href="/designate/+bug/1471161/+attachment/4428290">edit</a>)
+        </small>
+      </li>
+    </ul>
+    <ul>
+      <li>
+        <a class="sprite add" href="/designate/+bug/1471161/+addcomment">Add attachment</a>
+      </li>
+    </ul>
+  </div>
+
+
+      
+
+    
+          </div><!-- yui-b side -->
+        
+      </div><!-- yui-t4 -->
+
+      
+  <div id="footer" class="footer">
+    <div class="lp-arcana">
+        <div class="lp-branding">
+          <a href="https://launchpad.net/"><img src="/@@/launchpad-logo-and-name-hierarchy.png" alt="Launchpad" /></a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://launchpad.net/+tour">Take the tour</a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://help.launchpad.net/">Read the guide</a>
+          &nbsp;
+          <form id="globalsearch" method="get" accept-charset="UTF-8" action="https://launchpad.net/+search">
+            <input type="search" id="search-text" name="field.text" />
+            <input type="image" src="/@@/search" style="vertical-align:5%" alt="Search Launchpad" />
+          </form>
+        </div>
+        
+  
+
+    </div>
+
+    <div class="colophon">
+      &copy; 2004-2021
+      <a href="http://canonical.com/">Canonical&nbsp;Ltd.</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://launchpad.net/legal">Terms of use</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://www.ubuntu.com/legal/dataprivacy">Data privacy</a>
+      &nbsp;&bull;&nbsp;
+      <a href="/feedback">Contact Launchpad Support</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="http://blog.launchpad.net/">Blog</a>
+      
+	&nbsp;&bull;&nbsp;
+	<a href="https://canonical.com/careers">Careers</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="https://twitter.com/launchpadstatus">System status</a>
+      <span id="lp-version">
+      &nbsp;&bull;&nbsp;
+        r0d8de2b
+        
+        
+        (<a href="https://dev.launchpad.net/">Get the code!</a>)
+      </span>
+    </div>
+  </div>
+
+    </div><!-- yui-d0-->
+
+    
+  
+  
+  <script id="json-cache-script">LP.cache = {"bug_is_private": false, "bug": {"self_link": "https://bugs.launchpad.net/api/devel/bugs/1471161", "web_link": "https://bugs.launchpad.net/bugs/1471161", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug", "id": 1471161, "private": false, "information_type": "Public Security", "name": null, "title": "Designate mDNS DoS through incorrect handling of large RecordSets", "description": "Designate does not enforce the DNS protocol limit concerning record set sizes when adding records for a domain name.  The protocol limit is slightly less than 2**16 bytes because of some data that must accompany any record set, as part of the zone file transfer.\n\nAs a result, the rendering loop in desginate-mdns can does not make progress because the problematic record set at rrsets[i] will never fit (per designate/mdns/handler.py:RequestHandler._handle_axfr):\n\n        # Render the results, yielding a packet after each TooBig exception.\n        i, renderer = 0, None\n        while i \u003c len(rrsets):\n            # No renderer? Build one\n            if renderer is None:\n                renderer = dns.renderer.Renderer(\n                    response.id, response.flags, max_message_size)\n\u2026\n            try:\n                renderer.add_rrset(dns.renderer.ANSWER, rrsets[i])\n                i += 1\n            except dns.exception.TooBig:\n                renderer.write_header()\n                if request.had_tsig:\n\u2026\n                yield renderer\n                renderer = None\n\n\nWhen this happens, designate-mdns will keep sending SOA records over and over again:\n\nsendto(37, \"\\0\\35\u003c{\\204\\0\\0\\1\\0\\0\\0\\0\\0\\0\\7example\\3org\\0\\0\\374\\0\\1\", 31, 0, NULL, 0) = 31\nsendto(37, \"\\0\\35\u003c{\\204\\0\\0\\1\\0\\0\\0\\0\\0\\0\\7example\\3org\\0\\0\\374\\0\\1\", 31, 0, NULL, 0) = 31\nsendto(37, \"\\0\\35\u003c{\\204\\0\\0\\1\\0\\0\\0\\0\\0\\0\\7example\\3org\\0\\0\\374\\0\\1\", 31, 0, NULL, 0) = 31\n\nHere is how I triggered this.  I created a domain example.org:\n\n+--------------------------------------+--------------+------------+\n| id                                   | name         |     serial |\n+--------------------------------------+--------------+------------+\n| ded903fc-60ef-4b5e-a37c-f3181baf9516 | example.org. | 1435315435 |\n+--------------------------------------+--------------+------------+\n\nThen I added several hundred NS records for the same subdomain, using this shell command:\n\nfor x in {1..304} ; do\n  designate record-create --name 'sub.example.org.' --type NS --data \\\n$x'.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.'$x. \\\n  ded903fc-60ef-4b5e-a37c-f3181baf9516\ndone\n\nIn the tested configuration, PowerDNS will attempt a zone file transfer, and trigger the bug.  Because it keeps receiving data, it does not seem it will ever run into a timeout (and if it does, it will try again).\n\nDownstream bug report: https://bugzilla.redhat.com/show_bug.cgi?id=1236014", "owner_link": "https://bugs.launchpad.net/api/devel/~fweimer", "bug_tasks_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1471161/bug_tasks", "duplicate_of_link": null, "date_created": "2015-07-03T09:27:39.923266+00:00", "activity_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1471161/activity", "subscriptions_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1471161/subscriptions", "date_last_updated": "2015-10-15T08:29:38.866815+00:00", "who_made_private_link": null, "date_made_private": null, "heat": 264, "bug_watches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1471161/bug_watches", "cves_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1471161/cves", "duplicates_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1471161/duplicates", "attachments_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1471161/attachments", "security_related": true, "latest_patch_uploaded": "2015-07-13T12:38:57.835601+00:00", "tags": ["in-stable-kilo", "patch"], "date_last_message": "2015-07-29T16:24:36.393211+00:00", "number_of_duplicates": 0, "message_count": 30, "users_affected_count": 1, "users_unaffected_count": 0, "users_affected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1471161/users_affected", "users_unaffected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1471161/users_unaffected", "users_affected_count_with_dupes": 1, "other_users_affected_count_with_dupes": 1, "users_affected_with_dupes_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1471161/users_affected_with_dupes", "messages_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1471161/messages", "linked_branches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1471161/linked_branches", "linked_merge_proposals_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1471161/linked_merge_proposals", "http_etag": "\"c1ac52db1a92daee6adb197aaa0f4f45d2bb3132-12edb1d00575189a9042bd59c9f981b3ef95ea01\""}, "total_comments_and_activity": 70, "related_features": {}, "information_type_data": {"PUBLIC": {"is_private": false, "name": "Public", "order": 0, "description": "Everyone can see this information.\n", "value": "PUBLIC", "description_css_class": "choice-description"}, "PRIVATESECURITY": {"is_private": true, "name": "Private Security", "order": 2, "description": "Only the security group can see this information.\n ", "value": "PRIVATESECURITY", "description_css_class": "choice-description"}, "PUBLICSECURITY": {"is_private": false, "name": "Public Security", "order": 1, "description": "Everyone can see this security related information.\n", "value": "PUBLICSECURITY", "description_css_class": "choice-description"}, "USERDATA": {"is_private": true, "name": "Private", "order": 3, "description": "Only shared with users permitted to see private user information.\n", "value": "USERDATA", "description_css_class": "choice-description"}}, "context": {"self_link": "https://bugs.launchpad.net/api/devel/designate/+bug/1471161", "web_link": "https://bugs.launchpad.net/designate/+bug/1471161", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug_task", "bug_link": "https://bugs.launchpad.net/api/devel/bugs/1471161", "milestone_link": "https://bugs.launchpad.net/api/devel/designate/+milestone/1.0.0", "status": "Fix Released", "importance": "Critical", "assignee_link": "https://bugs.launchpad.net/api/devel/~kiall", "bug_target_display_name": "Designate", "bug_target_name": "designate", "bug_watch_link": null, "date_assigned": "2015-07-13T13:20:31.851486+00:00", "date_created": "2015-07-03T09:27:39.923266+00:00", "date_confirmed": "2015-07-09T16:15:42.187348+00:00", "date_incomplete": null, "date_in_progress": "2015-07-28T09:42:44.297788+00:00", "date_closed": "2015-07-29T13:47:12.748168+00:00", "date_left_new": "2015-07-09T16:15:42.187348+00:00", "date_triaged": "2015-07-09T16:15:42.187348+00:00", "date_fix_committed": "2015-07-28T15:50:25.950224+00:00", "date_fix_released": "2015-07-29T13:47:12.748168+00:00", "date_left_closed": null, "owner_link": "https://bugs.launchpad.net/api/devel/~fweimer", "target_link": "https://bugs.launchpad.net/api/devel/designate", "title": "Bug #1471161 in Designate: \"Designate mDNS DoS through incorrect handling of large RecordSets\"", "related_tasks_collection_link": "https://bugs.launchpad.net/api/devel/designate/+bug/1471161/related_tasks", "is_complete": true, "http_etag": "\"310f005ca17a1bca654e6df86905ca2c55fb19d0-7e9543036f15573c9c74fb65c94330722a681ade\""}, "bugtask_data": {"1882160": {"delete_link": "https://bugs.launchpad.net/ubuntu/+source/designate/+bug/1471161/+delete", "bug_title": "Designate mDNS DoS through incorrect handling of large RecordSets", "user_can_unassign": false, "importance_value": "Undecided", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary1882160", "target_is_product": false, "user_can_edit_milestone": false, "prefix": "ubuntu_designate", "bugtask_path": "/ubuntu/+source/designate/+bug/1471161", "id": 1882160, "milestone_value": null, "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task1882160", "targetname": "designate (Ubuntu)", "assignee_is_team": null, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": null, "status_value": "Fix Released"}, "1872417": {"delete_link": "https://bugs.launchpad.net/designate/kilo/+bug/1471161/+delete", "bug_title": "Designate mDNS DoS through incorrect handling of large RecordSets", "user_can_unassign": false, "importance_value": "Critical", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary1872417", "target_is_product": false, "user_can_edit_milestone": false, "prefix": "designate_kilo", "bugtask_path": "/designate/kilo/+bug/1471161", "id": 1872417, "milestone_value": null, "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task1872417", "targetname": "Designate kilo", "assignee_is_team": false, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": "kiall", "status_value": "Fix Committed"}, "1869050": {"delete_link": "https://bugs.launchpad.net/designate/+bug/1471161/+delete", "bug_title": "Designate mDNS DoS through incorrect handling of large RecordSets", "user_can_unassign": false, "importance_value": "Critical", "user_can_edit_importance": false, "assignee_vocabulary": "AllUserTeamsParticipation", "hide_assignee_team_selection": true, "user_can_edit_status": true, "user_can_delete": false, "row_id": "tasksummary1869050", "target_is_product": true, "user_can_edit_milestone": false, "prefix": "designate", "bugtask_path": "/designate/+bug/1471161", "id": 1869050, "milestone_value": "https://bugs.launchpad.net/api/devel/designate/+milestone/1.0.0", "status_widget_items": "[]", "milestone_widget_items": "[]", "form_row_id": "task1869050", "targetname": "Designate", "assignee_is_team": false, "assignee_vocabulary_filters": [], "user_can_edit_assignee": false, "importance_widget_items": "[]", "assignee_value": "kiall", "status_value": "Fix Released"}}, "subscribers_portlet_url_data": {"self_link": "https://bugs.launchpad.net/api/devel/bugs/1471161", "web_link": "https://bugs.launchpad.net/bugs/1471161"}, "initial_comment_batch_offset": 41, "first visible_recent_comment": -11};</script>
+
+    
+  
+
+    
+  </body>
+
+
+  <!--
+    Facet name: bugs
+    Page type: main_side
+    Has global search: True
+    Has application tabs: True
+    Has side portlets: True
+
+    At least 69 queries/external actions issued in 1.17 seconds
+
+    Features: {'app.maintenance_message': None, 'hard_timeout': '9000', 'js.yui_version': None, 'app.mainsite_only.canonical_url': None, 'disclosure.dsp_picker.enabled': 'on', 'baselayout.careers_link.disabled': None, 'bugs.affected_count_includes_dupes.disabled': None, 'visible_render_time': None, 'profiling.enabled': None, 'bugs.nominations.bug_supervisors_can_target': 'on'}
+
+    r0d8de2b
+
+    -->
+
+</html>
+

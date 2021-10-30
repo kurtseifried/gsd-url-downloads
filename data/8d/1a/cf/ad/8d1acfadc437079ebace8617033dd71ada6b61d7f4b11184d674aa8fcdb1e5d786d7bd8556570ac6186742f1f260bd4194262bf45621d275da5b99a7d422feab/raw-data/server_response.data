@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='mbstring related Bug #77371 - RDF' href='rss/bug.php?id=77371'>
+        <link rel='alternate' type='application/rss+xml' title='mbstring related Bug #77371 - RSS 2.0' href='rss/bug.php?id=77371&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #77371 :: heap buffer overflow in mb regex functions - compile_string_node</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=77371">Sec Bug</a>&nbsp;#77371</th>
+            <td id="summary" colspan="5">heap buffer overflow in mb regex functions - compile_string_node</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2018-12-29 22:29 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2019-02-22 22:08 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>hugh &#x61;&#116; allthethings &#x64;&#111;&#x74; co &#x64;&#111;&#x74; nz</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=mbstring+related">mbstring related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.6.39</td>
+            <th class="details">OS:</th>
+            <td>Linux</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-9023" target="_blank">2019-9023</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=77371&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=77371&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=77371&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1546122591">&nbsp;</a><strong>[2018-12-29 22:29 UTC] hugh &#x61;&#116; allthethings &#x64;&#111;&#x74; co &#x64;&#111;&#x74; nz</strong>
+<pre class='note'>Description:
+------------
+After patching for #77370, I found another heap buffer overflow, based on incomplete multibyte strings in $pattern in mb regex functions such as mb_ereg, mb_split.
+
+Narrowed the bug down to the compile_string_node function in ext/mbstring/oniguruma/regcomp.c. In the function, the length of a string is calculated, and is used in add_compile_string. If the string has an unfinished multibyte character at the end of the string, then the length will overflow the end of the buffer.
+
+This could cause memory corruption and/or leakage.
+
+Reproduced on 5.6, 7.0 and 7.1 (after patch for #77370 is applied, otherwise that case gets hit first). 7.2, 7.3 and master don't have this bug due to not having the file.
+
+Patch is available at <a href="https://gist.github.com/hughdavenport/89849d35cc27c2242edcce4eb7c93520" rel="nofollow">https://gist.github.com/hughdavenport/89849d35cc27c2242edcce4eb7c93520</a>
+
+
+
+Test script:
+---------------
+php -r 'var_dump(mb_ereg(&quot;()0\xfc00000\xfc00000\xfc00000\xfc&quot;,&quot;&quot;));'
+
+the patch from #77370 needs to be applied first to get to this point.
+
+Expected result:
+----------------
+no crash
+
+Actual result:
+--------------
+$ ~/php-5.6.39/sapi/cli/php -r 'var_dump(mb_ereg(&quot;()0\xfc00000\xfc00000\xfc00000\xfc&quot;,&quot;&quot;));'
+=================================================================
+==4295==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x606000002c38 at pc 0x0000004d67d1 bp 0x7fff747ef860 sp 0x7fff747ef010
+READ of size 24 at 0x606000002c38 thread T0
+    #0 0x4d67d0 in __asan_memcpy (/home/hugh/php-5.6.39/sapi/cli/php+0x4d67d0)
+    #1 0x847418 in add_bytes /home/hugh/php-5.6.39/ext/mbstring/oniguruma/regcomp.c:284:3
+    #2 0x847418 in add_compile_string /home/hugh/php-5.6.39/ext/mbstring/oniguruma/regcomp.c:452
+    #3 0x81a59a in compile_string_node /home/hugh/php-5.6.39/ext/mbstring/oniguruma/regcomp.c:541:10
+    #4 0x81a59a in compile_tree /home/hugh/php-5.6.39/ext/mbstring/oniguruma/regcomp.c:1627
+    #5 0x8164f8 in compile_tree /home/hugh/php-5.6.39/ext/mbstring/oniguruma/regcomp.c:1590:11
+    #6 0x8092a5 in onig_compile /home/hugh/php-5.6.39/ext/mbstring/oniguruma/regcomp.c:5390:7
+    #7 0x82df69 in onig_new /home/hugh/php-5.6.39/ext/mbstring/oniguruma/regcomp.c:5545:7
+    #8 0x9a7775 in php_mbregex_compile_pattern /home/hugh/php-5.6.39/ext/mbstring/php_mbregex.c:458:19
+    #9 0x9a06e9 in _php_mb_regex_ereg_exec /home/hugh/php-5.6.39/ext/mbstring/php_mbregex.c:728:7
+    #10 0x11a26b8 in zend_do_fcall_common_helper_SPEC /home/hugh/php-5.6.39/Zend/zend_vm_execute.h:558:5
+    #11 0xffc61d in execute_ex /home/hugh/php-5.6.39/Zend/zend_vm_execute.h:363:14
+    #12 0xffe602 in zend_execute /home/hugh/php-5.6.39/Zend/zend_vm_execute.h:388:2
+    #13 0xebe437 in zend_eval_stringl /home/hugh/php-5.6.39/Zend/zend_execute_API.c:1080:4
+    #14 0xebfbb9 in zend_eval_stringl_ex /home/hugh/php-5.6.39/Zend/zend_execute_API.c:1127:11
+    #15 0xebfbb9 in zend_eval_string_ex /home/hugh/php-5.6.39/Zend/zend_execute_API.c:1138
+    #16 0x125a108 in do_cli /home/hugh/php-5.6.39/sapi/cli/php_cli.c:1038:8
+    #17 0x1256f81 in main /home/hugh/php-5.6.39/sapi/cli/php_cli.c:1382:18
+    #18 0x7fe2c4e7fb96 in __libc_start_main /build/glibc-OTsEL5/glibc-2.27/csu/../csu/libc-start.c:310
+    #19 0x436129 in _start (/home/hugh/php-5.6.39/sapi/cli/php+0x436129)
+
+0x606000002c38 is located 0 bytes to the right of 56-byte region [0x606000002c00,0x606000002c38)
+allocated by thread T0 here:
+    #0 0x4eb780 in malloc (/home/hugh/php-5.6.39/sapi/cli/php+0x4eb780)
+    #1 0x87e8ff in node_new /home/hugh/php-5.6.39/ext/mbstring/oniguruma/regparse.c:1120:18
+    #2 0x87e8ff in node_new_str /home/hugh/php-5.6.39/ext/mbstring/oniguruma/regparse.c:1498
+    #3 0x87e8ff in onig_node_new_str /home/hugh/php-5.6.39/ext/mbstring/oniguruma/regparse.c:1516
+    #4 0x812709 in expand_case_fold_string /home/hugh/php-5.6.39/ext/mbstring/oniguruma/regcomp.c:3463:9
+    #5 0x812709 in setup_tree /home/hugh/php-5.6.39/ext/mbstring/oniguruma/regcomp.c:3686
+    #6 0x8113e3 in setup_tree /home/hugh/php-5.6.39/ext/mbstring/oniguruma/regcomp.c:3677:11
+    #7 0x80ec76 in setup_tree /home/hugh/php-5.6.39/ext/mbstring/oniguruma/regcomp.c:3666:6
+    #8 0x805be8 in onig_compile /home/hugh/php-5.6.39/ext/mbstring/oniguruma/regcomp.c:5335:7
+    #9 0x82df69 in onig_new /home/hugh/php-5.6.39/ext/mbstring/oniguruma/regcomp.c:5545:7
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow (/home/hugh/php-5.6.39/sapi/cli/php+0x4d67d0) in __asan_memcpy
+Shadow bytes around the buggy address:
+  0x0c0c7fff8530: 00 00 00 fa fa fa fa fa 00 00 00 00 00 00 00 fa
+  0x0c0c7fff8540: fa fa fa fa 00 00 00 00 00 00 00 fa fa fa fa fa
+  0x0c0c7fff8550: 00 00 00 00 00 00 00 fa fa fa fa fa 00 00 00 00
+  0x0c0c7fff8560: 00 00 00 fa fa fa fa fa 00 00 00 00 00 00 00 fa
+  0x0c0c7fff8570: fa fa fa fa 00 00 00 00 00 00 00 fa fa fa fa fa
+=&gt;0x0c0c7fff8580: 00 00 00 00 00 00 00[fa]fa fa fa fa 00 00 00 00
+  0x0c0c7fff8590: 00 00 00 fa fa fa fa fa 00 00 00 00 00 00 00 fa
+  0x0c0c7fff85a0: fa fa fa fa 00 00 00 00 00 00 00 00 fa fa fa fa
+  0x0c0c7fff85b0: 00 00 00 00 00 00 00 00 fa fa fa fa 00 00 00 00
+  0x0c0c7fff85c0: 00 00 00 00 fa fa fa fa 00 00 00 00 00 00 00 00
+  0x0c0c7fff85d0: fa fa fa fa 00 00 00 00 00 00 00 00 fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==4295==ABORTING
+
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=77371'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=77371'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1546142861">&nbsp;</a><strong>[2018-12-30 04:07 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 7.1.25</span>
+<span class="added">+PHP Version: 5.6.39</span>
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID:      needed</span>
+</div></div></div><div class='comment type_comment' ><a name="1546142861">&nbsp;</a><strong>[2018-12-30 04:07 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The fix is in security repo as d949cca738a67419c7d73f032ffe81ca6b77d803 and in <a href="https://gist.github.com/smalyshev/01688aa8e20317ee8c2ebc3cb4dd63b3" rel="nofollow">https://gist.github.com/smalyshev/01688aa8e20317ee8c2ebc3cb4dd63b3</a>
+
+Please verify.
+</pre>
+</div><div class='comment type_comment' ><a name="1546202498">&nbsp;</a><strong>[2018-12-30 20:41 UTC] hugh &#x61;&#116; allthethings &#x64;&#111;&#x74; co &#x64;&#111;&#x74; nz</strong>
+<pre class='note'>Verified on 5.6, 7.0. Patch didn't apply cleanly to 7.1 (my bad!). Needs to test against sn-&gt;end instead of end in 7.1.25. That also fixes another bug I'm yet to file for 7.1, but still affects 5.6 and 7.0 so will hopefully write that up today
+</pre>
+</div><div class='comment type_comment' ><a name="1546204186">&nbsp;</a><strong>[2018-12-30 21:09 UTC] hugh &#x61;&#116; allthethings &#x64;&#111;&#x74; co &#x64;&#111;&#x74; nz</strong>
+<pre class='note'>Sorry, I had that file edited, but I found another instance where it could get fixed in compile_length_string_node. Should I just file another bug report for that along with a test case to keep them seperate?
+
+Cheers,
+
+Hugh
+</pre>
+</div><div class='comment type_comment' ><a name="1546209580">&nbsp;</a><strong>[2018-12-30 22:39 UTC] hugh &#x61;&#116; allthethings &#x64;&#111;&#x74; co &#x64;&#111;&#x74; nz</strong>
+<pre class='note'>#77381 is the new report for the one of the other enclen problems
+</pre>
+</div><div class='comment type_svn' ><a name="1546848654">&nbsp;</a><strong>[2019-01-07 08:10 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=28362ed4fae6969b5a8878591a5a06eadf114e03" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=28362ed4fae6969b5a8878591a5a06eadf114e03</a>
+Log: Fix <a href='bug.php?id=77371'>bug #77371</a> (heap buffer overflow in mb regex functions - compile_string_node)
+</pre>
+</div><div class='comment type_log' ><a name="1546848654">&nbsp;</a><strong>[2019-01-07 08:10 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1546849184">&nbsp;</a><strong>[2019-01-07 08:19 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=c6e34d91b88638966662caac62c4d0e90538e317" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=c6e34d91b88638966662caac62c4d0e90538e317</a>
+Log: Fix <a href='bug.php?id=77371'>bug #77371</a> (heap buffer overflow in mb regex functions - compile_string_node)
+</pre>
+</div><div class='comment type_svn' ><a name="1546849187">&nbsp;</a><strong>[2019-01-07 08:19 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=28362ed4fae6969b5a8878591a5a06eadf114e03" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=28362ed4fae6969b5a8878591a5a06eadf114e03</a>
+Log: Fix <a href='bug.php?id=77371'>bug #77371</a> (heap buffer overflow in mb regex functions - compile_string_node)
+</pre>
+</div><div class='comment type_svn' ><a name="1546849230">&nbsp;</a><strong>[2019-01-07 08:20 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=c6e34d91b88638966662caac62c4d0e90538e317" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=c6e34d91b88638966662caac62c4d0e90538e317</a>
+Log: Fix <a href='bug.php?id=77371'>bug #77371</a> (heap buffer overflow in mb regex functions - compile_string_node)
+</pre>
+</div><div class='comment type_svn' ><a name="1546849233">&nbsp;</a><strong>[2019-01-07 08:20 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=28362ed4fae6969b5a8878591a5a06eadf114e03" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=28362ed4fae6969b5a8878591a5a06eadf114e03</a>
+Log: Fix <a href='bug.php?id=77371'>bug #77371</a> (heap buffer overflow in mb regex functions - compile_string_node)
+</pre>
+</div><div class='comment type_svn' ><a name="1546849253">&nbsp;</a><strong>[2019-01-07 08:20 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=c6e34d91b88638966662caac62c4d0e90538e317" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=c6e34d91b88638966662caac62c4d0e90538e317</a>
+Log: Fix <a href='bug.php?id=77371'>bug #77371</a> (heap buffer overflow in mb regex functions - compile_string_node)
+</pre>
+</div><div class='comment type_svn' ><a name="1546849256">&nbsp;</a><strong>[2019-01-07 08:20 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=28362ed4fae6969b5a8878591a5a06eadf114e03" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=28362ed4fae6969b5a8878591a5a06eadf114e03</a>
+Log: Fix <a href='bug.php?id=77371'>bug #77371</a> (heap buffer overflow in mb regex functions - compile_string_node)
+</pre>
+</div><div class='comment type_svn' ><a name="1546849268">&nbsp;</a><strong>[2019-01-07 08:21 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=c6e34d91b88638966662caac62c4d0e90538e317" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=c6e34d91b88638966662caac62c4d0e90538e317</a>
+Log: Fix <a href='bug.php?id=77371'>bug #77371</a> (heap buffer overflow in mb regex functions - compile_string_node)
+</pre>
+</div><div class='comment type_svn' ><a name="1546849272">&nbsp;</a><strong>[2019-01-07 08:21 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=28362ed4fae6969b5a8878591a5a06eadf114e03" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=28362ed4fae6969b5a8878591a5a06eadf114e03</a>
+Log: Fix <a href='bug.php?id=77371'>bug #77371</a> (heap buffer overflow in mb regex functions - compile_string_node)
+</pre>
+</div><div class='comment type_log' ><a name="1550873309">&nbsp;</a><strong>[2019-02-22 22:08 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID: needed</span>
+<span class="added">+CVE-ID: 2019-9023</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

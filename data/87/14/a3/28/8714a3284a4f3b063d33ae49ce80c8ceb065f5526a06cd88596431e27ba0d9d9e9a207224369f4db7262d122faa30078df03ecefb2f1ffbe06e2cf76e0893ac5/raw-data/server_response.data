@@ -1,0 +1,4949 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en" dir="ltr">
+  <head>
+<base href="https://bugs.launchpad.net/nova/+bug/1184041/+index" />
+
+    <meta charset="UTF-8" />
+    <title>Bug #1184041 “[OSSA 2013-020] Denial of Service in Nova network ...” : Bugs : OpenStack Compute (nova)</title>
+    <link rel="shortcut icon" href="/@@/launchpad.png" />
+    <link rel="canonical" href="https://bugs.launchpad.net/bugs/1184041" />
+    
+      <link rel="alternate" type="application/atom+xml" href="http://feeds.launchpad.net/bugs/1184041/bug.atom" title="Bug 1184041 Feed" />
+    
+
+    
+  
+  <link type="text/css" rel="stylesheet" media="screen, print" href="/+icing/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/combo.css" />
+
+
+    
+
+    
+      <meta name="description" content="The code for retrieving the list of ips to make source security groups is very inefficient. It is possible to create a set of rules using source security groups that will lead to an explosion of get_network_info calls.
+
+Example:
+
+# create a security group
+nova secgroup-create foo foo
+
+# add source group rules referencing the same group
+for i in {1..10}; do
+  nova secgroup-add-group-rule foo foo tcp $i $i
+done
+
+# launch 10 instances
+nova boot --flavor 1 --image precise --num-instances 10 --sec..." />
+      <meta property="og:description" content="The code for retrieving the list of ips to make source security groups is very inefficient. It is possible to create a set of rules using source security groups that will lead to an explosion of get_network_info calls.
+
+Example:
+
+# create a security group
+nova secgroup-create foo foo
+
+# add source group rules referencing the same group
+for i in {1..10}; do
+  nova secgroup-add-group-rule foo foo tcp $i $i
+done
+
+# launch 10 instances
+nova boot --flavor 1 --image precise --num-instances 10 --sec..." />
+    
+
+    
+    
+      <meta property="og:title" content="Bug #1184041 “[OSSA 2013-020] Denial of Service in Nova network ...” : Bugs : OpenStack Compute (nova)" />
+      <meta property="og:type" content="website" />
+      <meta property="og:image" content="/@@/launchpad.png" />
+      <meta property="og:url" content="https://bugs.launchpad.net/bugs/1184041" />
+      <meta property="og:site_name" content="Launchpad" />
+    
+
+    
+
+    
+  
+
+  
+  
+  <script type="text/javascript">
+    var LP = {
+        cache: {},
+        links: {}
+    };
+  </script>
+
+  
+
+  <script type="text/javascript">var cookie_scope = '; Path=/; Secure; Domain=.launchpad.net';</script>
+
+   <script type="text/javascript" src="/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?yui/yui/yui-min.js&amp;lp/meta.js&amp;yui/loader/loader-min.js"></script>
+   <script type="text/javascript">
+        var raw = null;
+        if (LP.devmode) {
+           raw = 'raw';
+        }
+        YUI.GlobalConfig = {
+            combine: true,
+            comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+            root: 'yui/',
+            filter: raw,
+            debug: false,
+            fetchCSS: false,
+            maxURLLength: 2000,
+            groups: {
+                lp: {
+                    combine: true,
+                    base: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?lp/',
+                    comboBase: '/+combo/rev0d8de2bfee2024772b3040d4d19f42f47395ac0d/?',
+                    root: 'lp/',
+                    // comes from including lp/meta.js
+                    modules: LP_MODULES,
+                    fetchCSS: false
+                }
+            }
+        }</script>
+
+  <script type="text/javascript">
+      // we need this to create a single YUI instance all events and code
+      // talks across. All instances of YUI().use should be based off of
+      // LPJS instead.
+      var LPJS = new YUI();
+  </script>
+
+
+
+    <script id="base-layout-load-scripts" type="text/javascript">
+        //<![CDATA[
+        LPJS.use('base', 'node', 'console', 'event',
+            'oop', 'lp', 'lp.app.foldables','lp.app.sorttable',
+            'lp.app.inlinehelp', 'lp.app.links',
+            'lp.bugs.bugtask_index', 'lp.bugs.subscribers',
+            'lp.app.ellipsis', 'lp.code.branchmergeproposal.diff',
+            'lp.views.global',
+             function(Y) {
+
+            Y.on("domready", function () {
+                var global_view = new Y.lp.views.Global();
+                global_view.render();
+
+                Y.lp.app.sorttable.SortTable.init();
+                Y.lp.app.inlinehelp.init_help();
+                Y.lp.activate_collapsibles();
+                Y.lp.app.foldables.activate();
+                Y.lp.app.links.check_valid_lp_links();
+            });
+
+            Y.on('lp:context:web_link:changed', function(e) {
+                  window.location = e.new_value;
+            });
+        });
+        //]]>
+    </script>
+    <script id="base-helper-functions" type="text/javascript">
+         //<![CDATA[
+        // This code is pulled from lp.js that needs to be available on every
+        // request. Pulling here to get it outside the scope of the YUI block.
+        function setFocusByName(name) {
+            // Focus the first element matching the given name which can be focused.
+            var nodes = document.getElementsByName(name);
+            var i, node;
+            for (i = 0; i < nodes.length; i++) {
+                node = nodes[i];
+                if (node.focus) {
+                    try {
+                        // Trying to focus a hidden element throws an error in IE8.
+                        if (node.offsetHeight !== 0) {
+                            node.focus();
+                        }
+                    } catch (e) {
+                        LPJS.use('console', function(Y) {
+                            Y.log('In setFocusByName(<' +
+                                node.tagName + ' type=' + node.type + '>): ' + e);
+                        });
+                    }
+                    break;
+                }
+            }
+        }
+
+        function selectWidget(widget_name, event) {
+          if (event && (event.keyCode === 9 || event.keyCode === 13)) {
+              // Avoid firing if user is tabbing through or simply pressing
+              // enter to submit the form.
+              return;
+          }
+          document.getElementById(widget_name).checked = true;
+        }
+        //]]>
+    </script>
+
+    
+      
+      <script type="text/javascript" id="available-official-tags-js">var available_official_tags = ["api", "api-ref", "availability-zones", "cells", "ceph", "cinder", "compute", "conductor", "config", "console", "cyborg", "db", "doc", "ec2", "evacuate", "fault-injection", "gate-failure", "glance", "hyper-v", "i18n", "image-cache", "in-stable-liberty", "in-stable-newton", "in-stable-ocata", "ironic", "kilo-backport-potential", "liberty-backport-potential", "libvirt", "live-migration", "low-hanging-fruit", "lxc", "metadata", "mitaka-backport-potential", "needs-attention", "needs-functional-test", "needs.openstack-version", "network", "neutron", "newton-backport-potential", "nfs", "notifications", "nova-manage", "nova-network", "numa", "ocata-backport-potential", "openstack-version.grizzly", "openstack-version.havana", "openstack-version.icehouse", "openstack-version.juno", "openstack-version.kilo", "openstack-version.liberty", "openstack-version.mitaka", "openstack-version.newton", "openstack-version.ocata", "openstack-version.pike", "ops", "oslo", "pci", "performance", "pike-backport-potential", "placement", "policy", "postgresql", "powervm", "privsep", "queens-backport-potential", "quotas", "race-condition", "reboot", "rebuild", "rescue", "resize", "resource-tracker", "rootwrap", "s390x", "scheduler", "security", "security-groups", "serviceability", "shared-storage", "shelve", "snapshot", "stacktrace", "stein-rc-potential", "testing", "train-rc-potential", "unified-objects", "upgrade", "ussuri-backport-potential", "ussuri-rc-potential", "vgpu", "victoria-rc-potential", "vmware", "volumes", "wallaby-rc-potential", "xen", "xena-rc-potential", "xenserver", "zvm"];</script>
+      <script type="text/javascript">
+        LPJS.use('base', 'node', 'oop', 'event', 'lp.bugs.bugtask_index',
+                  'lp.bugs.subscribers', 'lp.code.branchmergeproposal.diff',
+                  'lp.app.comment', 'lp.services.messages.edit', function(Y) {
+            Y.on('domready', function() {
+                Y.lp.code.branchmergeproposal.diff.connect_diff_links();
+                Y.lp.bugs.bugtask_index.setup_bugtask_index();
+                Y.lp.bugs.bugtask_index.setup_bugtask_table();
+                LP.cache.comment_context = LP.cache.bug;
+                var cl = new Y.lp.app.comment.CommentList();
+                cl.render();
+                var sl = new Y.lp.bugs.subscribers.createBugSubscribersLoader({
+                    container_box: '#other-bug-subscribers',
+                    subscribers_details_view:
+                        '/+bug-portlet-subscribers-details',
+                    subscribe_someone_else_link: '.menu-link-addsubscriber'
+                }, window);
+
+                Y.lp.services.messages.edit.setup();
+            });
+         });
+      </script>
+      <style type="text/css">
+        /* Align the 'add comment' link to the right of the comment box. */
+        #add-comment-form textarea { width: 100%; }
+        #add-comment-form { max-width: 60em; padding-bottom: 4em; }
+        #add-comment-form .actions {float: right;}
+        .buglink-summary dd { font-size: 10px; }
+        a#privacy-link:link:hover, a#privacy-link:visited:hover {text-decoration:none;}
+      </style>
+      <style type="text/css">
+        .yui3-overlay .value label  {
+          /* It normally makes sense for form labels to be bold, but since
+          this form consists only of radio buttons, there's nothing but labels
+          so we just get wall-to-wall bold. */
+          font-weight: normal !important;
+        }
+      </style>
+    
+    
+  </head>
+
+  <body id="document" itemscope="" itemtype="http://schema.org/WebPage" class="tab-bugs
+      main_side
+      public
+      yui3-skin-sam">
+          
+          
+    <div class="yui-d0">
+      <div id="locationbar" class="login-logout">
+        
+
+<div id="logincontrol"><a href="https://bugs.launchpad.net/nova/+bug/1184041/+login">Log in / Register</a></div>
+
+
+
+      </div><!--id="locationbar"-->
+
+      <div id="watermark" class="watermark-apps-portlet">
+        <div>
+          <a href="https://launchpad.net/nova"><img alt="" width="64" height="64" src="https://launchpadlibrarian.net/324577028/nova64.png" /></a>
+        </div>
+        <div class="wide">
+          <h2 id="watermark-heading"><a href="https://launchpad.net/nova">OpenStack Compute (nova)</a></h2>
+        </div>
+        
+  <!-- Application Menu -->
+  <ul class="facetmenu">
+    
+      
+      <li class="overview"><a href="https://launchpad.net/nova">Overview</a></li>
+      
+    
+    
+      
+      <li class="branches"><a href="https://code.launchpad.net/nova">Code</a></li>
+      
+    
+    
+      <li class="bugs active"><a href="https://bugs.launchpad.net/nova">Bugs</a></li>
+      
+      
+    
+    
+      
+      <li class="specifications"><a href="https://blueprints.launchpad.net/nova">Blueprints</a></li>
+      
+    
+    
+      
+      <li class="translations"><a href="https://translations.launchpad.net/nova">Translations</a></li>
+      
+    
+    
+      
+      <li class="answers"><a href="https://answers.launchpad.net/nova">Answers</a></li>
+      
+    
+  </ul>
+
+      </div>
+
+      <div class="yui-t4">
+        <div id="maincontent" class="yui-main">
+          <div class="yui-b" dir="ltr">
+            <div class="context-publication">
+              
+      <h1 id="edit-title">
+<span class="yui3-editable_text-text ellipsis" style="max-width: 95%;">
+    [OSSA 2013-020] Denial of Service in Nova network source security groups (CVE-2013-4185)
+</span>
+  
+</h1>
+
+
+
+    
+              
+
+              <div id="registration" class="registering">
+                
+      Bug #1184041 reported by
+      <a href="https://launchpad.net/~vishvananda" class="sprite person">Vish Ishaya</a>
+      <time title="2013-05-24 23:46:44 UTC" datetime="2013-05-24T23:46:44.030188+00:00">on 2013-05-24</time>
+    
+              </div>
+            </div>
+
+            
+            <div id="request-notifications">
+              
+            </div>
+
+            
+              <div>
+
+      
+
+      <div id="bug-is-duplicate">
+          
+      </div>
+      
+
+      <div style="float: right;">
+        <span><a href="/+help-bugs/bug-heat.html" target="help" class="sprite flame">268</a></span>
+      </div>
+
+      
+
+
+  
+  
+    <div class="actions">
+      <span id="affectsmetoo" style="display: inline">This bug affects 2 people</span>
+    </div>
+  
+
+
+
+    <table id="affected-software" class="listing">
+      <thead>
+        <tr>
+          <th colspan="2">Affects</th>
+          <th>Status</th>
+          <th>Importance</th>
+          <th>Assigned to</th>
+          <th>Milestone</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        
+          
+  <tr class="highlight" id="tasksummary1409088">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/nova/+bug/1184041/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary1409088">
+        <span class="yui3-activator-data-box">
+            <a class="sprite product" href="https://bugs.launchpad.net/nova">OpenStack Compute (nova)</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/nova/+bug/1184041/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/nova/+bug/1184041/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1409088">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~vishvananda">Vish Ishaya</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/nova/+milestone/2013.2">OpenStack Compute (nova) 2013.2 "havana"</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1409088">
+     <td colspan="7"><form action="/nova/+bug/1184041/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/nova">OpenStack Compute (nova)</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~vishvananda" class="sprite person">Vish Ishaya</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2013-05-24 23:46:44 UTC" datetime="2013-05-24T23:46:44.030188+00:00">2013-05-24</time>
+      </td>
+    </tr>
+    
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2013-07-19 17:32:26 UTC" datetime="2013-07-19T17:32:26.291982+00:00">2013-07-19</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2013-07-22 17:17:07 UTC" datetime="2013-07-22T17:17:07.490972+00:00">2013-07-22</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2013-09-05 15:38:10 UTC" datetime="2013-09-05T15:38:10.726955+00:00">2013-09-05</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="nova.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="nova.target.option.package" name="nova.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="nova.target.distribution" name="nova.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="nova.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="nova.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="nova.target.package"
+                         name="nova.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;nova.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('nova.target.package');
+              var select_menu = Y.DOM.byId('nova.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-nova-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_team_text": "Remove team", "header": "Select a package", "show_remove_button": false, "selected_value": null, "step_title": "Search by name", "show_assign_me_button": false, "vocabulary_filters": [], "vocabulary_name": "DistributionPackage", "input_element": "nova.target.package", "show_widget_id": "show-widget-nova-target-package", "assign_me_text": "Pick me", "show_create_team": false, "remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "selected_value_metadata": null};
+        var show_widget_id = 'show-widget-nova-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="nova.target.option.product" name="nova.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="nova" id="nova.target.product"
+                         name="nova.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;nova.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('nova.target.product');
+              var select_menu = Y.DOM.byId('nova.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-nova-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_team_text": "Remove team", "header": "Select a project", "show_remove_button": false, "selected_value": "nova", "step_title": "Search", "show_assign_me_button": false, "vocabulary_filters": [], "vocabulary_name": "Product", "input_element": "nova.target.product", "show_widget_id": "show-widget-nova-target-product", "assign_me_text": "Pick me", "show_create_team": false, "remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "selected_value_metadata": null};
+        var show_widget_id = 'show-widget-nova-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="nova.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="nova.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="nova.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="nova.status" name="nova.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="nova.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          OpenStack Compute (nova) 2013.2
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="nova.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="nova.assignee.assign_to_me" name="nova.assignee.option" value="nova.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="nova.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="nova.assignee.assigned_to" name="nova.assignee.option" value="nova.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="nova.assignee.assigned_to">
+              Vish Ishaya (vishvananda)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="nova.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="nova.comment_on_change" name="nova.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1441811">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/nova/grizzly/+bug/1184041/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    <td style="padding: 0.3em 0em 0.3em 1.5em">
+      <span class="sprite milestone"></span>
+      
+        <a href="https://bugs.launchpad.net/nova/grizzly">Grizzly</a>
+      
+        
+    </td>
+    
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/nova/grizzly/+bug/1184041/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/nova/grizzly/+bug/1184041/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1441811">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~vishvananda">Vish Ishaya</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      <div class="milestone-content" style="width: 100%; float: left">
+        
+        <a class="value" href="https://launchpad.net/nova/+milestone/2013.1.3">OpenStack Compute (nova) 2013.1.3</a>
+        
+      </div>
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1441811">
+     <td colspan="7"><form action="/nova/grizzly/+bug/1184041/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/nova/grizzly">OpenStack Compute (nova) grizzly</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~apevec" class="sprite person">Alan Pevec</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2013-08-04 10:29:56 UTC" datetime="2013-08-04T10:29:56.823902+00:00">2013-08-04</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2013-08-04 10:30:33 UTC" datetime="2013-08-04T10:30:33.532821+00:00">2013-08-04</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2013-08-04 10:31:27 UTC" datetime="2013-08-04T10:31:27.781418+00:00">2013-08-04</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2013-08-04 10:30:33 UTC" datetime="2013-08-04T10:30:33.532821+00:00">2013-08-04</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2013-08-08 19:53:34 UTC" datetime="2013-08-08T19:53:34.391358+00:00">2013-08-08</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="nova_grizzly.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="nova_grizzly.importance">Importance</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="nova_grizzly.milestone">Milestone</label>
+        </td>
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="nova_grizzly.status" name="nova_grizzly.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="nova_grizzly.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          OpenStack Compute (nova) 2013.1.3
+        </td>
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="nova_grizzly.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="nova_grizzly.assignee.assign_to_me" name="nova_grizzly.assignee.option" value="nova_grizzly.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="nova_grizzly.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="nova_grizzly.assignee.assigned_to" name="nova_grizzly.assignee.option" value="nova_grizzly.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="nova_grizzly.assignee.assigned_to">
+              Vish Ishaya (vishvananda)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="nova_grizzly.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="nova_grizzly.comment_on_change" name="nova_grizzly.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+        
+          
+  <tr id="tasksummary1409793">
+    <td>
+      <a class="bugtask-expander" href="https://bugs.launchpad.net/ossa/+bug/1184041/+editstatus">
+        &#8203;
+      </a>
+    </td>
+    
+    <td>
+      <span id="bugtarget-picker-tasksummary1409793">
+        <span class="yui3-activator-data-box">
+            <a class="sprite product" href="https://bugs.launchpad.net/ossa">OpenStack Security Advisory</a>
+        </span>
+        <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+          Edit
+        </button>
+        <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        
+      </span>
+    </td>
+
+    
+
+    
+    <td style="width: 20%; vertical-align: middle">
+      <div class="status-content" style="width: 100%; float: left">
+        
+        
+          <a href="https://bugs.launchpad.net/ossa/+bug/1184041/+editstatus" style="float: left" class="value statusFIXRELEASED">Fix Released</a>
+          <a href="https://bugs.launchpad.net/ossa/+bug/1184041/+editstatus" style="margin-left: 3px">
+            <img class="editicon" src="/@@/edit" />
+          </a>
+        
+      </div>
+    </td>
+
+    
+    <td style="width: 15em; vertical-align: middle">
+      <div class="importance-content" style="width: 100%; float: left">
+        <span style="float: left" class="value importanceHIGH">High</span>
+      </div>
+    </td>
+
+    <td style="width:20%; margin: 0; padding: 0;
+               vertical-align: middle; padding-left: 0.5em">
+      
+
+      
+        <span id="assignee-picker-tasksummary1409793">
+          <span class="yui3-activator-data-box">
+            <a class="sprite person" href="https://launchpad.net/~fungi">Jeremy Stanley</a>
+            
+          </span>
+          
+          <button class="lazr-btn yui3-activator-act yui3-activator-hidden">
+            Edit
+          </button>
+          <div class="yui3-activator-message-box yui3-activator-hidden"></div>
+        </span>
+      
+    </td>
+
+    <td style="width: 20%; vertical-align: middle">
+      
+    </td>
+
+    
+  </tr>
+
+  
+    <tr class="bugtask-collapsible-content hidden" id="task1409793">
+     <td colspan="7"><form action="/ossa/+bug/1184041/+editstatus" method="post" enctype="multipart/form-data">
+  
+
+  <p class="error message">
+    You need to log in to change this bug's status.
+  </p>
+  
+  <table class="summary" style="float: right; margin-left: 1em;">
+    <tr>
+      <th>Affecting:</th>
+      <td><a href="/ossa">OpenStack Security Advisory</a></td>
+    </tr>
+    <tr>
+      <th>Filed here by:</th>
+      <td><a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez</a></td>
+    </tr>
+    <tr>
+      <th>When:</th>
+      <td>
+        <time title="2013-05-27 13:30:24 UTC" datetime="2013-05-27T13:30:24.699487+00:00">2013-05-27</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Confirmed:</th>
+      <td>
+        <time title="2013-06-01 00:26:52 UTC" datetime="2013-06-01T00:26:52.601268+00:00">2013-06-01</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Assigned:</th>
+      <td>
+        <time title="2013-05-28 14:23:14 UTC" datetime="2013-05-28T14:23:14.034294+00:00">2013-05-28</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Started work:</th>
+      <td>
+        <time title="2013-07-31 04:53:03 UTC" datetime="2013-07-31T04:53:03.253611+00:00">2013-07-31</time>
+      </td>
+    </tr>
+    <tr>
+      <th>Completed:</th>
+      <td>
+        <time title="2013-08-06 15:29:19 UTC" datetime="2013-08-06T15:29:19.163179+00:00">2013-08-06</time>
+      </td>
+    </tr>
+  </table>
+  <div class="field">
+    <table>
+      <tr>
+        <td>
+          <label for="ossa.target">Target</label>
+        </td>
+      </tr>
+      <tr>
+        <td>
+          <table>
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" id="ossa.target.option.package" name="ossa.target" type="radio" value="package" />
+        Distribution
+      </label>
+    </td>
+    <td>
+      <select id="ossa.target.distribution" name="ossa.target.distribution" size="1" >
+<option value="baltix">Baltix</option>
+<option value="boss">BOSS</option>
+<option value="charms">Juju Charms Collection</option>
+<option value="elbuntu">Elbuntu</option>
+<option value="guadalinex">Guadalinex</option>
+<option value="guadalinexedu">Guadalinex Edu</option>
+<option value="kiwilinux">Kiwi Linux</option>
+<option value="nubuntu">nUbuntu</option>
+<option value="pld-linux">PLD Linux</option>
+<option value="tilix">Tilix</option>
+<option value="tuxlab">tuXlab</option>
+<option selected="selected" value="ubuntu">Ubuntu</option>
+<option value="ubuntu-leb">Ubuntu Linaro Evaluation Build</option>
+<option value="ubuntu-rtm">Ubuntu RTM</option>
+</select>
+<input name="ossa.target.distribution-empty-marker" type="hidden" value="1" />
+    </td>
+  </tr>
+  <tr>
+    <td align="right">
+      <label for="ossa.target.option.package">
+        Package
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="" id="ossa.target.package"
+                         name="ossa.target.package" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;ossa.target.option.package&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ossa.target.package');
+              var select_menu = Y.DOM.byId('ossa.target.package-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ossa-target-package" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_team_text": "Remove team", "header": "Select a package", "show_remove_button": false, "selected_value": null, "step_title": "Search by name", "show_assign_me_button": false, "vocabulary_filters": [], "vocabulary_name": "DistributionPackage", "input_element": "ossa.target.package", "show_widget_id": "show-widget-ossa-target-package", "assign_me_text": "Pick me", "show_create_team": false, "remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "selected_value_metadata": null};
+        var show_widget_id = 'show-widget-ossa-target-package';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+
+  <tr>
+    <td>
+      <label>
+        <input class="radioType" checked="checked" id="ossa.target.option.product" name="ossa.target" type="radio" value="product" />
+       Project
+      </label>
+    </td>
+    <td>
+      
+
+
+    <input type="text" value="ossa" id="ossa.target.product"
+                         name="ossa.target.product" size="20"
+                         maxlength=""
+                         onKeyPress="selectWidget(&#x27;ossa.target.option.product&#x27;, event)" style=""
+                         class="" />
+
+    
+      
+      <script type="text/javascript">
+          LPJS.use('node', 'lp.app.picker', function(Y) {
+              var text_input = Y.DOM.byId('ossa.target.product');
+              var select_menu = Y.DOM.byId('ossa.target.product-suggestions');
+              Y.lp.app.picker.connect_select_menu(
+                  select_menu, text_input);
+          });</script>
+    
+
+    <span class="hidden">(<a id="show-widget-ossa-target-product" href="#">Find&hellip;</a>)</span>
+    <script>
+    LPJS.use('node', 'lp.app.picker', function(Y) {
+        var config = {"remove_team_text": "Remove team", "header": "Select a project", "show_remove_button": false, "selected_value": "ossa", "step_title": "Search", "show_assign_me_button": false, "vocabulary_filters": [], "vocabulary_name": "Product", "input_element": "ossa.target.product", "show_widget_id": "show-widget-ossa-target-product", "assign_me_text": "Pick me", "show_create_team": false, "remove_person_text": "Remove person", "picker_type": "default", "extra_no_results_message": null, "selected_value_metadata": null};
+        var show_widget_id = 'show-widget-ossa-target-product';
+        Y.lp.app.picker.addPicker(config, show_widget_id);
+    });
+    </script>
+  
+
+
+
+    </td>
+  </tr>
+</table>
+
+          
+        </td>
+      </tr>
+    </table>
+    
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ossa.status">Status</label>
+        </td>
+        <td>
+          <label style="font-weight: bold" for="ossa.importance">Importance</label>
+        </td>
+        
+      </tr>
+      <tr>
+        <td><div>
+<div class="value">
+<select id="ossa.status" name="ossa.status" size="1" >
+<option selected="selected" value="Fix Released">Fix Released</option>
+</select>
+</div>
+<input name="ossa.status-empty-marker" type="hidden" value="1" />
+</div></td>
+        <td title="Changeable only by a project maintainer or bug supervisor">
+          <span class="sprite read-only"></span>
+          <span class="importanceHIGH">High</span>
+        </td>
+        
+      </tr>
+    </table>
+    <table>
+      <tr>
+        <td>
+          <label style="font-weight: bold" for="ossa.assignee">Assigned to</label>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="2" style="white-space: nowrap">
+
+  <table>
+    
+    <tr>
+      <td style="padding: 0 2px 2px 0">
+        <input type="radio" id="ossa.assignee.assign_to_me" name="ossa.assignee.option" value="ossa.assignee.assign_to_me" />
+      </td>
+      <td style="padding: 0">
+        <label style="font-weight: normal" for="ossa.assignee.assign_to_me">
+          Me
+        </label>
+      </td>
+    </tr>
+    
+      
+        <tr>
+          <td style="padding: 0 2px 2px 0">
+              <input type="radio" checked="checked" id="ossa.assignee.assigned_to" name="ossa.assignee.option" value="ossa.assignee.assigned_to" />
+          </td>
+          <td style="padding: 0">
+            <label style="font-weight: normal" for="ossa.assignee.assigned_to">
+              Jeremy Stanley (fungi)
+            </label>
+          </td>
+        </tr>
+      
+    
+    
+  </table>
+
+
+</td>
+      </tr>
+    </table>
+    
+  </div>
+  <div class="field">
+    <div>
+      <label style="font-weight: bold" for="ossa.comment_on_change">Comment on this change (optional)</label>
+      <textarea cols="62" rows="4" id="ossa.comment_on_change" name="ossa.comment_on_change"></textarea>
+    </div>
+    <div>
+      <label style="font-weight: normal">
+        <input type="checkbox" name="subscribe" id="subscribe" value="Subscribe" />
+        Email me about changes to this bug report
+      </label>
+    </div>
+  </div>
+  
+</form>
+</td>
+    </tr>
+  
+
+
+        
+      </tbody>
+
+    </table>
+
+
+
+<div class="actions">
+  
+    <span id="also-affects-product" class="">
+    <a class="menu-link-addupstream sprite add" href="https://bugs.launchpad.net/nova/+bug/1184041/+choose-affected-product">Also affects project</a>
+        <a href="/+help-bugs/also-affects-project-help.html" target="help" class="sprite maybe action-icon">(?)</a>
+    </span>
+    <span id="also-affects-package" class="">
+    <a class="menu-link-adddistro sprite add" href="https://bugs.launchpad.net/nova/+bug/1184041/+distrotask">Also affects distribution/package</a>
+    </span>
+    <a class="menu-link-nominate sprite milestone" href="https://bugs.launchpad.net/nova/+bug/1184041/+nominate">Nominate for series</a>
+    
+  
+
+</div>
+
+
+
+
+      <div id="maincontentsub">
+        <div class="top-portlet">
+
+      <div itemprop="mainContentOfPage" class="report">
+        
+
+        <div>
+  <div class="lazr-multiline-edit" id="edit-description">
+  <div class="clearfix">
+    
+
+    <h3>Bug Description</h3>
+  </div>
+
+  <div class="yui3-editable_text-text"><p>The code for retrieving the list of ips to make source security groups is very inefficient. It is possible to create a set of rules using source security groups that will lead to an explosion of get_network_info calls.</p>
+<p>Example:</p>
+<p># create a security group<br />
+nova secgroup-create foo foo</p>
+<p># add source group rules referencing the same group<br />
+for i in {1..10}; do<br />
+&nbsp;&nbsp;nova secgroup-<wbr />add-group-<wbr />rule foo foo tcp $i $i<br />
+done</p>
+<p># launch 10 instances<br />
+nova boot --flavor 1 --image precise --num-instances 10 --security-groups foo test</p>
+<p>When each instance boots it sends out a notification to each of the other instances to update their iptables rules. Here is what happens when the 10th instance boots:</p>
+<p>for num instances in group that is referenced in a source rule: 10<br />
+&nbsp;&nbsp;for num rules referencing a source group: 10<br />
+&nbsp;&nbsp;&nbsp;&nbsp;for num instances in the source group: 10<br />
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;call get_nw_info()</p>
+<p>That means 1000 individual requests to get_nw_info for a single instance launch. In this case you have You can see how these numbers could get out of hand very quickly, for example launching 20 instances:<br />
+instance number(n) : num calls (n^2) * 10<br />
+1 :  10<br />
+2 :  20<br />
+3 :  90<br />
+...<br />
+18 : 3240<br />
+19 : 3610<br />
+20 : 4000<br />
+...<br />
+$ python -c &quot;print sum(n * n * 10 for n in xrange(1, 21))&quot;<br />
+28700</p>
+<p>28,700 calls to get_network info by the time the launch completes. In reality this number of calls creates a DOS where nova-network can&#x27;t respond in time and instance launches start to timeout.</p>
+<p>There are multiple fixes needed:</p>
+<p>a) constructing a list of all needed instances instead of making a separate request for each rule.<br />
+b) a single call to retrieve nw_info (or at least fixed ip info) for multiple instances at once.</p></div>
+  </div>
+
+  
+</div>
+
+
+        <div style="margin:-10px 0 20px 5px" class="clearfix">
+          
+        </div>
+
+        <div id="bug-tags">
+          <span id="tags-heading">
+            
+          </span>
+          <span id="tag-list">
+          </span>
+          <a href="+edit" title="Add tags" id="tags-trigger" class="sprite add">Add tags</a>
+          
+          <a href="/+help-bugs/tag-help.html" target="help" class="sprite maybe action-icon">Tag help</a>
+        </div>
+
+        <script type="text/javascript">
+          LPJS.use('event', 'node', 'lp.bugs.tags_entry', function(Y) {
+              Y.on('domready',
+                   function(e) {
+                       Y.lp.bugs.tags_entry.setup_tag_entry(
+                           available_official_tags);
+                   },
+                   window);
+          });
+        </script>
+
+        <div class="clearfix"></div>
+      </div>
+
+      <div id="branches-and-cves">
+        <div id="bug-branches-container" style="float: left">
+          
+
+            <div id="bug-branches">
+              <h2>Related branches</h2>
+
+              
+                
+
+ 
+
+ <div class="buglink-summary">
+
+  <a href="https://code.launchpad.net/~ubuntu-branches/ubuntu/precise/nova/precise-security" class="sprite branch">lp:ubuntu/precise-security/nova</a>
+  
+  
+</div>
+
+
+
+              
+              
+                
+
+ 
+
+ <div class="buglink-summary">
+
+  <a href="https://code.launchpad.net/~ubuntu-branches/ubuntu/precise/nova/precise-updates" class="sprite branch">lp:ubuntu/precise-updates/nova</a>
+  
+  
+</div>
+
+
+
+              
+              
+                
+
+ 
+
+ <div class="buglink-summary">
+
+  <a href="https://code.launchpad.net/~ubuntu-branches/ubuntu/quantal/nova/quantal-security" class="sprite branch">lp:ubuntu/quantal-security/nova</a>
+  
+  
+</div>
+
+
+
+              
+              
+                
+
+ 
+
+ <div class="buglink-summary">
+
+  <a href="https://code.launchpad.net/~ubuntu-branches/ubuntu/quantal/nova/quantal-updates" class="sprite branch">lp:ubuntu/quantal-updates/nova</a>
+  
+  
+</div>
+
+
+
+              
+            </div>
+          
+        </div><!-- bug-branch-container -->
+
+        <div class="cves">
+          <h2>CVE References</h2>
+          <ul>
+            <li class="sprite cve">
+              <a href="/bugs/cve/2013-4185" title="Algorithmic complexity vulnerability ...">2013-4185</a>
+            </li>
+          </ul>
+        </div>
+
+        <div class="clearfix"></div>
+      </div> <!-- branches and CVEs -->
+
+      </div>
+
+      <div>
+      
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/1" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-05-27T13:34:47.585250+00:00" title="2013-05-27 13:34:47 UTC">on 2013-05-27</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/1"> #1</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Not totally convinced we should issue an OSSA about this one... It&#x27;s a bit of a slippery slope since authenticated users have a lot of ways to consume resources . Only wildly assymetric attacks should trigger OSSAs, but that may well be the case here.</p>
+<p>That only affects Nova when used with nova-network (not Quantum), right ?</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Not totally convinced we should issue an OSSA about this one... It's a bit of a slippery slope since authenticated users have a lot of ways to consume resources . Only wildly assymetric attacks should trigger OSSAs, but that may well be the case here.
+
+That only affects Nova when used with nova-network (not Quantum), right ?</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in ossa: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        New &#8594; Incomplete
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+    
+    <time title="2013-05-28 14:23:13 UTC" datetime="2013-05-28T14:23:13.743598+00:00">on 2013-05-28</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in ossa: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; Michael Still (mikalstill)
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/2" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~vishvananda" class="sprite person">Vish Ishaya (vishvananda)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-05-31T22:56:02.650524+00:00" title="2013-05-31 22:56:02 UTC">on 2013-05-31</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/2"> #2</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>ttx: I&#x27;m not sure if it needs an OSSA, although this case is particularly nasty. It isn&#x27;t just that you are using resources, you can cause the system to become so overloaded that all nova-computes in the system cannot respond to messages. So it basically borks the entire cloud.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">ttx: I'm not sure if it needs an OSSA, although this case is particularly nasty. It isn't just that you are using resources, you can cause the system to become so overloaded that all nova-computes in the system cannot respond to messages. So it basically borks the entire cloud.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/3" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~russellb" class="sprite person">Russell Bryant (russellb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-05-31T23:50:43.120171+00:00" title="2013-05-31 23:50:43 UTC">on 2013-05-31</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/3"> #3</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>It definitely sounds nasty.  It seems OSSA worthy to me.  I guess we could use some more opinions.  Sometimes I feel overly conservative when considering DOS vulnerabilities.</p>
+<p>If I understand this correctly, the number we&#x27;re talking about is blocking rpc calls made to the network service.  Starting 20 instances isn&#x27;t too hard, and resulting in 28,700 rpc calls in this example is pretty darn bad.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">It definitely sounds nasty.  It seems OSSA worthy to me.  I guess we could use some more opinions.  Sometimes I feel overly conservative when considering DOS vulnerabilities.
+
+If I understand this correctly, the number we're talking about is blocking rpc calls made to the network service.  Starting 20 instances isn't too hard, and resulting in 28,700 rpc calls in this example is pretty darn bad.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/4" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~fungi" class="sprite person">Jeremy Stanley (fungi)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-06-01T00:16:52.217048+00:00" title="2013-06-01 00:16:52 UTC">on 2013-06-01</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/4"> #4</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This reasoning also takes us back to the earlier discussion about authenticated vs. unauthenticated and whether we can infer what that means for all deployers. With today&#x27;s free trials and otherwise minimally vetted users I&#x27;m leaning toward disregarding that axis in appraising the severity of a risk from the project perspective.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This reasoning also takes us back to the earlier discussion about authenticated vs. unauthenticated and whether we can infer what that means for all deployers. With today's free trials and otherwise minimally vetted users I'm leaning toward disregarding that axis in appraising the severity of a risk from the project perspective.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~fungi" class="sprite person">Jeremy Stanley (fungi)</a>
+    
+    <time title="2013-06-01 00:26:52 UTC" datetime="2013-06-01T00:26:52.191763+00:00">on 2013-06-01</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in ossa: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Incomplete &#8594; Confirmed
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        Michael Still (mikalstill) &#8594; Jeremy Stanley (fungi)
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/5" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-06-03T09:22:01.688914+00:00" title="2013-06-03 09:22:01 UTC">on 2013-06-03</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/5"> #5</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Agreed on OSSA need. Now do we have a fix ? :)</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Agreed on OSSA need. Now do we have a fix ? :)</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+    
+    <time title="2013-06-03 15:51:46 UTC" datetime="2013-06-03T15:51:46.385476+00:00">on 2013-06-03</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in ossa: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>importance</b>:
+      </td>
+      <td>
+        Undecided &#8594; Medium
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/6" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~fungi" class="sprite person">Jeremy Stanley (fungi)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-06-03T22:43:54.628546+00:00" title="2013-06-03 22:43:54 UTC">on 2013-06-03</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/6"> #6</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Proposed impact description...</p>
+<p>Title: Denial of Service in Nova network source security groups<br />
+Reporter: Vishvananda Ishaya (Nebula)<br />
+Products: Nova<br />
+Affects: All versions</p>
+<p>Vishvananda Ishaya from Nebula reported a denial of service<br />
+vulnerability in Nova&#x27;s handling of network source security group<br />
+policy updates. By performing a large number of server creation<br />
+operations, the proportion of updates increases quadratically and<br />
+may overwhelm nova-network such that it is no longer able to service<br />
+other requests in a timely fashion. Only setups relying on<br />
+nova-network are affected.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Proposed impact description...
+
+Title: Denial of Service in Nova network source security groups
+Reporter: Vishvananda Ishaya (Nebula)
+Products: Nova
+Affects: All versions
+
+Vishvananda Ishaya from Nebula reported a denial of service
+vulnerability in Nova's handling of network source security group
+policy updates. By performing a large number of server creation
+operations, the proportion of updates increases quadratically and
+may overwhelm nova-network such that it is no longer able to service
+other requests in a timely fashion. Only setups relying on
+nova-network are affected.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in ossa: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>importance</b>:
+      </td>
+      <td>
+        Medium &#8594; High
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Confirmed &#8594; Triaged
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/7" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-06-04T15:53:53.834211+00:00" title="2013-06-04 15:53:53 UTC">on 2013-06-04</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/7"> #7</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Impact ++</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Impact ++</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/8" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-06-07T09:27:54.386002+00:00" title="2013-06-07 09:27:54 UTC">on 2013-06-07</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/8"> #8</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Vish: do you have a fix for that, or should we look for someone else to do one ?</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Vish: do you have a fix for that, or should we look for someone else to do one ?</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/9" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~vishvananda" class="sprite person">Vish Ishaya (vishvananda)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-06-12T15:39:41.138076+00:00" title="2013-06-12 15:39:41 UTC">on 2013-06-12</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/9"> #9</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>I don&#x27;t have a fix yet no, just the method by which to construct one outlined in the bug report.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">I don't have a fix yet no, just the method by which to construct one outlined in the bug report.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/10" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~fungi" class="sprite person">Jeremy Stanley (fungi)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-06-25T19:00:11.907769+00:00" title="2013-06-25 19:00:11 UTC">on 2013-06-25</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/10"> #10</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Beating the drum on this one to see if we&#x27;re any closer to having a fix, or whether we should pull in some additional development resources as subscribers... thoughts?</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Beating the drum on this one to see if we're any closer to having a fix, or whether we should pull in some additional development resources as subscribers... thoughts?</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/11" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~vishvananda" class="sprite person">Vish Ishaya (vishvananda)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-07-19T17:30:23.760901+00:00" title="2013-07-19 17:30:23 UTC">on 2013-07-19</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/11"> #11</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/nova/+bug/1184041/+attachment/3742869/+files/0001-Use-cached-nwinfo-for-secgroup-rules.patch">0001-Use-cached-nwinfo-for-secgroup-rules.patch</a>
+        <a class="sprite edit action-icon" href="/nova/+bug/1184041/+attachment/3742869">Edit</a>
+        (2.7 KiB,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Found a much simpler solution to this after some experimenting. The original solution touches a ton of files but this one is pretty simple. It uses the cached ip addresses to construct the security group rules.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Found a much simpler solution to this after some experimenting. The original solution touches a ton of files but this one is pretty simple. It uses the cached ip addresses to construct the security group rules.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in nova: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>assignee</b>:
+      </td>
+      <td>
+        nobody &#8594; Vish Ishaya (vishvananda)
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/12" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~russellb" class="sprite person">Russell Bryant (russellb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-07-19T17:35:49.155671+00:00" title="2013-07-19 17:35:49 UTC">on 2013-07-19</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/12"> #12</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>nice work!  +2  My only other question is whether any tests are needed to cover this.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">nice work!  +2  My only other question is whether any tests are needed to cover this.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~vishvananda" class="sprite person">Vish Ishaya (vishvananda)</a>
+    
+    <time title="2013-07-22 17:17:07 UTC" datetime="2013-07-22T17:17:07.189668+00:00">on 2013-07-22</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in nova: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Triaged &#8594; In Progress
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/13" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~vishvananda" class="sprite person">Vish Ishaya (vishvananda)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-07-22T17:47:00.690915+00:00" title="2013-07-22 17:47:00 UTC">on 2013-07-22</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/13"> #13</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/nova/+bug/1184041/+attachment/3745734/+files/0001-Use-cached-nwinfo-for-secgroup-rules-grizzly.patch">0001-Use-cached-nwinfo-for-secgroup-rules-grizzly.patch</a>
+        <a class="sprite edit action-icon" href="/nova/+bug/1184041/+attachment/3745734">Edit</a>
+        (2.8 KiB,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Applies to grizzly with some very minor line continuation changes.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Applies to grizzly with some very minor line continuation changes.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/15" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~vishvananda" class="sprite person">Vish Ishaya (vishvananda)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-07-22T17:49:57.393708+00:00" title="2013-07-22 17:49:57 UTC">on 2013-07-22</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/15"> #15</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    <ul style="margin-bottom: 1em">
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/nova/+bug/1184041/+attachment/3745736/+files/0001-Use-cached-nwinfo-for-secgroup-rules-folsom.patch">0001-Use-cached-nwinfo-for-secgroup-rules-folsom.patch</a>
+        <a class="sprite edit action-icon" href="/nova/+bug/1184041/+attachment/3745736">Edit</a>
+        (2.9 KiB,
+        text/plain)
+      </li>
+    </ul>
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Folsom version</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Folsom version</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/16" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~russellb" class="sprite person">Russell Bryant (russellb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-07-22T17:52:29.717401+00:00" title="2013-07-22 17:52:29 UTC">on 2013-07-22</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/16"> #16</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>+2 on the backports</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">+2 on the backports</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/17" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~fungi" class="sprite person">Jeremy Stanley (fungi)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-07-24T20:49:16.360887+00:00" title="2013-07-24 20:49:16 UTC">on 2013-07-24</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/17"> #17</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Note that we&#x27;re going to be unable to land anything on stable/folsom until someone picks up nova <a href="/bugs/1200336" class="bug-link">bug 1200336</a> and devises a fix (also we&#x27;ll need to manually merge <a rel="nofollow" href="https://review.openstack.org/36698">https:/<wbr />/review.<wbr />openstack.<wbr />org/36698</a> to d-g since we&#x27;re deadlocked on multiple regressions in the folsom gate now).</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Note that we're going to be unable to land anything on stable/folsom until someone picks up nova bug 1200336 and devises a fix (also we'll need to manually merge https://review.openstack.org/36698 to d-g since we're deadlocked on multiple regressions in the folsom gate now).</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/18" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~russellb" class="sprite person">Russell Bryant (russellb)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-07-26T14:25:38.189937+00:00" title="2013-07-26 14:25:38 UTC">on 2013-07-26</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/18"> #18</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Just came across <a rel="nofollow" href="https://bugs.launchpad.net/nova/+bug/1202893">https:/<wbr />/bugs.launchpad<wbr />.net/nova/<wbr />+bug/1202893</a> which looks like a duplicate ...</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Just came across https://bugs.launchpad.net/nova/+bug/1202893 which looks like a duplicate ...</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/19" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~fungi" class="sprite person">Jeremy Stanley (fungi)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-07-27T17:33:54.425207+00:00" title="2013-07-27 17:33:54 UTC">on 2013-07-27</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/19"> #19</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Agreed, it looks like the same set of symptoms. I think we should open this bug public and mark that one as a duplicate, then use the normal review process to wrap things up from this point forward. Anyone disagree?</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Agreed, it looks like the same set of symptoms. I think we should open this bug public and mark that one as a duplicate, then use the normal review process to wrap things up from this point forward. Anyone disagree?</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/20" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-07-29T09:33:29.759535+00:00" title="2013-07-29 09:33:29 UTC">on 2013-07-29</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/20"> #20</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Nope, sounds good to me.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Nope, sounds good to me.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~fungi" class="sprite person">Jeremy Stanley (fungi)</a>
+    
+    <time title="2013-07-31 01:35:47 UTC" datetime="2013-07-31T01:35:47.552647+00:00">on 2013-07-31</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>information type</b>:
+      </td>
+      <td>
+        Private Security &#8594; Public Security
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~fungi" class="sprite person">Jeremy Stanley (fungi)</a>
+    
+    <time title="2013-07-31 04:53:02 UTC" datetime="2013-07-31T04:53:02.238192+00:00">on 2013-07-31</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in ossa: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Triaged &#8594; In Progress
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/21" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-07-31T18:07:14.683025+00:00" title="2013-07-31 18:07:14 UTC">on 2013-07-31</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/nova/+bug/1184041/comments/21">
+                <strong>Fix proposed to nova (master)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/21"> #21</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Fix proposed to branch: master<br />
+Review: <a rel="nofollow" href="https://review.openstack.org/39541">https:/<wbr />/review.<wbr />openstack.<wbr />org/39541</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Fix proposed to branch: master
+Review: https://review.openstack.org/39541</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/22" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-07-31T18:11:30.906336+00:00" title="2013-07-31 18:11:30 UTC">on 2013-07-31</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/nova/+bug/1184041/comments/22">
+                <strong>Fix proposed to nova (stable/grizzly)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/22"> #22</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Fix proposed to branch: stable/grizzly<br />
+Review: <a rel="nofollow" href="https://review.openstack.org/39543">https:/<wbr />/review.<wbr />openstack.<wbr />org/39543</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Fix proposed to branch: stable/grizzly
+Review: https://review.openstack.org/39543</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/23" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-07-31T18:12:27.766959+00:00" title="2013-07-31 18:12:27 UTC">on 2013-07-31</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/nova/+bug/1184041/comments/23">
+                <strong>Fix proposed to nova (stable/folsom)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/23"> #23</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Fix proposed to branch: stable/folsom<br />
+Review: <a rel="nofollow" href="https://review.openstack.org/39544">https:/<wbr />/review.<wbr />openstack.<wbr />org/39544</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Fix proposed to branch: stable/folsom
+Review: https://review.openstack.org/39544</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~fungi" class="sprite person">Jeremy Stanley (fungi)</a>
+    
+    <time title="2013-07-31 19:29:35 UTC" datetime="2013-07-31T19:29:35.171777+00:00">on 2013-07-31</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>summary</b>:
+      </td>
+      <td>
+        - Potential Denial of Service using source_security_groups<br />+ Denial of Service in Nova network source security groups (CVE-2013-4185)
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/24" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-08-01T16:15:38.119174+00:00" title="2013-08-01 16:15:38 UTC">on 2013-08-01</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/nova/+bug/1184041/comments/24">
+                <strong>Fix merged to nova (master)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/24"> #24</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://review.openstack.org/39541">https:/<wbr />/review.<wbr />openstack.<wbr />org/39541</a><br />
+Committed: <a rel="nofollow" href="http://github.com/openstack/nova/commit/85aac04704350566d6b06aa7a3b99649946c672c">http://<wbr />github.<wbr />com/openstack/<wbr />nova/commit/<wbr />85aac0470435056<wbr />6d6b06aa7a3b996<wbr />49946c672c</a><br />
+Submitter: Jenkins<br />
+Branch:    master</p>
+<p>commit 85aac0470435056<wbr />6d6b06aa7a3b996<wbr />49946c672c<br />
+Author: Vishvananda Ishaya &lt;email address hidden&gt;<br />
+Date:   Fri Jul 19 10:23:59 2013 -0700</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Use cached nwinfo for secgroup rules</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;This stops a potential DOS with source security groups by using the<br />
+&nbsp;&nbsp;&nbsp;&nbsp;db cached version of the network info instead of calling out to<br />
+&nbsp;&nbsp;&nbsp;&nbsp;the network api multiple times.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Fixes <a href="/bugs/1184041" class="bug-link">bug 1184041</a></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Change-Id: Id5f24ecf0e8cce<wbr />60c27a9aecbc6e6<wbr />06c4c44d6b6</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://review.openstack.org/39541
+Committed: http://github.com/openstack/nova/commit/85aac04704350566d6b06aa7a3b99649946c672c
+Submitter: Jenkins
+Branch:    master
+
+commit 85aac04704350566d6b06aa7a3b99649946c672c
+Author: Vishvananda Ishaya &lt;vishvananda@gmail.com&gt;
+Date:   Fri Jul 19 10:23:59 2013 -0700
+
+    Use cached nwinfo for secgroup rules
+    
+    This stops a potential DOS with source security groups by using the
+    db cached version of the network info instead of calling out to
+    the network api multiple times.
+    
+    Fixes bug 1184041
+    
+    Change-Id: Id5f24ecf0e8cce60c27a9aecbc6e606c4c44d6b6
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in nova: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        In Progress &#8594; Fix Committed
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/25" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-08-01T19:03:41.991763+00:00" title="2013-08-01 19:03:41 UTC">on 2013-08-01</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/nova/+bug/1184041/comments/25">
+                <strong>Fix merged to nova (stable/grizzly)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/25"> #25</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://review.openstack.org/39543">https:/<wbr />/review.<wbr />openstack.<wbr />org/39543</a><br />
+Committed: <a rel="nofollow" href="http://github.com/openstack/nova/commit/52ad911963da4095b213952dee3a430fe0c4c30f">http://<wbr />github.<wbr />com/openstack/<wbr />nova/commit/<wbr />52ad911963da409<wbr />5b213952dee3a43<wbr />0fe0c4c30f</a><br />
+Submitter: Jenkins<br />
+Branch:    stable/grizzly</p>
+<p>commit 52ad911963da409<wbr />5b213952dee3a43<wbr />0fe0c4c30f<br />
+Author: Vishvananda Ishaya &lt;email address hidden&gt;<br />
+Date:   Fri Jul 19 10:23:59 2013 -0700</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Use cached nwinfo for secgroup rules</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;This stops a potential DOS with source security groups by using the<br />
+&nbsp;&nbsp;&nbsp;&nbsp;db cached version of the network info instead of calling out to<br />
+&nbsp;&nbsp;&nbsp;&nbsp;the network api multiple times.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Fixes <a href="/bugs/1184041" class="bug-link">bug 1184041</a></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Change-Id: Id5f24ecf0e8cce<wbr />60c27a9aecbc6e6<wbr />06c4c44d6b6<br />
+&nbsp;&nbsp;&nbsp;&nbsp;(cherry picked from commit 85aac0470435056<wbr />6d6b06aa7a3b996<wbr />49946c672c)</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://review.openstack.org/39543
+Committed: http://github.com/openstack/nova/commit/52ad911963da4095b213952dee3a430fe0c4c30f
+Submitter: Jenkins
+Branch:    stable/grizzly
+
+commit 52ad911963da4095b213952dee3a430fe0c4c30f
+Author: Vishvananda Ishaya &lt;vishvananda@gmail.com&gt;
+Date:   Fri Jul 19 10:23:59 2013 -0700
+
+    Use cached nwinfo for secgroup rules
+    
+    This stops a potential DOS with source security groups by using the
+    db cached version of the network info instead of calling out to
+    the network api multiple times.
+    
+    Fixes bug 1184041
+    
+    Change-Id: Id5f24ecf0e8cce60c27a9aecbc6e606c4c44d6b6
+    (cherry picked from commit 85aac04704350566d6b06aa7a3b99649946c672c)
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  <div class="boardCommentActivity">
+    
+      <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>tags</b>:
+      </td>
+      <td>
+        added: in-stable-grizzly
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>tags</b>:
+      </td>
+      <td>
+        added: in-stable-folsom
+      </td>
+    </tr>
+  
+</table>
+    
+    
+  </div>
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/26" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~hudson-openstack" class="sprite person">OpenStack Infra (hudson-openstack)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-08-01T19:04:04.284154+00:00" title="2013-08-01 19:04:04 UTC">on 2013-08-01</time><span class="editable-message-last-edit-date">:
+              </span>
+              <a href="/nova/+bug/1184041/comments/26">
+                <strong>Fix merged to nova (stable/folsom)</strong>
+              </a>
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/26"> #26</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Reviewed:  <a rel="nofollow" href="https://review.openstack.org/39544">https:/<wbr />/review.<wbr />openstack.<wbr />org/39544</a><br />
+Committed: <a rel="nofollow" href="http://github.com/openstack/nova/commit/d4ee081c5c0a5132781235177c430ebcf72b0b0b">http://<wbr />github.<wbr />com/openstack/<wbr />nova/commit/<wbr />d4ee081c5c0a513<wbr />2781235177c430e<wbr />bcf72b0b0b</a><br />
+Submitter: Jenkins<br />
+Branch:    stable/folsom</p>
+<p>commit d4ee081c5c0a513<wbr />2781235177c430e<wbr />bcf72b0b0b<br />
+Author: Vishvananda Ishaya &lt;email address hidden&gt;<br />
+Date:   Fri Jul 19 10:23:59 2013 -0700</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Use cached nwinfo for secgroup rules</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;This stops a potential DOS with source security groups by using the<br />
+&nbsp;&nbsp;&nbsp;&nbsp;db cached version of the network info instead of calling out to<br />
+&nbsp;&nbsp;&nbsp;&nbsp;the network api multiple times.</p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Fixes <a href="/bugs/1184041" class="bug-link">bug 1184041</a></p>
+<p>&nbsp;&nbsp;&nbsp;&nbsp;Change-Id: Id5f24ecf0e8cce<wbr />60c27a9aecbc6e6<wbr />06c4c44d6b6<br />
+&nbsp;&nbsp;&nbsp;&nbsp;(cherry picked from commit 85aac0470435056<wbr />6d6b06aa7a3b996<wbr />49946c672c)</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Reviewed:  https://review.openstack.org/39544
+Committed: http://github.com/openstack/nova/commit/d4ee081c5c0a5132781235177c430ebcf72b0b0b
+Submitter: Jenkins
+Branch:    stable/folsom
+
+commit d4ee081c5c0a5132781235177c430ebcf72b0b0b
+Author: Vishvananda Ishaya &lt;vishvananda@gmail.com&gt;
+Date:   Fri Jul 19 10:23:59 2013 -0700
+
+    Use cached nwinfo for secgroup rules
+    
+    This stops a potential DOS with source security groups by using the
+    db cached version of the network info instead of calling out to
+    the network api multiple times.
+    
+    Fixes bug 1184041
+    
+    Change-Id: Id5f24ecf0e8cce60c27a9aecbc6e606c4c44d6b6
+    (cherry picked from commit 85aac04704350566d6b06aa7a3b99649946c672c)
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~apevec" class="sprite person">Alan Pevec (apevec)</a>
+    
+    <time title="2013-08-04 10:32:16 UTC" datetime="2013-08-04T10:32:16.382313+00:00">on 2013-08-04</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>tags</b>:
+      </td>
+      <td>
+        removed: in-stable-folsom in-stable-grizzly
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~fungi" class="sprite person">Jeremy Stanley (fungi)</a>
+    
+    <time title="2013-08-05 16:56:12 UTC" datetime="2013-08-05T16:56:12.287914+00:00">on 2013-08-05</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in ossa: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        In Progress &#8594; Fix Committed
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~fungi" class="sprite person">Jeremy Stanley (fungi)</a>
+    
+    <time title="2013-08-06 14:34:06 UTC" datetime="2013-08-06T14:34:06.990161+00:00">on 2013-08-06</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>summary</b>:
+      </td>
+      <td>
+        - Denial of Service in Nova network source security groups (CVE-2013-4185)<br />+ [OSSA 2013-020] Denial of Service in Nova network source security groups<br />+ (CVE-2013-4185)
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~fungi" class="sprite person">Jeremy Stanley (fungi)</a>
+    
+    <time title="2013-08-06 15:29:18 UTC" datetime="2013-08-06T15:29:18.289872+00:00">on 2013-08-06</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in ossa: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Fix Committed &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/27" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~sorrison" class="sprite person">Sam Morrison (sorrison)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-08-23T04:24:06.440166+00:00" title="2013-08-23 04:24:06 UTC">on 2013-08-23</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/27"> #27</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>This has a side affect of breaking security group linking via source groups.</p>
+<p>Example:</p>
+<p>Secgroup &quot;Server&quot; has rule</p>
+<p>+------<wbr />-------<wbr />+------<wbr />-----+-<wbr />-------<wbr />-+-----<wbr />-----+-<wbr />-------<wbr />-------<wbr />+<br />
+<span class="foldable-quoted">
+| IP Protocol | From Port | To Port | IP Range | Source Group  |<br />
+</span>
+
++------<wbr />-------<wbr />+------<wbr />-----+-<wbr />-------<wbr />-+-----<wbr />-----+-<wbr />-------<wbr />-------<wbr />+<br />
+<span class="foldable-quoted">
+| tcp         | 8140      | 8140    |          | client |<br />
+</span>
+
++------<wbr />-------<wbr />+------<wbr />-----+-<wbr />-------<wbr />-+-----<wbr />-----+-<wbr />-------<wbr />-------<wbr />+</p>
+<p>Instance A is running and is associated with the &quot;Server&quot; secgroup</p>
+<p>Now if a create a new instance with the &quot;client&quot; security group it should add a rule to instance A to all the new instance to talk to it.</p>
+<p>This no longer gets added as it uses the cached version.</p>
+<p>Restarting nova-compute will fix this and the rule will be applied.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">This has a side affect of breaking security group linking via source groups.
+
+Example:
+
+Secgroup "Server" has rule
+
++-------------+-----------+---------+----------+---------------+
+| IP Protocol | From Port | To Port | IP Range | Source Group  |
++-------------+-----------+---------+----------+---------------+
+| tcp         | 8140      | 8140    |          | client |
++-------------+-----------+---------+----------+---------------+
+
+Instance A is running and is associated with the "Server" secgroup
+
+Now if a create a new instance with the "client" security group it should add a rule to instance A to all the new instance to talk to it.
+
+This no longer gets added as it uses the cached version.
+
+Restarting nova-compute will fix this and the rule will be applied.
+
+
+</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/28" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-08-23T18:44:45.037388+00:00" title="2013-08-23 18:44:45 UTC">on 2013-08-23</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/28"> #28</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>@Sam: could you file a separate bug about this regression ? It will be easier to track rather than reusing the original bug.</p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">@Sam: could you file a separate bug about this regression ? It will be easier to track rather than reusing the original bug.</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+            <div xmlns="http://www.w3.org/1999/xhtml" itemscope="" itemtype="http://schema.org/UserComments" class="boardComment editable-message
+                  " data-baseurl="/nova/+bug/1184041/comments/29" data-i-can-edit="False">
+  <div class="boardCommentDetails">
+    <div class="message-revision-container">
+      <div class="message-revision-container-header">
+        <span>Revision history for this message</span>
+        <img src="/+icing/build/overlay/assets/skins/sam/images/close.gif" class="message-revision-close" />
+      </div>
+      <script type="text/template">
+        <div class='message-revision-item'>
+          <div class='message-revision-title'>
+              <a class="sprite remove action-icon message-revision-del-btn">
+                  Remove
+              </a>
+              <a class="js-action">
+                  Revision #{revision}, created at {date_created_display}
+              </a>
+          </div>
+          <div class='message-revision-body'>{content}</div>
+        </div>
+      </script>
+      <div class="message-revision-list"></div>
+    </div>
+
+    <table>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://launchpad.net/~sorrison" class="sprite person">Sam Morrison (sorrison)</a>
+            wrote
+            <time itemprop="commentTime" datetime="2013-08-26T01:14:24.974430+00:00" title="2013-08-26 01:14:24 UTC">on 2013-08-26</time><span class="editable-message-last-edit-date">:
+              </span>
+              
+          </td>
+          
+
+          <td>
+            
+          </td>
+          <td>
+            
+          </td>
+          <td class="bug-comment-index">
+          <a itemprop="url" href="/nova/+bug/1184041/comments/29"> #29</a>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="boardCommentBody">
+    
+
+    
+
+    
+
+  
+  <div class="editable-message-body">
+    <div class="comment-text editable-message-text" itemprop="commentText"><p>Created new <a href="/bugs/1216720" class="bug-link">bug #1216720</a></p></div>
+    
+    
+    
+  </div>
+
+  <div class="editable-message-form" style="display: none">
+     <textarea style="width: 100%" rows="10">Created new bug #1216720</textarea>
+     <input type="button" value="Update" class="editable-message-update-btn" />
+     <input type="button" value="Cancel" class="editable-message-cancel-btn" />
+  </div>
+
+
+  </div>
+
+  
+  
+</div>
+
+          
+
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+    
+    <time title="2013-09-05 15:38:08 UTC" datetime="2013-09-05T15:38:08.903662+00:00">on 2013-09-05</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in nova: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>milestone</b>:
+      </td>
+      <td>
+        none &#8594; havana-3
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align: right;">
+        <b>status</b>:
+      </td>
+      <td>
+        Fix Committed &#8594; Fix Released
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~ttx" class="sprite person">Thierry Carrez (ttx)</a>
+    
+    <time title="2013-10-17 11:55:42 UTC" datetime="2013-10-17T11:55:42.592742+00:00">on 2013-10-17</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      <tr>
+        <td colspan="2">Changed in nova: </td>
+      </tr>
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>milestone</b>:
+      </td>
+      <td>
+        havana-3 &#8594; 2013.2
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        
+          
+
+          
+              <div class="boardComment">
+  <div class="boardCommentDetails">
+    
+      <a href="https://launchpad.net/~sdague" class="sprite person">Sean Dague (sdague)</a>
+    
+    <time title="2014-09-19 11:03:05 UTC" datetime="2014-09-19T11:03:05.539302+00:00">on 2014-09-19</time>
+  </div>
+  <div class="boardCommentActivity">
+    <table class="bug-activity">
+  
+    
+      
+    
+    <tr>
+      <td style="text-align: right;">
+        <b>no longer affects</b>:
+      </td>
+      <td>
+        nova/folsom
+      </td>
+    </tr>
+  
+</table>
+  </div>
+</div>
+          
+
+          
+
+        
+        <div style="float: right;">
+          <a class="menu-link-activitylog" href="https://bugs.launchpad.net/nova/+bug/1184041/+activity">See full activity log</a>
+        </div>
+        <div class="clearfix"></div>
+
+        
+          
+
+          
+            <div align="center" id="add-comment-login-first">
+              To post a comment you must <a href="+login?comments=all">log in</a>.
+            </div>
+          
+        
+        
+      
+
+      </div><!-- class="top-portlet" -->
+      </div><!--- id="maincontentsub"-->
+      <div>
+        <div id="duplicate-form-container"></div>
+        <div id="privacy-form-container"></div>
+      </div>
+    </div>
+            
+            
+          </div><!-- yui-b -->
+        </div><!-- yui-main -->
+
+        
+          <div id="side-portlets" class="yui-b side">
+            
+      <div id="involvement" class="portlet">
+        <ul class="involvement">
+          <li class="single">
+            <a class="sprite bugs" href="/nova/+filebug">
+              Report a bug
+            </a>
+          </li>
+        </ul>
+      </div>
+      <div id="privacy" class="first portlet public">
+  <div id="privacy-text">
+     <span id="information-type-summary" class="sprite public">This report contains
+         <strong id="information-type">Public Security</strong>
+         information
+     </span>&nbsp;<a class="sprite edit action-icon" id="privacy-link" href="/nova/+bug/1184041/+secrecy">Edit</a>
+
+     <div id="information-type-description" style="padding-top: 5px">Everyone can see this security related information.
+</div>
+  </div>
+</div>
+
+      <div id="portlet-actions" class="portlet vertical">
+  <ul id="duplicate-actions">
+    <li class="sprite bug-dupe">
+    <span id="mark-duplicate-text">
+    <a class="menu-link-mark-dupe" href="/nova/+bug/1184041/+duplicate">Mark as duplicate</a>
+    </span>
+    </li>
+    
+    <li><a class="menu-link-createquestion sprite add" href="https://bugs.launchpad.net/nova/+bug/1184041/+create-question">Convert to a question</a></li>
+    
+    <li><a class="menu-link-addbranch sprite add" href="https://bugs.launchpad.net/nova/+bug/1184041/+addbranch">Link a related branch</a></li>
+    <li><a class="menu-link-linktocve sprite add" href="https://bugs.launchpad.net/nova/+bug/1184041/+linkcve">Link to <abbr title="Common Vulnerabilities and Exposures Index">CVE</abbr></a></li>
+    <li><a class="menu-link-unlinkcve sprite modify remove" href="https://bugs.launchpad.net/nova/+bug/1184041/+unlinkcve">Remove CVE link</a></li>
+  </ul>
+</div>
+
+      <div class="portlet" id="portlet-duplicates">
+  <h2>Duplicates of this bug</h2>
+  <ul>
+    <li>
+      <a class="sprite bug" href="https://bugs.launchpad.net/nova/+bug/1202893" title="Huge spikes in get_instance_nw_info since upgrading to grizzly"> Bug #1202893</a>
+    </li>
+  </ul>
+</div>
+
+      <div class="portlet vertical" id="portlet-subscription">
+  <div class="section">
+    <div id="current_user_subscription" class="False">
+      
+        <span>You are</span>
+        
+        <a class="menu-link-subscription sprite modify edit" href="/nova/+bug/1184041/+subscribe">
+           
+           
+           
+           not directly subscribed to this bug's notifications.
+        </a>
+      
+      
+    </div>
+    <div id="sub-unsub-spinner">Subscribing...</div>
+    <ul>
+      
+      <li><a class="menu-link-editsubscriptions sprite modify edit" href="https://bugs.launchpad.net/nova/+bug/1184041/+subscriptions" title="View and change your subscriptions to this bug">Edit bug mail</a></li>
+    </ul>
+  </div>
+  <script type="text/javascript">
+    LPJS.use('io-base', 'node',
+            'lp.bugs.bugtask_index.portlets.subscription', function(Y) {
+        Y.on('domready', function() {
+            Y.lp.bugs.bugtask_index.portlets.subscription.initialize();
+        });
+    });
+  </script>
+</div>
+
+      <div class="portlet vertical" id="portlet-subscribers">
+  <h2>Other bug subscribers</h2>
+  <div>
+    <div><a class="menu-link-addsubscriber sprite add" href="https://bugs.launchpad.net/nova/+bug/1184041/+addsubscriber" title="Launchpad will email that person whenever this bugs changes">Subscribe someone else</a></div>
+  </div>
+  <div id="other-bug-subscribers"></div>
+</div>
+
+      
+
+      
+
+      
+  <div class="portlet" id="portlet-patches">
+    <h2>Patches</h2>
+    <ul>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/nova/+bug/1184041/+attachment/3742869/+files/0001-Use-cached-nwinfo-for-secgroup-rules.patch">0001-Use-cached-nwinfo-for-secgroup-rules.patch</a>
+        <small>
+          (<a href="/nova/+bug/1184041/+attachment/3742869">edit</a>)
+        </small>
+      </li>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/nova/+bug/1184041/+attachment/3745734/+files/0001-Use-cached-nwinfo-for-secgroup-rules-grizzly.patch">0001-Use-cached-nwinfo-for-secgroup-rules-grizzly.patch</a>
+        <small>
+          (<a href="/nova/+bug/1184041/+attachment/3745734">edit</a>)
+        </small>
+      </li>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/nova/+bug/1184041/+attachment/3745735/+files/0001-Use-cached-nwinfo-for-secgroup-rules-folsom.patch">0001-Use-cached-nwinfo-for-secgroup-rules-folsom.patch</a>
+        <small>
+          (<a href="/nova/+bug/1184041/+attachment/3745735">edit</a>)
+        </small>
+      </li>
+      <li class="download-attachment">
+        <a class="sprite haspatch-icon" href="https://bugs.launchpad.net/nova/+bug/1184041/+attachment/3745736/+files/0001-Use-cached-nwinfo-for-secgroup-rules-folsom.patch">0001-Use-cached-nwinfo-for-secgroup-rules-folsom.patch</a>
+        <small>
+          (<a href="/nova/+bug/1184041/+attachment/3745736">edit</a>)
+        </small>
+      </li>
+    </ul>
+    <ul>
+      <li>
+        <a class="sprite add" href="/nova/+bug/1184041/+addcomment?field.patch=on">Add patch</a>
+      </li>
+    </ul>
+  </div>
+  
+
+
+      
+
+    
+          </div><!-- yui-b side -->
+        
+      </div><!-- yui-t4 -->
+
+      
+  <div id="footer" class="footer">
+    <div class="lp-arcana">
+        <div class="lp-branding">
+          <a href="https://launchpad.net/"><img src="/@@/launchpad-logo-and-name-hierarchy.png" alt="Launchpad" /></a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://launchpad.net/+tour">Take the tour</a>
+          &nbsp;&bull;&nbsp;
+          <a href="https://help.launchpad.net/">Read the guide</a>
+          &nbsp;
+          <form id="globalsearch" method="get" accept-charset="UTF-8" action="https://launchpad.net/+search">
+            <input type="search" id="search-text" name="field.text" />
+            <input type="image" src="/@@/search" style="vertical-align:5%" alt="Search Launchpad" />
+          </form>
+        </div>
+        
+  
+
+    </div>
+
+    <div class="colophon">
+      &copy; 2004-2021
+      <a href="http://canonical.com/">Canonical&nbsp;Ltd.</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://launchpad.net/legal">Terms of use</a>
+      &nbsp;&bull;&nbsp;
+      <a href="https://www.ubuntu.com/legal/dataprivacy">Data privacy</a>
+      &nbsp;&bull;&nbsp;
+      <a href="/feedback">Contact Launchpad Support</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="http://blog.launchpad.net/">Blog</a>
+      
+	&nbsp;&bull;&nbsp;
+	<a href="https://canonical.com/careers">Careers</a>
+      
+      &nbsp;&bull;&nbsp;
+      <a href="https://twitter.com/launchpadstatus">System status</a>
+      <span id="lp-version">
+      &nbsp;&bull;&nbsp;
+        r0d8de2b
+        
+        
+        (<a href="https://dev.launchpad.net/">Get the code!</a>)
+      </span>
+    </div>
+  </div>
+
+    </div><!-- yui-d0-->
+
+    
+  
+  
+  <script id="json-cache-script">LP.cache = {"initial_comment_batch_offset": 41, "first visible_recent_comment": -11, "related_features": {}, "subscribers_portlet_url_data": {"web_link": "https://bugs.launchpad.net/bugs/1184041", "self_link": "https://bugs.launchpad.net/api/devel/bugs/1184041"}, "bug": {"self_link": "https://bugs.launchpad.net/api/devel/bugs/1184041", "web_link": "https://bugs.launchpad.net/bugs/1184041", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug", "id": 1184041, "private": false, "information_type": "Public Security", "name": null, "title": "[OSSA 2013-020] Denial of Service in Nova network source security groups (CVE-2013-4185)", "description": "The code for retrieving the list of ips to make source security groups is very inefficient. It is possible to create a set of rules using source security groups that will lead to an explosion of get_network_info calls.\n\nExample:\n\n# create a security group\nnova secgroup-create foo foo\n\n# add source group rules referencing the same group\nfor i in {1..10}; do\n  nova secgroup-add-group-rule foo foo tcp $i $i\ndone\n\n# launch 10 instances\nnova boot --flavor 1 --image precise --num-instances 10 --security-groups foo test\n\nWhen each instance boots it sends out a notification to each of the other instances to update their iptables rules. Here is what happens when the 10th instance boots:\n\nfor num instances in group that is referenced in a source rule: 10\n  for num rules referencing a source group: 10\n    for num instances in the source group: 10\n      call get_nw_info()\n\nThat means 1000 individual requests to get_nw_info for a single instance launch. In this case you have You can see how these numbers could get out of hand very quickly, for example launching 20 instances:\ninstance number(n) : num calls (n^2) * 10 \n1 :  10\n2 :  20\n3 :  90\n...\n18 : 3240\n19 : 3610\n20 : 4000\n...\n$ python -c \"print sum(n * n * 10 for n in xrange(1, 21))\"\n28700\n\n28,700 calls to get_network info by the time the launch completes. In reality this number of calls creates a DOS where nova-network can't respond in time and instance launches start to timeout.\n\nThere are multiple fixes needed:\n\na) constructing a list of all needed instances instead of making a separate request for each rule.\nb) a single call to retrieve nw_info (or at least fixed ip info) for multiple instances at once.", "owner_link": "https://bugs.launchpad.net/api/devel/~vishvananda", "bug_tasks_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1184041/bug_tasks", "duplicate_of_link": null, "date_created": "2013-05-24T23:46:44.030188+00:00", "activity_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1184041/activity", "subscriptions_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1184041/subscriptions", "date_last_updated": "2013-10-24T04:53:15.417075+00:00", "who_made_private_link": null, "date_made_private": null, "heat": 268, "bug_watches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1184041/bug_watches", "cves_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1184041/cves", "duplicates_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1184041/duplicates", "attachments_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1184041/attachments", "security_related": true, "latest_patch_uploaded": "2013-07-22T17:49:57.393708+00:00", "tags": [], "date_last_message": "2013-08-26T01:14:24.974430+00:00", "number_of_duplicates": 1, "message_count": 30, "users_affected_count": 1, "users_unaffected_count": 0, "users_affected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1184041/users_affected", "users_unaffected_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1184041/users_unaffected", "users_affected_count_with_dupes": 2, "other_users_affected_count_with_dupes": 2, "users_affected_with_dupes_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1184041/users_affected_with_dupes", "messages_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1184041/messages", "linked_branches_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1184041/linked_branches", "linked_merge_proposals_collection_link": "https://bugs.launchpad.net/api/devel/bugs/1184041/linked_merge_proposals", "http_etag": "\"cd30f33574bc1507921241e8fc3226867dc46b77-dd01f10637162a2b9c0a78bcc76c599fb60e45c5\""}, "bugtask_data": {"1409088": {"milestone_widget_items": "[]", "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/nova/+bug/1184041/+delete", "user_can_edit_status": true, "bugtask_path": "/nova/+bug/1184041", "row_id": "tasksummary1409088", "importance_value": "High", "importance_widget_items": "[]", "id": 1409088, "user_can_delete": false, "targetname": "OpenStack Compute (nova)", "user_can_edit_importance": false, "assignee_vocabulary_filters": [], "bug_title": "[OSSA 2013-020] Denial of Service in Nova network source security groups (CVE-2013-4185)", "assignee_value": "vishvananda", "hide_assignee_team_selection": true, "user_can_edit_assignee": false, "form_row_id": "task1409088", "target_is_product": true, "assignee_is_team": false, "status_value": "Fix Released", "user_can_unassign": false, "milestone_value": "https://bugs.launchpad.net/api/devel/nova/+milestone/2013.2", "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_milestone": false, "prefix": "nova"}, "1409793": {"milestone_widget_items": "[]", "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/ossa/+bug/1184041/+delete", "user_can_edit_status": true, "bugtask_path": "/ossa/+bug/1184041", "row_id": "tasksummary1409793", "importance_value": "High", "importance_widget_items": "[]", "id": 1409793, "user_can_delete": false, "targetname": "OpenStack Security Advisory", "user_can_edit_importance": false, "assignee_vocabulary_filters": [], "bug_title": "[OSSA 2013-020] Denial of Service in Nova network source security groups (CVE-2013-4185)", "assignee_value": "fungi", "hide_assignee_team_selection": true, "user_can_edit_assignee": false, "form_row_id": "task1409793", "target_is_product": true, "assignee_is_team": false, "status_value": "Fix Released", "user_can_unassign": false, "milestone_value": null, "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_milestone": false, "prefix": "ossa"}, "1441811": {"milestone_widget_items": "[]", "status_widget_items": "[]", "delete_link": "https://bugs.launchpad.net/nova/grizzly/+bug/1184041/+delete", "user_can_edit_status": true, "bugtask_path": "/nova/grizzly/+bug/1184041", "row_id": "tasksummary1441811", "importance_value": "High", "importance_widget_items": "[]", "id": 1441811, "user_can_delete": false, "targetname": "OpenStack Compute (nova) grizzly", "user_can_edit_importance": false, "assignee_vocabulary_filters": [], "bug_title": "[OSSA 2013-020] Denial of Service in Nova network source security groups (CVE-2013-4185)", "assignee_value": "vishvananda", "hide_assignee_team_selection": true, "user_can_edit_assignee": false, "form_row_id": "task1441811", "target_is_product": false, "assignee_is_team": false, "status_value": "Fix Released", "user_can_unassign": false, "milestone_value": "https://bugs.launchpad.net/api/devel/nova/+milestone/2013.1.3", "assignee_vocabulary": "AllUserTeamsParticipation", "user_can_edit_milestone": false, "prefix": "nova_grizzly"}}, "bug_is_private": false, "context": {"self_link": "https://bugs.launchpad.net/api/devel/nova/+bug/1184041", "web_link": "https://bugs.launchpad.net/nova/+bug/1184041", "resource_type_link": "https://bugs.launchpad.net/api/devel/#bug_task", "bug_link": "https://bugs.launchpad.net/api/devel/bugs/1184041", "milestone_link": "https://bugs.launchpad.net/api/devel/nova/+milestone/2013.2", "status": "Fix Released", "importance": "High", "assignee_link": "https://bugs.launchpad.net/api/devel/~vishvananda", "bug_target_display_name": "OpenStack Compute (nova)", "bug_target_name": "nova", "bug_watch_link": null, "date_assigned": "2013-07-19T17:32:26.291982+00:00", "date_created": "2013-05-24T23:46:44.030188+00:00", "date_confirmed": null, "date_incomplete": null, "date_in_progress": "2013-07-22T17:17:07.490972+00:00", "date_closed": "2013-09-05T15:38:10.726955+00:00", "date_left_new": null, "date_triaged": null, "date_fix_committed": "2013-08-01T16:15:36.485674+00:00", "date_fix_released": "2013-09-05T15:38:10.726955+00:00", "date_left_closed": null, "owner_link": "https://bugs.launchpad.net/api/devel/~vishvananda", "target_link": "https://bugs.launchpad.net/api/devel/nova", "title": "Bug #1184041 in OpenStack Compute (nova): \"[OSSA 2013-020] Denial of Service in Nova network source security groups (CVE-2013-4185)\"", "related_tasks_collection_link": "https://bugs.launchpad.net/api/devel/nova/+bug/1184041/related_tasks", "is_complete": true, "http_etag": "\"12254776bddbddb1750c2c4d323d2686293f57da-bc1620d21992c36b6fdd35952b34e219e1957a8d\""}, "information_type_data": {"PUBLIC": {"value": "PUBLIC", "is_private": false, "order": 0, "name": "Public", "description": "Everyone can see this information.\n", "description_css_class": "choice-description"}, "PRIVATESECURITY": {"value": "PRIVATESECURITY", "is_private": true, "order": 2, "name": "Private Security", "description": "Only the security group can see this information.\n ", "description_css_class": "choice-description"}, "USERDATA": {"value": "USERDATA", "is_private": true, "order": 3, "name": "Private", "description": "Only shared with users permitted to see private user information.\n", "description_css_class": "choice-description"}, "PUBLICSECURITY": {"value": "PUBLICSECURITY", "is_private": false, "order": 1, "name": "Public Security", "description": "Everyone can see this security related information.\n", "description_css_class": "choice-description"}}, "total_comments_and_activity": 77};</script>
+
+    
+  
+
+    
+  </body>
+
+
+  <!--
+    Facet name: bugs
+    Page type: main_side
+    Has global search: True
+    Has application tabs: True
+    Has side portlets: True
+
+    At least 85 queries/external actions issued in 1.51 seconds
+
+    Features: {'bugs.nominations.bug_supervisors_can_target': 'on', 'hard_timeout': '9000', 'visible_render_time': None, 'bugs.affected_count_includes_dupes.disabled': None, 'app.mainsite_only.canonical_url': None, 'app.maintenance_message': None, 'js.yui_version': None, 'disclosure.dsp_picker.enabled': 'on', 'profiling.enabled': None, 'baselayout.careers_link.disabled': None}
+
+    r0d8de2b
+
+    -->
+
+</html>
+

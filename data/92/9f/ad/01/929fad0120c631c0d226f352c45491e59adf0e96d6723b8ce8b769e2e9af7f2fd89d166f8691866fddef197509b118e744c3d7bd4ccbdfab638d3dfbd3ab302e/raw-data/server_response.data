@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='Date/time related Bug #74819 - RDF' href='rss/bug.php?id=74819'>
+        <link rel='alternate' type='application/rss+xml' title='Date/time related Bug #74819 - RSS 2.0' href='rss/bug.php?id=74819&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #74819 :: wddx_deserialize() heap out-of-bound read via php_parse_date()</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=74819">Sec Bug</a>&nbsp;#74819</th>
+            <td id="summary" colspan="5">wddx_deserialize() heap out-of-bound read via php_parse_date()</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2017-06-27 06:36 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2018-01-15 12:18 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>l &#x64;&#111;&#x74; wei &#x61;&#116; ntu &#x64;&#111;&#x74; edu &#x64;&#111;&#x74; sg</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=Date%2Ftime+related">Date/time related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>7.1.6</td>
+            <th class="details">OS:</th>
+            <td>Linux</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2017-11145" target="_blank">2017-11145</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=74819&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=74819&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=74819&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1498545402">&nbsp;</a><strong>[2017-06-27 06:36 UTC] l &#x64;&#111;&#x74; wei &#x61;&#116; ntu &#x64;&#111;&#x74; edu &#x64;&#111;&#x74; sg</strong>
+<pre class='note'>Description:
+------------
+While deserializing an invalid dateTime value, wddx_deserialize() would result in a heap out-of-bounds read in timelib_meridian(). As wddx_deserialize() is exposed to network data, and sometimes echo the results back to client, this issue could potentially allow remote peeking of the process memory. It should also affect other PHP APIs that make use of timelib_meridian().
+
+Reproduced on both php-7.1.6 and php-5.6.30, tested on 32-bit builds, with ASAN enabled and USE_ZEND_ALLOC set to 0.
+
+Configuration:
+CC=&quot;`which gcc`&quot; CFLAGS=&quot;-O0 -g -fsanitize=address&quot; ./configure --prefix=&quot;`pwd`/../php7_wddx&quot; --disable-shared --enable-wddx
+
+Reproducer:
+$ cat repro.wddx 
+&lt;?xml version='1.0'?&gt;
+&lt;!DOCTYPE wddxPacket SYSTEM 'wddx_0100.dtd'&gt;
+&lt;wddxPacket version='1.0'&gt;
+&lt;header/&gt;
+	&lt;data&gt;
+        	&lt;struct&gt;
+                    &lt;var name='aDateTime'&gt;
+                         &lt;dateTime&gt;I06.00am 0&lt;/dateTime&gt;
+                     &lt;/var&gt;
+                &lt;/struct&gt;
+	&lt;/data&gt;
+&lt;/wddxPacket&gt;
+
+
+
+Test script:
+---------------
+$ cat wddx.php 
+&lt;?php
+$argc = $_SERVER['argc'];
+$argv = $_SERVER['argv'];
+
+$dir_str = dirname(__FILE__);
+$file_str = ($dir_str).&quot;/&quot;.$argv[1];
+
+if (!extension_loaded('wddx')) print &quot;wddx not loaded.\n&quot;;
+
+$wddx_str = file_get_contents($file_str);
+print strlen($wddx_str) . &quot; bytes read.\n&quot;;
+var_dump(wddx_deserialize($wddx_str));
+?&gt;
+
+Expected result:
+----------------
+No Crash
+
+Actual result:
+--------------
+$ export USE_ZEND_ALLOC=0
+
+$ ../../php7_wddx/bin/php wddx.php repro.wddx 
+307 bytes read.
+=================================================================
+==13293== ERROR: AddressSanitizer: heap-buffer-overflow on address 0xb57057fa at pc 0x809b0f4 bp 0xbfb9c788 sp 0xbfb9c77c
+READ of size 1 at 0xb57057fa thread T0
+    #0 0x809b0f3 in timelib_meridian /home/weilei/php-7.1.6/ext/date/lib/parse_date.c:410
+    #1 0x80af10b in scan /home/weilei/php-7.1.6/ext/date/lib/parse_date.c:5230
+    #2 0x80f3822 in timelib_strtotime /home/weilei/php-7.1.6/ext/date/lib/parse_date.c:24098
+    #3 0x806afbd in php_parse_date /home/weilei/php-7.1.6/ext/date/php_date.c:1455
+    #4 0x8a2fea7 in php_wddx_process_data /home/weilei/php-7.1.6/ext/wddx/wddx.c:1075
+    #5 0x8a4489a in _cdata_handler /home/weilei/php-7.1.6/ext/xml/compat.c:265
+    #6 0xb5d0a6b5 in xmlParseCharData__internal_alias /home/weilei/libxml2/parser.c:4597
+    #7 0xb5d5c9be in xmlParseTryOrFinish /home/weilei/libxml2/parser.c:11715
+    #8 0xb5d64462 in xmlParseChunk__internal_alias /home/weilei/libxml2/parser.c:12454
+    #9 0x8a46705 in php_XML_Parse /home/weilei/php-7.1.6/ext/xml/compat.c:600
+    #10 0x8a30293 in php_wddx_deserialize_ex /home/weilei/php-7.1.6/ext/wddx/wddx.c:1109
+    #11 0x8a32cb3 in zif_wddx_deserialize /home/weilei/php-7.1.6/ext/wddx/wddx.c:1327
+    #12 0x8de0fb6 in ZEND_DO_ICALL_SPEC_RETVAL_USED_HANDLER /home/weilei/php-7.1.6/Zend/zend_vm_execute.h:675
+    #13 0x8ddb38a in execute_ex /home/weilei/php-7.1.6/Zend/zend_vm_execute.h:429
+    #14 0x8ddcaf0 in zend_execute /home/weilei/php-7.1.6/Zend/zend_vm_execute.h:474
+    #15 0x8c35c00 in zend_execute_scripts /home/weilei/php-7.1.6/Zend/zend.c:1476
+    #16 0x8a634e4 in php_execute_script /home/weilei/php-7.1.6/main/main.c:2537
+    #17 0x90f9d1b in do_cli /home/weilei/php-7.1.6/sapi/cli/php_cli.c:993
+    #18 0x90fc5f6 in main /home/weilei/php-7.1.6/sapi/cli/php_cli.c:1381
+    #19 0xb5b03a82 (/lib/i386-linux-gnu/libc.so.6+0x19a82)
+    #20 0x8065200 in _start (/home/weilei/php7_wddx/bin/php+0x8065200)
+0xb57057fa is located 0 bytes to the right of 10-byte region [0xb57057f0,0xb57057fa)
+allocated by thread T0 here:
+    #0 0xb61b2854 (/usr/lib/i386-linux-gnu/libasan.so.0+0x16854)
+    #1 0x8b76d40 in __zend_malloc /home/weilei/php-7.1.6/Zend/zend_alloc.c:2820
+    #2 0x8b73e5f in _emalloc /home/weilei/php-7.1.6/Zend/zend_alloc.c:2413
+    #3 0x8b74aaa in _safe_emalloc /home/weilei/php-7.1.6/Zend/zend_alloc.c:2472
+    #4 0x8b75005 in _ecalloc /home/weilei/php-7.1.6/Zend/zend_alloc.c:2495
+    #5 0x809b85c in timelib_string /home/weilei/php-7.1.6/ext/date/lib/parse_date.c:460
+    #6 0x80ae9dd in scan /home/weilei/php-7.1.6/ext/date/lib/parse_date.c:5214
+    #7 0x80f3822 in timelib_strtotime /home/weilei/php-7.1.6/ext/date/lib/parse_date.c:24098
+    #8 0x806afbd in php_parse_date /home/weilei/php-7.1.6/ext/date/php_date.c:1455
+    #9 0x8a2fea7 in php_wddx_process_data /home/weilei/php-7.1.6/ext/wddx/wddx.c:1075
+    #10 0x8a4489a in _cdata_handler /home/weilei/php-7.1.6/ext/xml/compat.c:265
+    #11 0xb5d0a6b5 in xmlParseCharData__internal_alias /home/weilei/libxml2/parser.c:4597
+    #12 0xb5d5c9be in xmlParseTryOrFinish /home/weilei/libxml2/parser.c:11715
+    #13 0xb5d64462 in xmlParseChunk__internal_alias /home/weilei/libxml2/parser.c:12454
+    #14 0x8a46705 in php_XML_Parse /home/weilei/php-7.1.6/ext/xml/compat.c:600
+    #15 0x8a30293 in php_wddx_deserialize_ex /home/weilei/php-7.1.6/ext/wddx/wddx.c:1109
+    #16 0x8a32cb3 in zif_wddx_deserialize /home/weilei/php-7.1.6/ext/wddx/wddx.c:1327
+    #17 0x8de0fb6 in ZEND_DO_ICALL_SPEC_RETVAL_USED_HANDLER /home/weilei/php-7.1.6/Zend/zend_vm_execute.h:675
+    #18 0x8ddb38a in execute_ex /home/weilei/php-7.1.6/Zend/zend_vm_execute.h:429
+    #19 0x8ddcaf0 in zend_execute /home/weilei/php-7.1.6/Zend/zend_vm_execute.h:474
+    #20 0x8c35c00 in zend_execute_scripts /home/weilei/php-7.1.6/Zend/zend.c:1476
+    #21 0x8a634e4 in php_execute_script /home/weilei/php-7.1.6/main/main.c:2537
+    #22 0x90f9d1b in do_cli /home/weilei/php-7.1.6/sapi/cli/php_cli.c:993
+    #23 0x90fc5f6 in main /home/weilei/php-7.1.6/sapi/cli/php_cli.c:1381
+    #24 0xb5b03a82 (/lib/i386-linux-gnu/libc.so.6+0x19a82)
+SUMMARY: AddressSanitizer: heap-buffer-overflow /home/weilei/php-7.1.6/ext/date/lib/parse_date.c:410 timelib_meridian
+Shadow bytes around the buggy address:
+  0x36ae0aa0: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x36ae0ab0: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x36ae0ac0: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x36ae0ad0: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x36ae0ae0: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+=&gt;0x36ae0af0: fa fa fd fa fa fa fd fa fa fa fd fa fa fa 00[02]
+  0x36ae0b00:fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x36ae0b10: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x36ae0b20: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x36ae0b30: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x36ae0b40: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:     fa
+  Heap righ redzone:     fb
+  Freed Heap region:     fd
+  Stack left redzone:    f1
+  Stack mid redzone:     f2
+  Stack right redzone:   f3
+  Stack partial redzone: f4
+  Stack after return:    f5
+  Stack use after scope: f8
+  Global redzone:        f9
+  Global init order:     f6
+  Poisoned by user:      f7
+  ASan internal:         fe
+==13293== ABORTING
+Aborted
+
+$ ../php7_wddx/bin/php --version
+PHP 7.1.6 (cli) (built: Jun 27 2017 12:59:32) ( NTS )
+Copyright (c) 1997-2017 The PHP Group
+Zend Engine v3.1.0, Copyright (c) 1998-2017 Zend Technologies
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=74819'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=74819'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1499032019">&nbsp;</a><strong>[2017-07-02 21:46 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID:      needed</span>
+</div></div></div><div class='comment type_comment' ><a name="1499032019">&nbsp;</a><strong>[2017-07-02 21:46 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The bug seems to be in timelib, not wddx, though not sure if it's triggerable from outside wddx. May be possible.
+</pre>
+</div><div class='comment type_comment' ><a name="1499032911">&nbsp;</a><strong>[2017-07-02 22:01 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The fix is in security repo as 0d25fae279caf240340fb6805a9c54c20154db95 and in <a href="https://gist.github.com/bd77ac90d3bdf31ce2a5251ad92e9e75" rel="nofollow">https://gist.github.com/bd77ac90d3bdf31ce2a5251ad92e9e75</a>
+
+Please verify.
+</pre>
+</div><div class='comment type_comment' ><a name="1499051518">&nbsp;</a><strong>[2017-07-03 03:11 UTC] l &#x64;&#111;&#x74; wei &#x61;&#116; ntu &#x64;&#111;&#x74; edu &#x64;&#111;&#x74; sg</strong>
+<pre class='note'>Patch works for all the crash repros I have, on a 32-bit build of PHP-7.1.6. 
+
+I have not found other triggers other than wddx so far.
+</pre>
+</div><div class='comment type_comment' ><a name="1499051834">&nbsp;</a><strong>[2017-07-03 03:17 UTC] l &#x64;&#111;&#x74; wei &#x61;&#116; ntu &#x64;&#111;&#x74; edu &#x64;&#111;&#x74; sg</strong>
+<pre class='note'>Please attribute the finding to:
+
+Wei Lei and Liu Yang of Nanyang Technological University
+
+Thanks.
+</pre>
+</div><div class='comment type_log' ><a name="1499221738">&nbsp;</a><strong>[2017-07-05 02:28 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Package: WDDX related</span>
+<span class="added">+Package: Date/time related</span>
+</div></div></div><div class='comment type_comment' ><a name="1499221738">&nbsp;</a><strong>[2017-07-05 02:28 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Reclassifying since it's actually timelib issue.
+</pre>
+</div><div class='comment type_log' ><a name="1499228200">&nbsp;</a><strong>[2017-07-05 04:16 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_comment' ><a name="1499228200">&nbsp;</a><strong>[2017-07-05 04:16 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>The fix for this bug has been committed.
+
+Snapshots of the sources are packaged every three hours; this change
+will be in the next snapshot. You can grab the snapshot at
+<a href="http://snaps.php.net/" rel="nofollow">http://snaps.php.net/</a>.
+
+ For Windows:
+
+<a href="http://windows.php.net/snapshots/" rel="nofollow">http://windows.php.net/snapshots/</a>
+ 
+Thank you for the report, and for helping us make PHP better.
+
+
+</pre>
+</div><div class='comment type_comment' ><a name="1499924559">&nbsp;</a><strong>[2017-07-13 05:42 UTC] fernando &#x61;&#116; null-life &#x64;&#111;&#x74; com</strong>
+<pre class='note'>So... this looks like a duplicate of the bug I reported last year and has been on hold since then.
+
+Sec <a href='bug.php?id=72959'>Bug #72959</a>	timelib_meridian out-of-bounds access
+Submitted:	2016-08-28 22:32 UTC	Modified:	2016-09-06 00:55 UTC	
+From:	fernando at null-life dot com	Assigned:	derick
+
+This sucks
+</pre>
+</div><div class='comment type_comment' ><a name="1501494047">&nbsp;</a><strong>[2017-07-31 09:40 UTC] stackexploit &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Looks like it's a duplicate of <a href="https://bugs.php.net/bug.php?id=73109" rel="nofollow">https://bugs.php.net/bug.php?id=73109</a>
+I reported #73109 almost 1 year ago, and I claimed that the patch you supplied was insufficient. So why you choose to ignore it?
+</pre>
+</div><div class='comment type_log' ><a name="1516018690">&nbsp;</a><strong>[2018-01-15 12:18 UTC] <a href="//people.php.net/kaplan">kaplan@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID: needed</span>
+<span class="added">+CVE-ID: 2017-11145</span>
+</div></div></div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

