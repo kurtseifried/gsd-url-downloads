@@ -1,0 +1,129 @@
+#######################################################################
+
+                             Luigi Auriemma
+
+Application:  VideoLAN (VLC)
+              http://www.videolan.org
+Versions:     <= 0.8.6d
+Platforms:    Windows, Mac, *BSD, *nix and more
+Bug:          heap overflow in sdpplin_parse and possible heap overflow
+              in Windows
+Exploitation: remote
+Date:         08 Jan 2008
+Author:       Luigi Auriemma
+              e-mail: aluigi@autistici.org
+              web:    aluigi.org
+
+
+#######################################################################
+
+
+1) Introduction
+2) Bug
+3) The Code
+4) Fix
+
+
+#######################################################################
+
+===============
+1) Introduction
+===============
+
+
+VLC is an open source multi platform media player.
+
+
+#######################################################################
+
+======
+2) Bug
+======
+
+
+VLC uses an old version of the Xine library on which is located the
+following heap overflow:
+
+from modules/access/rtsp/real_sdpplin.c:
+
+sdpplin_t *sdpplin_parse(char *data) {
+
+  sdpplin_t        *desc = malloc(sizeof(sdpplin_t));
+  sdpplin_stream_t *stream;
+  char             *buf=malloc(3200);
+  char             *decoded=malloc(3200);
+  ...
+  while (data && *data) {
+    handled=0;
+
+    if (filter(data, "m=", &buf)) {
+    ...
+
+static int filter(const char *in, const char *filter, char **out) {
+
+  int flen=strlen(filter);
+  int len;
+
+  if (!in) return 0;
+
+  len = (strchr(in,'\n')) ? strchr(in,'\n')-in : strlen(in);
+  if (!strncmp(in,filter,flen)) {
+    if(in[flen]=='"') flen++;
+    if(in[len-1]==13) len--;
+    if(in[len-1]=='"') len--;
+    memcpy(*out, in+flen, len-flen+1);
+    (*out)[len-flen]=0;
+    return len-flen;
+  }
+  return 0;
+}
+
+
+so the input buffers buf and decoded (this one used only for the base64
+decoding) are overflowed during the reading of the SDP parameters.
+
+There is also another problem affecting the Windows version of the
+player and at the moment the real cause is not clear.
+The problem seems to be a possible heap overflow during the handling of
+the RTSP data and can be replicated simply through the sending of many
+bytes at the connection, for example instead of sending
+"HTTP/1.0 200 OK" the server should send 5000 'A's.
+
+The cause seems located in the libaccess_realrtsp plugin (since when
+VLC uses live5555 the problem doesn't happen) but the code and seems
+all correct and in fact on Linux nothing happens.
+
+Both the problems affect the current SVN versions too.
+
+
+#######################################################################
+
+===========
+3) The Code
+===========
+
+
+for testing the main heap overflow it's enough to use a SDP data like
+the following:
+
+m=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA...more_than_3200_chars...AAAAA
+or
+a=Title:buffer;AAAAAAAAAAAAAAAAAAAAAAAAA...more_than_6400_chars...AAAAA
+
+while the Windows problem can be tested just binding the port 554 and
+sending 5000 chars (as already said the first connection is made by
+live5555, so keep this in mind if VLC doesn't crash immediately or
+doesn't crash at all).
+
+
+#######################################################################
+
+======
+4) Fix
+======
+
+
+No fix
+
+
+#######################################################################

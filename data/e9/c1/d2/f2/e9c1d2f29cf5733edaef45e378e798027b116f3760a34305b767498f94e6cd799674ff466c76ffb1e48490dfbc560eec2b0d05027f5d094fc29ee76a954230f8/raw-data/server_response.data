@@ -1,0 +1,177 @@
+#######################################################################
+
+                             Luigi Auriemma
+
+Application:  client/server Doom (csDoom)
+              http://voxelsoft.com/csdoom/      (current maintainer)
+              http://csdoom.sourceforge.net     (original author, 2000)
+Versions:     <= 0.7
+Platforms:    Windows, *nix, *BSD and more
+Bugs:         A] buffer-overflow in SV_BroadcastPrintf
+              B] buffer-overflow in SV_SetupUserInfo
+              C] format string in Printf
+Exploitation: A] remote, versus server
+              B] remote, versus server
+              C] remote, versus server and client
+Date:         26 March 2006
+Author:       Luigi Auriemma
+              e-mail: aluigi@autistici.org
+              web:    aluigi.org
+
+
+#######################################################################
+
+
+1) Introduction
+2) Bugs
+3) The Code
+4) Fix
+
+
+#######################################################################
+
+===============
+1) Introduction
+===============
+
+
+client/server Doom (csDoom) is an open source Doom engine developed by
+Sergey Makovkin and based on the ZDoom 1.22 code.
+The game is focused on online multiplayer and the latest version has
+been released in the far year 2000.
+
+In the 2004/2005 Denis Lukianov decided to continue the development of
+this engine focusing moreover on the removing of all the bugs which
+caused the death of this software.
+
+Although enough old, this game is still included in the Internet Doom
+Explorer (IDE, http://nfdfn.jinr.dubna.su/~bond/csdoom/) server browser
+used to retrieve the online servers list of some multiplayer Doom
+engine.
+
+
+#######################################################################
+
+=======
+2) Bugs
+=======
+
+----------------------------------------
+A] buffer-overflow in SV_BroadcastPrintf
+----------------------------------------
+
+The function SV_BroadcastPrintf is used by the server for sending a
+message to all the connected clients.
+For example it's used when a client joins the match or when he sends a
+chat message.
+The buffer used for containing the generated string is composed by
+1024 bytes while the input text sent from the attacker can be max 2048
+bytes long (MSG_ReadString) allowing possible malicious code execution.
+
+From doomsv/src/sv_main.cpp:
+
+void STACK_ARGS SV_BroadcastPrintf (int level, const char *fmt, ...)
+{
+    va_list       argptr;
+    char          string[1024];
+    client_t     *cl;
+
+    va_start (argptr,fmt);
+    vsprintf (string, fmt,argptr);
+    va_end (argptr);
+    ...
+
+
+--------------------------------------
+B] buffer-overflow in SV_SetupUserInfo
+--------------------------------------
+
+When a player joins the server he sends two text strings which identify
+his nickname and teamname.
+Both these strings (max 2048 bytes, MSG_ReadString) are copied through
+strcpy() in two buffers of 16 bytes.
+Anyway these buffers are global, not local, so should be not possible
+to use this bug for executing malicious code but only for crashing the
+server.
+
+From doomsv/src/sv_main.cpp:
+
+void SV_SetupUserInfo(void)
+{
+    player_t *p;
+
+    p = &players[parse_cl];
+
+    strcpy(p->userinfo.netname, MSG_ReadString() );
+    strcpy(p->userinfo.team, MSG_ReadString() );
+    ...
+
+
+--------------------------
+C] format string in Printf
+--------------------------
+
+Both client and server have the same format string vulnerability in the
+PrintString function (in the instruction "printf (outline);") located
+in doom*/src/c_console.cpp.
+This function is used for visualizing all the text strings in the
+console and in the game screen through the Printf function, widely used
+in the engine.
+The following code flow should be enough clear:
+
+int STACK_ARGS Printf (int printlevel, const char *format, ...)
+{
+	va_list argptr;
+	int count;
+
+	va_start (argptr, format);
+	count = VPrintf (printlevel, format, argptr);
+	va_end (argptr);
+
+	return count;
+}
+
+int VPrintf (int printlevel, const char *format, va_list parms)
+{
+	char outline[8192];
+
+	if (gameisdead)
+		return 0;
+
+	vsprintf (outline, format, parms);
+	return PrintString (printlevel, outline);
+}
+
+int PrintString (int printlevel, const char *outline)
+{
+	printf (outline);
+	return strlen (outline);
+}
+
+Note: this bug has been already patched by Denis in the csDoom client.
+
+
+#######################################################################
+
+===========
+3) The Code
+===========
+
+
+http://aluigi.org/poc/csdoombof.zip
+
+
+#######################################################################
+
+======
+4) Fix
+======
+
+
+All the bugs have been fixed in the current version (released
+yesterday) maintained by Denis:
+
+  http://voxelsoft.com/csdoom/
+
+
+#######################################################################

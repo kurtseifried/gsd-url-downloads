@@ -1,0 +1,157 @@
+#######################################################################
+
+                             Luigi Auriemma
+
+Application:  BomberClone
+              http://bomberclone.de
+Versions:     <= 0.11.6 and current CVS
+Platforms:    Windows, *nix, *BSD and more
+Bugs:         A] memcpy crash in rscache_add
+              B] information disclosure in send_pkg
+              C] simple error message termination
+Exploitation: remote, versus server
+Date:         30 Jul 2006
+Author:       Luigi Auriemma
+              e-mail: aluigi@autistici.org
+              web:    aluigi.org
+
+
+#######################################################################
+
+
+1) Introduction
+2) Bugs
+3) The Code
+4) Fix
+
+
+#######################################################################
+
+===============
+1) Introduction
+===============
+
+
+BomberClone is an open source AtomicBomberMan clone with multiplayer
+support.
+Note that this game is still a beta and doesn't have a master server
+for indexing online game servers, so consider these bugs only a
+"curiosity" and nothing more.
+
+
+#######################################################################
+
+=======
+2) Bugs
+=======
+
+------------------------------
+A] memcpy crash in rscache_add
+------------------------------
+
+The send_pkg function used in the game supports an automatic caching
+function (rscache_add) for resending the same packet if no acknowledge
+is received.
+rscache_add simply copies the output packet we want to keep cached in a
+global buffer but there are some unspecified errors in these
+instructions (NULLed or invalid resend_cache.entry->packet, big endian
+check bypass and others) which lead to a crash.
+
+From pkgcache.c:
+
+int
+rscache_add (_net_addr * addr, struct pkg *packet)
+{
+    int newlen;
+
+    /* maybe we forgot to check here something? i don't know but it seems
+     * that i forgot to calculate the packetsize into this.
+     * (i'll add the packet len to this calculation) */
+    if (resend_cache.fill + sizeof (struct _rscache_entry) + packet->h.len > PKG_RESENDCACHE_SIZE)
+        return -1;
+
+    rscache_setpointer (resend_cache.fill);
+    resend_cache.entry->retry = 0;
+    resend_cache.entry->timestamp = timestamp;
+    memcpy (&resend_cache.entry->addr, addr, sizeof (_net_addr));
+    memcpy (&resend_cache.entry->packet, packet, NTOH16 (packet->h.len));
+
+    newlen = resend_cache.fill + rscache_getcurlen ();
+
+    resend_cache.fill = newlen;
+
+    return 0;
+};
+
+
+-------------------------------------
+B] information disclosure in send_pkg
+-------------------------------------
+
+The send_pkg function is used for sending the packets to the network.
+In some of the functions which handle the incoming data, like
+do_gameinfo, the len field (a 16 bit number used for specifying the
+size of the data in the packet) is not reset and so will be sent a
+packet containing the amount of data specified by the len value
+received in the original packet.
+During my tests I was able to catch some useful informations like parts
+of the current environment string.
+
+From packets.c:
+
+void
+send_pkg (struct pkg *packet, _net_addr * addr)
+{
+    /* check if the packet would be send to
+     * an AI_Player, so ignore it. */
+    if ((addr->pl_nr >= 0 && addr->pl_nr < MAX_PLAYERS)
+        && PS_IS_aiplayer (players[addr->pl_nr].state))
+        return;
+
+    /* set the id for the packet and the network flags 
+     * the id is needed for the inpkg index to check for 
+     * double reached packets */
+    packet->h.id = HTON16 (pkg_lastid++);
+    if (bman.net_ai_family != PF_INET)
+        packet->h.flags = packet->h.flags | PKGF_ipv6;
+    udp_send (bman.sock, (char *) packet, NTOH16 (packet->h.len), &addr->sAddr, bman.net_ai_family);
+
+    /* if PKGF_ackreq is set add the packet to the resendcache
+     * so we can resend it if no PKF_ackreq returned for the packet. */
+    if (packet->h.flags & PKGF_ackreq) {
+        if (rscache_add (addr, packet) == -1)
+            d_printf ("resend_cache overrun.... packet throw away.\n");
+    }
+};
+
+
+-----------------------------------
+C] simple error message termination
+-----------------------------------
+
+The error packet used for transmitting error messages to clients and
+kick them can be used also versus the same server terminating it
+immediately.
+
+
+#######################################################################
+
+===========
+3) The Code
+===========
+
+
+http://aluigi.org/poc/bcloneboom.zip
+
+
+#######################################################################
+
+======
+4) Fix
+======
+
+
+A patch will be released soon.
+
+
+#######################################################################

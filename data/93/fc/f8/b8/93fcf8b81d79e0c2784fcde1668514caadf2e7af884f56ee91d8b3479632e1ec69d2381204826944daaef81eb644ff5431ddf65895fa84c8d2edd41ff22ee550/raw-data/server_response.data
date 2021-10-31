@@ -1,0 +1,107 @@
+#######################################################################
+
+                             Luigi Auriemma
+
+Application:  Print Manager Plus
+              http://www.softwareshelf.com/products/print_manager_plus_professional.htm
+Versions:     7.0.127.16
+Platforms:    Windows
+Bug:          Denial of Service
+Exploitation: remote
+Date:         31 Jan 2008
+Author:       Luigi Auriemma
+              e-mail: aluigi@autistici.org
+              web:    aluigi.org
+
+
+#######################################################################
+
+
+1) Introduction
+2) Bug
+3) The Code
+4) Fix
+
+
+#######################################################################
+
+===============
+1) Introduction
+===============
+
+
+From vendor's website:
+"With over 10 years of experience in the Print Management arena and by
+surveying and listening to our customers it has made Print Manager Plus
+the #1 Print Management software in the world, which is used in
+thousands of Schools, Universities, Libraries, Corporations,
+Governments, and Individual consultants."
+
+
+#######################################################################
+
+======
+2) Bug
+======
+
+
+PQCore is a service that runs on the server on which Print Manager
+Plus is installed and is automatically relaunched by PQService in case
+it dies.
+
+The TCP port 48101 bound by the service is used to receive messages
+through the network which, when received, are used by vswprintf (called
+at offset 00421995) for building the following log entry:
+
+  "  CPMPPipeServer::ProcessResponse - msg: %s"
+
+The destination buffer used by vswprintf is located on the stack and
+has a size of about 500 bytes but the resulted unicode buffer-overflow
+is limited by the exception handler which terminates the process before
+returning from the vulnerable function (the classical canary checking
+at the end of the function).
+Using longer strings (max 8192 bytes) will just cause the crash of the
+process in vswprintf but without control over any register.
+
+So in this case there are just no security bugs, no DoS since seems
+that is used just a connection for each message and there is no
+exploitable buffer-overflow since the process is automatically
+terminated and restarted in a matter of milliseconds.
+
+Anyway, before kicking this bug in the recycle bin, exists a minimal
+way to cause a Denial of Service.
+In fact sending some consecutive long messages will show an error
+messagebox on the screen and no new messages will be accepted.
+
+In some cases could also happen that after having acknowledged the
+message the problems will continue and the manual killing of the PQCore
+process is required for being able to restart it.
+
+
+#######################################################################
+
+===========
+3) The Code
+===========
+
+
+create a text file containing about 600 chars in it and then use the
+following command:
+
+  tcpfp -f file.txt -t 300 SERVER 48101
+
+http://aluigi.org/fakep/tcpfp.zip
+
+
+#######################################################################
+
+======
+4) Fix
+======
+
+
+UPDATE 06 Feb 2008
+Bug fixed in version 7.0.127.18
+
+
+#######################################################################

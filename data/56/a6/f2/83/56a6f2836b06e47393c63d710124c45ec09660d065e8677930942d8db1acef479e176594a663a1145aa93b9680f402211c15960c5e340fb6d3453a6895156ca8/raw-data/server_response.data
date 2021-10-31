@@ -1,0 +1,137 @@
+#######################################################################
+
+                             Luigi Auriemma
+
+Application:  dim3 (dimension 3 engine)
+              http://www.klinksoftware.com
+Versions:     <= 1.5
+Platforms:    Windows and Mac
+Bugs:         A] network_receive_packet/data buffer-overflow
+              B] network_host_handle_join buffer-overflow
+Exploitation: A] remote, versus server and client
+              B] remote, versus server
+Date:         23 Apr 2006
+Author:       Luigi Auriemma
+              e-mail: aluigi@autistici.org
+              web:    aluigi.org
+
+
+#######################################################################
+
+
+1) Introduction
+2) Bugs
+3) The Code
+4) Fix
+
+
+#######################################################################
+
+===============
+1) Introduction
+===============
+
+
+dim3 is an interesting open source project for the creation of a game
+engine easy to use for modders.
+
+IMPORTANT NOTE:
+The network code in the current version must be considered still a work
+in progress (as written on the website) so don't consider the bugs
+described in this advisory a real threat.
+
+
+#######################################################################
+
+=======
+2) Bugs
+=======
+
+----------------------------------------------
+A] network_receive_packet/data buffer-overflow
+----------------------------------------------
+
+The function network_receive_packet is used for reading data from the
+network.
+It first reads the header of the data which is composed by 3 fields of
+16 bit which identify the size of the data block, the type of action
+and the remote uid.
+All these fields are signed short and the first one (data_len) can be
+used for bypassing the check
+"if (data_len>net_max_msg_size) return(FALSE);" and for forcing the
+reading of an arbitrary amount of data in network_receive_data causing
+the overflowing of the data buffer of 2048 (net_max_msg_size) bytes.
+
+From Code/dim3NetworkUtility/Sources/socket.c:
+
+bool network_receive_packet(d3socket sock,int *action,int *from_remote_uid,unsigned char *data,int *len)
+{
+	int					data_len;
+	network_header		head;
+
+	if (!network_receive_data(sock,(unsigned char*)&head,sizeof(network_header))) return(FALSE);
+
+	*len=data_len=(signed short)ntohs(head.len);
+	*action=(signed short)ntohs(head.action);
+	*from_remote_uid=(signed short)ntohs(head.from_remote_uid);
+
+	if (data_len==0) return(TRUE);
+	if (data_len>net_max_msg_size) return(FALSE);
+
+		// get the data
+
+	return(network_receive_data(sock,data,data_len));
+}
+
+
+-------------------------------------------
+B] network_host_handle_join buffer-overflow
+-------------------------------------------
+
+The network_host_handle_join function is used for handling the new
+players which join the server.
+This function reads the nickname sent by the client and uses strcpy for
+copying it in a buffer of 32 (name_str_len) bytes.
+
+From Code/dim3Server/Sources/host.c:
+
+int network_host_handle_join(int sock,network_request_join *request_join)
+{
+	int							remote_uid;
+	network_reply_join			reply_join;
+	network_request_remote_add	remote_add;
+
+    ...
+
+	if (remote_uid!=-1) {
+		strcpy(remote_add.name,request_join->name);
+		remote_add.score=0;
+		network_player_send_others_packet(remote_uid,net_action_request_remote_add,(unsigned char*)&remote_add,sizeof(network_request_remote_add),FALSE);
+	}
+
+	return(remote_uid);
+}
+
+
+#######################################################################
+
+===========
+3) The Code
+===========
+
+
+http://aluigi.org/poc/dim3bof.zip
+
+
+#######################################################################
+
+======
+4) Fix
+======
+
+
+The version 1.6 will be released enough soon and will implement many
+improvements for the network code, included the fixes for these bugs.
+
+
+#######################################################################

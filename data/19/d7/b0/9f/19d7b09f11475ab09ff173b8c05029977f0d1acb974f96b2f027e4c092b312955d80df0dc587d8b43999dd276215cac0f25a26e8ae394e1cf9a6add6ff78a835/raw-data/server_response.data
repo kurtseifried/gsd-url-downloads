@@ -1,0 +1,144 @@
+#######################################################################
+
+                             Luigi Auriemma
+
+Application:  HP OpenView Network Node Manager
+              http://www.openview.hp.com/products/nnm/
+Versions:
+
+  these bugs were wrongly reported by me one week ago in version 7.53,
+  in reality they affect version 7.50 and probably 7.51 too so I have
+  decided to leave this advisory here ONLY for reference moreover
+  because seems that all the following bugs have been found and fixed
+  by the same HP and not reported by other researchers (in fact there
+  were no details about them online when I found them)
+
+Platforms:    Windows (tested), Solaris, Linux, HP-UX
+Bugs:         A] format string in ovalarmsrv
+              B] multiple buffer-overflows in ovalarmsrv
+              C] buffer-overflow in ovuispmd
+              D] buffer-overflow in ovwdb
+Exploitation: remote
+Date:         15 Apr 2008 (first advisory 07 Apr 2008)
+Author:       the original author of the vulnerabilities is unknown,
+              seems they were found and fixed by the same HP (I'm
+              waiting the confirm from HP)
+Advisory:     Luigi Auriemma
+              e-mail: aluigi@autistici.org
+              web:    aluigi.org
+
+
+#######################################################################
+
+
+1) Introduction
+2) Bugs
+3) The Code
+4) Fix
+
+
+#######################################################################
+
+===============
+1) Introduction
+===============
+
+
+From vendor's website:
+OpenView NNM "automates the process of developing a hyper-accurate
+topology of your physical network, virtual network services and the
+complex relationships between them. It then uses that topology as the
+basis for intelligent root cause analysis to enhance network
+availability and performance."
+
+
+#######################################################################
+
+=======
+2) Bugs
+=======
+
+------------------------------
+A] format string in ovalarmsrv
+------------------------------
+
+The ovalarmsrv.exe process listening on port 2953 is affected by a
+format string vulnerability caused by the calling of ov.fprintf_new
+(which then calls vsprintf) using the final message without a format
+argument:
+
+  "Connection Refused; Data in listener port corrupt: ATTACKER_STRING"
+
+
+------------------------------------------
+B] multiple buffer-overflows in ovalarmsrv
+------------------------------------------
+
+The same process listens also on port 2954 where are handled some types
+of requests using specific sscanf formats:
+
+  REQUEST_SEV_CHANGE    (47): "%d %d %d %[^\n]"
+  REQUEST_SAVE_STATE    (61): "%d %[^\n]s"
+  REQUEST_LOCAL         (66): "%d"
+  REQUEST_RESTORE_STATE (62): "%d %s"
+  REQUEST_SAVE_DIR      (63):
+
+As visible by the previous format arguments there are no checks on the
+length of the client string handled by the requests 47, 61 and 62 which
+can be used to exploit a stack based buffer-overflow vulnerability
+using a string parameter longer than 512 bytes.
+
+
+------------------------------
+C] buffer-overflow in ovuispmd
+------------------------------
+
+The protocol used by the ovuispmd service running on port 7777 is very
+simple, a 32 bit number which specifies the length of the data block
+followed by the data.
+
+The destination buffer where are received these data has a size of 16
+kilobytes and there are no checks on the amount of bytes to receive so
+is possible to exploit the subsequent buffer-overflow.
+
+
+---------------------------
+D] buffer-overflow in ovwdb
+---------------------------
+
+The process ovwdb running on port 2447 uses the same protocol of
+ovuispmd and is vulnerable to the same bug.
+
+
+#######################################################################
+
+===========
+3) The Code
+===========
+
+
+A]
+echo %n%n%s%n%n%s | nc SERVER 2953 -v -v
+
+B]
+echo 62 AAAAAAAAAAAAA...512_'A's...AAAAAAAAAAAAA | nc SERVER 2954 -v -v
+
+C]
+send the following hex bytes to port 7777
+00 00 5d c0 followed by 24000 'A's
+
+D]
+as above but to port 2447
+
+
+#######################################################################
+
+======
+4) Fix
+======
+
+
+Version 7.53 fixes all the bugs for sure.
+
+
+#######################################################################

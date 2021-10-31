@@ -1,0 +1,56 @@
+--- affix/daemon/btsrv.c	2004-02-13 19:16:03.000000000 +0200
++++ affix-new/daemon/btsrv.c	2005-08-26 17:28:31.587766464 +0300
+@@ -441,9 +441,10 @@
+ int event_pin_code_request(struct PIN_Code_Request_Event *evt, int devnum)
+ {
+ 	int		fd, err, flags;
+-	FILE		*fp;
+-	char		pin[32], cmdline[100];
++	char		pin[32];
+ 	char		name[248];
++	int 	status = 0;
++	pid_t	pid;
+ 
+ 	if (!managepin)
+ 		return 0;
+@@ -453,7 +454,7 @@
+ 	fd = hci_open_id(devnum);
+ 	if (fd < 0)
+ 		return fd;
+-#if 0
++#if 1
+ 	{
+ 		/* get device name first */
+ 		INQUIRY_ITEM	dev;
+@@ -475,21 +476,20 @@
+ 	if (!(flags & HCI_SECURITY_PAIRABLE))
+ 		goto err;
+ 
+-	sprintf(cmdline, "/etc/affix/btsrv-gui pin %s \"%s\"", bda2str(&evt->bda), name);
+-	DBPRT("cmdline: [%s]", cmdline);
+-	fp = popen(cmdline, "r");
+-	if (!fp) {
+-		BTERROR("popen() failed");
+-		goto err;
++	switch (pid = fork()) {
++		case -1:
++			BTERROR("Fork error!\n");
++		case 0:
++			execl("/etc/affix/btsrv-gui","/etc/affix/btsrv-gui","pin",name,bda2str(&evt->bda),NULL);
++		default:
++			waitpid(pid,&status,0);
+ 	}
+-	err = fscanf(fp, "%s", pin);
+-	if (err == EOF) {
+-		BTERROR("fscanf() failed");
+-		pclose(fp);
++	if (status < 0) {
++		BTERROR("btsrv-gui failure. WRONG PIN !\n");
+ 		goto err;
+ 	}
++	
+ 	DBPRT("Got PIN code from pipe: %s, len: %d", pin, strlen(pin));
+-	pclose(fp);
+ 	err = HCI_PINCodeRequestReply(fd, &evt->bda, strlen(pin), pin);
+ 	if (err) {
+ 		BTERROR("unable to set pin code: %d", err);

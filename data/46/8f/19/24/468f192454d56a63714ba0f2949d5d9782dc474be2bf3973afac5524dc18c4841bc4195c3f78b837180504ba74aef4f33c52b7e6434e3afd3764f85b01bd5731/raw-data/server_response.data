@@ -1,0 +1,103 @@
+#######################################################################
+
+                             Luigi Auriemma
+
+Application:  IGSS (Interactive Graphical SCADA System)
+              http://www.igss.com
+              http://www.7t.dk
+Versions:     IGSSdataServer.exe <= 9.00.00.11063
+Platforms:    Windows
+Bug:          stack overflow
+Exploitation: remote, versus server
+Date:         21 Mar 2011 (found 10 Jan 2011)
+Author:       Luigi Auriemma
+              e-mail: aluigi@autistici.org
+              web:    aluigi.org
+
+
+#######################################################################
+
+
+1) Introduction
+2) Bug
+3) The Code
+4) Fix
+
+
+#######################################################################
+
+===============
+1) Introduction
+===============
+
+
+IGSS (Interactive Graphical SCADA system) is a SCADA solution developed
+by the 7-Technologies and used mainly in Denmark and US.
+
+Informations from the vendor's website:
+"IGSS is the complete automation software – a SCADA system for process
+control and supervision - with a long row of releases since the start
+of 7T 25 years ago.
+At that time, 7T was the first company in the world to develop an
+object oriented and mouse operated SCADA system under the name of
+IGSS."
+
+
+#######################################################################
+
+======
+2) Bug
+======
+
+
+IGSSdataServer.exe is a server running on port 12401 active when the
+project is started.
+
+The opcode 0x7 is used for handling the RMS report templates and
+through the "ReadFile" (0x6) and "Write File" (0x5) commands is
+possible to exploit a buffer overflow caused by the building of a full
+path string using a stack buffer of 256 bytes located on the caller
+function:
+
+  0040F840  /$  8B4424 04          MOV EAX,DWORD PTR SS:[ESP+4]
+  0040F844  |.  50                 PUSH EAX
+  0040F845  |.  83C1 04            ADD ECX,4
+  0040F848  |.  51                 PUSH ECX
+  0040F849  |.  8B4C24 10          MOV ECX,DWORD PTR SS:[ESP+10]
+  0040F84D  |.  68 54A54300        PUSH 0043A554                ; "%s\%s.RMS"
+  0040F852  |.  51                 PUSH ECX
+  0040F853  |.  E8 120F0100        CALL 0042076A                ; sprintf
+  0040F858  |.  83C4 10            ADD ESP,10
+  0040F85B  \.  C2 0800            RETN 8
+
+
+#######################################################################
+
+===========
+3) The Code
+===========
+
+
+http://aluigi.org/poc/igss_4.zip
+
+Proof-of-concept via "ReadFile":
+  nc SERVER 12401 < igss_4a.dat
+
+Proof-of-concept via "Write File":
+  nc SERVER 12401 < igss_4b.dat
+
+
+#######################################################################
+
+======
+4) Fix
+======
+
+
+No fix.
+
+UPDATE 24 Mar 2011:
+version 11083
+
+
+#######################################################################

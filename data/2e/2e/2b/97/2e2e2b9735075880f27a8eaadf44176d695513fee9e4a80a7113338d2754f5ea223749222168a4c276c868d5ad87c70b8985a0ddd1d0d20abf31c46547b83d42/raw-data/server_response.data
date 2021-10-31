@@ -1,0 +1,262 @@
+#######################################################################
+
+                             Luigi Auriemma
+
+Application:  Network Audio System
+              http://www.radscan.com/nas.html
+Versions:     <= 1.8a (svn 231)
+Platforms:    *nix and Windows
+Bugs:         A] accept_att_local buffer overflow through USL connection
+              B] server termination through unexistent ID in AddResource
+              C] bcopy crash caused by integer overflow in ProcAuWriteElement
+              D] invalid memory pointer through big num_actions in ProcAuSetElements
+              E] invalid memory pointer in compileInputs
+              F] NULL pointer caused by too much connections
+Exploitation: local and remote, versus server
+Date:         18 Mar 2007
+Author:       Luigi Auriemma
+              e-mail: aluigi@autistici.org
+              web:    aluigi.org
+
+
+#######################################################################
+
+
+1) Introduction
+2) Bugs
+3) The Code
+4) Fix
+
+
+#######################################################################
+
+===============
+1) Introduction
+===============
+
+
+Network Audio System (NAS), as suggested by the name, is a network
+transparent audio system which works very similarly to the X server.
+The server daemon runs as root and listens on both Unix and TCP
+sockets.
+
+
+#######################################################################
+
+=======
+2) Bugs
+=======
+
+----------------------------------------------------------
+A] accept_att_local buffer overflow through USL connection
+----------------------------------------------------------
+
+A stack based buffer-overflow is located in the function which receives
+the connection over the USL socket allowing the writing of 255 bytes in
+the path buffer of 64.
+Note that this socket is not enabled by default and I don't know in
+what occasions or on what platforms it runs.
+
+from server/os/connection.c:
+
+static int
+accept_att_local(void)
+{
+    int newconn;
+    int read_in;
+    char length;
+    char path[64];
+
+    /*
+     * first get device-name
+     */
+    if ((read_in = read(ptsFd, &length, 1)) <= 0) {
+        Error("audio server: Can't read slave name length from USL client connection");
+        return (-1);
+    }
+
+    if ((read_in = read(ptsFd, path, length)) <= 0) {
+        Error("audio server: Can't read slave name from USL client connection");
+        return (-1);
+    }
+
+    path[length] = '\0';
+    ...
+
+
+----------------------------------------------------------
+B] server termination through unexistent ID in AddResource
+----------------------------------------------------------
+
+An unexistent client ID forces the termination of the server.
+
+from server/dia/resource.c:
+
+Bool
+AddResource(AuID id, RESTYPE type, pointer value)
+{
+    int client;
+    register ClientResourceRec *rrec;
+    register ResourcePtr res, *head;
+
+    client = CLIENT_ID(id);
+    rrec = &clientTable[client];
+    if (!rrec->buckets) {
+        ErrorF("AddResource(%x, %x, %x), client=%d \n",
+               id, type, (unsigned long) value, client);
+        FatalError("client not in use\n");
+    }
+    ...
+
+
+---------------------------------------------------------------
+C] bcopy crash caused by integer overflow in ProcAuWriteElement
+---------------------------------------------------------------
+
+An integer overflow in ProcAuWriteElement allows the crash of the NAS
+server through a too long max_samples value set by the client during
+the connection and the subsequent writing of too much bytes in the
+destination buffer.
+In my tests wasn't possible to cause damages worst than a crash since
+it's not possible to control the amount of bytes to write.
+
+from server/dia/audispatch.c:
+
+int
+ProcAuWriteElement(ClientPtr client)
+{
+    ...
+    if (stuff->num_bytes > c->dataSize - currentSize)
+        AU_ERROR(AuBadValue, stuff->num_bytes);
+
+    if (stuff->num_bytes) {
+        s = (AuUint8 *) & stuff[1];
+        d = c->write;
+        n = aumin(stuff->num_bytes, c->dataEnd - d);
+        bcopy(s, d, n);
+
+        /* wrap if necessary */
+        if (n != stuff->num_bytes)
+            bcopy(s + n, c->data, stuff->num_bytes - n);
+            ...
+
+
+----------------------------------------------------------------------
+D] invalid memory pointer through big num_actions in ProcAuSetElements
+----------------------------------------------------------------------
+
+In ProcAuSetElements num_actions is used for incrementing the pointer
+of the el structure which is located in the stuff buffer (the buffer
+containing the data of the client).
+If a client sends one or more big num_action values will force the
+server to use (through el) the data outside the stuff buffer causing a
+crash.
+
+from server/dia/audispatch.c:
+
+#define ADD_VAR(n)                                                            \
+{                                                                             \
+    AuUint8 *_t = (AuUint8 *) el;                                             \
+                                                                              \
+    varLen += (n);                                                            \
+    _t += (n);                                                                \
+    el = (auElement *) _t;                                                    \
+}
+
+#define COMP_ACTIONS(num)                                                      \
+{                                                                              \
+    numActions += (num) ? (num) : numDefaultActions[el->type];                 \
+    ADD_VAR((num) * sizeof(auElementAction));                                  \
+}
+...
+
+int
+ProcAuSetElements(ClientPtr client)
+{
+fprintf(stderr, "XXX ProcAuSetElements\n");
+    REQUEST(auSetElementsReq);
+    FlowPtr flow;
+    int len, i, varLen, numActions, status;
+    auElement *el;
+
+    ...
+
+    el = (auElement *) & stuff[1];
+    /* compute length of variable data and do some error checking */
+    for (i = varLen = numActions = 0; i < stuff->numElements; i++, el++)
+        switch (el->type) {
+        case AuElementTypeImportClient:
+            COMP_ACTIONS(el->importclient.actions.num_actions);
+            ...
+
+
+------------------------------------------
+E] invalid memory pointer in compileInputs
+------------------------------------------
+
+Another crash is possible through an invalid memory pointer caused by
+the AuCompileFlow function using a too big input value (then passed to
+compileInputs as inputNum).
+
+from server/dia/auutil.c:
+
+static int
+compileInputs(ClientPtr client, FlowElementPtr elements,
+              CompiledFlowOutputPtr output, AuUint32 inputNum,
+              AuFixedPoint multiplyConstant, AuFixedPoint addConstant,
+              AuUint8 numTracks, AuUint8 * inTracks, AuUint8 firstOutTrack,
+              AuBool recompile, AuUint32 * inputCnt)
+{
+    auElement *el = elements[inputNum].raw;
+    int status = AuSuccess;
+    AuBool compiled = elements[inputNum].compiled, compileInput = AuFalse;
+    AuUint32 nextInput;
+    AuUint8 inputTracks[auMaxTracks];
+
+    /* XXX - need to check for loops */
+
+    /* indicate that we've compiled this element */
+    elements[inputNum].compiled = AuTrue;
+    ...
+
+
+----------------------------------------------
+F] NULL pointer caused by too much connections
+----------------------------------------------
+
+A NULL pointer crash can be exploited very easily and without any type
+of authentication from both local and remote sockets through many
+simultaneous connections (at least 120).
+
+from server/os/io.c:
+
+int
+ReadRequestFromClient(client)
+ClientPtr client;
+{
+    OsCommPtr oc = (OsCommPtr) client->osPrivate;
+    register ConnectionInputPtr oci = oc->input;
+    ...
+
+
+#######################################################################
+
+===========
+3) The Code
+===========
+
+
+http://aluigi.org/poc/nasbugs.zip
+
+
+#######################################################################
+
+======
+4) Fix
+======
+
+
+SVN 237
+
+
+#######################################################################

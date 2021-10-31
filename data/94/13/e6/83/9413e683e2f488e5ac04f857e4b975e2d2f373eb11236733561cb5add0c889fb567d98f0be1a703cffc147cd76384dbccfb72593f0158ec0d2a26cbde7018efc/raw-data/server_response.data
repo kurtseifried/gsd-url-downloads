@@ -1,0 +1,116 @@
+#######################################################################
+
+                             Luigi Auriemma
+
+Application:  Festalon
+              http://projects.raphnet.net/#festalon
+Versions:     <= 0.5.5 and >= 0.5.0
+Platforms:    Windows, *nix, *BSD, Winamp and XMMS plugin
+Bug:          heap corruption in FESTAHES_Load
+Exploitation: local
+Date:         06 Aug 2006
+Author:       Luigi Auriemma
+              e-mail: aluigi@autistici.org
+              web:    aluigi.org
+
+
+#######################################################################
+
+
+1) Introduction
+2) Bug
+3) The Code
+4) Fix
+
+
+#######################################################################
+
+===============
+1) Introduction
+===============
+
+
+Festalon is a player (stand-alone and plugin) for the Nintendo .nsf
+music files.
+
+
+#######################################################################
+
+======
+2) Bug
+======
+
+
+HES is a file format for ripped TG16/PC Engine music which has been
+added from version 0.5.0.
+FESTALON_HES is a structure of 1501888 bytes used to contain the file
+in memory.
+The program uses an anti-overflow check for avoiding input data major
+than the rom size of 0x100000 bytes.
+Anyway the check is made on the sum of LoadAddr (used as an offset of
+the destination rom buffer) and LoadSize (amount of data to copy) so an
+attacker can use a negative LoadAddr value for overwriting the memory
+antecedent the one allocated.
+The exploitation (I'm not sure if code execution is really possible
+although the effects seem similar to a heap overflow) occurs when the
+program terminates and free() is called.
+
+From pce/hes.c:
+
+FESTALON_HES *FESTAHES_Load(FESTALON *fe, uint8 *buf, uint32 size)
+{
+ FESTALON_HES *hes;
+ uint32 LoadAddr,LoadSize;
+ uint16 InitAddr;
+ uint8 *tmp;
+ int x;
+
+ fe->TotalChannels = 6;
+ fe->OutChannels = 2;
+
+ hes = FESTA_malloc(16, sizeof(FESTALON_HES));
+ hes->h6280 = malloc(sizeof(h6280_Regs));
+
+ InitAddr = De16(&buf[0x6]);
+
+ tmp = &buf[0x10];
+
+ while(tmp < (buf + size - 0x10))
+ {
+  LoadSize = De32(&tmp[0x4]);
+  LoadAddr = De32(&tmp[0x8]);
+  //printf("%08x:%08x\n",LoadSize,LoadAddr);
+  tmp += 0x10;
+  if(tmp >= (buf + size + LoadSize)) break;
+
+  if((LoadAddr + LoadSize) > 0x100000) break;
+  memcpy(hes->rom + LoadAddr,tmp,LoadSize);
+  tmp += LoadSize;
+ }
+ ...
+
+
+#######################################################################
+
+===========
+3) The Code
+===========
+
+
+http://aluigi.org/poc/festahc.zip
+
+
+#######################################################################
+
+======
+4) Fix
+======
+
+
+At the moment the project no longer has a real homepage so I don't know
+if it's still 100% supported.
+Anyway I consider this bug mostly a "curiosity" than a real
+vulnerability.
+
+
+#######################################################################

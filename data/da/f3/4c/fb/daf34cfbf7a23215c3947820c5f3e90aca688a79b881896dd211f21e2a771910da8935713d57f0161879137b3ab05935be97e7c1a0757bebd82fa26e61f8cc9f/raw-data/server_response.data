@@ -1,0 +1,182 @@
+#######################################################################
+
+Title:  Details about the hlfreeze/hl-headnut/csdos/"Born to be pig" bugs
+Author: Luigi Auriemma
+        e-mail: aluigi@autistici.org
+        web:    aluigi.org
+
+#######################################################################
+
+
+This short text is an idea I have had during the patching of the so
+called csdos.pl bug since there were a lot of things unclear.
+
+I will try to be much clear as I can... but I already know I will fail
+eh eh eh.
+
+I will refer specifically to csdos (found and released by Firestorm in
+the 2006) but the problem is the SAME of hlfreeze/hl-headnut (found by
+Delikon in the far 2003) with the following differences:
+- csdos works also versus servers protected by password
+- csdos works also versus recent versions since hlfreeze/hl-headnut
+  was fixed "after" version 1.1.1.0
+- they use two different ways for reaching the piece of code which
+  enters in endless loop, csdos an additional backslash while
+  hlfreeze/hl-headnut the absence of player informations
+- hlfreeze/hl-headnut is older 8-)
+
+The following are the links to the code about I refer:
+  http://aluigi.org/fakep/hlfill.zip        (can test both the attacks)
+  http://packetstormsecurity.org/0304-exploits/hl-headnut.c
+  http://downloads.securityfocus.com/vulnerabilities/exploits/csdos.pl
+
+First a small info for understanding the functions about I refer.
+The connection string is the data sent by the client to the server and
+which starts with the usual "ÿÿÿÿconnect" header.
+Info_ValueForKey is a function used for reading a specific value from a
+connection string though its parameter name, example:
+
+  \parameter\value\parameter\value\...\parameter\value
+
+Info_SetValueForKey does the "write" operation, if the string already
+contains a parameter with the same name it will be deleted and the new
+one will be appended to string.
+Info_ValueForKey reads, Info_SetValueForKey writes, stop.
+
+The effect of the bug is visible through an endless loop in the
+function SV_CheckForDuplicateNames which has the job of looking for
+duplicated player names when a new client joins and adds a number in
+front to his name if another homonym already exists.
+This function should look "similar" (I have not tested it and I can't
+know if it's the same) to the following code:
+
+    duplicated = 0;
+    val = (char *)Info_ValueForKey (cl->userinfo, "name");
+    while (1) {
+        for (i=0, client = svs.clients ; i < MAX_CLIENTS; i++, client++) {
+            if ( !client->active || !client->spawned || client == cl)
+                continue;
+            if (!Q_stricmp(client->name, val))
+                break;
+        }
+        if( i < MAX_CLIENTS) {
+            p = val;
+            if (val[0] == '(') {
+                if (val[2] == ')')
+                    p = val + 3;
+                else if (val[3] == ')')
+                    p = val + 4;
+            }
+            snprintf(newname, sizeof( newname ), "(%d)%-0.*s", dupc++, 28, p);
+            Info_SetValueForKey (cl->userinfo, "name", newname, MAX_INFO_STRING);
+            val = (char *)Info_ValueForKey (cl->userinfo, "name");
+            duplicated = 1;
+        } else {
+            break;
+        }
+    }
+    return duplicated;
+
+As already said here is where we see the effect of the problem but the
+bug is located somewhere else.
+
+When a client joins the server this one reads his name with
+Info_ValueForKey, if the name is not available in the connection string
+(Info_ValueForKey returns "") the client will be kicked with an error
+message, while if it's invalid will be replaced by "unnamed".
+Then the nick (unnamed or the original one) will be readded to the
+string with Info_SetValueForKey.
+Now take a look here:
+
+  original connection string:
+    ÿÿÿÿconnect 47 12345678
+    "\prot\2\unique\0\raw\00000000000000000000000000000000"
+    "\name\mynickname\topcolor\0"
+
+  after Info_SetValueForKey:
+    ÿÿÿÿconnect 47 12345678
+    "\prot\2\unique\0\raw\00000000000000000000000000000000"
+    "\topcolor\0\name\mynickname"
+
+OK, now redo the same operation with a backslash char appended to our
+(we are the client/attacker) original connection string:
+
+  original connection string:
+    ÿÿÿÿconnect 47 12345678
+    "\prot\2\unique\0\raw\00000000000000000000000000000000"
+    "\name\mynickname\topcolor\0\"
+
+  after Info_SetValueForKey:
+    ÿÿÿÿconnect 47 12345678
+    "\prot\2\unique\0\raw\00000000000000000000000000000000"
+    "\topcolor\0\\name\mynickname"
+
+the additional backslash char is WRONG because it "says" that a new
+parameter is beginning but in reality there is nothing and
+Info_ValueForKey returns "" if it handles a string with a malformed
+format like this one.
+
+So the first check made by the server at the beginning of the
+connection has been bypassed since the nickname seems to exist but the
+subsequent operations on the string will fail and will lead to the
+endless loop which freezes the server.
+
+At least two players with the same "empty" name are needed for
+exploiting this bug since the server must enter in the second part of
+the SV_CheckForDuplicateNames function.
+
+UPDATE 28 Dec 2007
+------------------
+"Born to be pig" is another bug (http://euro.ucoz.ru/cs-exploit.zip
+found by .FUF) ever caused by the presence of at least two players from
+the same attacker but this time the problem is exploitable through the
+inserting of two dots ".." in the name of the player.
+
+These dots cause the freezing of the server because the second player
+which uses the same identical name of the first one (like myname..xxx)
+is not correctly handled by the server.
+When two players have the same name the server substituites the name of
+the new player with (number)nickname where number is a sequential
+number depending by the amount of players using the same name (in a
+perfect world this number should never go over "max players - 1").
+
+So the server calls Info_SetValueForStarKey for substituiting the name
+of the second player with (number)nickname BUT Info_SetValueForStarKey
+has some checks which avoid the usage of some bad chars like the dotdot
+sequence usually used for directory traversal attacks:
+
+void Info_SetValueForStarKey ( char *s, const char *key, const char *value, int maxsize )
+{
+    char    news[1024], *v;
+    int     c;
+
+    if (strstr (key, "\\") || strstr (value, "\\") )
+    {
+        return;
+    }
+
+    if (strstr (key, "..") || strstr (value, "..") )
+    {
+        Con_Printf ("Can't use keys or values with a ..\n");
+        return;
+    }
+
+    if (strstr (key, "\"") || strstr (value, "\"") )
+    {
+        return;
+    }
+
+    if (strlen(key) > MAX_KV_LEN || strlen(value) > MAX_KV_LEN)
+    {
+        return;
+    }
+    ...
+
+So the name will be not changed and when the function will redo the
+checks again to see if the current (number)nickname is in use by
+another player (like (1)myname..xxx) it will get the current name which
+is not (number)nickname but still the same unchanged old one.
+And this cycle will continue forever freezing the entire server.
+
+
+#######################################################################
