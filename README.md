@@ -1,4 +1,4 @@
-# uvi-url-downloads
+# gsd-url-downloads
 
 Downloaded data, SHA512(URL) data/aa/bb/cc/dd/aabbccdd_rest_of_hash/
 
@@ -13,3 +13,4 @@ Response data such as HTTP status code, etc.
 
 ## extracted-urls.json
 TODO: Extracted URLs from the document
+
